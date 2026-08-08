@@ -1,5 +1,8 @@
 """
-Sentinel DNA AI Investigation Report Generator
+Sentinel DNA Investigation Report Generator
+
+Combines investigation intelligence outputs
+into a final analyst investigation report.
 """
 
 from __future__ import annotations
@@ -7,30 +10,28 @@ from __future__ import annotations
 from typing import Any
 
 
-from .executive_summary import (
-    ExecutiveSummaryGenerator,
-)
-
-from .timeline_builder import (
-    TimelineBuilder,
-)
-
-
-
 class ReportGenerator:
     """
-    Builds complete investigation reports.
+    Generates complete investigation reports.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        executive_summary=None,
+        timeline_builder=None,
+    ) -> None:
 
-        self.summary_generator = (
-            ExecutiveSummaryGenerator()
+        self.executive_summary = (
+            executive_summary
         )
 
         self.timeline_builder = (
-            TimelineBuilder()
+            timeline_builder
         )
+
+        self.history: list[
+            dict[str, Any]
+        ] = []
 
 
     def generate(
@@ -38,32 +39,96 @@ class ReportGenerator:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Generate final SOC report.
+        Generate investigation report.
         """
+
+        case_id = investigation.get(
+            "case_id",
+            "UNKNOWN",
+        )
+
 
         report = {
 
-            "case_id":
-                investigation.get(
-                    "case_id"
-                ),
+            "case_id": case_id,
 
-            "summary":
-                self.summary_generator.generate(
-                    investigation
-                ),
+            "status": investigation.get(
+                "status",
+                "unknown",
+            ),
 
-            "timeline":
-                self.timeline_builder.build(
-                    investigation
-                ),
+            "results": investigation.get(
+                "results",
+                [],
+            ),
 
-            "status":
-                investigation.get(
-                    "status",
-                    "unknown",
-                ),
+            "summary": (
+                f"Investigation {case_id} "
+                "report generated."
+            ),
+
+            "timeline": [],
+
         }
 
 
+        if self.executive_summary:
+
+            report[
+                "executive_summary"
+            ] = self.executive_summary.generate(
+                investigation
+            )
+
+
+        if self.timeline_builder:
+
+            report[
+                "timeline"
+            ] = self.timeline_builder.build(
+                investigation
+            )
+
+        else:
+
+            report[
+                "timeline"
+            ] = [
+                {
+                    "event": (
+                        "Investigation created"
+                    ),
+
+                    "case_id": case_id,
+
+                    "status": report["status"],
+                }
+            ]
+
+
+        self.history.append(
+            report
+        )
+
+
         return report
+
+
+    def get_history(
+        self,
+    ) -> list[dict[str, Any]]:
+        """
+        Return report history.
+        """
+
+        return self.history
+
+
+    def clear_history(
+        self,
+    ) -> None:
+        """
+        Clear report history.
+        """
+
+        self.history.clear()
