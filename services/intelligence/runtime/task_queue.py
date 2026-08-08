@@ -1,43 +1,134 @@
 """
 Sentinel DNA Runtime Task Queue
+
+Enterprise workload queue.
+
+Responsibilities:
+
+- Store pending tasks
+- Manage task ordering
+- Retrieve executable workloads
+- Protect queue state
 """
 
 from __future__ import annotations
 
-from collections import deque
+from dataclasses import dataclass, field
 
-from services.intelligence.runtime.task import Task
+from .task import Task
 
 
+@dataclass
 class TaskQueue:
     """
-    FIFO queue for runtime tasks.
+    Runtime task queue.
     """
 
-    def __init__(self) -> None:
-        self._queue: deque[Task] = deque()
+    _tasks: list[Task] = field(
+        default_factory=list
+    )
 
-    def enqueue(self, task: Task) -> None:
-        self._queue.append(task)
 
-    def dequeue(self) -> Task | None:
-        if not self._queue:
+    def enqueue(
+        self,
+        task: Task,
+    ) -> None:
+        """
+        Add task to queue.
+        """
+
+        task.queue()
+
+        self._tasks.append(
+            task
+        )
+
+
+    def dequeue(
+        self,
+    ) -> Task | None:
+        """
+        Retrieve next task.
+        """
+
+        if not self._tasks:
             return None
-        return self._queue.popleft()
 
-    def peek(self) -> Task | None:
-        if not self._queue:
+        return self._tasks.pop(0)
+
+
+    def peek(
+        self,
+    ) -> Task | None:
+        """
+        View next task.
+        """
+
+        if not self._tasks:
             return None
-        return self._queue[0]
 
-    def size(self) -> int:
-        return len(self._queue)
+        return self._tasks[0]
 
-    def empty(self) -> bool:
-        return len(self._queue) == 0
 
-    def clear(self) -> None:
-        self._queue.clear()
+    def tasks(
+        self,
+    ) -> list[Task]:
+        """
+        Return queued tasks.
 
-    def tasks(self) -> list[Task]:
-        return list(self._queue)
+        Returns copy to protect state.
+        """
+
+        return list(
+            self._tasks
+        )
+
+
+    def size(
+        self,
+    ) -> int:
+        """
+        Return queue size.
+        """
+
+        return len(
+            self._tasks
+        )
+
+
+    def empty(
+        self,
+    ) -> bool:
+        """
+        Check queue empty.
+        """
+
+        return not self._tasks
+
+
+    def clear(
+        self,
+    ) -> None:
+        """
+        Remove all queued tasks.
+        """
+
+        self._tasks.clear()
+
+
+    def status(
+        self,
+    ) -> dict:
+        """
+        Queue status.
+        """
+
+        return {
+            "queued_tasks": len(
+                self._tasks
+            ),
+            "tasks": [
+                task.to_dict()
+                for task in self._tasks
+            ],
+        }
