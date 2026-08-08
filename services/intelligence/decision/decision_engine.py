@@ -1,7 +1,8 @@
 """
-Sentinel DNA Autonomous Investigation Decision Engine
+Sentinel DNA AI Decision Engine
 
-Central reasoning layer for investigation decisions.
+Combines intelligence outputs into
+a final security decision.
 """
 
 from __future__ import annotations
@@ -11,18 +12,25 @@ from typing import Any
 
 class DecisionEngine:
     """
-    Produces investigation decisions.
-
-    Current:
-        Rule-based decision logic.
-
-    Future:
-        LLM reasoning.
-        Graph reasoning.
-        Autonomous agent planning.
+    Generates explainable AI security decisions.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        risk_engine=None,
+        recommendation_engine=None,
+        confidence_engine=None,
+    ) -> None:
+
+        self.risk_engine = risk_engine
+
+        self.recommendation_engine = (
+            recommendation_engine
+        )
+
+        self.confidence_engine = (
+            confidence_engine
+        )
 
         self.history: list[
             dict[str, Any]
@@ -34,68 +42,153 @@ class DecisionEngine:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Analyze investigation and produce decision.
+        Integration API.
+
+        Used by InvestigationIntegrator.
+
+        Converts internal AI decisions
+        into SOC workflow actions.
         """
 
-        severity = investigation.get(
-            "severity",
-            "low",
+        result = self.decide(
+            investigation
         )
 
+        decision_map = {
+            "respond_immediately": "respond",
+            "investigate_further": "investigate",
+            "monitor": "monitor",
+        }
 
-        decision = "monitor"
+        result["decision"] = decision_map.get(
+            result["decision"],
+            result["decision"],
+        )
 
-        priority = "low"
-
-
-        if severity == "critical":
-
-            decision = "respond"
-
-            priority = "critical"
-
-
-        elif severity == "high":
-
-            decision = "investigate"
-
-            priority = "high"
+        return result
 
 
-        elif severity == "medium":
+    def decide(
+        self,
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Generate final AI security decision.
+        """
 
-            decision = "review"
+        risk = {}
 
-            priority = "medium"
+        if self.risk_engine:
+
+            risk = self.risk_engine.analyze(
+                investigation
+            )
 
 
-        result = {
-            "investigation_id": investigation.get(
+        recommendations = {}
+
+        if self.recommendation_engine:
+
+            recommendations = (
+                self.recommendation_engine.generate(
+                    investigation
+                )
+            )
+
+
+        confidence = {}
+
+        if self.confidence_engine:
+
+            confidence = (
+                self.confidence_engine.calculate(
+                    investigation
+                )
+            )
+
+
+        decision = {
+
+            "case_id": investigation.get(
                 "id"
             ),
-            "decision": decision,
-            "priority": priority,
+
+            "risk": risk,
+
+            "recommendations": (
+                recommendations.get(
+                    "recommendations",
+                    [],
+                )
+                if recommendations
+                else []
+            ),
+
+            "confidence": confidence,
+
+            "decision": self._decision(
+                investigation
+            ),
         }
 
 
         self.history.append(
-            result
+            decision
         )
 
 
-        return result
+        return decision
 
+
+    def _decision(
+        self,
+        investigation: dict[str, Any],
+    ) -> str:
+        """
+        Determine AI security decision.
+
+        Internal reasoning states:
+
+        critical/high:
+            respond_immediately
+
+        medium:
+            investigate_further
+
+        low/unknown:
+            monitor
+        """
+
+        severity = investigation.get(
+            "severity",
+            "",
+        ).lower()
+
+
+        if severity in (
+            "critical",
+            "high",
+        ):
+
+            return "respond_immediately"
+
+
+        if severity == "medium":
+
+            return "investigate_further"
+
+
+        return "monitor"
 
 
     def get_history(
         self,
     ) -> list[dict[str, Any]]:
         """
-        Return decisions.
+        Return decision history.
         """
 
         return self.history
-
 
 
     def clear_history(
