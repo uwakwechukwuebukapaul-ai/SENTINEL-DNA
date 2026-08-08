@@ -16,9 +16,14 @@ from services.intelligence.reporting.report_generator import (
     ReportGenerator,
 )
 
+from services.intelligence.reporting.report_service import (
+    ReportService,
+)
+
 
 __all__ = [
     "ExecutiveSummaryGenerator",
     "TimelineBuilder",
     "ReportGenerator",
+    "ReportService",
 ]
