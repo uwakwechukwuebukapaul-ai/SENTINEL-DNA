@@ -9,14 +9,29 @@ Responsibilities:
 - Build execution plan
 - Dispatch runtime tasks
 - Aggregate agent results
+- Track execution telemetry
 - Return orchestration outcome
 """
 
+from __future__ import annotations
+
 from typing import Any
 
-from .investigation_context import InvestigationContext
-from .investigation_plan import InvestigationPlan
-from .orchestration_result import OrchestrationResult
+from .investigation_context import (
+    InvestigationContext,
+)
+
+from .investigation_plan import (
+    InvestigationPlan,
+)
+
+from .orchestration_result import (
+    OrchestrationResult,
+)
+
+from .execution_tracker import (
+    ExecutionTracker,
+)
 
 
 class InvestigationCoordinator:
@@ -24,16 +39,20 @@ class InvestigationCoordinator:
     Coordinates investigation lifecycle execution.
     """
 
+
     def __init__(
         self,
         registry=None,
         runtime=None,
         orchestrator=None,
-    ):
+    ) -> None:
 
         self.registry = registry
+
         self.runtime = runtime
+
         self.orchestrator = orchestrator
+
 
 
     def create_context(
@@ -52,13 +71,18 @@ class InvestigationCoordinator:
 
         iocs = []
 
+
         for item in evidence:
 
-            if isinstance(item, dict):
+            if isinstance(
+                item,
+                dict,
+            ):
 
                 indicator = item.get(
                     "indicator"
                 )
+
 
                 if indicator:
 
@@ -73,6 +97,7 @@ class InvestigationCoordinator:
             evidence=evidence,
             iocs=iocs,
         )
+
 
 
     def create_plan(
@@ -101,6 +126,7 @@ class InvestigationCoordinator:
         )
 
 
+
     def investigate(
         self,
         case_id: str,
@@ -113,7 +139,7 @@ class InvestigationCoordinator:
         context = self.create_context(
             case_id,
             [
-                alert
+                alert,
             ],
         )
 
@@ -135,7 +161,7 @@ class InvestigationCoordinator:
 
 
         #
-        # Direct runtime execution path
+        # Runtime execution path
         #
         if self.runtime:
 
@@ -145,7 +171,11 @@ class InvestigationCoordinator:
             )
 
 
+            tracker = ExecutionTracker()
+
+
             for capability in plan.agents:
+
 
                 task = self._create_task(
                     capability,
@@ -164,6 +194,7 @@ class InvestigationCoordinator:
 
                 if execution_result is not None:
 
+
                     result.add_agent_result(
                         capability,
                         execution_result,
@@ -174,11 +205,24 @@ class InvestigationCoordinator:
                         capability
                     )
 
+
+                    tracker.record_success(
+                        capability
+                    )
+
+
                 else:
+
 
                     result.add_error(
                         f"{capability} execution failed"
                     )
+
+
+                    tracker.record_failure(
+                        capability
+                    )
+
 
 
             if result.errors:
@@ -186,7 +230,14 @@ class InvestigationCoordinator:
                 result.success = False
 
 
+
+            result.metadata[
+                "execution"
+            ] = tracker.summary()
+
+
             return result
+
 
 
         #
@@ -197,9 +248,11 @@ class InvestigationCoordinator:
             success=False,
         )
 
+
         result.add_error(
             "Runtime unavailable"
         )
+
 
         return result
 
@@ -215,11 +268,13 @@ class InvestigationCoordinator:
         """
         Create runtime task.
 
-        Kept isolated so future runtime
+        Isolated so future runtime
         scheduling can replace this layer.
         """
 
-        from services.intelligence.runtime.task import Task
+        from services.intelligence.runtime.task import (
+            Task,
+        )
 
 
         return Task(
