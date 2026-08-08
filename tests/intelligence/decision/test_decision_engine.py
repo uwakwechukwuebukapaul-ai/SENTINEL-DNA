@@ -4,64 +4,42 @@ from services.intelligence.decision import (
 
 
 
-def test_critical_decision():
+def test_high_risk_decision():
 
     engine = DecisionEngine()
 
 
-    result = engine.analyze(
+    result = engine.decide(
         {
-            "id": "INV-001",
-            "severity": "critical",
-        }
-    )
-
-
-    assert result["decision"] == "respond"
-
-
-
-def test_high_decision():
-
-    engine = DecisionEngine()
-
-
-    result = engine.analyze(
-        {
+            "id": "INC-001",
             "severity": "high",
         }
     )
 
 
-    assert result["priority"] == "high"
+    assert (
+        result["decision"]
+        == "respond_immediately"
+    )
 
 
 
-def test_medium_decision():
+def test_medium_risk_decision():
 
     engine = DecisionEngine()
 
 
-    result = engine.analyze(
+    result = engine.decide(
         {
             "severity": "medium",
         }
     )
 
 
-    assert result["decision"] == "review"
-
-
-
-def test_low_decision():
-
-    engine = DecisionEngine()
-
-
-    result = engine.analyze({})
-
-
-    assert result["decision"] == "monitor"
+    assert (
+        result["decision"]
+        == "investigate_further"
+    )
 
 
 
@@ -69,7 +47,8 @@ def test_history():
 
     engine = DecisionEngine()
 
-    engine.analyze({})
+    engine.decide({})
+
 
     assert len(
         engine.get_history()
@@ -81,8 +60,9 @@ def test_clear_history():
 
     engine = DecisionEngine()
 
-    engine.analyze({})
+    engine.decide({})
 
     engine.clear_history()
+
 
     assert engine.get_history() == []

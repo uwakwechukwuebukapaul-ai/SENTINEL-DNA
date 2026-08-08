@@ -1,7 +1,8 @@
 """
 Sentinel DNA Recommendation Engine
 
-Generates investigation response recommendations.
+Generates explainable security response
+recommendations from investigation context.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from typing import Any
 
 class RecommendationEngine:
     """
-    Generates security investigation recommendations.
+    Generates SOC investigation recommendations.
     """
 
     def __init__(self) -> None:
@@ -23,67 +24,65 @@ class RecommendationEngine:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Generate recommendations from investigation context.
+        Generate recommendations from investigation data.
         """
 
         recommendations: list[str] = []
 
-
-        severity = investigation.get(
-            "severity",
-            ""
+        severity = str(
+            investigation.get(
+                "severity",
+                "",
+            )
         ).lower()
 
 
-        # High severity response
-        if severity == "high":
+        # High impact security incidents
+        if severity in (
+            "critical",
+            "high",
+        ):
 
             recommendations.extend(
                 [
                     "Contain affected assets",
                     "IOC blocking",
-                ]
-            )
-
-
-        # Critical severity response
-        elif severity == "critical":
-
-            recommendations.extend(
-                [
-                    "Isolate affected systems",
-                    "IOC blocking",
-                    "Escalate incident",
+                    "Escalate investigation",
                 ]
             )
 
 
         # Credential compromise response
         if investigation.get(
-            "credential_compromise",
-            False,
+            "credential_compromise"
         ):
 
             recommendations.append(
                 "Reset affected credentials"
             )
 
-
-        # Malware response
-        if investigation.get(
-            "malware_detected",
-            False,
-        ):
-
             recommendations.append(
-                "Perform malware containment"
+                "Review authentication activity"
             )
 
 
-        # IOC response
+        # Malware indicators
         if investigation.get(
-            "ioc_detected",
-            False,
+            "malware_detected"
+        ):
+
+            recommendations.append(
+                "Isolate infected systems"
+            )
+
+            recommendations.append(
+                "Perform malware analysis"
+            )
+
+
+        # Suspicious IOC activity
+        if investigation.get(
+            "ioc_detected"
         ):
 
             recommendations.append(
@@ -91,7 +90,15 @@ class RecommendationEngine:
             )
 
 
-        # Default recommendation
+        # Medium severity investigations
+        if severity == "medium":
+
+            recommendations.append(
+                "Investigate further"
+            )
+
+
+        # Default action
         if not recommendations:
 
             recommendations.append(
@@ -100,11 +107,19 @@ class RecommendationEngine:
 
 
         result = {
-            "recommendations": recommendations
+
+            "investigation_id": investigation.get(
+                "id"
+            ),
+
+            "recommendations": recommendations,
+
         }
 
 
-        self.history.append(result)
+        self.history.append(
+            result
+        )
 
 
         return result
