@@ -27,6 +27,25 @@ class ReportRepository:
             dict[str, Any],
         ] = {}
 
+    def create(
+        self,
+        case_id: str,
+        report: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Create and store investigation report.
+
+        Repository contract used by persistence workflows.
+        """
+
+        stored_report = {
+            "case_id": case_id,
+            "report": report,
+        }
+
+        self._reports[case_id] = stored_report
+
+        return stored_report
 
     def save(
         self,
@@ -41,7 +60,6 @@ class ReportRepository:
 
         return report
 
-
     def get(
         self,
         case_id: str,
@@ -54,14 +72,12 @@ class ReportRepository:
             case_id
         )
 
-
     def exists(
         self,
         case_id: str,
     ) -> bool:
 
         return case_id in self._reports
-
 
     def list_all(self) -> list[dict[str, Any]]:
         """
