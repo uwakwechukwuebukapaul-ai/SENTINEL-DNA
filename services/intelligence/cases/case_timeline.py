@@ -6,7 +6,7 @@ Tracks investigation events.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 
@@ -15,7 +15,7 @@ class CaseTimeline:
     Investigation event timeline.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
 
         self.events: list[dict[str, Any]] = []
 
@@ -26,11 +26,19 @@ class CaseTimeline:
         description: str,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Add investigation event.
+        """
 
         event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(
+                UTC
+            ).isoformat(),
+
             "type": event_type,
+
             "description": description,
+
             "metadata": metadata or {},
         }
 
@@ -39,6 +47,11 @@ class CaseTimeline:
         return event
 
 
-    def get_events(self):
+    def get_events(
+        self,
+    ) -> list[dict[str, Any]]:
+        """
+        Return investigation timeline events.
+        """
 
         return self.events
