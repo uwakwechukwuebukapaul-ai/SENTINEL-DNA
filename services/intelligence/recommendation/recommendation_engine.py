@@ -1,7 +1,7 @@
 """
-Sentinel DNA Investigation Recommendation Engine
+Sentinel DNA Recommendation Engine
 
-Generates AI-assisted investigation recommendations.
+Generates investigation response recommendations.
 """
 
 from __future__ import annotations
@@ -11,22 +11,11 @@ from typing import Any
 
 class RecommendationEngine:
     """
-    Generates recommended SOC actions.
-
-    Current:
-        Rule-based reasoning.
-
-    Future:
-        LLM reasoning.
-        Graph intelligence.
-        Reinforcement learning.
+    Generates security investigation recommendations.
     """
 
     def __init__(self) -> None:
-
-        self.history: list[
-            dict[str, Any]
-        ] = []
+        self.history: list[dict[str, Any]] = []
 
 
     def generate(
@@ -34,7 +23,7 @@ class RecommendationEngine:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Generate investigation recommendations.
+        Generate recommendations from investigation context.
         """
 
         recommendations: list[str] = []
@@ -42,26 +31,37 @@ class RecommendationEngine:
 
         severity = investigation.get(
             "severity",
-            "low",
-        )
+            ""
+        ).lower()
 
 
-        if severity in (
-            "critical",
-            "high",
-        ):
+        # High severity response
+        if severity == "high":
 
-            recommendations.append(
-                "Contain affected assets"
-            )
-
-            recommendations.append(
-                "IOC blocking"
+            recommendations.extend(
+                [
+                    "Contain affected assets",
+                    "IOC blocking",
+                ]
             )
 
 
+        # Critical severity response
+        elif severity == "critical":
+
+            recommendations.extend(
+                [
+                    "Isolate affected systems",
+                    "IOC blocking",
+                    "Escalate incident",
+                ]
+            )
+
+
+        # Credential compromise response
         if investigation.get(
-            "credential_compromise"
+            "credential_compromise",
+            False,
         ):
 
             recommendations.append(
@@ -69,15 +69,29 @@ class RecommendationEngine:
             )
 
 
+        # Malware response
         if investigation.get(
-            "malware_detected"
+            "malware_detected",
+            False,
         ):
 
             recommendations.append(
-                "Perform endpoint investigation"
+                "Perform malware containment"
             )
 
 
+        # IOC response
+        if investigation.get(
+            "ioc_detected",
+            False,
+        ):
+
+            recommendations.append(
+                "Block malicious indicators"
+            )
+
+
+        # Default recommendation
         if not recommendations:
 
             recommendations.append(
@@ -86,16 +100,11 @@ class RecommendationEngine:
 
 
         result = {
-            "investigation_id": investigation.get(
-                "id"
-            ),
-            "recommendations": recommendations,
+            "recommendations": recommendations
         }
 
 
-        self.history.append(
-            result
-        )
+        self.history.append(result)
 
 
         return result
