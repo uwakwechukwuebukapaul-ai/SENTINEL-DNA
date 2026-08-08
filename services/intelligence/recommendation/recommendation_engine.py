@@ -1,55 +1,123 @@
 """
-Sentinel DNA Recommendation Engine
+Sentinel DNA Investigation Recommendation Engine
 
-Produces AI-assisted SOC recommendations.
+Generates AI-assisted investigation recommendations.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .recommendation import Recommendation
-
-from .recommendation_rules import (
-    RecommendationRuleEngine,
-)
-
-
 
 class RecommendationEngine:
     """
-    Enterprise recommendation generator.
+    Generates recommended SOC actions.
+
+    Current:
+        Rule-based reasoning.
+
+    Future:
+        LLM reasoning.
+        Graph intelligence.
+        Reinforcement learning.
     """
 
+    def __init__(self) -> None:
 
-    def __init__(self):
-
-        self.rules = (
-            RecommendationRuleEngine()
-        )
+        self.history: list[
+            dict[str, Any]
+        ] = []
 
 
     def generate(
         self,
-        risk_level: str,
-        findings: list[Any],
-    ) -> list[Recommendation]:
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Generate investigation recommendations.
+        """
+
+        recommendations: list[str] = []
 
 
-        raw = self.rules.generate(
-            risk_level=risk_level,
-            findings=findings,
+        severity = investigation.get(
+            "severity",
+            "low",
         )
 
 
-        return [
+        if severity in (
+            "critical",
+            "high",
+        ):
 
-            Recommendation(
-                action=item["action"],
-                priority=item["priority"],
-                reason=item["reason"],
+            recommendations.append(
+                "Contain affected assets"
             )
 
-            for item in raw
+            recommendations.append(
+                "IOC blocking"
+            )
 
-        ]
+
+        if investigation.get(
+            "credential_compromise"
+        ):
+
+            recommendations.append(
+                "Reset affected credentials"
+            )
+
+
+        if investigation.get(
+            "malware_detected"
+        ):
+
+            recommendations.append(
+                "Perform endpoint investigation"
+            )
+
+
+        if not recommendations:
+
+            recommendations.append(
+                "Continue monitoring"
+            )
+
+
+        result = {
+            "investigation_id": investigation.get(
+                "id"
+            ),
+            "recommendations": recommendations,
+        }
+
+
+        self.history.append(
+            result
+        )
+
+
+        return result
+
+
+
+    def get_history(
+        self,
+    ) -> list[dict[str, Any]]:
+        """
+        Return recommendation history.
+        """
+
+        return self.history
+
+
+
+    def clear_history(
+        self,
+    ) -> None:
+        """
+        Clear recommendation history.
+        """
+
+        self.history.clear()
