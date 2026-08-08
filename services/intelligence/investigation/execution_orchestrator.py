@@ -2,162 +2,106 @@
 Sentinel DNA Investigation Execution Orchestrator
 
 Coordinates autonomous investigation execution.
-
-Pipeline:
-
-Alert
- |
-Investigation Context
- |
-Intelligence Engines
- |
-Risk Analysis
- |
-Report Generation
- |
-Persistence
 """
 
 from __future__ import annotations
 
+from datetime import datetime, UTC
 from typing import Any
+
+from .investigation_pipeline import (
+    InvestigationPipeline,
+)
+
+from .investigation_result import (
+    InvestigationResult,
+)
 
 
 class InvestigationExecutionOrchestrator:
     """
-    Main AI investigation execution controller.
+    Main coordinator for AI investigation execution.
     """
 
     def __init__(
         self,
-        investigation_repository=None,
-        report_repository=None,
-        engines=None,
+        pipeline: InvestigationPipeline | None = None,
     ) -> None:
 
-        self.investigation_repository = (
-            investigation_repository
-        )
+        self.pipeline = pipeline or InvestigationPipeline()
 
-        self.report_repository = (
-            report_repository
-        )
-
-        self.engines = engines or {}
-
-        self.history: list[dict[str, Any]] = []
+        self.execution_history: list[
+            dict[str, Any]
+        ] = []
 
 
-    def register_engine(
-        self,
-        name: str,
-        engine: Any,
-    ) -> None:
-        """
-        Register intelligence capability.
-        """
-
-        self.engines[name] = engine
-
-
-    def execute(
+    def execute_investigation(
         self,
         case_id: str,
         alert: dict[str, Any],
-    ) -> dict[str, Any]:
+    ) -> InvestigationResult:
         """
-        Execute complete investigation.
+        Execute complete investigation workflow.
         """
 
-        investigation = None
-
-        if self.investigation_repository:
-
-            investigation = (
-                self.investigation_repository.create(
-                    case_id=case_id,
-                    alert=alert,
-                )
-            )
+        started_at = datetime.now(
+            UTC
+        ).isoformat()
 
 
-        results = {}
-
-
-        for name, engine in self.engines.items():
-
-            try:
-
-                if hasattr(
-                    engine,
-                    "analyze",
-                ):
-
-                    results[name] = (
-                        engine.analyze(alert)
-                    )
-
-                elif hasattr(
-                    engine,
-                    "execute",
-                ):
-
-                    results[name] = (
-                        engine.execute(alert)
-                    )
-
-            except Exception as exc:
-
-                results[name] = {
-                    "error": str(exc)
-                }
-
-
-        report = {
-
-            "case_id": case_id,
-
-            "alert": alert,
-
-            "intelligence": results,
-
-            "status": "completed",
-
-        }
-
-
-        if self.report_repository:
-
-            self.report_repository.create(
-                case_id=case_id,
-                report=report,
-            )
-
-
-        execution = {
-
-            "case_id": case_id,
-
-            "investigation": investigation,
-
-            "report": report,
-
-        }
-
-
-        self.history.append(
-            execution
+        result = self.pipeline.execute(
+            case_id=case_id,
+            alert=alert,
         )
 
 
-        return execution
+        self._record_execution(
+            case_id=case_id,
+            status=result.status,
+            started_at=started_at,
+            result=result.to_dict(),
+        )
+
+
+        return result
+
+
+    def _record_execution(
+        self,
+        case_id: str,
+        status: str,
+        started_at: str,
+        result: dict[str, Any],
+    ) -> None:
+        """
+        Store execution audit record.
+        """
+
+        self.execution_history.append(
+            {
+                "case_id": case_id,
+                "status": status,
+                "started_at": started_at,
+                "result": result,
+            }
+        )
 
 
     def get_history(
         self,
     ) -> list[dict[str, Any]]:
         """
-        Return executions.
+        Return investigation execution history.
         """
 
-        return self.history
+        return self.execution_history
+
+
+    def clear_history(
+        self,
+    ) -> None:
+        """
+        Clear execution history.
+        """
+
+        self.execution_history.clear()
