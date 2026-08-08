@@ -1,41 +1,32 @@
 """
-Sentinel DNA Investigation Decision Engine
+Sentinel DNA Autonomous Investigation Decision Engine
+
+Central reasoning layer for investigation decisions.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .confidence_scoring import (
-    ConfidenceScoringEngine,
-)
-
-from .recommendation_engine import (
-    RecommendationEngine,
-)
-
-
 
 class DecisionEngine:
     """
-    Converts investigation results into decisions.
+    Produces investigation decisions.
+
+    Current:
+        Rule-based decision logic.
+
+    Future:
+        LLM reasoning.
+        Graph reasoning.
+        Autonomous agent planning.
     """
 
     def __init__(self) -> None:
 
-        self.confidence_engine = (
-            ConfidenceScoringEngine()
-        )
-
-        self.recommendation_engine = (
-            RecommendationEngine()
-        )
-
-
         self.history: list[
             dict[str, Any]
         ] = []
-
 
 
     def analyze(
@@ -43,49 +34,47 @@ class DecisionEngine:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Analyze investigation output.
+        Analyze investigation and produce decision.
         """
 
-        results = investigation.get(
-            "results",
-            [],
+        severity = investigation.get(
+            "severity",
+            "low",
         )
 
 
-        confidence = (
-            self.confidence_engine
-            .calculate(results)
-        )
+        decision = "monitor"
+
+        priority = "low"
 
 
-        if confidence >= 80:
+        if severity == "critical":
 
-            decision = "critical"
+            decision = "respond"
 
-        elif confidence >= 40:
-
-            decision = "high"
-
-        else:
-
-            decision = "low"
+            priority = "critical"
 
 
+        elif severity == "high":
 
-        recommendation = (
-            self.recommendation_engine
-            .recommend(
-                decision,
-                int(confidence),
-            )
-        )
+            decision = "investigate"
+
+            priority = "high"
+
+
+        elif severity == "medium":
+
+            decision = "review"
+
+            priority = "medium"
 
 
         result = {
+            "investigation_id": investigation.get(
+                "id"
+            ),
             "decision": decision,
-            "confidence": confidence,
-            "recommendation":
-                recommendation,
+            "priority": priority,
         }
 
 
@@ -101,5 +90,19 @@ class DecisionEngine:
     def get_history(
         self,
     ) -> list[dict[str, Any]]:
+        """
+        Return decisions.
+        """
 
         return self.history
+
+
+
+    def clear_history(
+        self,
+    ) -> None:
+        """
+        Clear decision history.
+        """
+
+        self.history.clear()
