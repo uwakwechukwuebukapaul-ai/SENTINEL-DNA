@@ -1,7 +1,8 @@
 """
-Sentinel DNA Investigation Integration Layer
+Sentinel DNA Investigation Integrator
 
-Connects intelligence engines into one workflow.
+Connects intelligence engines into a unified
+investigation execution workflow.
 """
 
 from __future__ import annotations
@@ -11,23 +12,41 @@ from typing import Any
 
 class InvestigationIntegrator:
     """
-    Coordinates investigation intelligence.
+    Coordinates investigation intelligence flow.
 
-    Future:
-        - Dependency injection
-        - Event streaming
-        - Async execution
-        - Agent workflows
+    Pipeline:
+
+    Investigation
+          |
+          ↓
+    Decision Engine
+          |
+          ↓
+    Recommendation Engine
+          |
+          ↓
+    Reporting Layer
     """
+
 
     def __init__(
         self,
         decision_engine=None,
         recommendation_engine=None,
+        report_engine=None,
     ) -> None:
 
-        self.decision_engine = decision_engine
-        self.recommendation_engine = recommendation_engine
+        self.decision_engine = (
+            decision_engine
+        )
+
+        self.recommendation_engine = (
+            recommendation_engine
+        )
+
+        self.report_engine = (
+            report_engine
+        )
 
         self.history: list[
             dict[str, Any]
@@ -42,13 +61,16 @@ class InvestigationIntegrator:
         Execute intelligence workflow.
         """
 
-        result = {
+        result: dict[str, Any] = {
+
             "investigation_id": investigation.get(
                 "id"
             ),
+
         }
 
 
+        # AI Decision Layer
         if self.decision_engine:
 
             result["decision"] = (
@@ -58,11 +80,23 @@ class InvestigationIntegrator:
             )
 
 
+        # Recommendation Layer
         if self.recommendation_engine:
 
             result["recommendations"] = (
                 self.recommendation_engine.generate(
                     investigation
+                )
+            )
+
+
+        # Reporting Layer
+        if self.report_engine:
+
+            result["report"] = (
+                self.report_engine.generate(
+                    investigation,
+                    result,
                 )
             )
 
@@ -90,5 +124,8 @@ class InvestigationIntegrator:
     def clear_history(
         self,
     ) -> None:
+        """
+        Clear execution history.
+        """
 
         self.history.clear()
