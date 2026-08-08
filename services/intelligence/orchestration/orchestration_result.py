@@ -37,6 +37,11 @@ class OrchestrationResult:
         default_factory=list
     )
 
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+
     # ------------------------------------------------------------------
     # Agent results
     # ------------------------------------------------------------------
@@ -62,6 +67,7 @@ class OrchestrationResult:
 
         self.results[agent_name] = result
 
+
     # ------------------------------------------------------------------
     # Errors
     # ------------------------------------------------------------------
@@ -86,6 +92,7 @@ class OrchestrationResult:
 
         self.success = False
 
+
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
@@ -109,6 +116,7 @@ class OrchestrationResult:
             ),
         }
 
+
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
@@ -129,5 +137,8 @@ class OrchestrationResult:
             ),
             "errors": list(
                 self.errors
+            ),
+            "metadata": dict(
+                self.metadata
             ),
         }

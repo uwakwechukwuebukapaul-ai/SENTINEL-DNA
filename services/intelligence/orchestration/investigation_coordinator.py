@@ -1,148 +1,233 @@
 """
 Sentinel DNA Investigation Coordinator
 
-Enterprise investigation orchestration boundary.
+High level investigation execution entry point.
 
-Coordinates:
+Responsibilities:
 
-Execution Plan
-|
-Agent Pipeline
-|
-Runtime
-|
-Persistence
+- Create investigation context
+- Build execution plan
+- Dispatch runtime tasks
+- Aggregate agent results
+- Return orchestration outcome
 """
-
-from __future__ import annotations
 
 from typing import Any
 
-
-from services.intelligence.orchestration.agent_pipeline import (
-    AgentPipeline,
-)
-
-from services.intelligence.orchestration.orchestration_result import (
-    OrchestrationResult,
-)
-
-from services.intelligence.storage.investigation_repository import (
-    InvestigationRepository,
-)
+from .investigation_context import InvestigationContext
+from .investigation_plan import InvestigationPlan
+from .orchestration_result import OrchestrationResult
 
 
 class InvestigationCoordinator:
     """
-    Coordinates autonomous investigations.
+    Coordinates investigation lifecycle execution.
     """
 
     def __init__(
         self,
-        registry: Any,
-        runtime: Any,
-        pipeline: AgentPipeline | None = None,
-        repository: InvestigationRepository | None = None,
-    ) -> None:
+        registry=None,
+        runtime=None,
+        orchestrator=None,
+    ):
 
-        self.pipeline = (
-            pipeline
-            or AgentPipeline(
-                registry=registry,
-                runtime=runtime,
-            )
+        self.registry = registry
+        self.runtime = runtime
+        self.orchestrator = orchestrator
+
+
+    def create_context(
+        self,
+        investigation_id: str,
+        evidence: list[Any] | None = None,
+    ) -> InvestigationContext:
+        """
+        Build normalized investigation context.
+
+        Converts incoming evidence into
+        investigation IOCs.
+        """
+
+        evidence = evidence or []
+
+        iocs = []
+
+        for item in evidence:
+
+            if isinstance(item, dict):
+
+                indicator = item.get(
+                    "indicator"
+                )
+
+                if indicator:
+
+                    iocs.append(
+                        indicator
+                    )
+
+
+        return InvestigationContext(
+            investigation_id=investigation_id,
+            case_id=investigation_id,
+            evidence=evidence,
+            iocs=iocs,
         )
 
-        self.repository = (
-            repository
-            or InvestigationRepository()
+
+    def create_plan(
+        self,
+        alert: dict,
+    ) -> InvestigationPlan:
+        """
+        Create investigation execution plan.
+        """
+
+        return InvestigationPlan(
+            investigation_id=alert.get(
+                "case_id",
+                "unknown",
+            ),
+
+            plan_name=(
+                "Standard Security Investigation"
+            ),
+
+            agents=[
+                "investigation_execution",
+                "threat_intelligence",
+                "ioc_enrichment",
+            ],
         )
 
-
-    # ----------------------------------------------------------
-    # Investigation execution
-    # ----------------------------------------------------------
 
     def investigate(
         self,
         case_id: str,
-        alert: dict[str, Any],
+        alert: dict,
     ) -> OrchestrationResult:
         """
         Execute investigation lifecycle.
         """
 
-        self.repository.create(
-            case_id=case_id,
-            alert=alert,
-        )
-
-
-        context = self._create_context(
+        context = self.create_context(
             case_id,
-            alert,
+            [
+                alert
+            ],
         )
 
 
-        plan = self._create_plan()
-
-
-        result = self.pipeline.execute(
-            plan=plan,
-            context=context,
+        plan = self.create_plan(
+            alert
         )
 
 
-        if result.success:
+        #
+        # Preferred orchestration engine path
+        #
+        if self.orchestrator:
 
-            self.repository.update_status(
-                case_id,
-                "completed",
+            return self.orchestrator.execute(
+                plan,
+                context,
             )
 
-        else:
 
-            self.repository.update_status(
-                case_id,
-                "failed",
+        #
+        # Direct runtime execution path
+        #
+        if self.runtime:
+
+            result = OrchestrationResult(
+                plan_name=plan.plan_name,
+                success=True,
             )
 
+
+            for capability in plan.agents:
+
+                task = self._create_task(
+                    capability,
+                    case_id,
+                    alert,
+                    context,
+                )
+
+
+                execution_result = (
+                    self.runtime.execute(
+                        task
+                    )
+                )
+
+
+                if execution_result is not None:
+
+                    result.add_agent_result(
+                        capability,
+                        execution_result,
+                    )
+
+
+                    result.agents_executed.append(
+                        capability
+                    )
+
+                else:
+
+                    result.add_error(
+                        f"{capability} execution failed"
+                    )
+
+
+            if result.errors:
+
+                result.success = False
+
+
+            return result
+
+
+        #
+        # Runtime unavailable
+        #
+        result = OrchestrationResult(
+            plan_name=plan.plan_name,
+            success=False,
+        )
+
+        result.add_error(
+            "Runtime unavailable"
+        )
 
         return result
 
 
 
-    # ----------------------------------------------------------
-    # Context
-    # ----------------------------------------------------------
-
-    def _create_context(
+    def _create_task(
         self,
+        capability: str,
         case_id: str,
-        alert: dict[str, Any],
+        alert: dict,
+        context: InvestigationContext,
     ):
+        """
+        Create runtime task.
 
-        from services.intelligence.orchestration.orchestration_context import (
-            OrchestrationContext,
+        Kept isolated so future runtime
+        scheduling can replace this layer.
+        """
+
+        from services.intelligence.runtime.task import Task
+
+
+        return Task(
+            capability=capability,
+
+            payload={
+                "case_id": case_id,
+                "alert": alert,
+                "context": context,
+            },
         )
-
-
-        return OrchestrationContext(
-            case_id=case_id,
-            alert=alert,
-        )
-
-
-
-    # ----------------------------------------------------------
-    # Plan
-    # ----------------------------------------------------------
-
-    def _create_plan(self):
-
-        from services.intelligence.orchestration.investigation_plans import (
-            InvestigationPlans,
-        )
-
-
-        return InvestigationPlans.standard_investigation()

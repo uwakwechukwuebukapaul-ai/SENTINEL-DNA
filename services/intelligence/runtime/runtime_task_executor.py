@@ -1,76 +1,70 @@
 """
 Sentinel DNA Runtime Task Executor
 
-Executes investigation tasks through registered capability handlers.
+Core execution engine for AI agent capabilities.
+
+Responsibilities:
+
+- Register capability handlers
+- Execute runtime tasks
+- Track execution metrics
+- Manage task lifecycle
 """
 
-from typing import Any
+from __future__ import annotations
 
-from .task import (
-    Task,
-    TaskStatus,
-)
+from typing import Any, Callable
+
+from .task import Task, TaskStatus
 
 
 class RuntimeTaskExecutor:
     """
-    Runtime execution engine for investigation tasks.
-
-    Responsibilities:
-    - Register capability handlers
-    - Execute tasks
-    - Track lifecycle state
-    - Record runtime metrics
-    - Fail safely
+    Enterprise runtime execution engine.
     """
 
-    def __init__(self):
 
-        self.handlers: dict[str, Any] = {}
+    def __init__(self) -> None:
+
+        self.handlers: dict[
+            str,
+            Callable[[dict[str, Any]], Any],
+        ] = {}
 
         self.executed = 0
-        self.failed = 0
         self.completed = 0
+        self.failed = 0
+
 
 
     def register(
         self,
         capability: str,
-        handler: Any,
+        handler: Callable[
+            [dict[str, Any]],
+            Any,
+        ],
     ) -> None:
+        """
+        Register capability handler.
+        """
 
-        self.handlers[capability] = handler
+        self.handlers[
+            capability
+        ] = handler
 
-
-    def unregister(
-        self,
-        capability: str,
-    ) -> None:
-
-        self.handlers.pop(
-            capability,
-            None,
-        )
-
-
-    def status(self) -> dict[str, Any]:
-
-        return {
-            "handlers": list(
-                self.handlers.keys()
-            ),
-            "executed": self.executed,
-            "completed": self.completed,
-            "failed": self.failed,
-        }
 
 
     def execute(
         self,
         task: Task,
-    ):
+    ) -> Any:
+        """
+        Execute runtime task.
+        """
 
         self.executed += 1
+
 
         handler = self.handlers.get(
             task.capability
@@ -82,7 +76,9 @@ class RuntimeTaskExecutor:
             task.status = TaskStatus.FAILED
 
             task.error = (
-                f"Agent not found: {task.capability}"
+                f"No handler registered "
+                f"for capability: "
+                f"{task.capability}"
             )
 
             self.failed += 1
@@ -90,45 +86,71 @@ class RuntimeTaskExecutor:
             return None
 
 
+
         try:
-
-            task.status = TaskStatus.RUNNING
-
 
             result = handler(
                 task.payload
             )
 
 
-            if result is None:
-
-                task.status = TaskStatus.FAILED
-
-                task.error = (
-                    f"Agent execution returned no result: "
-                    f"{task.capability}"
-                )
-
-                self.failed += 1
-
-                return None
-
-
-            task.status = TaskStatus.COMPLETED
-
             task.result = result
 
+            task.status = (
+                TaskStatus.COMPLETED
+            )
+
             self.completed += 1
+
 
             return result
 
 
+
         except Exception as exc:
 
-            task.status = TaskStatus.FAILED
+            import traceback
+
+
+            task.status = (
+                TaskStatus.FAILED
+            )
+
 
             task.error = str(exc)
 
+
             self.failed += 1
 
+
+            traceback.print_exc()
+
+
             return None
+
+
+
+    def status(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Runtime health status.
+        """
+
+        return {
+
+            "handlers":
+                list(
+                    self.handlers.keys()
+                ),
+
+            "executed":
+                self.executed,
+
+            "completed":
+                self.completed,
+
+            "failed":
+                self.failed,
+
+        }

@@ -1,98 +1,48 @@
 """
 Sentinel DNA Agent Bootstrap
 
-Central initialization point for intelligence agents.
-
-Responsibilities:
-
-- create intelligence agents
-- register agents for orchestration
-- register agents into runtime lifecycle
-- connect agent capabilities to runtime execution
+Registers enterprise AI investigation agents.
 """
-
-from __future__ import annotations
-
-from services.intelligence.agents.agent_registry import (
-    AgentRegistry,
-)
 
 from services.intelligence.agents.investigation_agent import (
     InvestigationAgent,
-)
-
-from services.intelligence.agents.ioc_enrichment_agent import (
-    IOCEnrichmentAgent,
 )
 
 from services.intelligence.agents.threat_intelligence_agent import (
     ThreatIntelligenceAgent,
 )
 
-
-def create_agents() -> list:
-    """
-    Create Sentinel DNA intelligence agents.
-    """
-
-    return [
-        InvestigationAgent(),
-        IOCEnrichmentAgent(),
-        ThreatIntelligenceAgent(),
-    ]
-
-
-def register_agents(
-    registry: AgentRegistry,
-) -> list:
-    """
-    Register agents into orchestration registry.
-
-    Returns created agents for optional
-    runtime registration.
-    """
-
-    agents = create_agents()
-
-    for agent in agents:
-        registry.register(agent)
-
-    return agents
+from services.intelligence.agents.ioc_enrichment_agent import (
+    IOCEnrichmentAgent,
+)
 
 
 def bootstrap_agents(
-    registry: AgentRegistry,
-    lifecycle_service=None,
+    registry,
     runtime_adapter=None,
-) -> list:
+):
     """
-    Enterprise agent bootstrap.
-
-    Initializes:
-
-    Agent Registry
-        |
-        v
-    Runtime Lifecycle
-        |
-        v
-    Runtime Capability Adapter
+    Register all intelligence agents.
     """
 
-    agents = register_agents(
-        registry
-    )
+    agents = [
+        InvestigationAgent(),
+        ThreatIntelligenceAgent(),
+        IOCEnrichmentAgent(),
+    ]
+
 
     for agent in agents:
 
-        if lifecycle_service is not None:
-            lifecycle_service.register(
-                agent
-            )
+        registry.register(
+            agent
+        )
 
-        if runtime_adapter is not None:
+        if runtime_adapter:
+
             runtime_adapter.register_agent(
                 agent
             )
 
-    return agents
+
+    return registry
