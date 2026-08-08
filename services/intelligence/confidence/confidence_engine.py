@@ -1,8 +1,7 @@
 """
 Sentinel DNA Confidence Engine
 
-Combines investigation signals
-into explainable AI confidence.
+Calculates confidence level for AI decisions.
 """
 
 from __future__ import annotations
@@ -10,67 +9,115 @@ from __future__ import annotations
 from typing import Any
 
 
-from services.intelligence.confidence.confidence_score import (
-    ConfidenceScore,
-)
-
-
-from services.intelligence.confidence.confidence_factors import (
-    ConfidenceFactorEvaluator,
-)
-
-
-
 class ConfidenceEngine:
     """
-    Enterprise confidence calculation engine.
+    Evaluates confidence in investigation decisions.
     """
-
 
     def __init__(self):
 
-        self.factor_evaluator = (
-            ConfidenceFactorEvaluator()
-        )
+        self.history: list[
+            dict[str, Any]
+        ] = []
 
 
-
-    def evaluate(
+    def calculate(
         self,
-        evidence: list[Any],
-        findings: list[Any],
-        correlations: list[Any],
-    ) -> ConfidenceScore:
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
         """
-        Generate confidence score.
+        Calculate confidence score.
         """
 
+        score = 50
+        reasons = []
 
-        factors = (
-            self.factor_evaluator.evaluate(
-                evidence=evidence,
-                findings=findings,
-                correlations=correlations,
+
+        if investigation.get(
+            "severity"
+        ) in (
+            "high",
+            "critical",
+        ):
+
+            score += 20
+
+            reasons.append(
+                "High severity indicator detected"
             )
+
+
+        if investigation.get(
+            "credential_compromise",
+            False,
+        ):
+
+            score += 20
+
+            reasons.append(
+                "Credential compromise evidence found"
+            )
+
+
+        if investigation.get(
+            "ioc_detected",
+            False,
+        ):
+
+            score += 10
+
+            reasons.append(
+                "IOC evidence available"
+            )
+
+
+        if score > 100:
+            score = 100
+
+
+        result = {
+            "confidence_score": score,
+            "confidence_level": self._level(
+                score
+            ),
+            "reasons": reasons,
+        }
+
+
+        self.history.append(
+            result
         )
 
 
-        if not factors:
-
-            return ConfidenceScore.from_score(
-                0
-            )
+        return result
 
 
-        confidence = (
-            sum(
-                factors.values()
-            )
-            /
-            len(factors)
-        )
+
+    def _level(
+        self,
+        score: int,
+    ) -> str:
+
+        if score >= 80:
+            return "high"
+
+        if score >= 50:
+            return "medium"
+
+        return "low"
 
 
-        return ConfidenceScore.from_score(
-            confidence
-        )
+
+    def get_history(
+        self,
+    ) -> list[dict[str, Any]]:
+
+        return self.history
+
+
+
+    def clear_history(
+        self,
+    ) -> None:
+
+        self.history.clear()
