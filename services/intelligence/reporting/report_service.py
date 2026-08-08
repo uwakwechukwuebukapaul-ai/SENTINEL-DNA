@@ -1,148 +1,169 @@
 """
-Sentinel DNA Report Service
+Sentinel DNA Investigation Report Service
 
-Application service layer for investigation reporting.
+Coordinates investigation report generation
+and API response formatting.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from services.intelligence.reporting.report_builder import (
-    ReportBuilder,
-)
-
-from services.intelligence.reporting.investigation_report import (
-    InvestigationReport,
-)
-
 
 class ReportService:
     """
-    Sentinel DNA Investigation Report Service.
+    Application service for investigation reporting.
     """
 
     def __init__(
         self,
-        builder: ReportBuilder | None = None,
+        report_generator=None,
+        executive_summary=None,
+        timeline_builder=None,
     ) -> None:
 
-        self.builder = (
-            builder
-            or ReportBuilder()
-        )
+        self.report_generator = report_generator
 
-        # Temporary v1 storage.
-        # Replace with repository layer later.
-        self._reports: dict[
-            str,
-            InvestigationReport
-        ] = {}
+        self.executive_summary = executive_summary
+
+        self.timeline_builder = timeline_builder
 
 
-    # --------------------------------------------------
-    # Generate
-    # --------------------------------------------------
-
-    def generate_report(
+    def create_report(
         self,
-        case_id: str,
-        orchestration_result: Any,
-    ) -> InvestigationReport:
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Create investigation report.
+        """
 
-        if not case_id:
-            raise ValueError(
-                "Case ID is required."
+        if self.report_generator:
+
+            report = self.report_generator.generate(
+                investigation
             )
 
-        if orchestration_result is None:
-            raise ValueError(
-                "Orchestration result is required."
+        else:
+
+            case_id = investigation.get(
+                "case_id",
+                investigation.get(
+                    "id",
+                    "UNKNOWN",
+                ),
+            )
+
+            report = {
+
+                "case_id": case_id,
+
+                "status": investigation.get(
+                    "status",
+                    "unknown",
+                ),
+
+                "severity": investigation.get(
+                    "severity",
+                    "unknown",
+                ),
+
+                "summary": (
+                    f"Investigation {case_id} "
+                    "report generated."
+                ),
+
+                "timeline": [],
+
+                "results": investigation.get(
+                    "results",
+                    [],
+                ),
+            }
+
+
+        if self.executive_summary:
+
+            report[
+                "executive_summary"
+            ] = self.executive_summary.generate(
+                investigation
             )
 
 
-        report = self.builder.build(
-            case_id=case_id,
-            orchestration_result=orchestration_result,
-        )
+        if self.timeline_builder:
 
-
-        self._reports[
-            case_id
-        ] = report
+            report[
+                "timeline"
+            ] = self.timeline_builder.build(
+                investigation
+            )
 
 
         return report
 
 
-
-    # --------------------------------------------------
-    # Retrieve
-    # --------------------------------------------------
-
-    def get_report(
+    def generate(
         self,
-        case_id: str,
-    ) -> InvestigationReport | None:
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
         """
-        Retrieve existing investigation report.
+        Compatibility API.
         """
 
-        return self._reports.get(
-            case_id
+        return self.create_report(
+            investigation
         )
 
-
-
-    # --------------------------------------------------
-    # Serialization
-    # --------------------------------------------------
-
-    def serialize_report(
-        self,
-        report: InvestigationReport,
-    ) -> dict[str, Any]:
-
-        return {
-            "case_id": report.case_id,
-            "severity": report.severity,
-            "risk_score": report.risk_score,
-            "findings": report.findings,
-            "recommendations": report.recommendations,
-            "confidence": getattr(
-                report,
-                "confidence",
-                None,
-            ),
-            "agent_results": getattr(
-                report,
-                "agent_results",
-                {},
-            ),
-            "metadata": getattr(
-                report,
-                "metadata",
-                {},
-            ),
-        }
-
-
-
-    # --------------------------------------------------
-    # API helper
-    # --------------------------------------------------
 
     def build_response(
         self,
         case_id: str,
-        orchestration_result: Any,
+        summary: dict[str, Any] | None = None,
+        timeline: list[dict[str, Any]] | None = None,
+        findings: list[Any] | None = None,
+        artifacts: list[Any] | None = None,
+        orchestration_result: dict[str, Any] | None = None,
+        severity: str = "unknown",
     ) -> dict[str, Any]:
+        """
+        Build API-ready investigation report response.
+        """
 
-        report = self.generate_report(
-            case_id,
-            orchestration_result,
-        )
+        return {
 
-        return self.serialize_report(
-            report
-        )
+            "case_id": case_id,
+
+            "severity": severity,
+
+            "summary": (
+                summary
+                if summary is not None
+                else {}
+            ),
+
+            "timeline": (
+                timeline
+                if timeline is not None
+                else []
+            ),
+
+            "findings": (
+                findings
+                if findings is not None
+                else []
+            ),
+
+            "artifacts": (
+                artifacts
+                if artifacts is not None
+                else []
+            ),
+
+            "orchestration_result": (
+                orchestration_result
+                if orchestration_result is not None
+                else {}
+            ),
+
+            "status": "completed",
+        }
