@@ -6,6 +6,7 @@ Executes investigation plans.
 
 from __future__ import annotations
 
+from datetime import datetime, UTC
 from typing import Any
 
 from .agent_dispatcher import (
@@ -17,7 +18,11 @@ from .agent_dispatcher import (
 class InvestigationExecutor:
     """
     Executes investigation workflows.
+
+    Converts investigation plans into
+    agent executions.
     """
+
 
     def __init__(
         self,
@@ -44,7 +49,14 @@ class InvestigationExecutor:
         Execute investigation plan.
         """
 
+        started = datetime.now(
+            UTC
+        )
+
+
         findings = []
+
+        errors = []
 
 
         for task in plan.get(
@@ -52,24 +64,57 @@ class InvestigationExecutor:
             [],
         ):
 
-            result = (
-                self.dispatcher.dispatch(
-                    task["name"],
-                    context,
-                )
-            )
+            try:
 
-            findings.append(
-                result
-            )
+                result = (
+                    self.dispatcher.dispatch(
+                        task["name"],
+                        context,
+                    )
+                )
+
+                findings.append(
+                    result
+                )
+
+
+            except Exception as exc:
+
+                errors.append(
+                    {
+                        "task": task.get(
+                            "name"
+                        ),
+                        "error": str(exc),
+                    }
+                )
+
+
+        completed = datetime.now(
+            UTC
+        )
 
 
         execution = {
+
             "case_id": plan.get(
                 "case_id"
             ),
-            "status": "completed",
+
+            "status": (
+                "completed"
+                if not errors
+                else "partial"
+            ),
+
             "findings": findings,
+
+            "errors": errors,
+
+            "duration_seconds": (
+                completed - started
+            ).total_seconds(),
+
         }
 
 

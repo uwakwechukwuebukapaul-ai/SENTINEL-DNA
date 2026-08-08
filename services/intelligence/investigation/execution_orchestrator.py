@@ -21,14 +21,23 @@ from .investigation_result import (
 class InvestigationExecutionOrchestrator:
     """
     Main coordinator for AI investigation execution.
+
+    Responsible for:
+    - starting investigations
+    - tracking execution lifecycle
+    - recording audit history
     """
+
 
     def __init__(
         self,
         pipeline: InvestigationPipeline | None = None,
     ) -> None:
 
-        self.pipeline = pipeline or InvestigationPipeline()
+        self.pipeline = (
+            pipeline
+            or InvestigationPipeline()
+        )
 
         self.execution_history: list[
             dict[str, Any]
@@ -44,26 +53,64 @@ class InvestigationExecutionOrchestrator:
         Execute complete investigation workflow.
         """
 
-        started_at = datetime.now(
+        started = datetime.now(
             UTC
-        ).isoformat()
-
-
-        result = self.pipeline.execute(
-            case_id=case_id,
-            alert=alert,
         )
 
-
-        self._record_execution(
-            case_id=case_id,
-            status=result.status,
-            started_at=started_at,
-            result=result.to_dict(),
-        )
+        started_at = started.isoformat()
 
 
-        return result
+        try:
+
+            result = self.pipeline.execute(
+                case_id=case_id,
+                alert=alert,
+            )
+
+
+            completed = datetime.now(
+                UTC
+            )
+
+
+            self._record_execution(
+                case_id=case_id,
+                status=result.status,
+                started_at=started_at,
+                completed_at=completed.isoformat(),
+                duration=(
+                    completed - started
+                ).total_seconds(),
+                result=result.to_dict(),
+            )
+
+
+            return result
+
+
+        except Exception as exc:
+
+            completed = datetime.now(
+                UTC
+            )
+
+
+            self._record_execution(
+                case_id=case_id,
+                status="failed",
+                started_at=started_at,
+                completed_at=completed.isoformat(),
+                duration=(
+                    completed - started
+                ).total_seconds(),
+                result={
+                    "error": str(exc),
+                },
+            )
+
+
+            raise
+
 
 
     def _record_execution(
@@ -71,6 +118,8 @@ class InvestigationExecutionOrchestrator:
         case_id: str,
         status: str,
         started_at: str,
+        completed_at: str,
+        duration: float,
         result: dict[str, Any],
     ) -> None:
         """
@@ -82,9 +131,12 @@ class InvestigationExecutionOrchestrator:
                 "case_id": case_id,
                 "status": status,
                 "started_at": started_at,
+                "completed_at": completed_at,
+                "duration_seconds": duration,
                 "result": result,
             }
         )
+
 
 
     def get_history(
@@ -95,6 +147,7 @@ class InvestigationExecutionOrchestrator:
         """
 
         return self.execution_history
+
 
 
     def clear_history(
