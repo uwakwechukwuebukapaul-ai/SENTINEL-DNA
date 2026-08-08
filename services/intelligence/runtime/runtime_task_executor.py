@@ -1,58 +1,64 @@
 """
 Sentinel DNA Runtime Task Executor
 
-Core execution engine for AI agent capabilities.
+Enterprise execution engine.
 
 Responsibilities:
 
 - Register capability handlers
 - Execute runtime tasks
 - Track execution metrics
-- Manage task lifecycle
+- Report runtime status
+- Handle failures
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from .task import Task, TaskStatus
+from .task import Task
 
 
+TaskHandler = Callable[[dict[str, Any]], Any]
+
+
+@dataclass
 class RuntimeTaskExecutor:
     """
-    Enterprise runtime execution engine.
+    Runtime task execution engine.
     """
 
+    handlers: dict[str, TaskHandler] = field(
+        default_factory=dict
+    )
 
-    def __init__(self) -> None:
+    executed: int = 0
 
-        self.handlers: dict[
-            str,
-            Callable[[dict[str, Any]], Any],
-        ] = {}
-
-        self.executed = 0
-        self.completed = 0
-        self.failed = 0
-
+    failed: int = 0
 
 
     def register(
         self,
         capability: str,
-        handler: Callable[
-            [dict[str, Any]],
-            Any,
-        ],
+        handler: TaskHandler,
     ) -> None:
         """
         Register capability handler.
         """
 
-        self.handlers[
-            capability
-        ] = handler
+        self.handlers[capability] = handler
 
+
+    def available(
+        self,
+        capability: str,
+    ) -> bool:
+        """
+        Check capability availability.
+        """
+
+        return capability in self.handlers
 
 
     def execute(
@@ -60,25 +66,15 @@ class RuntimeTaskExecutor:
         task: Task,
     ) -> Any:
         """
-        Execute runtime task.
+        Execute task.
         """
 
-        self.executed += 1
-
-
-        handler = self.handlers.get(
+        if not self.available(
             task.capability
-        )
+        ):
 
-
-        if handler is None:
-
-            task.status = TaskStatus.FAILED
-
-            task.error = (
-                f"No handler registered "
-                f"for capability: "
-                f"{task.capability}"
+            task.fail(
+                f"No handler registered for {task.capability}"
             )
 
             self.failed += 1
@@ -86,71 +82,69 @@ class RuntimeTaskExecutor:
             return None
 
 
+        task.start()
+
 
         try:
+
+            handler = self.handlers[
+                task.capability
+            ]
 
             result = handler(
                 task.payload
             )
 
 
-            task.result = result
-
-            task.status = (
-                TaskStatus.COMPLETED
+            task.complete(
+                result
             )
 
-            self.completed += 1
+
+            self.executed += 1
 
 
             return result
 
 
-
         except Exception as exc:
 
-            import traceback
-
-
-            task.status = (
-                TaskStatus.FAILED
+            task.fail(
+                str(exc)
             )
-
-
-            task.error = str(exc)
 
 
             self.failed += 1
 
 
-            traceback.print_exc()
-
-
             return None
 
 
-
-    def status(
-        self,
-    ) -> dict[str, Any]:
+    def capabilities(self) -> list[str]:
         """
-        Runtime health status.
+        List registered capabilities.
+        """
+
+        return list(
+            self.handlers.keys()
+        )
+
+
+    def status(self) -> dict[str, Any]:
+        """
+        Runtime execution status.
         """
 
         return {
-
-            "handlers":
-                list(
-                    self.handlers.keys()
-                ),
-
-            "executed":
-                self.executed,
-
-            "completed":
-                self.completed,
-
-            "failed":
-                self.failed,
-
+            "handlers": list(
+                self.handlers.keys()
+            ),
+            "registered_handlers": len(
+                self.handlers
+            ),
+            "executed": self.executed,
+            "failed": self.failed,
+            "available": list(
+                self.handlers.keys()
+            ),
         }
