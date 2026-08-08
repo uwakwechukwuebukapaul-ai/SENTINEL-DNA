@@ -1,10 +1,11 @@
 """
 Sentinel DNA Agent Pipeline
 
-Executes investigation plans through registered agents.
+Executes investigation agents
+through the orchestration layer.
 """
 
-from typing import Any
+from __future__ import annotations
 
 from .orchestration_result import (
     OrchestrationResult,
@@ -13,16 +14,17 @@ from .orchestration_result import (
 
 class AgentPipeline:
     """
-    Executes investigation agents from an orchestration plan.
+    Executes agents defined in an investigation plan.
     """
+
 
     def __init__(
         self,
         registry,
-        runtime=None,
-    ):
+    ) -> None:
+
         self.registry = registry
-        self.runtime = runtime
+
 
 
     def execute(
@@ -31,35 +33,23 @@ class AgentPipeline:
         context,
     ) -> OrchestrationResult:
         """
-        Execute all agents in an investigation plan.
+        Execute pipeline agents.
         """
 
         result = OrchestrationResult(
-            plan_name=getattr(
+            plan_name=plan.name
+            if hasattr(plan, "name")
+            else getattr(
                 plan,
-                "name",
-                "unknown",
-            )
+                "plan_name",
+                "Unknown",
+            ),
+
+            success=True,
         )
 
 
-        agents = getattr(
-            plan,
-            "agents",
-            [],
-        )
-
-
-        if not agents:
-
-            result.add_error(
-                "No investigation agents defined"
-            )
-
-            return result
-
-
-        for agent_name in agents:
+        for agent_name in plan.agents:
 
             agent = self.registry.get(
                 agent_name
@@ -72,23 +62,17 @@ class AgentPipeline:
                     f"Agent not found: {agent_name}"
                 )
 
+                result.success = False
+
                 continue
+
 
 
             try:
 
-                if self.runtime:
-
-                    agent_result = self.runtime.execute(
-                        agent_name,
-                        context,
-                    )
-
-                else:
-
-                    agent_result = agent.execute(
-                        context
-                    )
+                agent_result = agent.execute(
+                    context
+                )
 
 
                 result.add_agent_result(
@@ -97,11 +81,22 @@ class AgentPipeline:
                 )
 
 
+                # IMPORTANT:
+                # Track successful execution
+
+                result.agents_executed.append(
+                    agent_name
+                )
+
+
             except Exception as exc:
 
                 result.add_error(
-                    f"Agent execution failed: {agent_name}: {exc}"
+                    f"{agent_name} execution failed: {exc}"
                 )
+
+                result.success = False
+
 
 
         return result
