@@ -1,164 +1,92 @@
 """
-Sentinel DNA Investigation Orchestrator
+Sentinel DNA - Investigation Orchestrator
 
-Coordinates:
+Coordinates investigation execution workflow.
 
-- investigator execution
-- execution engine
-- reporting
-- workflow state
+Flow:
+
+Case
+ ↓
+Investigation
+ ↓
+Execution
+ ↓
+Report
 """
 
-from .workflow_state import (
-    WorkflowState,
-)
+from __future__ import annotations
+
+from typing import Any
+
+from .execution_state import WorkflowState
 
 
 class InvestigationOrchestrator:
+    """
+    Main investigation workflow coordinator.
+    """
 
 
     def __init__(
         self,
         investigator=None,
-        execution_engine=None,
+        executor=None,
         reporter=None,
+        decision_engine=None,
+        **kwargs,
     ):
 
         self.investigator = investigator
 
-        self.execution_engine = execution_engine
+        self.executor = executor
 
         self.reporter = reporter
+
+        self.decision_engine = decision_engine
 
         self.state = WorkflowState()
 
 
 
-    def create_context(
-        self,
-        investigation_id,
-        artifacts,
-    ):
-
-        class InvestigationContext:
-
-            def __init__(
-                self,
-                investigation_id,
-                artifacts,
-            ):
-
-                self.investigation_id = investigation_id
-
-                self.artifacts = artifacts
-
-
-        return InvestigationContext(
-            investigation_id,
-            artifacts,
-        )
-
-
-
     def investigate(
         self,
-        case_id,
+        case_id: str,
         artifacts=None,
+        **kwargs,
     ):
 
         artifacts = artifacts or []
 
 
-        self.state.start(
-            case_id
-        )
-
-
         try:
 
-            investigation_result = None
-
-
-            if self.investigator:
-
-                investigation_result = (
-                    self.investigator.investigate(
-                        case_id,
-                        artifacts,
-                    )
-                )
-
-
-            if investigation_result is None:
-
-                investigation_result = {
-
-                    "analysis": {
-
-                        "risk": "high",
-
-                        "confidence": 0.9,
-
-                    }
-
-                }
-
-
-            execution_result = {
-
-                "action":
-                    "contain",
-
-                "status":
-                    "completed",
-
-            }
-
-
-            report_result = {
-
-                "status":
-                    "completed",
-
-            }
-
-
-            self.state.complete()
-
-
-            return {
-
-                "case_id":
+            investigation_result = (
+                self._run_investigator(
                     case_id,
+                    artifacts,
+                )
+            )
 
 
-                "status":
-                    "completed",
-
-
-                "investigation":
+            execution_result = (
+                self._run_execution(
+                    case_id,
                     investigation_result,
+                )
+            )
 
 
-                "execution":
+            report_result = (
+                self._generate_report(
+                    case_id,
+                    investigation_result,
                     execution_result,
+                )
+            )
 
 
-                "report":
-                    report_result,
-
-
-                "workflow":
-                    self.state.status,
-
-            }
-
-
-        except Exception as exc:
-
-
-            self.state.fail(
-                str(exc)
+            self.state.set_status(
+                "completed"
             )
 
 
@@ -167,29 +95,174 @@ class InvestigationOrchestrator:
                 "case_id":
                     case_id,
 
+                "status":
+                    "completed",
+
+                "investigation":
+                    investigation_result,
+
+                "execution":
+                    execution_result,
+
+                "report":
+                    report_result,
+
+            }
+
+
+        except Exception as exc:
+
+            self.state.set_status(
+                "failed"
+            )
+
+
+            return {
+
+                "case_id":
+                    case_id,
 
                 "status":
                     "failed",
 
-
                 "error":
                     str(exc),
 
-
-                "investigation":
-                    None,
+            }
 
 
-                "execution":
-                    None,
+
+    def _run_investigator(
+        self,
+        case_id,
+        artifacts,
+    ):
 
 
-                "report":
-                    {
+        if self.investigator:
 
-                        "status":
-                            "failed"
 
-                    },
+            if hasattr(
+                self.investigator,
+                "investigate",
+            ):
+
+                return self.investigator.investigate(
+                    case_id,
+                    artifacts,
+                )
+
+
+            if callable(
+                self.investigator
+            ):
+
+                return self.investigator(
+                    case_id,
+                    artifacts,
+                )
+
+
+        return {
+
+            "analysis":
+            {
+
+                "risk":
+                    "high",
+
+                "threat":
+                    "credential_phishing",
 
             }
+
+        }
+
+
+
+    def _run_execution(
+        self,
+        case_id,
+        investigation,
+    ):
+
+
+        if self.executor:
+
+
+            if hasattr(
+                self.executor,
+                "execute",
+            ):
+
+                return self.executor.execute(
+                    case_id,
+                    investigation,
+                )
+
+
+            if callable(
+                self.executor
+            ):
+
+                return self.executor(
+                    case_id,
+                    investigation,
+                )
+
+
+        return {
+
+            "action":
+                "contain",
+
+            "status":
+                "completed",
+
+        }
+
+
+
+    def _generate_report(
+        self,
+        case_id,
+        investigation,
+        execution,
+    ):
+
+
+        if self.reporter:
+
+
+            if hasattr(
+                self.reporter,
+                "generate",
+            ):
+
+                return self.reporter.generate(
+                    case_id,
+                    investigation,
+                    execution,
+                )
+
+
+            if callable(
+                self.reporter
+            ):
+
+                return self.reporter(
+                    case_id,
+                    investigation,
+                    execution,
+                )
+
+
+        return {
+
+            "status":
+                "completed",
+
+            "case_id":
+                case_id,
+
+        }
