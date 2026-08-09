@@ -1,217 +1,491 @@
 """
-Correlation Engine
+Sentinel DNA Correlation Engine
 
-Coordinates IOC matching, threat correlation,
-attack story generation, confidence scoring,
-and export of intelligence correlation results.
+Responsibilities:
+
+- IOC correlation
+- Threat relationship discovery
+- Entity graph analysis
+- Confidence scoring
+- Attack story generation
+
+This module provides the intelligence correlation layer
+between evidence collection and AI investigation reasoning.
 """
 
-from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
-
-from .ioc_matcher import IOCMatcher
-from .threat_correlator import ThreatCorrelator
-from .correlation_result import CorrelationResult
 
 
-class CorrelationEngine:
+
+# ==========================================================
+# Correlation Result
+# ==========================================================
+
+class CorrelationResult:
     """
-    Intelligence correlation orchestration layer.
-
-    Responsibilities:
-    - Match indicators against knowledge
-    - Correlate threats and techniques
-    - Generate attack narratives
-    - Calculate confidence
-    - Produce analyst-ready results
+    Stable correlation result contract.
     """
 
     def __init__(
         self,
-        ioc_matcher: IOCMatcher | None = None,
-        threat_correlator: ThreatCorrelator | None = None,
-        knowledge_graph=None,
+        case_id,
+        indicators=None,
+        techniques=None,
+        confidence=0.0,
+        attack_story=None,
+        metadata=None,
     ):
-        """
-        Initialize correlation engine.
-        """
 
-        if knowledge_graph is None:
-            from services.intelligence.knowledge import KnowledgeGraph
+        self.case_id = case_id
 
-            knowledge_graph = KnowledgeGraph()
+        self.indicators = indicators or []
 
+        self.techniques = techniques or []
 
-        self.knowledge_graph = knowledge_graph
+        self.confidence = confidence
 
+        self.attack_story = attack_story or []
 
-        self.ioc_matcher = (
-            ioc_matcher
-            or IOCMatcher(
-                self.knowledge_graph
-            )
-        )
+        self.metadata = metadata or {}
 
 
-        self.threat_correlator = (
-            threat_correlator
-            or ThreatCorrelator(
-                self.knowledge_graph
-            )
-        )
+
+    def to_dict(self):
+
+        return {
+
+            "case_id":
+                self.case_id,
+
+            "indicators":
+                self.indicators,
+
+            "techniques":
+                self.techniques,
+
+            "confidence":
+                self.confidence,
+
+            "attack_story":
+                self.attack_story,
+
+            "metadata":
+                self.metadata,
+
+        }
 
 
-        self.history: list[dict[str, Any]] = []
+
+
+# ==========================================================
+# Threat Correlation Result
+# ==========================================================
+
+class ThreatCorrelationResult:
+    """
+    Threat graph correlation response.
+    """
+
+    def __init__(
+        self,
+        matched=False,
+        entities=None,
+        risk="unknown",
+        confidence=0.0,
+    ):
+
+        self.matched = matched
+
+        self.entities = entities or []
+
+        self.risk = risk
+
+        self.confidence = confidence
+
+
+
+    def to_dict(self):
+
+        return {
+
+            "matched":
+                self.matched,
+
+            "entities":
+                self.entities,
+
+            "risk":
+                self.risk,
+
+            "confidence":
+                self.confidence,
+
+        }
+
+
+
+
+# ==========================================================
+# Correlation Engine
+# ==========================================================
+
+class CorrelationEngine:
+    """
+    Main intelligence correlation engine.
+    """
+
 
 
     def correlate(
         self,
-        case_id: str,
-        indicators: list[dict[str, Any]],
-        techniques: list[dict[str, Any]],
-        reasoning: dict[str, Any] | None = None,
-    ) -> CorrelationResult:
+        case_id,
+        indicators=None,
+        techniques=None,
+        reason=None,
+        reasoning=None,
+    ):
         """
-        Execute intelligence correlation.
-        """
+        Correlate investigation intelligence.
 
-        reasoning = reasoning or {}
+        Supports:
 
+        reasoning={
+            "classification":"phishing"
+        }
 
-        matched_iocs = (
-            self.ioc_matcher.match(
-                indicators
-            )
-        )
+        and legacy:
 
-
-        correlation = (
-            self.threat_correlator.correlate(
-                matched_iocs,
-                techniques,
-            )
-        )
-
-
-        confidence = (
-            self._calculate_confidence(
-                matched_iocs,
-                techniques,
-                reasoning,
-                indicators,
-            )
-        )
-
-
-        attack_story = (
-            self._generate_attack_story(
-                indicators,
-                techniques,
-                correlation,
-            )
-        )
-
-
-        result = CorrelationResult(
-            case_id=case_id,
-            indicators=indicators,
-            techniques=techniques,
-            matched_iocs=matched_iocs,
-            correlations=correlation,
-            confidence=confidence,
-            attack_story=attack_story,
-            created_at=datetime.now(
-                timezone.utc
-            ).isoformat(),
-        )
-
-
-        self.history.append(
-            result.to_dict()
-        )
-
-
-        return result
-
-
-    def _calculate_confidence(
-        self,
-        matched_iocs: list[Any],
-        techniques: list[dict[str, Any]],
-        reasoning: dict[str, Any],
-        indicators: list[dict[str, Any]] | None = None,
-    ) -> float:
-        """
-        Calculate confidence score.
-
-        Scoring:
-        - IOC evidence: 0.5
-        - ATT&CK techniques: 0.3
-        - AI reasoning: 0.1
+        reason="phishing"
         """
 
-        score = 0.0
+        indicators = indicators or []
 
+        techniques = techniques or []
 
-        if matched_iocs or indicators:
-            score += 0.5
-
-
-        if techniques:
-            score += 0.3
 
 
         if reasoning:
-            score += 0.1
 
-
-        return min(
-            score,
-            1.0,
-        )
-
-
-    def _generate_attack_story(
-        self,
-        indicators: list[dict[str, Any]],
-        techniques: list[dict[str, Any]],
-        correlation: Any,
-    ) -> str:
-        """
-        Generate analyst-readable attack narrative.
-        """
-
-        if not indicators and not techniques:
-            return (
-                "No significant attack pattern identified."
+            reason = reasoning.get(
+                "classification"
             )
 
 
-        return (
-            "Observed activity involving "
-            f"{len(indicators)} indicators "
-            "and "
-            f"{len(techniques)} ATT&CK techniques."
+
+        confidence = 0.0
+
+
+
+        # IOC evidence
+
+        if indicators:
+
+            confidence += 0.3
+
+
+
+        # ATT&CK technique mapping
+
+        if techniques:
+
+            confidence += 0.3
+
+
+
+        # Intelligence classification
+
+        if reason:
+
+            confidence += 0.3
+
+
+
+        if confidence > 1.0:
+
+            confidence = 1.0
+
+
+
+        attack_story = []
+
+
+
+        if indicators:
+
+            attack_story.append(
+                "IOC indicators correlated"
+            )
+
+
+
+        if techniques:
+
+            attack_story.append(
+                "Attack techniques identified"
+            )
+
+
+
+        if reason:
+
+            attack_story.append(
+                f"Threat classified as {reason}"
+            )
+
+
+
+        return CorrelationResult(
+
+            case_id=case_id,
+
+            indicators=indicators,
+
+            techniques=techniques,
+
+            confidence=confidence,
+
+            attack_story=attack_story,
+
+            metadata={
+
+                "created_at":
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+
+            },
+
         )
 
 
-    def get_history(
+
+
+
+# ==========================================================
+# Threat Correlator
+# ==========================================================
+
+class ThreatCorrelator:
+    """
+    Knowledge graph threat relationship correlator.
+    """
+
+
+
+    def __init__(
         self,
-    ) -> list[dict[str, Any]]:
-        """
-        Return previous correlation results.
-        """
+        graph=None,
+    ):
 
-        return self.history.copy()
+        self.graph = graph
 
 
-    def clear_history(
+
+    def correlate(
         self,
-    ) -> None:
-        """
-        Clear correlation history.
-        """
+        indicator,
+        entity_type=None,
+    ):
 
-        self.history.clear()
+        if not self.graph:
+
+            return ThreatCorrelationResult()
+
+
+
+        entities = getattr(
+            self.graph,
+            "entities",
+            []
+        )
+
+
+
+        # Support dict graph storage
+
+        if isinstance(
+            entities,
+            dict,
+        ):
+
+            entities = list(
+                entities.values()
+            )
+
+
+
+        matched_entities = []
+
+
+
+        for entity in entities:
+
+            value = getattr(
+                entity,
+                "value",
+                entity,
+            )
+
+            current_type = getattr(
+                entity,
+                "entity_type",
+                None,
+            )
+
+
+
+            if (
+
+                value == indicator
+
+                and
+
+                (
+                    entity_type is None
+
+                    or
+
+                    current_type == entity_type
+
+                )
+
+            ):
+
+                matched_entities.append(
+                    entity
+                )
+
+
+
+        expanded_entities = list(
+            matched_entities
+        )
+
+
+
+        relationships = getattr(
+            self.graph,
+            "relationships",
+            []
+        )
+
+
+
+        matched_ids = [
+
+            getattr(
+                item,
+                "id",
+                None,
+            )
+
+            for item in matched_entities
+
+        ]
+
+
+
+        # Expand graph relationships
+
+        for relationship in relationships:
+
+
+            source = getattr(
+                relationship,
+                "source",
+                None,
+            )
+
+
+            target = getattr(
+                relationship,
+                "target",
+                None,
+            )
+
+
+
+            if source in matched_ids:
+
+
+                for entity in entities:
+
+
+                    if getattr(
+                        entity,
+                        "id",
+                        None,
+                    ) == target:
+
+                        expanded_entities.append(
+                            entity
+                        )
+
+
+
+            if target in matched_ids:
+
+
+                for entity in entities:
+
+
+                    if getattr(
+                        entity,
+                        "id",
+                        None,
+                    ) == source:
+
+                        expanded_entities.append(
+                            entity
+                        )
+
+
+
+        values = []
+
+
+
+        for entity in expanded_entities:
+
+
+            value = getattr(
+                entity,
+                "value",
+                entity,
+            )
+
+
+            values.append(
+                value
+            )
+
+
+
+        risk = "unknown"
+
+        confidence = 0.0
+
+
+
+        if matched_entities:
+
+            risk = "high"
+
+            confidence = 0.6
+
+
+
+        return ThreatCorrelationResult(
+
+            matched=bool(
+                matched_entities
+            ),
+
+            entities=values,
+
+            risk=risk,
+
+            confidence=confidence,
+
+        )
