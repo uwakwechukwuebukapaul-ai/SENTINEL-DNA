@@ -1,151 +1,143 @@
 """
-Intelligence Fusion Engine
+Fusion Engine
 
-Responsible for combining:
-- Threat providers
-- Reputation analysis
-- Knowledge graph correlation
-- MITRE enrichment
-
-into one intelligence decision.
+Combines intelligence signals,
+provider enrichment, and correlation
+results into a unified intelligence
+assessment.
 """
 
 from typing import Any
 
-from .fusion_result import FusionResult
+from services.intelligence.fusion.fusion_result import (
+    FusionResult,
+)
+
 
 
 class FusionEngine:
     """
-    Central intelligence fusion orchestrator.
+    Intelligence decision engine.
+
+    Responsible for:
+    - risk scoring
+    - confidence calculation
+    - MITRE mapping
+    - intelligence aggregation
     """
+
 
 
     def __init__(
         self,
-        providers=None,
-        knowledge_graph=None,
-        correlator=None,
     ):
 
-        self.providers = (
-            providers or []
-        )
+        self.risk_weights = {
 
-        self.knowledge_graph = (
-            knowledge_graph
-        )
+            "critical": 1.0,
 
-        self.correlator = (
-            correlator
-        )
+            "high": 0.8,
 
+            "medium": 0.5,
 
-    def register_provider(
-        self,
-        provider,
-    ):
-        """
-        Add intelligence provider.
-        """
+            "low": 0.2,
 
-        self.providers.append(
-            provider
-        )
+        }
+
 
 
     def fuse(
         self,
-        indicator: str,
-        indicator_type: str | None = None,
+        context: Any,
     ) -> FusionResult:
+
         """
-        Execute intelligence fusion.
+        Generate unified intelligence result.
         """
 
-        provider_results = []
 
-        provider_names = []
+        signals = []
 
-        risk_scores = []
+        records = []
 
-
-        #
-        # Provider enrichment
-        #
-
-        for provider in self.providers:
-
-            try:
-
-                result = provider.lookup(
-                    indicator,
-                    indicator_type,
-                )
-
-                provider_results.append(
-                    result
-                )
-
-                provider_names.append(
-                    provider.name
-                )
-
-
-                if result.get(
-                    "risk"
-                ):
-
-                    risk_scores.append(
-                        result["risk"]
-                    )
-
-
-            except Exception:
-
-                continue
+        correlation = None
 
 
 
         #
-        # Knowledge graph correlation
+        # Support runtime context
         #
 
-        entities = []
+        if hasattr(
+            context,
+            "signals",
+        ):
 
-        relationships = []
+            signals = (
+                context.signals
+            )
 
-        mitre = []
 
+        elif isinstance(
+            context,
+            dict,
+        ):
 
-        if self.correlator:
-
-            correlation = (
-                self.correlator.correlate(
-                    indicator,
-                    indicator_type,
+            signals = (
+                context.get(
+                    "signals",
+                    [],
                 )
             )
 
 
-            if correlation:
 
-                entities.extend(
-                    correlation.entities
+        if hasattr(
+            context,
+            "intelligence_records",
+        ):
+
+            records = (
+                context.intelligence_records
+            )
+
+
+        elif isinstance(
+            context,
+            dict,
+        ):
+
+            records = (
+                context.get(
+                    "records",
+                    [],
+                )
+            )
+
+
+
+        if hasattr(
+            context,
+            "correlations",
+        ):
+
+            if context.correlations:
+
+                correlation = (
+                    context.correlations[0]
                 )
 
-                relationships.extend(
-                    correlation.relationships
+
+        elif isinstance(
+            context,
+            dict,
+        ):
+
+            correlation = (
+                context.get(
+                    "correlation"
                 )
-
-                if correlation.metadata:
-
-                    mitre.extend(
-                        correlation.metadata.get(
-                            "mitre",
-                            []
-                        )
-                    )
+            )
 
 
 
@@ -153,96 +145,204 @@ class FusionEngine:
         # Risk calculation
         #
 
-        risk = self.calculate_risk(
-            risk_scores,
-            bool(entities),
-        )
-
-
-        confidence = (
-            self.calculate_confidence(
-                provider_names,
-                entities,
+        risk = (
+            self._calculate_risk(
+                correlation,
+                records,
+                signals,
             )
         )
 
 
-        return FusionResult(
-            indicator=indicator,
-            indicator_type=indicator_type,
-            risk=risk,
-            confidence=confidence,
-            providers=provider_names,
-            mitre=mitre,
-            entities=entities,
-            relationships=relationships,
-            metadata={
-                "provider_results":
-                    provider_results
-            },
+
+        confidence = (
+            self._calculate_confidence(
+                correlation,
+                records,
+                signals,
+            )
         )
 
 
-    def calculate_risk(
+
+        mitre = (
+            self._extract_mitre(
+                correlation,
+                records,
+            )
+        )
+
+
+
+        attack_pattern = (
+            self._extract_attack_pattern(
+                correlation
+            )
+        )
+
+
+
+        return FusionResult(
+
+            risk=risk,
+
+            confidence=confidence,
+
+            mitre=mitre,
+
+            attack_pattern=attack_pattern,
+
+            signals=signals,
+
+            records=records,
+
+            metadata={
+
+                "signal_count":
+                    len(signals),
+
+                "record_count":
+                    len(records),
+
+            },
+
+        )
+
+
+
+    def _calculate_risk(
         self,
-        scores,
-        correlated,
+        correlation,
+        records,
+        signals,
     ):
 
-        if correlated:
+        if correlation:
 
-            return "high"
+            value = getattr(
+                correlation,
+                "risk",
+                None,
+            )
 
+            if value:
 
-        if not scores:
-
-            return "unknown"
-
-
-        if "critical" in scores:
-
-            return "critical"
+                return value
 
 
-        if "high" in scores:
 
-            return "high"
-
-
-        if "medium" in scores:
+        if records:
 
             return "medium"
+
+
+
+        if len(signals) >= 3:
+
+            return "medium"
+
 
 
         return "low"
 
 
 
-    def calculate_confidence(
+    def _calculate_confidence(
         self,
-        providers,
-        entities,
+        correlation,
+        records,
+        signals,
     ):
 
-        confidence = 0.0
+        score = 0.0
 
 
-        if providers:
 
-            confidence += 0.5
+        if correlation:
 
-
-        if entities:
-
-            confidence += 0.3
+            score += 0.5
 
 
-        if len(providers) > 1:
 
-            confidence += 0.2
+        if records:
+
+            score += 0.3
+
+
+
+        if len(signals) >= 3:
+
+            score += 0.2
+
 
 
         return min(
-            confidence,
-            1.0
+            score,
+            1.0,
         )
+
+
+
+    def _extract_mitre(
+        self,
+        correlation,
+        records,
+    ):
+
+        techniques = []
+
+
+
+        if correlation:
+
+            techniques.extend(
+
+                getattr(
+                    correlation,
+                    "mitre",
+                    [],
+                )
+                or []
+
+            )
+
+
+
+        for record in records:
+
+            techniques.extend(
+
+                getattr(
+                    record,
+                    "mitre",
+                    [],
+                )
+                or []
+
+            )
+
+
+
+        return list(
+            set(
+                techniques
+            )
+        )
+
+
+
+    def _extract_attack_pattern(
+        self,
+        correlation,
+    ):
+
+        if correlation:
+
+            return getattr(
+                correlation,
+                "attack_pattern",
+                None,
+            )
+
+
+        return None
