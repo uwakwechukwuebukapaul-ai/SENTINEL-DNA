@@ -4,6 +4,7 @@ Sentinel DNA - AI Investigator Gateway
 Enterprise execution entry point for autonomous investigations.
 
 Responsibilities:
+
 - Accept investigation requests
 - Validate investigation payloads
 - Connect scenarios with orchestration
@@ -21,8 +22,12 @@ from typing import Any, Dict, Optional
 import uuid
 
 
+
 class InvestigationGatewayError(Exception):
-    """Raised when investigator gateway execution fails."""
+    """
+    Raised when investigator gateway execution fails.
+    """
+
 
 
 class InvestigatorGateway:
@@ -30,11 +35,13 @@ class InvestigatorGateway:
     Enterprise gateway for AI investigation execution.
 
     Acts as the public service boundary between:
+
     - SOC alerts
     - scenario simulations
     - orchestration engines
     - reporting systems
     """
+
 
     def __init__(
         self,
@@ -42,9 +49,11 @@ class InvestigatorGateway:
         pipeline=None,
         reporter=None,
     ):
+
         self.orchestrator = orchestrator
         self.pipeline = pipeline
         self.reporter = reporter
+
 
 
     def start_investigation(
@@ -59,6 +68,7 @@ class InvestigatorGateway:
 
         investigation_id = self._generate_id()
 
+
         request = {
             "investigation_id": investigation_id,
             "created_at": self._timestamp(),
@@ -67,19 +77,27 @@ class InvestigatorGateway:
             "metadata": metadata or {},
         }
 
+
         try:
 
-            context = self._create_context(request)
+            context = self._create_context(
+                request
+            )
+
 
             orchestration_result = (
-                self._execute_orchestrator(context)
+                self._execute_orchestrator(
+                    context
+                )
             )
+
 
             report = (
                 self._generate_report(
                     orchestration_result
                 )
             )
+
 
             return {
                 "status": "completed",
@@ -88,6 +106,7 @@ class InvestigatorGateway:
                 "report": report,
             }
 
+
         except Exception as exc:
 
             return {
@@ -95,6 +114,7 @@ class InvestigatorGateway:
                 "investigation_id": investigation_id,
                 "error": str(exc),
             }
+
 
 
     def _create_context(
@@ -112,45 +132,83 @@ class InvestigatorGateway:
         }
 
 
+
     def _execute_orchestrator(
         self,
         context: Dict[str, Any],
     ) -> Any:
         """
-        Execute existing orchestration engine.
+        Execute investigation engine.
+
+        Supports:
+
+        - run(context)
+        - execute(context)
+        - investigate(case_id, alert)
         """
 
         if not self.orchestrator:
+
             return {
                 "phase": "simulation",
-                "message": (
-                    "No orchestrator configured"
-                ),
+                "message": "No orchestrator configured",
                 "context": context,
             }
+
 
 
         if hasattr(
             self.orchestrator,
             "run"
         ):
+
             return self.orchestrator.run(
                 context
             )
+
 
 
         if hasattr(
             self.orchestrator,
             "execute"
         ):
+
             return self.orchestrator.execute(
                 context
             )
 
 
+
+        if hasattr(
+            self.orchestrator,
+            "investigate"
+        ):
+
+            investigation = (
+                context["investigation"]
+            )
+
+
+            return self.orchestrator.investigate(
+                case_id=(
+                    investigation[
+                        "investigation_id"
+                    ]
+                ),
+                alert=(
+                    investigation.get(
+                        "alert",
+                        {}
+                    )
+                ),
+            )
+
+
+
         raise InvestigationGatewayError(
             "Unsupported orchestrator interface"
         )
+
 
 
     def _generate_report(
@@ -162,26 +220,32 @@ class InvestigatorGateway:
         """
 
         if not self.reporter:
+
             return {
                 "summary":
                     "Investigation completed"
             }
 
 
+
         if hasattr(
             self.reporter,
             "generate"
         ):
+
             return self.reporter.generate(
                 result
             )
 
 
+
         return result
+
 
 
     @staticmethod
     def _generate_id() -> str:
+
         return (
             "INV-"
             + datetime.now()
@@ -193,8 +257,10 @@ class InvestigatorGateway:
         )
 
 
+
     @staticmethod
     def _timestamp() -> str:
+
         return datetime.now(
             timezone.utc
         ).isoformat()

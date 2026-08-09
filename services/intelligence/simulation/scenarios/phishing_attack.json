@@ -1,89 +1,43 @@
 {
-    "id": "SIM-PHISH-001",
+  "id": "SIM-PHISH-001",
+  "name": "phishing_attack",
+  "description": "Credential harvesting phishing campaign targeting enterprise users.",
+  "category": "phishing",
+  "severity": "HIGH",
 
-    "name": "Credential Phishing Attack",
+  "attacker": {
+    "type": "external",
+    "objective": "credential_theft"
+  },
 
-    "description": "A targeted phishing campaign attempting to steal employee credentials through a fake authentication portal.",
-
-    "category": "phishing",
-
-    "severity": "high",
-
-    "attack_type": "credential_theft",
-
-    "mitre_techniques": [
-        {
-            "id": "T1566.002",
-            "name": "Spearphishing Link"
-        },
-        {
-            "id": "T1056.002",
-            "name": "Input Capture: GUI Input Capture"
-        }
-    ],
-
-    "indicators": [
-        {
-            "type": "domain",
-            "value": "secure-login-example.com",
-            "confidence": 85
-        },
-        {
-            "type": "url",
-            "value": "https://secure-login-example.com/auth",
-            "confidence": 90
-        },
-        {
-            "type": "email",
-            "value": "security-alert@example.com",
-            "confidence": 70
-        }
-    ],
-
-    "evidence": [
-        {
-            "type": "email",
-            "description": "Suspicious email requesting immediate account verification"
-        },
-        {
-            "type": "network",
-            "description": "User connection to suspicious authentication domain"
-        },
-        {
-            "type": "identity",
-            "description": "Possible credential submission to external portal"
-        }
-    ],
-
-    "investigation_objectives": [
-        "Identify malicious indicators",
-        "Determine phishing campaign scope",
-        "Assess credential compromise risk",
-        "Generate containment recommendations"
-    ],
-
-    "expected_findings": [
-        "credential theft attempt detected",
-        "malicious authentication portal identified",
-        "suspicious domain activity detected",
-        "potential account compromise"
-    ],
-
-    "expected_risk": {
-        "severity": "high",
-        "minimum_confidence": 85
+  "artifacts": [
+    {
+      "type": "email",
+      "sender": "security-alert@company-support.xyz",
+      "subject": "Urgent password reset required",
+      "body": "Your account requires immediate verification. Click the attached link."
     },
-
-    "expected_actions": [
-        "Block malicious domain",
-        "Reset affected user credentials",
-        "Search mailbox for similar phishing messages",
-        "Hunt related indicators across environment"
-    ],
-
-    "simulation_metadata": {
-        "created_by": "Sentinel DNA Simulation Engine",
-        "version": "1.0",
-        "environment": "enterprise_soc"
+    {
+      "type": "url",
+      "value": "https://company-support.xyz/login"
+    },
+    {
+      "type": "domain",
+      "value": "company-support.xyz"
     }
+  ],
+
+  "expected_detection": {
+    "technique": "Credential Phishing",
+    "mitre_attack": [
+      "T1566.002"
+    ]
+  },
+
+  "expected_response": [
+    "Block malicious domain",
+    "Analyze phishing email",
+    "Reset compromised credentials",
+    "Notify affected users"
+  ]
 }

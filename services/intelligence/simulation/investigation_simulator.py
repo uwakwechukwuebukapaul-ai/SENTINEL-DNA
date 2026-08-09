@@ -1,13 +1,7 @@
 """
-Sentinel DNA - Investigation Simulator
+Sentinel DNA Investigation Simulator
 
-High level simulation service.
-
-Used for:
-- demonstrations
-- testing
-- analyst training
-- product validation
+Loads scenarios and executes investigations.
 """
 
 from __future__ import annotations
@@ -26,16 +20,15 @@ class InvestigationSimulator:
 
     def simulate(
         self,
-        scenario_name: str
-    ) -> dict:
+        scenario_name
+    ):
 
-        scenario = (
-            self.loader.load(
-                scenario_name
-            )
+        scenario = self.loader.load(
+            scenario_name
         )
 
-        result = (
+
+        execution_result = (
             self.executor.execute(
                 scenario
             )
@@ -43,7 +36,27 @@ class InvestigationSimulator:
 
 
         return {
-            "simulation": scenario_name,
+            "scenario": scenario.get(
+                "name",
+                scenario_name
+            ),
+
             "status": "completed",
-            "result": result
+
+            "execution": execution_result,
+
+            "artifacts": scenario.get(
+                "artifacts",
+                []
+            ),
+
+            "severity": scenario.get(
+                "severity",
+                "UNKNOWN"
+            ),
+
+            "category": scenario.get(
+                "category",
+                "unknown"
+            )
         }

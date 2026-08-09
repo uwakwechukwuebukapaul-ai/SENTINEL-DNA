@@ -14,9 +14,14 @@ from services.intelligence.mitre.mitre_mapper import (
     MitreMapper,
 )
 
+from services.intelligence.mitre.mitre_engine import (
+    MitreEngine,
+)
+
 
 __all__ = [
     "MitreTechnique",
     "MitreDatabase",
     "MitreMapper",
+    "MitreEngine",
 ]
