@@ -1,100 +1,120 @@
 """
-Sentinel DNA Runtime Intelligence Runtime
+Runtime Intelligence Runtime
 
-Top-level intelligence runtime container.
+Primary execution boundary for Sentinel DNA
+intelligence workflows.
 
 Responsibilities:
 
-- bootstrap intelligence stack
-- manage runtime lifecycle
-- expose intelligence interface
-- provide health status
+- receive investigation signals
+- execute runtime intelligence service
+- manage execution lifecycle
+- return intelligence result
 """
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
 from typing import Any
 
-from .runtime_intelligence_facade import (
-    RuntimeIntelligenceFacade,
+
+from services.intelligence.runtime.runtime_intelligence_service import (
+    RuntimeIntelligenceService,
 )
 
 
-@dataclass
+from services.intelligence.runtime.runtime_intelligence_result import (
+    RuntimeIntelligenceResult,
+)
+
+
+
 class RuntimeIntelligenceRuntime:
     """
-    Intelligence runtime container.
+    Runtime execution wrapper around
+    RuntimeIntelligenceService.
     """
 
-    facade: RuntimeIntelligenceFacade = field(
-        default_factory=RuntimeIntelligenceFacade
-    )
 
-    running: bool = False
-
-
-    def start(self) -> None:
-        """
-        Start intelligence runtime.
-        """
-
-        self.running = True
-
-
-
-    def stop(self) -> None:
-        """
-        Stop intelligence runtime.
-        """
-
-        self.running = False
-
-
-
-    def register(
+    def __init__(
         self,
-        capability: str,
-        handler,
-    ) -> None:
-        """
-        Register intelligence capability.
-        """
+        intelligence_service: RuntimeIntelligenceService,
+    ):
 
-        self.facade.register_capability(
-            capability,
-            handler,
+        self.intelligence_service = (
+            intelligence_service
         )
+
+        self.status = "ready"
 
 
 
     def execute(
         self,
-        capability: str,
-        investigation_id: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        signals: list[dict[str, Any]],
+        case_id: str | None = None,
+    ) -> RuntimeIntelligenceResult:
         """
-        Execute intelligence request.
+        Execute intelligence workflow.
         """
 
-        return self.facade.execute(
-            capability,
-            investigation_id,
-            metadata,
-        )
+        self.status = "running"
+
+
+        try:
+
+            result = (
+                self.intelligence_service.investigate(
+                    signals,
+                    case_id,
+                )
+            )
+
+
+            self.status = "completed"
+
+
+            return result
 
 
 
-    def health(self) -> dict[str, Any]:
-        """
-        Runtime health status.
-        """
+        except Exception as exc:
+
+            self.status = "failed"
+
+
+            return RuntimeIntelligenceResult(
+
+                success=False,
+
+                risk="unknown",
+
+                confidence=0.0,
+
+                mitre=[],
+
+                providers=[],
+
+                correlations=[],
+
+                metadata={
+                    "error":
+                        str(exc),
+
+                    "case_id":
+                        case_id,
+                },
+            )
+
+
+
+    def health(
+        self,
+    ):
 
         return {
-            "running":
-                self.running,
 
-            "intelligence":
-                self.facade.status(),
+            "component":
+                "runtime_intelligence_runtime",
+
+            "status":
+                self.status,
+
         }
