@@ -1,111 +1,90 @@
 """
-Sentinel DNA Runtime Intelligence Pipeline
+Runtime Intelligence Pipeline
 
-Enterprise intelligence processing pipeline.
+Coordinates intelligence execution stages.
 
-Responsibilities:
+Flow:
 
-- process intelligence requests
-- manage context flow
-- route capabilities
-- track executions
+Signals
+   |
+   v
+Runtime Intelligence Runtime
+   |
+   v
+Providers
+   |
+   v
+Correlation
+   |
+   v
+Fusion
+   |
+   v
+Intelligence Result
 """
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
 from typing import Any
 
-from .runtime_intelligence_router import RuntimeIntelligenceRouter
-from .runtime_intelligence_context import RuntimeIntelligenceContext
+
+from services.intelligence.runtime.runtime_intelligence_runtime import (
+    RuntimeIntelligenceRuntime,
+)
 
 
-@dataclass
+
 class RuntimeIntelligencePipeline:
     """
-    Intelligence execution pipeline.
+    Main intelligence execution pipeline.
     """
 
-    router: RuntimeIntelligenceRouter = field(
-        default_factory=RuntimeIntelligenceRouter
-    )
 
-    executions: int = 0
-
-
-    def register(
+    def __init__(
         self,
-        capability: str,
-        handler,
-    ) -> None:
-        """
-        Register intelligence capability.
-        """
+        runtime: RuntimeIntelligenceRuntime,
+    ):
 
-        self.router.register(
-            capability,
-            handler,
-        )
+        self.runtime = runtime
+
+
+        self.stages = [
+            "collection",
+            "enrichment",
+            "correlation",
+            "fusion",
+            "decision",
+        ]
 
 
 
     def execute(
         self,
-        capability: str,
-        context: RuntimeIntelligenceContext,
-    ) -> Any:
-        """
-        Execute intelligence capability.
-        """
+        signals: list[dict[str, Any]],
+        case_id: str | None = None,
+    ):
 
-        result = self.router.route(
-            capability,
-            context,
+
+        result = (
+            self.runtime.execute(
+                signals,
+                case_id,
+            )
         )
-
-
-        if result is not None:
-            self.executions += 1
 
 
         return result
 
 
 
-    def available(
+    def describe(
         self,
-        capability: str,
-    ) -> bool:
-        """
-        Check capability.
-        """
-
-        return self.router.available(
-            capability
-        )
-
-
-
-    def clear(self) -> None:
-        """
-        Reset pipeline.
-        """
-
-        self.router.clear()
-
-        self.executions = 0
-
-
-
-    def status(self) -> dict[str, Any]:
-        """
-        Pipeline status.
-        """
+    ):
 
         return {
-            "executions":
-                self.executions,
 
-            "router":
-                self.router.status(),
+            "pipeline":
+                "runtime_intelligence_pipeline",
+
+            "stages":
+                self.stages,
+
         }
