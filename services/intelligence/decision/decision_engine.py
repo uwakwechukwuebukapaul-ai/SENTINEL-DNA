@@ -1,171 +1,26 @@
 """
-Sentinel DNA Autonomous Decision Engine
+Sentinel DNA Decision Intelligence Engine.
 
-Central intelligence layer responsible for
-investigation reasoning and strategy selection.
+Responsible for:
+
+- incident decision generation
+- SOC priority calculation
+- recommended response actions
+- automation readiness
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .risk_classifier import RiskClassifier
-from .priority_engine import PriorityEngine
-from .investigation_strategy import InvestigationStrategy
-from .threat_reasoner import ThreatReasoner
-
 
 class DecisionEngine:
     """
-    AI decision intelligence coordinator.
+    Enterprise decision reasoning engine.
     """
 
-    def __init__(
-        self,
-        risk_classifier=None,
-        priority_engine=None,
-        strategy=None,
-        reasoner=None,
-    ) -> None:
-
-        self.risk_classifier = (
-            risk_classifier
-            or RiskClassifier()
-        )
-
-        self.priority_engine = (
-            priority_engine
-            or PriorityEngine()
-        )
-
-        self.strategy = (
-            strategy
-            or InvestigationStrategy()
-        )
-
-        self.reasoner = (
-            reasoner
-            or ThreatReasoner()
-        )
-
-        self.history: list[
-            dict[str, Any]
-        ] = []
-
-
-    def evaluate(
-        self,
-        alert: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Core AI decision evaluation.
-        """
-
-        severity = (
-            alert.get(
-                "severity",
-                "unknown",
-            )
-            .lower()
-        )
-
-
-        risk = (
-            self.risk_classifier
-            .classify(alert)
-        )
-
-
-        priority = (
-            self.priority_engine
-            .calculate(risk)
-        )
-
-
-        strategy = (
-            self.strategy
-            .select(alert)
-        )
-
-
-        actions = (
-            self.reasoner
-            .analyze(alert)
-        )
-
-
-        decision = (
-            self._select_decision(
-                severity
-            )
-        )
-
-
-        result = {
-
-            "decision": decision,
-
-            "risk": risk,
-
-            "priority": priority,
-
-            "strategy": strategy,
-
-            "actions": actions,
-
-        }
-
-
-        self.history.append(
-            {
-                "alert": alert,
-                "decision": result,
-            }
-        )
-
-
-        return result
-
-
-
-    def _select_decision(
-        self,
-        severity: str,
-    ) -> str:
-        """
-        Map severity into response action.
-        """
-
-        if severity in {
-            "critical",
-            "high",
-        }:
-            return "respond_immediately"
-
-
-        if severity == "medium":
-            return "investigate_further"
-
-
-        return "monitor"
-
-
-
-    def decide(
-        self,
-        alert: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Backward compatible decision API.
-        """
-
-        result = self.evaluate(
-            alert
-        )
-
-
-        return result
-
+    def __init__(self) -> None:
+        self.version = "1.0"
 
 
     def analyze(
@@ -173,54 +28,263 @@ class DecisionEngine:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Integration compatibility API.
+        Compatibility API for investigation workflows.
+
+        Converts raw investigation objects into
+        normalized decision intelligence input.
         """
 
-        result = self.evaluate(
-            investigation
-        )
+        normalized = {
 
+            "classification":
+                investigation.get(
+                    "classification",
+                    "security_incident",
+                ),
 
-        # Integration layer expects:
-        # result["decision"]["decision"]
+            "severity":
+                investigation.get(
+                    "severity",
+                    "low",
+                ),
 
-        return {
-            "decision": {
-                "decision": (
-                    "respond"
-                    if investigation.get(
-                        "severity",
-                        "",
-                    ).lower()
-                    in {
-                        "critical",
-                        "high",
-                    }
-                    else "investigate"
-                )
-            },
+            "confidence":
+                investigation.get(
+                    "confidence",
+                    1.0,
+                ),
 
-            "analysis": result,
         }
 
 
+        return self.decide(
+            normalized
+        )
 
-    def get_history(
+
+    def decide(
         self,
-    ) -> list[dict[str, Any]]:
+        intelligence: dict[str, Any],
+    ) -> dict[str, Any]:
         """
-        Return decision history.
+        Generate security response decision.
         """
 
-        return self.history
+        classification = str(
+            intelligence.get(
+                "classification",
+                "unknown",
+            )
+        ).lower()
 
 
+        severity = str(
+            intelligence.get(
+                "severity",
+                "low",
+            )
+        ).lower()
 
-    def clear_history(
+
+        confidence = float(
+            intelligence.get(
+                "confidence",
+                0,
+            )
+        )
+
+
+        priority = self._calculate_priority(
+            classification,
+            severity,
+            confidence,
+        )
+
+
+        return {
+
+            "status":
+                "completed",
+
+
+            "decision":
+                self._calculate_decision(
+                    priority
+                ),
+
+
+            "priority":
+                priority,
+
+
+            "classification":
+                classification,
+
+
+            "confidence":
+                confidence,
+
+
+            "recommended_actions":
+                self._recommended_actions(
+                    classification
+                ),
+
+
+            "automation_ready":
+                self._automation_ready(
+                    priority,
+                    confidence,
+                ),
+        }
+
+
+    def _calculate_priority(
         self,
-    ) -> None:
+        classification: str,
+        severity: str,
+        confidence: float,
+    ) -> str:
         """
-        Clear decision history.
+        Calculate SOC incident priority.
         """
 
-        self.history.clear()
+        if classification == "unknown":
+
+            if severity == "critical":
+
+                return "P1"
+
+            return "P4"
+
+
+        if severity == "critical":
+
+            return "P1"
+
+
+        if (
+            classification in {
+                "phishing",
+                "malware",
+            }
+            and severity == "high"
+        ):
+
+            return "P1"
+
+
+        if severity == "high":
+
+            return "P2"
+
+
+        if severity == "medium":
+
+            return "P2"
+
+
+        if severity == "low":
+
+            return "P3"
+
+
+        return "P4"
+
+
+    def _calculate_decision(
+        self,
+        priority: str,
+    ) -> str:
+        """
+        Convert priority into SOC action.
+        """
+
+        if priority == "P1":
+
+            return "respond"
+
+
+        if priority == "P2":
+
+            return "investigate"
+
+
+        return "monitor"
+
+
+    def _recommended_actions(
+        self,
+        classification: str,
+    ) -> list[str]:
+        """
+        Generate analyst response actions.
+        """
+
+        if classification == "phishing":
+
+            return [
+
+                "Block malicious sender and domains.",
+
+                "Remove phishing emails.",
+
+                "Reset affected credentials.",
+
+            ]
+
+
+        if classification == "malware":
+
+            return [
+
+                "Isolate affected endpoint.",
+
+                "Collect malware artifacts.",
+
+                "Run endpoint investigation.",
+
+            ]
+
+
+        if classification == "security_incident":
+
+            return [
+
+                "Escalate critical security incident.",
+
+                "Collect additional evidence.",
+
+                "Begin containment workflow.",
+
+            ]
+
+
+        return [
+
+            "Collect additional evidence.",
+
+            "Monitor activity.",
+
+        ]
+
+
+    def _automation_ready(
+        self,
+        priority: str,
+        confidence: float,
+    ) -> bool:
+        """
+        Determine if SOAR automation can execute.
+        """
+
+        return (
+
+            priority in {
+                "P1",
+                "P2",
+            }
+
+            and confidence >= 0.5
+
+        )
