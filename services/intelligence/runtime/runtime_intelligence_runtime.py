@@ -1,48 +1,82 @@
 """
 Runtime Intelligence Runtime
 
-Primary execution boundary for Sentinel DNA
-intelligence workflows.
+Execution boundary for Sentinel DNA
+intelligence operations.
 
-Responsibilities:
+Responsible for:
 
-- receive investigation signals
-- execute runtime intelligence service
-- manage execution lifecycle
-- return intelligence result
+- runtime lifecycle
+- intelligence execution
+- service coordination
+- health reporting
 """
 
 from typing import Any
 
 
-from services.intelligence.runtime.runtime_intelligence_service import (
-    RuntimeIntelligenceService,
-)
-
-
-from services.intelligence.runtime.runtime_intelligence_result import (
-    RuntimeIntelligenceResult,
-)
-
-
 
 class RuntimeIntelligenceRuntime:
     """
-    Runtime execution wrapper around
-    RuntimeIntelligenceService.
+    Main runtime execution container.
     """
 
 
     def __init__(
         self,
-        intelligence_service: RuntimeIntelligenceService,
+        controller,
     ):
 
-        self.intelligence_service = (
-            intelligence_service
-        )
+        self.controller = controller
 
-        self.status = "ready"
+        self.status = "initialized"
+
+        self.executions = 0
+
+
+
+    def start(
+        self,
+    ):
+
+        """
+        Start runtime.
+        """
+
+        self.status = "running"
+
+        return {
+
+            "status":
+                self.status,
+
+            "component":
+                "runtime_intelligence_runtime",
+
+        }
+
+
+
+    def stop(
+        self,
+    ):
+
+        """
+        Stop runtime.
+        """
+
+        self.status = "stopped"
+
+
+        return {
+
+            "status":
+                self.status,
+
+            "component":
+                "runtime_intelligence_runtime",
+
+        }
 
 
 
@@ -50,58 +84,26 @@ class RuntimeIntelligenceRuntime:
         self,
         signals: list[dict[str, Any]],
         case_id: str | None = None,
-    ) -> RuntimeIntelligenceResult:
+    ):
+
         """
         Execute intelligence workflow.
         """
 
-        self.status = "running"
+        if self.status != "running":
+
+            self.start()
 
 
-        try:
+        self.executions += 1
 
-            result = (
-                self.intelligence_service.investigate(
-                    signals,
-                    case_id,
-                )
+
+        return (
+            self.controller.execute(
+                signals,
+                case_id,
             )
-
-
-            self.status = "completed"
-
-
-            return result
-
-
-
-        except Exception as exc:
-
-            self.status = "failed"
-
-
-            return RuntimeIntelligenceResult(
-
-                success=False,
-
-                risk="unknown",
-
-                confidence=0.0,
-
-                mitre=[],
-
-                providers=[],
-
-                correlations=[],
-
-                metadata={
-                    "error":
-                        str(exc),
-
-                    "case_id":
-                        case_id,
-                },
-            )
+        )
 
 
 
@@ -114,7 +116,12 @@ class RuntimeIntelligenceRuntime:
             "component":
                 "runtime_intelligence_runtime",
 
+
             "status":
                 self.status,
+
+
+            "executions":
+                self.executions,
 
         }
