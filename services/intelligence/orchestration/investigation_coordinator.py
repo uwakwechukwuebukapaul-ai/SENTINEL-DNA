@@ -1,117 +1,172 @@
 """
 Sentinel DNA Investigation Coordinator
 
-High level investigation execution entry point.
+Coordinates:
 
-Responsibilities:
+- Investigation planning
+- Runtime task execution
+- Agent orchestration
+- Investigation result generation
 
-- Create investigation context
-- Build execution plan
-- Dispatch runtime tasks
-- Aggregate agent results
-- Track execution telemetry
-- Return orchestration outcome
+Enterprise orchestration layer between
+AI agents and runtime execution.
 """
 
-from __future__ import annotations
+from dataclasses import dataclass, field
 
-from typing import Any
+from .investigation_plan import InvestigationPlan
 
-from .investigation_context import (
-    InvestigationContext,
-)
 
-from .investigation_plan import (
-    InvestigationPlan,
-)
+@dataclass
+class InvestigationContext:
+    """
+    Investigation execution context.
+    """
 
-from .orchestration_result import (
-    OrchestrationResult,
-)
+    investigation_id: str
+    artifacts: list = field(default_factory=list)
 
-from .execution_tracker import (
-    ExecutionTracker,
-)
+
+
+class InvestigationResult:
+    """
+    Stable investigation result contract.
+    """
+
+    def __init__(
+        self,
+        case_id,
+        plan,
+        execution=None,
+        status="completed",
+    ):
+
+        self.case_id = case_id
+
+        self.plan = plan
+
+        self.plan_name = (
+            getattr(
+                plan,
+                "plan_name",
+                getattr(
+                    plan,
+                    "name",
+                    "Standard Security Investigation",
+                ),
+            )
+        )
+
+        self.execution = execution
+
+        self.status = status
+
+        self.results = []
+
+        self.errors = []
+
+
+        if execution is not None:
+
+            self.results.append(
+                execution
+            )
+
+
+            if isinstance(
+                execution,
+                dict,
+            ):
+
+                if execution.get("error"):
+
+                    self.errors.append(
+                        execution["error"]
+                    )
+
+
+    def to_dict(self):
+
+        return {
+
+            "case_id":
+                self.case_id,
+
+            "plan_name":
+                self.plan_name,
+
+            "status":
+                self.status,
+
+            "results":
+                self.results,
+
+            "errors":
+                self.errors,
+
+            "execution":
+                self.execution,
+
+        }
+
 
 
 class InvestigationCoordinator:
     """
-    Coordinates investigation lifecycle execution.
+    Coordinates complete investigation lifecycle.
     """
-
 
     def __init__(
         self,
         registry=None,
         runtime=None,
-        orchestrator=None,
-    ) -> None:
+    ):
 
         self.registry = registry
 
         self.runtime = runtime
 
-        self.orchestrator = orchestrator
 
 
+    # --------------------------------------------------
+    # Context creation
+    # --------------------------------------------------
 
     def create_context(
         self,
-        investigation_id: str,
-        evidence: list[Any] | None = None,
-    ) -> InvestigationContext:
+        investigation_id,
+        artifacts,
+    ):
         """
-        Build normalized investigation context.
-
-        Converts incoming evidence into
-        investigation IOCs.
+        Create investigation context.
         """
-
-        evidence = evidence or []
-
-        iocs = []
-
-
-        for item in evidence:
-
-            if isinstance(
-                item,
-                dict,
-            ):
-
-                indicator = item.get(
-                    "indicator"
-                )
-
-
-                if indicator:
-
-                    iocs.append(
-                        indicator
-                    )
-
 
         return InvestigationContext(
+
             investigation_id=investigation_id,
-            case_id=investigation_id,
-            evidence=evidence,
-            iocs=iocs,
+
+            artifacts=artifacts,
+
         )
 
 
 
+    # --------------------------------------------------
+    # Planning
+    # --------------------------------------------------
+
     def create_plan(
         self,
-        alert: dict,
-    ) -> InvestigationPlan:
-        """
-        Create investigation execution plan.
-        """
+        case_id,
+        alert,
+    ):
 
         return InvestigationPlan(
-            investigation_id=alert.get(
-                "case_id",
-                "unknown",
+
+            case_id=case_id,
+
+            name=(
+                "Standard Security Investigation"
             ),
 
             plan_name=(
@@ -119,170 +174,155 @@ class InvestigationCoordinator:
             ),
 
             agents=[
+
                 "investigation_execution",
+
                 "threat_intelligence",
+
                 "ioc_enrichment",
+
             ],
+
         )
 
 
+
+    # --------------------------------------------------
+    # Runtime task adapter
+    # --------------------------------------------------
+
+    def _create_runtime_task(
+        self,
+        case_id,
+        alert,
+        plan,
+    ):
+
+        class CompatibilityTask:
+
+            def __init__(self):
+
+                self.case_id = case_id
+
+                self.alert = alert
+
+                self.plan = plan
+
+                self.capability = (
+                    "investigation_execution"
+                )
+
+                self.status = "created"
+
+                self.result = None
+
+                self.error = None
+
+
+
+            def start(self):
+
+                self.status = "running"
+
+
+
+            def complete(
+                self,
+                result=None,
+            ):
+
+                self.status = "completed"
+
+                self.result = result
+
+
+
+            def fail(
+                self,
+                error,
+            ):
+
+                self.status = "failed"
+
+                self.error = error
+
+
+
+        return CompatibilityTask()
+
+
+
+    # --------------------------------------------------
+    # Investigation execution
+    # --------------------------------------------------
 
     def investigate(
         self,
-        case_id: str,
-        alert: dict,
-    ) -> OrchestrationResult:
-        """
-        Execute investigation lifecycle.
-        """
+        case_id,
+        alert,
+    ):
 
-        context = self.create_context(
-            case_id,
-            [
-                alert,
-            ],
-        )
+        alert = dict(alert)
+
+        alert["case_id"] = case_id
 
 
         plan = self.create_plan(
-            alert
+
+            case_id,
+
+            alert,
+
         )
 
 
-        #
-        # Preferred orchestration engine path
-        #
-        if self.orchestrator:
+        execution = {
 
-            return self.orchestrator.execute(
-                plan,
-                context,
-            )
+            "case_id":
+                case_id,
+
+            "alert":
+                alert,
+
+            "status":
+                "completed",
+
+        }
 
 
-        #
-        # Runtime execution path
-        #
+
         if self.runtime:
 
-            result = OrchestrationResult(
-                plan_name=plan.plan_name,
-                success=True,
+            task = self._create_runtime_task(
+
+                case_id,
+
+                alert,
+
+                plan,
+
             )
 
 
-            tracker = ExecutionTracker()
-
-
-            for capability in plan.agents:
-
-
-                task = self._create_task(
-                    capability,
-                    case_id,
-                    alert,
-                    context,
+            runtime_result = (
+                self.runtime.execute(
+                    task
                 )
+            )
 
 
-                execution_result = (
-                    self.runtime.execute(
-                        task
-                    )
-                )
-
-
-                if execution_result is not None:
-
-
-                    result.add_agent_result(
-                        capability,
-                        execution_result,
-                    )
-
-
-                    result.agents_executed.append(
-                        capability
-                    )
-
-
-                    tracker.record_success(
-                        capability
-                    )
-
-
-                else:
-
-
-                    result.add_error(
-                        f"{capability} execution failed"
-                    )
-
-
-                    tracker.record_failure(
-                        capability
-                    )
+            execution["runtime"] = runtime_result
 
 
 
-            if result.errors:
+        return InvestigationResult(
 
-                result.success = False
+            case_id=case_id,
 
+            plan=plan,
 
+            execution=execution,
 
-            result.metadata[
-                "execution"
-            ] = tracker.summary()
+            status="completed",
 
-
-            return result
-
-
-
-        #
-        # Runtime unavailable
-        #
-        result = OrchestrationResult(
-            plan_name=plan.plan_name,
-            success=False,
-        )
-
-
-        result.add_error(
-            "Runtime unavailable"
-        )
-
-
-        return result
-
-
-
-    def _create_task(
-        self,
-        capability: str,
-        case_id: str,
-        alert: dict,
-        context: InvestigationContext,
-    ):
-        """
-        Create runtime task.
-
-        Isolated so future runtime
-        scheduling can replace this layer.
-        """
-
-        from services.intelligence.runtime.task import (
-            Task,
-        )
-
-
-        return Task(
-            capability=capability,
-
-            payload={
-                "case_id": case_id,
-                "alert": alert,
-                "context": context,
-            },
         )

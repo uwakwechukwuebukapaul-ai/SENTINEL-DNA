@@ -1,224 +1,106 @@
 """
 Sentinel DNA Investigation Plan
 
-Defines autonomous investigation execution plans.
+Defines the execution blueprint
+for autonomous investigations.
 """
 
-from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-
-
-@dataclass(init=False)
 class InvestigationPlan:
     """
-    Defines an investigation workflow.
+    Investigation workflow plan.
 
-    Supports:
-
-    Legacy fields:
+    Backward compatible with:
+    - investigation_id
     - case_id
     - name
-    - stages
-
-    Current fields:
-    - investigation_id
     - plan_name
-    - steps
+    - agents
+    - stages
     """
-
-    investigation_id: str | None
-
-    plan_name: str
-
-    agents: list[str]
-
-    steps: list[Any]
-
-    metadata: dict[str, Any]
-
 
     def __init__(
         self,
-        investigation_id: str | None = None,
-        plan_name: str | None = None,
-        agents: list[str] | None = None,
-        steps: list[Any] | None = None,
-        metadata: dict[str, Any] | None = None,
-        case_id: str | None = None,
-        name: str | None = None,
-        stages: list[Any] | None = None,
+        investigation_id=None,
+        case_id=None,
+        name=None,
+        plan_name=None,
+        agents=None,
+        stages=None,
     ):
-        """
-        Initialize investigation plan.
-
-        Maintains backward compatibility
-        across Sentinel DNA orchestration versions.
-        """
 
         self.investigation_id = (
             investigation_id
             or case_id
+            or "UNKNOWN"
         )
 
-        self.plan_name = (
-            plan_name
-            or name
-            or "Standard Security Investigation"
+        self.case_id = (
+            case_id
+            or self.investigation_id
         )
+
+        self.name = (
+            name
+            or plan_name
+            or "Investigation Plan"
+        )
+
+        self.plan_name = self.name
 
         self.agents = (
-            list(agents)
-            if agents
-            else []
+            agents
+            or []
         )
 
-        self.steps = (
-            list(steps)
-            if steps
-            else []
+        self.stages = (
+            stages
+            or []
         )
 
-        if stages:
-            self.steps.extend(
-                stages
-            )
-
-        self.metadata = (
-            dict(metadata)
-            if metadata
-            else {}
-        )
-
-
-    # --------------------------------------------------
-    # Agent Management
-    # --------------------------------------------------
-
-    def add_agent(
-        self,
-        agent_name: str,
-    ) -> None:
-        """
-        Add agent to investigation workflow.
-        """
-
-        if not agent_name:
-            return
-
-        if agent_name not in self.agents:
-            self.agents.append(
-                agent_name
-            )
-
-
-    # --------------------------------------------------
-    # Step Management
-    # --------------------------------------------------
-
-    def add_step(
-        self,
-        step: Any,
-    ) -> None:
-        """
-        Add execution step.
-        """
-
-        if step is None:
-            return
-
-        self.steps.append(
-            step
-        )
-
-
-    # --------------------------------------------------
-    # Stage Compatibility
-    # --------------------------------------------------
 
     def add_stage(
         self,
-        stage: str,
-    ) -> None:
+        stage,
+    ):
         """
-        Legacy alias for add_step().
+        Add workflow stage.
         """
 
-        self.add_step(
+        self.stages.append(
             stage
         )
 
 
-    @property
-    def stages(
+    def add_agent(
         self,
-    ) -> list[Any]:
+        agent,
+    ):
         """
-        Legacy stages accessor.
-
-        Older orchestration tests and modules
-        reference stages instead of steps.
+        Register execution agent.
         """
 
-        return self.steps
-
-
-    # --------------------------------------------------
-    # Legacy Properties
-    # --------------------------------------------------
-
-    @property
-    def case_id(
-        self,
-    ) -> str | None:
-        return self.investigation_id
-
-
-    @property
-    def name(
-        self,
-    ) -> str:
-        return self.plan_name
-
-
-    # --------------------------------------------------
-    # Serialization
-    # --------------------------------------------------
-
-    def to_dict(
-        self,
-    ) -> dict[str, Any]:
-
-        return {
-            "investigation_id": self.investigation_id,
-            "case_id": self.case_id,
-            "plan_name": self.plan_name,
-            "name": self.name,
-            "agents": list(
-                self.agents
-            ),
-            "steps": list(
-                self.steps
-            ),
-            "stages": list(
-                self.stages
-            ),
-            "metadata": dict(
-                self.metadata
-            ),
-        }
-
-
-    def __repr__(
-        self,
-    ) -> str:
-
-        return (
-            "InvestigationPlan("
-            f"id={self.investigation_id!r}, "
-            f"name={self.plan_name!r}, "
-            f"agents={self.agents!r}, "
-            f"steps={self.steps!r}"
-            ")"
+        self.agents.append(
+            agent
         )
+
+
+    def to_dict(self):
+        return {
+
+            "investigation_id":
+                self.investigation_id,
+
+            "case_id":
+                self.case_id,
+
+            "name":
+                self.name,
+
+            "agents":
+                self.agents,
+
+            "stages":
+                self.stages,
+
+        }

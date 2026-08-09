@@ -1,25 +1,50 @@
 """
-Sentinel DNA Investigation Orchestration Layer
+Sentinel DNA Investigation Orchestration Package
 
-Coordinates autonomous AI investigations.
+Exports orchestration components:
+
+- Workflow state
+- Investigation planning
+- Investigation coordination
+- Autonomous orchestration
 """
 
-from .investigation_plan import InvestigationPlan
-from .investigation_context import InvestigationContext
-from .investigation_orchestrator import InvestigationOrchestrator
-from .investigation_coordinator import InvestigationCoordinator
 
-from .agent_pipeline import (
-    AgentPipeline,
-    OrchestrationResult,
+from .workflow_state import (
+    WorkflowState,
+    WorkflowPhase,
 )
 
 
+from .investigation_plan import (
+    InvestigationPlan,
+)
+
+
+from .investigation_coordinator import (
+    InvestigationCoordinator,
+    InvestigationResult,
+)
+
+
+from .investigation_orchestrator import (
+    InvestigationOrchestrator,
+)
+
+
+
 __all__ = [
+
+    "WorkflowState",
+
+    "WorkflowPhase",
+
     "InvestigationPlan",
-    "InvestigationContext",
-    "InvestigationOrchestrator",
+
     "InvestigationCoordinator",
-    "AgentPipeline",
-    "OrchestrationResult",
+
+    "InvestigationResult",
+
+    "InvestigationOrchestrator",
+
 ]

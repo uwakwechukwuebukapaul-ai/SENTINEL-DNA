@@ -1,140 +1,211 @@
 """
-Investigation Orchestrator Tests
-
-Validates orchestration of:
-- investigation execution
-- execution state
-- agent coordination
-- intelligence workflow
+Tests for Investigation Orchestrator.
 """
 
-
-from services.intelligence.orchestration.investigation_orchestrator import (
+from services.intelligence.orchestration import (
     InvestigationOrchestrator,
+    WorkflowState,
 )
 
 
-class FakeAgent:
 
-    def __init__(self):
-        self.name = "fake_investigator"
+class FakeInvestigator:
 
-    def investigate(self, investigation):
+
+    def investigate(
+        self,
+        case_id,
+        artifacts,
+    ):
+
         return {
-            "agent": self.name,
-            "findings": [
-                "Suspicious activity detected"
-            ],
+
+            "analysis": {
+
+                "risk":
+                    "high"
+
+            },
+
+            "case_id":
+                case_id,
+
         }
 
 
-def test_orchestrator_creation():
 
-    orchestrator = InvestigationOrchestrator()
-
-    assert orchestrator is not None
+class FakeExecution:
 
 
-def test_register_agent():
+    def execute(
+        self,
+        investigation,
+    ):
 
-    orchestrator = InvestigationOrchestrator()
+        return {
 
-    agent = FakeAgent()
+            "action":
+                "contain"
 
-    orchestrator.register_agent(agent)
-
-    assert (
-        "fake_investigator"
-        in orchestrator.agents
-    )
-
-
-def test_execute_investigation():
-
-    orchestrator = InvestigationOrchestrator()
-
-    orchestrator.register_agent(
-        FakeAgent()
-    )
-
-
-    result = orchestrator.execute(
-        {
-            "id": "INV-001",
-            "severity": "critical",
         }
-    )
 
 
-    assert (
-        result["investigation_id"]
-        == "INV-001"
-    )
+
+class FakeReporter:
 
 
-    assert (
-        len(result["findings"])
-        > 0
-    )
+    def build(
+        self,
+        case_id,
+        orchestration_result,
+    ):
 
+        return {
 
-def test_execution_state_created():
+            "case_id":
+                case_id,
 
-    orchestrator = InvestigationOrchestrator()
+            "status":
+                "completed",
 
-
-    result = orchestrator.execute(
-        {
-            "id": "INV-002",
-            "severity": "high",
         }
+
+
+
+def create_orchestrator():
+
+    return InvestigationOrchestrator(
+
+        investigator=FakeInvestigator(),
+
+        execution_engine=FakeExecution(),
+
+        reporter=FakeReporter(),
+
+    )
+
+
+
+def test_orchestrator_initialization():
+
+    engine = create_orchestrator()
+
+    assert engine.state.status() == "created"
+
+
+
+def test_investigation_execution():
+
+    engine = create_orchestrator()
+
+
+    result = engine.investigate(
+
+        case_id="CASE-001",
+
+        artifacts=[
+            {
+                "type": "ioc",
+                "value": "evil.com",
+            }
+        ],
+
+    )
+
+
+    assert result["case_id"] == "CASE-001"
+
+    assert result["status"] == "completed"
+
+
+
+def test_investigator_result():
+
+    engine = create_orchestrator()
+
+
+    result = engine.investigate(
+
+        case_id="CASE-002",
+
     )
 
 
     assert (
-        result["state"]["status"]
-        == "completed"
+        result["investigation"]["analysis"]["risk"]
+        ==
+        "high"
     )
 
 
-def test_investigation_history():
 
-    orchestrator = InvestigationOrchestrator()
+def test_execution_result():
+
+    engine = create_orchestrator()
 
 
-    orchestrator.execute(
-        {
-            "id": "INV-003",
-        }
+    result = engine.investigate(
+
+        case_id="CASE-003",
+
     )
-
-
-    history = (
-        orchestrator.get_history()
-    )
-
-
-    assert len(history) == 1
-
-
-def test_clear_history():
-
-    orchestrator = InvestigationOrchestrator()
-
-
-    orchestrator.execute(
-        {
-            "id": "INV-004",
-        }
-    )
-
-
-    orchestrator.clear_history()
 
 
     assert (
-        len(
-            orchestrator.get_history()
-        )
-        == 0
+        result["execution"]["action"]
+        ==
+        "contain"
     )
+
+
+
+def test_report_result():
+
+    engine = create_orchestrator()
+
+
+    result = engine.investigate(
+
+        case_id="CASE-004",
+
+    )
+
+
+    assert (
+        result["report"]["status"]
+        ==
+        "completed"
+    )
+
+
+
+def test_workflow_failure():
+
+    class Broken:
+
+        def investigate(
+            self,
+            case_id,
+            artifacts,
+        ):
+
+            raise Exception(
+                "failed"
+            )
+
+
+    engine = InvestigationOrchestrator(
+
+        investigator=Broken()
+
+    )
+
+
+    result = engine.investigate(
+
+        case_id="CASE-005",
+
+    )
+
+
+    assert result["status"] == "failed"
