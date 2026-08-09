@@ -1,96 +1,33 @@
 """
-Sentinel DNA Runtime Intelligence Controller
+Runtime Intelligence Controller
 
-Application controller layer.
-
-Responsibilities:
-
-- handle intelligence requests
-- validate input
-- call runtime API
-- format responses
+Runtime API facade.
 """
 
-from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
-from .runtime_intelligence_api import (
-    RuntimeIntelligenceAPI,
-)
-
-
-@dataclass
 class RuntimeIntelligenceController:
-    """
-    Runtime intelligence controller.
-    """
-
-    api: RuntimeIntelligenceAPI = field(
-        default_factory=RuntimeIntelligenceAPI
-    )
 
 
-    def register(
+    def __init__(
         self,
-        capability: str,
-        handler,
-    ) -> None:
-        """
-        Register capability.
-        """
+        intelligence_service,
+    ):
 
-        self.api.register(
-            capability,
-            handler,
-        )
+        self.service = intelligence_service
 
 
 
-    def investigate(
+    def execute(
         self,
-        request: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Process intelligence request.
-        """
+        signals,
+        case_id=None,
+    ):
 
-        capability = request.get(
-            "capability"
+        result = (
+            self.service.investigate(
+                signals,
+                case_id,
+            )
         )
 
-        investigation_id = request.get(
-            "investigation_id"
-        )
-
-
-        if not capability or not investigation_id:
-            return {
-                "success": False,
-                "error": "invalid_request",
-            }
-
-
-        result = self.api.execute(
-            capability,
-            investigation_id,
-            request.get(
-                "metadata"
-            ),
-        )
-
-
-        return {
-            "success": result is not None,
-            "result": result,
-        }
-
-
-
-    def status(self) -> dict[str, Any]:
-        """
-        Controller status.
-        """
-
-        return self.api.status()
+        return result.to_dict()

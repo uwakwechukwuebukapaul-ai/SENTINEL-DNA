@@ -1,17 +1,9 @@
 """
-Sentinel DNA Runtime Intelligence Context
+Runtime Intelligence Context
 
-Shared execution context for intelligence workflows.
-
-Responsibilities:
-
-- store investigation data
-- maintain runtime metadata
-- share intelligence state
-- provide context snapshots
+Shared investigation intelligence state.
+Prevents repeated provider and correlation execution.
 """
-
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,20 +12,28 @@ from typing import Any
 @dataclass
 class RuntimeIntelligenceContext:
     """
-    Shared runtime intelligence context.
+    Runtime intelligence execution context.
     """
 
-    investigation_id: str
+    case_id: str | None = None
 
-    evidence: list[dict[str, Any]] = field(
+    signals: list[dict[str, Any]] = field(
         default_factory=list
     )
 
-    iocs: list[dict[str, Any]] = field(
+    intelligence_records: list[Any] = field(
         default_factory=list
     )
 
-    mitre: list[dict[str, Any]] = field(
+    entities: list[Any] = field(
+        default_factory=list
+    )
+
+    correlations: list[Any] = field(
+        default_factory=list
+    )
+
+    fusion_results: list[Any] = field(
         default_factory=list
     )
 
@@ -42,79 +42,29 @@ class RuntimeIntelligenceContext:
     )
 
 
-    def add_evidence(
+    def add_signal(
         self,
-        evidence: dict[str, Any],
-    ) -> None:
-        """
-        Add evidence item.
-        """
-
-        self.evidence.append(
-            evidence
-        )
+        signal: dict[str, Any],
+    ):
+        self.signals.append(signal)
 
 
-
-    def add_ioc(
+    def add_record(
         self,
-        ioc: dict[str, Any],
-    ) -> None:
-        """
-        Add IOC.
-        """
-
-        self.iocs.append(
-            ioc
-        )
+        record: Any,
+    ):
+        self.intelligence_records.append(record)
 
 
-
-    def add_mitre(
+    def add_correlation(
         self,
-        technique: dict[str, Any],
-    ) -> None:
-        """
-        Add MITRE mapping.
-        """
-
-        self.mitre.append(
-            technique
-        )
+        correlation: Any,
+    ):
+        self.correlations.append(correlation)
 
 
-
-    def update_metadata(
+    def add_fusion_result(
         self,
-        key: str,
-        value: Any,
-    ) -> None:
-        """
-        Update metadata.
-        """
-
-        self.metadata[key] = value
-
-
-
-    def status(self) -> dict[str, Any]:
-        """
-        Context summary.
-        """
-
-        return {
-            "investigation_id":
-                self.investigation_id,
-
-            "evidence_count":
-                len(self.evidence),
-
-            "ioc_count":
-                len(self.iocs),
-
-            "mitre_count":
-                len(self.mitre),
-
-            "metadata":
-                self.metadata,
-        }
+        result: Any,
+    ):
+        self.fusion_results.append(result)

@@ -1,195 +1,177 @@
 """
-Sentinel DNA Runtime Intelligence Service
+Runtime Intelligence Service
 
-Enterprise intelligence runtime service facade.
-
-Responsibilities:
-
-- expose intelligence operations API
-- register intelligence capabilities
-- execute investigations
-- coordinate gateway/router runtime
-- maintain request metrics
-- expose runtime status
+Coordinates:
+- providers
+- correlation
+- fusion
+- intelligence output
 """
 
-from __future__ import annotations
+from typing import Any
 
-from dataclasses import dataclass, field
-from typing import Any, Callable
-
-from .runtime_intelligence_gateway import (
-    RuntimeIntelligenceGateway,
+from services.intelligence.runtime.runtime_intelligence_context import (
+    RuntimeIntelligenceContext,
 )
 
-from .runtime_intelligence_router import (
-    RuntimeIntelligenceRouter,
+from services.intelligence.runtime.runtime_intelligence_result import (
+    RuntimeIntelligenceResult,
 )
 
 
-@dataclass
-class RuntimeIntelligenceContext:
-    """
-    Investigation execution context.
-    """
-
-    investigation_id: str
-
-
-
-@dataclass
 class RuntimeIntelligenceService:
-    """
-    Main intelligence runtime service.
-
-    Acts as the public API layer above
-    runtime routing components.
-    """
-
-    gateway: RuntimeIntelligenceGateway = field(
-        default_factory=RuntimeIntelligenceGateway
-    )
-
-    router: RuntimeIntelligenceRouter = field(
-        default_factory=RuntimeIntelligenceRouter
-    )
-
-    requests: int = 0
 
 
-    def register_capability(
+    def __init__(
         self,
-        capability: str,
-        handler: Callable,
-    ) -> None:
-        """
-        Register intelligence capability.
-        """
+        providers=None,
+        correlation_engine=None,
+        fusion_engine=None,
+    ):
 
-        self.router.register(
-            capability,
-            handler,
+        self.providers = providers or []
+
+        self.correlation_engine = (
+            correlation_engine
+        )
+
+        self.fusion_engine = (
+            fusion_engine
         )
 
 
     def investigate(
         self,
-        capability: str,
-        context: RuntimeIntelligenceContext,
-    ) -> Any:
-        """
-        Execute intelligence investigation.
-
-        Returns:
-            execution result
-
-        Returns None when capability
-        is unavailable.
-        """
-
-        self.requests += 1
+        signals: list[dict[str, Any]],
+        case_id: str | None = None,
+    ) -> RuntimeIntelligenceResult:
 
 
-        if not self.router.available(
-            capability
-        ):
-            return None
+        context = RuntimeIntelligenceContext(
+            case_id=case_id,
+            signals=signals,
+        )
 
 
-        return self.router.route(
-            capability,
+        provider_names = []
+
+
+        #
+        # Intelligence Providers
+        #
+
+        for provider in self.providers:
+
+            records = provider.enrich(
+                signals
+            )
+
+            context.intelligence_records.extend(
+                records
+            )
+
+            provider_names.append(
+                provider.__class__.__name__
+            )
+
+
+        #
+        # Correlation
+        #
+
+        if self.correlation_engine:
+
+            correlation = (
+                self.correlation_engine.correlate(
+                    signals
+                )
+            )
+
+            context.add_correlation(
+                correlation
+            )
+
+
+        #
+        # Fusion
+        #
+
+        if self.fusion_engine:
+
+            fusion = (
+                self.fusion_engine.fuse(
+                    context
+                )
+            )
+
+            context.add_fusion_result(
+                fusion
+            )
+
+
+        return self._build_result(
             context,
+            provider_names,
         )
 
 
-    def register_agent(
+    def _build_result(
         self,
-        agent_id: str,
-        capabilities: list[str],
-    ) -> None:
-        """
-        Register runtime intelligence agent.
-        """
-
-        self.gateway.register_agent(
-            agent_id,
-            capabilities,
-        )
+        context,
+        providers,
+    ):
 
 
-    def submit(
-        self,
-        capability: str,
-        request: dict[str, Any],
-    ) -> Any:
-        """
-        Submit runtime request.
-        """
+        risk = "unknown"
 
-        self.requests += 1
+        confidence = 0.0
+
+        mitre = []
 
 
-        return self.gateway.submit_request(
-            capability,
-            request,
-        )
+        if context.fusion_results:
+
+            fusion = (
+                context.fusion_results[0]
+            )
+
+            risk = getattr(
+                fusion,
+                "risk",
+                risk,
+            )
+
+            confidence = getattr(
+                fusion,
+                "confidence",
+                confidence,
+            )
+
+            mitre = getattr(
+                fusion,
+                "mitre",
+                [],
+            )
 
 
-    def available(
-        self,
-        capability: str,
-    ) -> bool:
-        """
-        Check capability availability.
-        """
+        return RuntimeIntelligenceResult(
 
-        return self.router.available(
-            capability
-        )
+            success=True,
 
+            risk=risk,
 
-    def clear(
-        self,
-    ) -> None:
-        """
-        Reset runtime state.
-        """
+            confidence=confidence,
 
-        self.gateway.clear()
+            mitre=mitre,
 
-        self.router.clear()
+            providers=providers,
 
-        self.requests = 0
+            correlations=context.correlations,
 
-
-
-    def status(
-        self,
-    ) -> dict[str, Any]:
-        """
-        Runtime status.
-        """
-
-        return {
-
-            "requests": self.requests,
-
-
-            "pipeline": {
-                "active": True,
-                "components": [
-                    "gateway",
-                    "router",
-                    "capability_registry",
-                ],
+            metadata={
+                "case_id": context.case_id,
+                "signal_count": len(
+                    context.signals
+                ),
             },
-
-
-            "gateway":
-                self.gateway.status(),
-
-
-            "router":
-                self.router.status(),
-
-        }
+        )
