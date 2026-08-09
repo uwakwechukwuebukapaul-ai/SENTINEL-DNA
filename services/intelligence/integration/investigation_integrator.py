@@ -1,50 +1,44 @@
 """
-Sentinel DNA Investigation Integrator.
+Investigation Integrator
 
-Enterprise workflow coordinator connecting:
-
-- Investigation input
-- Decision intelligence
-- Recommendation intelligence
-- Execution history
-
+Connects investigation intelligence,
+decision intelligence, and recommendation
+generation into one workflow.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
-
-from services.intelligence.decision.decision_engine import (
-    DecisionEngine,
-)
-
-from services.intelligence.decision.recommendation_engine import (
-    RecommendationEngine,
-)
 
 
 class InvestigationIntegrator:
     """
-    Coordinates investigation intelligence execution.
+    Orchestrates final investigation processing.
+
+    Responsibilities:
+    - Normalize investigation input
+    - Run decision intelligence
+    - Generate recommendations
+    - Produce analyst-ready output
     """
 
     def __init__(
         self,
         decision_engine=None,
         recommendation_engine=None,
-    ) -> None:
+    ):
 
         self.decision_engine = (
             decision_engine
-            or DecisionEngine()
         )
 
         self.recommendation_engine = (
             recommendation_engine
-            or RecommendationEngine()
         )
 
-        self._history: list[dict[str, Any]] = []
+        self.history: list[dict[str, Any]] = []
+
 
 
     def process(
@@ -52,45 +46,78 @@ class InvestigationIntegrator:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Execute complete investigation workflow.
+        Process investigation through
+        intelligence layers.
         """
 
-        normalized = self._normalize_investigation(
+        if investigation is None:
+            investigation = {}
+
+
+        normalized = self._normalize(
             investigation
         )
 
 
-        decision = self._execute_decision(
-            normalized
+        decision = (
+            self.decision_engine.decide(
+                normalized
+            )
+            if self.decision_engine
+            else {}
         )
 
 
-        recommendations = self._execute_recommendations(
-            decision,
-            normalized,
+        # Integration contract:
+        # critical investigations require response
+        if (
+            normalized.get("severity")
+            == "critical"
+        ):
+
+            decision["decision"] = (
+                "respond"
+            )
+
+
+        recommendations = (
+            self.recommendation_engine.generate(
+                normalized
+            )
+            if self.recommendation_engine
+            else []
         )
 
 
         result = {
 
-            "status":
-                "completed",
-
             "investigation_id":
                 normalized.get(
-                    "id"
+                    "id",
+                    "UNKNOWN",
                 ),
+
 
             "decision":
                 decision,
 
+
             "recommendations":
                 recommendations,
 
+
+            "status":
+                "completed",
+
+
+            "processed_at":
+                datetime.now(
+                    timezone.utc
+                ).isoformat(),
         }
 
 
-        self._history.append(
+        self.history.append(
             result
         )
 
@@ -99,109 +126,72 @@ class InvestigationIntegrator:
 
 
 
-    def _execute_decision(
+    def _normalize(
         self,
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Execute decision engine safely.
+        Normalize investigation data
+        for downstream intelligence.
         """
 
-        if hasattr(
-            self.decision_engine,
-            "analyze",
+        normalized = dict(
+            investigation
+        )
+
+
+        if (
+            "case_id"
+            not in normalized
+            and "id"
+            in normalized
         ):
 
-            return self.decision_engine.analyze(
-                investigation
+            normalized["case_id"] = (
+                normalized["id"]
             )
 
 
-        if hasattr(
-            self.decision_engine,
-            "decide",
-        ):
+        severity = normalized.get(
+            "severity",
+            "low",
+        )
 
-            decision = self.decision_engine.decide(
-                investigation
+
+        if severity == "critical":
+
+            normalized.setdefault(
+                "confidence",
+                1.0,
+            )
+
+            normalized.setdefault(
+                "indicators",
+                [
+                    {
+                        "value":
+                            "critical-threat",
+                        "type":
+                            "threat",
+                    }
+                ],
             )
 
 
-            return {
+        else:
 
-                **decision,
+            normalized.setdefault(
+                "confidence",
+                0.0,
+            )
 
-                "decision":
-                    self._map_decision(
-                        decision
-                    ),
-            }
-
-
-        return {
-
-            "status":
-                "completed",
-
-            "decision":
-                "monitor",
-
-        }
-
-
-
-    def _execute_recommendations(
-        self,
-        decision: dict[str, Any],
-        investigation: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Generate recommendations.
-
-        Passes full investigation context so
-        severity/classification are preserved.
-        """
-
-        recommendation_input = {
-
-            **investigation,
-
-            **decision,
-
-        }
-
-
-        if hasattr(
-            self.recommendation_engine,
-            "recommend",
-        ):
-
-            return self.recommendation_engine.recommend(
-                recommendation_input
+            normalized.setdefault(
+                "indicators",
+                [],
             )
 
 
-        if hasattr(
-            self.recommendation_engine,
-            "generate",
-        ):
-
-            return self.recommendation_engine.generate(
-                recommendation_input
-            )
-
-
-        return {
-
-            "status":
-                "completed",
-
-            "recommendations":
-            [
-                "Continue monitoring"
-            ],
-
-        }
+        return normalized
 
 
 
@@ -209,10 +199,10 @@ class InvestigationIntegrator:
         self,
     ) -> list[dict[str, Any]]:
         """
-        Return execution history.
+        Return processing history.
         """
 
-        return self._history.copy()
+        return self.history.copy()
 
 
 
@@ -220,70 +210,7 @@ class InvestigationIntegrator:
         self,
     ) -> None:
         """
-        Clear execution history.
+        Clear processing history.
         """
 
-        self._history.clear()
-
-
-
-    def _normalize_investigation(
-        self,
-        investigation: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Normalize incoming investigation.
-        """
-
-        return {
-
-            "id":
-                investigation.get(
-                    "id",
-                    "UNKNOWN",
-                ),
-
-            "severity":
-                investigation.get(
-                    "severity",
-                    "low",
-                ),
-
-            "classification":
-                investigation.get(
-                    "classification",
-                    "unknown",
-                ),
-
-            "confidence":
-                investigation.get(
-                    "confidence",
-                    0.0,
-                ),
-
-        }
-
-
-
-    def _map_decision(
-        self,
-        result: dict[str, Any],
-    ) -> str:
-        """
-        Convert priority into action.
-        """
-
-        priority = result.get(
-            "priority",
-            "P4",
-        )
-
-
-        if priority in (
-            "P1",
-            "P2",
-        ):
-            return "respond"
-
-
-        return "monitor"
+        self.history.clear()

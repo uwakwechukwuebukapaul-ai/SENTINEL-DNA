@@ -1,3 +1,3 @@
 """
-Sentinel DNA Decision Intelligence Tests.
+Sentinel DNA Decision Intelligence Tests
 """
