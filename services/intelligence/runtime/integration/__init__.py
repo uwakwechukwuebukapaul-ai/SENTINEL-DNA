@@ -1,8 +1,8 @@
 """
-Sentinel DNA Runtime Integration Layer
+Sentinel DNA - Runtime Integration Package
 
-Provides adapters that connect runtime
-execution with intelligence services.
+Provides adapters between external
+security platforms and runtime services.
 """
 
 from .runtime_adapter import RuntimeAdapter
