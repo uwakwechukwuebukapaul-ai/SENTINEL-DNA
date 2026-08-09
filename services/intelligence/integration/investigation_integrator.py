@@ -1,8 +1,10 @@
 """
 Sentinel DNA Investigation Integrator
 
-Connects intelligence engines into a unified
-investigation execution workflow.
+Connects investigation intelligence components:
+- decision engine
+- recommendation engine
+- investigation workflow history
 """
 
 from __future__ import annotations
@@ -12,20 +14,7 @@ from typing import Any
 
 class InvestigationIntegrator:
     """
-    Coordinates investigation intelligence flow.
-
-    Pipeline:
-
-    Investigation
-          |
-          ↓
-    Decision Engine
-          |
-          ↓
-    Recommendation Engine
-          |
-          ↓
-    Reporting Layer
+    Coordinates investigation intelligence workflow.
     """
 
 
@@ -33,19 +22,12 @@ class InvestigationIntegrator:
         self,
         decision_engine=None,
         recommendation_engine=None,
-        report_engine=None,
     ) -> None:
 
-        self.decision_engine = (
-            decision_engine
-        )
+        self.decision_engine = decision_engine
 
         self.recommendation_engine = (
             recommendation_engine
-        )
-
-        self.report_engine = (
-            report_engine
         )
 
         self.history: list[
@@ -73,10 +55,33 @@ class InvestigationIntegrator:
         # AI Decision Layer
         if self.decision_engine:
 
-            result["decision"] = (
+            decision_result = (
                 self.decision_engine.analyze(
                     investigation
                 )
+            )
+
+
+            # Normalize decision contract
+            if (
+                isinstance(
+                    decision_result,
+                    dict,
+                )
+                and "decision" in decision_result
+                and isinstance(
+                    decision_result["decision"],
+                    dict,
+                )
+            ):
+
+                decision_result = (
+                    decision_result["decision"]
+                )
+
+
+            result["decision"] = (
+                decision_result
             )
 
 
@@ -90,19 +95,12 @@ class InvestigationIntegrator:
             )
 
 
-        # Reporting Layer
-        if self.report_engine:
-
-            result["report"] = (
-                self.report_engine.generate(
-                    investigation,
-                    result,
-                )
-            )
-
-
+        # Store execution history
         self.history.append(
-            result
+            {
+                "investigation": investigation,
+                "result": result,
+            }
         )
 
 
@@ -114,7 +112,7 @@ class InvestigationIntegrator:
         self,
     ) -> list[dict[str, Any]]:
         """
-        Return integration history.
+        Return integration execution history.
         """
 
         return self.history
@@ -125,7 +123,7 @@ class InvestigationIntegrator:
         self,
     ) -> None:
         """
-        Clear execution history.
+        Clear integration execution history.
         """
 
         self.history.clear()

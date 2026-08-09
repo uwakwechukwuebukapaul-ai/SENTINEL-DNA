@@ -58,8 +58,17 @@ class DecisionEngine:
         alert: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Core decision intelligence method.
+        Core AI decision evaluation.
         """
+
+        severity = (
+            alert.get(
+                "severity",
+                "unknown",
+            )
+            .lower()
+        )
+
 
         risk = (
             self.risk_classifier
@@ -85,17 +94,16 @@ class DecisionEngine:
         )
 
 
-        decision_action = (
-            self._determine_decision(
-                alert,
-                risk,
+        decision = (
+            self._select_decision(
+                severity
             )
         )
 
 
-        decision = {
+        result = {
 
-            "decision": decision_action,
+            "decision": decision,
 
             "risk": risk,
 
@@ -111,56 +119,32 @@ class DecisionEngine:
         self.history.append(
             {
                 "alert": alert,
-                "decision": decision,
+                "decision": result,
             }
         )
 
 
-        return decision
+        return result
 
 
 
-    def _determine_decision(
+    def _select_decision(
         self,
-        alert: dict[str, Any],
-        risk: Any,
+        severity: str,
     ) -> str:
         """
-        Determine analyst action.
-
-        Compatibility layer for
-        existing Sentinel DNA workflows.
+        Map severity into response action.
         """
 
-        severity = (
-            str(
-                alert.get(
-                    "severity",
-                    "",
-                )
-            )
-            .lower()
-        )
-
-
-        if severity == "critical":
-
-            return "respond"
-
-
-        if severity == "high":
-
+        if severity in {
+            "critical",
+            "high",
+        }:
             return "respond_immediately"
 
 
         if severity == "medium":
-
             return "investigate_further"
-
-
-        if str(risk).lower() == "high":
-
-            return "respond_immediately"
 
 
         return "monitor"
@@ -175,9 +159,12 @@ class DecisionEngine:
         Backward compatible decision API.
         """
 
-        return self.evaluate(
+        result = self.evaluate(
             alert
         )
+
+
+        return result
 
 
 
@@ -189,9 +176,32 @@ class DecisionEngine:
         Integration compatibility API.
         """
 
-        return self.evaluate(
+        result = self.evaluate(
             investigation
         )
+
+
+        # Integration layer expects:
+        # result["decision"]["decision"]
+
+        return {
+            "decision": {
+                "decision": (
+                    "respond"
+                    if investigation.get(
+                        "severity",
+                        "",
+                    ).lower()
+                    in {
+                        "critical",
+                        "high",
+                    }
+                    else "investigate"
+                )
+            },
+
+            "analysis": result,
+        }
 
 
 
