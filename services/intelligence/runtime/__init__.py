@@ -1,36 +1,15 @@
 """
-Sentinel DNA Legacy Runtime Compatibility Package
+Sentinel DNA Intelligence Runtime.
+
+Provides execution infrastructure
+for autonomous intelligence agents.
 """
 
-from app.intelligence.runtime import (
-    Task,
-    TaskPriority,
-    TaskStatus,
-    RuntimeAgentManager,
-    RuntimeAgentOrchestrator,
-    SimpleRuntimeAgent,
-    RuntimeIntelligenceRouter,
-    RuntimeInvestigationOrchestrator,
-    RuntimeDetectionOrchestrator,
-    RuntimeThreatIntelligenceOrchestrator,
-    RuntimeResponseOrchestrator,
-    RuntimeAutonomousAgentOrchestrator,
-    RuntimeSOCOrchestrator,
-)
+from .agent_registry import AgentRegistry
+from .agent_orchestrator import AgentOrchestrator
 
 
 __all__ = [
-    "Task",
-    "TaskPriority",
-    "TaskStatus",
-    "RuntimeAgentManager",
-    "RuntimeAgentOrchestrator",
-    "SimpleRuntimeAgent",
-    "RuntimeIntelligenceRouter",
-    "RuntimeInvestigationOrchestrator",
-    "RuntimeDetectionOrchestrator",
-    "RuntimeThreatIntelligenceOrchestrator",
-    "RuntimeResponseOrchestrator",
-    "RuntimeAutonomousAgentOrchestrator",
-    "RuntimeSOCOrchestrator",
+    "AgentRegistry",
+    "AgentOrchestrator",
 ]
