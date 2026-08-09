@@ -1,29 +1,13 @@
 """
-Sentinel DNA Intelligence Reporting Package
+Investigation Reporting Package.
 
-Exports investigation reporting components.
+Provides analyst-ready security investigation reports.
 """
 
-from services.intelligence.reporting.executive_summary import (
-    ExecutiveSummaryGenerator,
+from .investigation_report import (
+    InvestigationReport,
 )
-
-from services.intelligence.reporting.timeline_builder import (
-    TimelineBuilder,
-)
-
-from services.intelligence.reporting.report_generator import (
-    ReportGenerator,
-)
-
-from services.intelligence.reporting.report_service import (
-    ReportService,
-)
-
 
 __all__ = [
-    "ExecutiveSummaryGenerator",
-    "TimelineBuilder",
-    "ReportGenerator",
-    "ReportService",
+    "InvestigationReport",
 ]
