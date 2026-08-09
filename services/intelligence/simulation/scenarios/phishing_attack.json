@@ -1,0 +1,89 @@
+{
+    "id": "SIM-PHISH-001",
+
+    "name": "Credential Phishing Attack",
+
+    "description": "A targeted phishing campaign attempting to steal employee credentials through a fake authentication portal.",
+
+    "category": "phishing",
+
+    "severity": "high",
+
+    "attack_type": "credential_theft",
+
+    "mitre_techniques": [
+        {
+            "id": "T1566.002",
+            "name": "Spearphishing Link"
+        },
+        {
+            "id": "T1056.002",
+            "name": "Input Capture: GUI Input Capture"
+        }
+    ],
+
+    "indicators": [
+        {
+            "type": "domain",
+            "value": "secure-login-example.com",
+            "confidence": 85
+        },
+        {
+            "type": "url",
+            "value": "https://secure-login-example.com/auth",
+            "confidence": 90
+        },
+        {
+            "type": "email",
+            "value": "security-alert@example.com",
+            "confidence": 70
+        }
+    ],
+
+    "evidence": [
+        {
+            "type": "email",
+            "description": "Suspicious email requesting immediate account verification"
+        },
+        {
+            "type": "network",
+            "description": "User connection to suspicious authentication domain"
+        },
+        {
+            "type": "identity",
+            "description": "Possible credential submission to external portal"
+        }
+    ],
+
+    "investigation_objectives": [
+        "Identify malicious indicators",
+        "Determine phishing campaign scope",
+        "Assess credential compromise risk",
+        "Generate containment recommendations"
+    ],
+
+    "expected_findings": [
+        "credential theft attempt detected",
+        "malicious authentication portal identified",
+        "suspicious domain activity detected",
+        "potential account compromise"
+    ],
+
+    "expected_risk": {
+        "severity": "high",
+        "minimum_confidence": 85
+    },
+
+    "expected_actions": [
+        "Block malicious domain",
+        "Reset affected user credentials",
+        "Search mailbox for similar phishing messages",
+        "Hunt related indicators across environment"
+    ],
+
+    "simulation_metadata": {
+        "created_by": "Sentinel DNA Simulation Engine",
+        "version": "1.0",
+        "environment": "enterprise_soc"
+    }
+}
