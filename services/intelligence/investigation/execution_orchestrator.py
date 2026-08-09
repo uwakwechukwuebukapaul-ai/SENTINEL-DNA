@@ -1,7 +1,8 @@
 """
 Sentinel DNA Investigation Execution Orchestrator
 
-Coordinates autonomous investigation execution.
+Coordinates autonomous investigation execution
+and optional intelligence reporting.
 """
 
 from __future__ import annotations
@@ -23,20 +24,26 @@ class InvestigationExecutionOrchestrator:
     Main coordinator for AI investigation execution.
 
     Responsible for:
+
     - starting investigations
     - tracking execution lifecycle
     - recording audit history
+    - generating intelligence reports
     """
-
 
     def __init__(
         self,
         pipeline: InvestigationPipeline | None = None,
+        reporting_service: Any | None = None,
     ) -> None:
 
         self.pipeline = (
             pipeline
             or InvestigationPipeline()
+        )
+
+        self.reporting_service = (
+            reporting_service
         )
 
         self.execution_history: list[
@@ -48,7 +55,7 @@ class InvestigationExecutionOrchestrator:
         self,
         case_id: str,
         alert: dict[str, Any],
-    ) -> InvestigationResult:
+    ) -> InvestigationResult | dict[str, Any]:
         """
         Execute complete investigation workflow.
         """
@@ -68,6 +75,22 @@ class InvestigationExecutionOrchestrator:
             )
 
 
+            output: (
+                InvestigationResult
+                | dict[str, Any]
+            ) = result
+
+
+            if self.reporting_service:
+
+                output = (
+                    self.reporting_service.generate(
+                        case_id=case_id,
+                        orchestration_result=result,
+                    )
+                )
+
+
             completed = datetime.now(
                 UTC
             )
@@ -81,11 +104,18 @@ class InvestigationExecutionOrchestrator:
                 duration=(
                     completed - started
                 ).total_seconds(),
-                result=result.to_dict(),
+                result=(
+                    result.to_dict()
+                    if hasattr(
+                        result,
+                        "to_dict",
+                    )
+                    else output
+                ),
             )
 
 
-            return result
+            return output
 
 
         except Exception as exc:
@@ -110,7 +140,6 @@ class InvestigationExecutionOrchestrator:
 
 
             raise
-
 
 
     def _record_execution(
@@ -138,7 +167,6 @@ class InvestigationExecutionOrchestrator:
         )
 
 
-
     def get_history(
         self,
     ) -> list[dict[str, Any]]:
@@ -147,7 +175,6 @@ class InvestigationExecutionOrchestrator:
         """
 
         return self.execution_history
-
 
 
     def clear_history(
