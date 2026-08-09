@@ -1,0 +1,3 @@
+"""
+Response intelligence tests.
+"""

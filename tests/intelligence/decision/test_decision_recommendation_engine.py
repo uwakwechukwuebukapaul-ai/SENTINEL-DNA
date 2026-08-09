@@ -1,5 +1,5 @@
 """
-Sentinel DNA Decision Recommendation Tests
+Tests for Sentinel DNA Recommendation Engine.
 """
 
 from services.intelligence.decision.recommendation_engine import (
@@ -8,57 +8,100 @@ from services.intelligence.decision.recommendation_engine import (
 
 
 
-def test_critical_recommendation():
+def create_engine():
 
-    engine = RecommendationEngine()
+    return RecommendationEngine()
+
+
+
+def test_phishing_recommendation():
+
+    engine = create_engine()
 
 
     result = engine.recommend(
-        "critical",
-        95,
+
+        {
+            "classification": "phishing",
+            "priority": "P1",
+        }
+
+    )
+
+
+    assert result["status"] == "completed"
+
+
+    assert (
+        "Block malicious sender and domains."
+        in result["recommendations"]
+    )
+
+
+
+def test_malware_recommendation():
+
+    engine = create_engine()
+
+
+    result = engine.recommend(
+
+        {
+            "classification": "malware",
+            "priority": "P2",
+        }
+
     )
 
 
     assert (
-        result["action"]
-        ==
-        "contain"
+        "Isolate affected endpoint."
+        in result["recommendations"]
     )
 
 
 
-def test_high_risk_recommendation():
+def test_automation_candidates():
 
-    engine = RecommendationEngine()
+    engine = create_engine()
 
 
     result = engine.recommend(
-        "high",
-        70,
+
+        {
+            "classification": "phishing",
+            "priority": "P1",
+        }
+
     )
 
 
     assert (
-        result["action"]
-        ==
-        "escalate"
+        len(result["automation_candidates"])
+        > 0
     )
 
 
 
-def test_low_risk_recommendation():
+def test_unknown_recommendation():
 
-    engine = RecommendationEngine()
+    engine = create_engine()
 
 
     result = engine.recommend(
-        "low",
-        10,
+
+        {
+            "classification": "unknown",
+            "priority": "P4",
+        }
+
     )
 
 
+    assert result["status"] == "completed"
+
+
     assert (
-        result["action"]
-        ==
-        "monitor"
+        "Continue monitoring."
+        in result["recommendations"]
     )

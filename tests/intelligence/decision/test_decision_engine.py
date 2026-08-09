@@ -1,68 +1,127 @@
-from services.intelligence.decision import (
+"""
+Tests for Sentinel DNA Decision Engine.
+"""
+
+from services.intelligence.decision.decision_engine import (
     DecisionEngine,
 )
 
 
+def create_engine():
 
-def test_high_risk_decision():
+    return DecisionEngine()
 
-    engine = DecisionEngine()
+
+
+def test_decision_engine_phishing():
+
+    engine = create_engine()
 
 
     result = engine.decide(
+
         {
-            "id": "INC-001",
-            "severity": "high",
+            "classification":
+                "phishing",
+
+            "severity":
+                "high",
+
+            "confidence":
+                0.9,
         }
+
+    )
+
+
+    assert result["status"] == "completed"
+
+    assert result["priority"] == "P1"
+
+    assert (
+        "Block malicious sender and domains."
+        in result["recommended_actions"]
+    )
+
+
+
+def test_decision_engine_malware():
+
+    engine = create_engine()
+
+
+    result = engine.decide(
+
+        {
+            "classification":
+                "malware",
+
+            "severity":
+                "medium",
+
+            "confidence":
+                0.7,
+        }
+
+    )
+
+
+    assert result["status"] == "completed"
+
+    assert (
+        "Isolate affected endpoint."
+        in result["recommended_actions"]
+    )
+
+
+
+def test_decision_engine_unknown():
+
+    engine = create_engine()
+
+
+    result = engine.decide(
+
+        {
+            "classification":
+                "unknown",
+
+            "severity":
+                "low",
+
+            "confidence":
+                0.2,
+        }
+
+    )
+
+
+    assert result["priority"] == "P4"
+
+
+
+def test_automation_flag():
+
+    engine = create_engine()
+
+
+    result = engine.decide(
+
+        {
+            "classification":
+                "phishing",
+
+            "severity":
+                "medium",
+
+            "confidence":
+                0.5,
+        }
+
     )
 
 
     assert (
-        result["decision"]
-        == "respond_immediately"
+        result["automation_ready"]
+        is True
     )
-
-
-
-def test_medium_risk_decision():
-
-    engine = DecisionEngine()
-
-
-    result = engine.decide(
-        {
-            "severity": "medium",
-        }
-    )
-
-
-    assert (
-        result["decision"]
-        == "investigate_further"
-    )
-
-
-
-def test_history():
-
-    engine = DecisionEngine()
-
-    engine.decide({})
-
-
-    assert len(
-        engine.get_history()
-    ) == 1
-
-
-
-def test_clear_history():
-
-    engine = DecisionEngine()
-
-    engine.decide({})
-
-    engine.clear_history()
-
-
-    assert engine.get_history() == []
