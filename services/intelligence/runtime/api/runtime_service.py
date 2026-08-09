@@ -1,74 +1,68 @@
 """
 Sentinel DNA - Runtime Service
 
-Service facade responsible for exposing
+Application service boundary for
 autonomous investigation execution.
-
-Responsibilities:
-
-- accept investigation requests
-- create runtime execution flow
-- delegate to InvestigationRuntime
-- normalize runtime responses
-- provide stable service contract
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from services.intelligence.runtime import (
+    InvestigationRuntime,
+    RuntimeResult,
+)
+
 
 class RuntimeService:
     """
-    Public runtime service facade.
+    Service facade for investigation runtime.
+
+    Responsible for:
+    - runtime lifecycle
+    - request validation
+    - response normalization
     """
+
 
     def __init__(
         self,
-        runtime=None,
+        runtime: InvestigationRuntime | None = None,
     ):
-        """
-        Dependency injection.
-
-        runtime:
-            InvestigationRuntime instance
-        """
-
-        if runtime is None:
-
-            from services.intelligence.runtime.investigation_runtime import (
-                InvestigationRuntime,
-            )
-
-            runtime = InvestigationRuntime()
-
-        self.runtime = runtime
+        self.runtime = (
+            runtime
+            or InvestigationRuntime()
+        )
 
 
-    def execute(
+    def start_investigation(
         self,
         case_id: str,
-        artifacts: list[dict[str, Any]] | None = None,
-        metadata: dict[str, Any] | None = None,
+        evidence: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Execute autonomous investigation.
 
-        Returns normalized runtime result.
+        Returns API-ready dictionary.
         """
 
-        if artifacts is None:
-            artifacts = []
 
+        if not case_id:
 
-        if metadata is None:
-            metadata = {}
+            return {
+
+                "status": "failed",
+
+                "error":
+                    "case_id is required",
+
+            }
 
 
         result = self.runtime.execute(
             case_id=case_id,
-            artifacts=artifacts,
-            metadata=metadata,
+            evidence=evidence or [],
         )
 
 
@@ -77,80 +71,45 @@ class RuntimeService:
         )
 
 
-    def investigate(
+    def get_status(
         self,
-        case_id: str,
-        artifacts: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
+        result: RuntimeResult | dict[str, Any],
+    ) -> str:
         """
-        Compatibility API.
-
-        Delegates investigation execution.
+        Extract execution status.
         """
 
-        return self.execute(
-            case_id=case_id,
-            artifacts=artifacts,
+
+        if isinstance(
+            result,
+            RuntimeResult,
+        ):
+
+            return result.status
+
+
+        return result.get(
+            "status",
+            "unknown",
         )
-
-
-    def health(
-        self,
-    ) -> dict[str, Any]:
-        """
-        Runtime health status.
-        """
-
-        return {
-
-            "service":
-                "sentinel-dna-runtime",
-
-            "status":
-                "healthy",
-
-        }
 
 
     def _normalize_result(
         self,
-        result,
+        result: RuntimeResult | dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Convert runtime objects into dictionaries.
+        Convert runtime output into
+        stable service contract.
         """
+
 
         if isinstance(
             result,
-            dict,
-        ):
-            return result
-
-
-        if hasattr(
-            result,
-            "to_dict",
+            RuntimeResult,
         ):
 
             return result.to_dict()
 
 
-        if hasattr(
-            result,
-            "__dict__",
-        ):
-
-            return vars(
-                result
-            )
-
-
-        return {
-
-            "status":
-                "unknown",
-
-            "result":
-                result,
-
-        }
+        return result
