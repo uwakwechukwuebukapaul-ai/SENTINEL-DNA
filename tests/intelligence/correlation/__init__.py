@@ -1,3 +1,3 @@
 """
-Correlation intelligence tests.
+Threat correlation tests.
 """

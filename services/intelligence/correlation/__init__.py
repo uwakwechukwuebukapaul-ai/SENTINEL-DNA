@@ -1,20 +1,22 @@
 """
-Sentinel DNA Correlation Intelligence Layer
+Sentinel DNA Intelligence Correlation Layer
 
-Correlates IOC intelligence,
-MITRE ATT&CK mappings,
-and AI reasoning outputs.
+Provides:
+- IOC matching
+- Threat correlation
+- Attack story generation
+- Correlation engine
 """
 
-from .correlation_engine import (
-    CorrelationEngine,
-)
+from .ioc_matcher import IOCMatcher
+from .threat_correlator import ThreatCorrelator
+from .correlation_result import CorrelationResult
+from .correlation_engine import CorrelationEngine
 
-from .models import (
-    CorrelationResult,
-)
 
 __all__ = [
-    "CorrelationEngine",
+    "IOCMatcher",
+    "ThreatCorrelator",
     "CorrelationResult",
+    "CorrelationEngine",
 ]
