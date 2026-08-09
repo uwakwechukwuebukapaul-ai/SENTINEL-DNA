@@ -1,22 +1,9 @@
 """
-Sentinel DNA Autonomous Reasoning Layer
+Sentinel DNA AI Investigation Reasoning Layer
 """
 
-from .reasoning_engine import (
-    ReasoningEngine,
-)
-
-from .hypothesis_generator import (
-    HypothesisGenerator,
-)
-
-from .confidence_reasoner import (
-    ConfidenceReasoner,
-)
-
+from .reasoner import InvestigationReasoner
 
 __all__ = [
-    "ReasoningEngine",
-    "HypothesisGenerator",
-    "ConfidenceReasoner",
+    "InvestigationReasoner",
 ]
