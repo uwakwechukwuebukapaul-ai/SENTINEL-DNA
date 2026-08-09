@@ -1,20 +1,14 @@
 """
-Intelligence Fusion Pipeline
+Intelligence Pipeline
 
-Coordinates threat intelligence fusion workflow.
+High-level intelligence workflow.
 
-Flow:
+Coordinates:
 
-Indicator
-    |
-    v
-Normalization
-    |
-    v
-Fusion Engine
-    |
-    v
-Risk Intelligence Result
+- intelligence providers
+- correlation engine
+- fusion engine
+- final intelligence output
 """
 
 from typing import Any
@@ -23,153 +17,119 @@ from typing import Any
 
 class IntelligencePipeline:
     """
-    High-level intelligence fusion execution pipeline.
+    Executes threat intelligence analysis workflow.
     """
 
 
     def __init__(
         self,
-        fusion_engine,
+        providers=None,
+        correlation_engine=None,
+        fusion_engine=None,
     ):
+
+        self.providers = (
+            providers or []
+        )
+
+        self.correlation_engine = (
+            correlation_engine
+        )
 
         self.fusion_engine = (
             fusion_engine
         )
 
-        self.status = "ready"
-
 
 
     def investigate(
         self,
-        indicator: str,
-        indicator_type: str | None = None,
+        signals: list[dict[str, Any]],
+        context=None,
     ):
 
         """
-        Execute intelligence fusion.
+        Execute complete intelligence pipeline.
         """
 
-        self.status = "running"
+        intelligence_records = []
 
 
-        normalized = (
-            self._normalize_indicator(
-                indicator,
-                indicator_type,
+        #
+        # Provider enrichment
+        #
+
+        for provider in self.providers:
+
+            records = provider.enrich(
+                signals
             )
-        )
 
-
-        result = (
-            self.fusion_engine.fuse(
-                normalized["value"],
-                normalized["type"],
+            intelligence_records.extend(
+                records
             )
-        )
-
-
-        self.status = "completed"
-
-
-        return {
-
-            "indicator":
-                normalized["value"],
-
-
-            "type":
-                normalized["type"],
-
-
-            "analysis":
-                (
-
-                    result.to_dict()
-
-                    if hasattr(
-                        result,
-                        "to_dict",
-                    )
-
-                    else result
-
-                ),
-
-        }
 
 
 
-    def execute(
-        self,
-        indicators: list[dict[str, Any]],
-    ):
+        #
+        # Correlation
+        #
 
-        """
-        Execute multiple indicator analysis.
-        """
-
-        results = []
+        correlation = None
 
 
-        for indicator in indicators:
+        if self.correlation_engine:
 
-            results.append(
-
-                self.investigate(
-
-                    indicator.get(
-                        "value"
-                    ),
-
-                    indicator.get(
-                        "type"
-                    ),
-
+            correlation = (
+                self.correlation_engine.correlate(
+                    signals
                 )
-
             )
 
 
-        return results
+
+        #
+        # Fusion
+        #
+
+        fusion_result = None
 
 
+        if self.fusion_engine:
 
-    def _normalize_indicator(
-        self,
-        indicator: str,
-        indicator_type: str | None,
-    ):
+            fusion_result = (
+                self.fusion_engine.fuse(
+                    {
+                        "signals":
+                            signals,
 
-        return {
+                        "records":
+                            intelligence_records,
 
-            "value":
-                indicator.strip()
-                if isinstance(
-                    indicator,
-                    str,
+                        "correlation":
+                            correlation,
+
+                    }
                 )
-                else indicator,
+            )
 
 
-            "type":
-                indicator_type
-                or "unknown",
-
-        }
-
-
-
-    def health(
-        self,
-    ):
 
         return {
 
-            "component":
-                "intelligence_pipeline",
+            "signals":
+                signals,
 
-            "status":
-                self.status,
+            "intelligence_records":
+                intelligence_records,
+
+            "correlation":
+                correlation,
+
+            "fusion":
+                fusion_result,
+
+            "success":
+                True,
 
         }
