@@ -1,14 +1,16 @@
 """
 Sentinel DNA Intelligence Runtime Package
 
-Exports runtime execution components:
+Exports:
 
-- context
-- results
-- services
-- controllers
+- execution context
+- intelligence results
+- service layer
+- controller layer
 - runtime boundary
-- orchestration components
+- validation
+- metrics
+- API facade
 """
 
 
@@ -37,6 +39,21 @@ from services.intelligence.runtime.runtime_intelligence_runtime import (
 )
 
 
+from services.intelligence.runtime.runtime_intelligence_validator import (
+    RuntimeIntelligenceValidator,
+)
+
+
+from services.intelligence.runtime.runtime_intelligence_metrics import (
+    RuntimeIntelligenceMetrics,
+)
+
+
+from services.intelligence.runtime.runtime_intelligence_api import (
+    RuntimeIntelligenceAPI,
+)
+
+
 
 __all__ = [
 
@@ -49,5 +66,11 @@ __all__ = [
     "RuntimeIntelligenceController",
 
     "RuntimeIntelligenceRuntime",
+
+    "RuntimeIntelligenceValidator",
+
+    "RuntimeIntelligenceMetrics",
+
+    "RuntimeIntelligenceAPI",
 
 ]
