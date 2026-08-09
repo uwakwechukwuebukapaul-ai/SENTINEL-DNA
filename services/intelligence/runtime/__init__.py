@@ -1,15 +1,16 @@
 """
-Sentinel DNA Intelligence Runtime.
+Sentinel DNA - Intelligence Runtime Package
 
-Provides execution infrastructure
-for autonomous intelligence agents.
+Provides runtime execution capabilities
+for autonomous investigations.
 """
 
-from .agent_registry import AgentRegistry
-from .agent_orchestrator import AgentOrchestrator
-
+from .runtime_context import RuntimeContext
+from .runtime_result import RuntimeResult
+from .investigation_runtime import InvestigationRuntime
 
 __all__ = [
-    "AgentRegistry",
-    "AgentOrchestrator",
+    "RuntimeContext",
+    "RuntimeResult",
+    "InvestigationRuntime",
 ]
