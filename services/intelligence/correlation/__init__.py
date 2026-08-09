@@ -1,17 +1,20 @@
 """
-Sentinel DNA Evidence Correlation Layer
+Sentinel DNA Correlation Intelligence Layer
+
+Correlates IOC intelligence,
+MITRE ATT&CK mappings,
+and AI reasoning outputs.
 """
 
 from .correlation_engine import (
     CorrelationEngine,
 )
 
-from .finding_correlator import (
-    FindingCorrelator,
+from .models import (
+    CorrelationResult,
 )
-
 
 __all__ = [
     "CorrelationEngine",
-    "FindingCorrelator",
+    "CorrelationResult",
 ]

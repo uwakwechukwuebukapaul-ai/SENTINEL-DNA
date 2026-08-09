@@ -1,93 +1,98 @@
 """
-Sentinel DNA Evidence Correlation Engine
+Sentinel DNA Intelligence Correlation Engine.
 
-Transforms raw investigation artifacts
-into correlated intelligence.
+Combines:
+- IOC intelligence
+- MITRE mappings
+- reasoning results
+
+into investigation intelligence.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from services.intelligence.correlation.finding_correlator import (
-    FindingCorrelator,
-)
+from .models import CorrelationResult
+
+from .attack_chain import AttackChainBuilder
 
 
 
 class CorrelationEngine:
-    """
-    Enterprise evidence correlation engine.
-    """
 
 
     def __init__(
         self,
-        correlator: FindingCorrelator | None = None,
-    ) -> None:
+        attack_chain_builder=None,
+    ):
 
-
-        self.correlator = (
-            correlator
-            or FindingCorrelator()
+        self.attack_chain_builder = (
+            attack_chain_builder
+            or AttackChainBuilder()
         )
 
 
 
-    # --------------------------------------------------
-    # Correlate investigation data
-    # --------------------------------------------------
-
     def correlate(
         self,
-        artifacts: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """
-        Generate intelligence correlation.
-        """
+        case_id: str,
+        indicators: list[dict[str, Any]],
+        techniques: list[dict[str, Any]],
+        reasoning: dict[str, Any] | None = None,
+    ) -> CorrelationResult:
 
 
-        findings = []
+        confidence = 0.0
 
 
-        for artifact in artifacts:
-
-            if "finding" in artifact:
-
-                findings.append(
-                    artifact["finding"]
-                )
+        if indicators:
+            confidence += 0.4
 
 
-            elif artifact.get(
-                "type"
-            ):
+        if techniques:
+            confidence += 0.4
 
-                findings.append(
-                    artifact
-                )
+
+        if reasoning:
+            confidence += 0.2
 
 
 
-        correlated = (
-            self.correlator.correlate(
-                findings
+        story = (
+            self.attack_chain_builder.build(
+                indicators,
+                techniques,
             )
         )
 
 
+        normalized_confidence = round(
+            min(
+                confidence,
+                1.0,
+            ),
+            2,
+        )
 
-        return {
 
-            "total_artifacts":
-                len(artifacts),
+        return CorrelationResult(
 
-            "correlated_findings":
-                len(correlated),
+            case_id=case_id,
 
-            "findings":
-                correlated,
+            indicators=indicators,
 
-            "status":
-                "completed",
-        }
+            techniques=techniques,
+
+            attack_story=story,
+
+            confidence=normalized_confidence,
+
+            metadata={
+                "engine":
+                    "sentinel-dna-correlation",
+
+                "reasoning_available":
+                    reasoning is not None,
+            },
+        )
