@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .investigation_context import InvestigationContext
 from .investigation_result import InvestigationResult
 
 
@@ -45,6 +46,7 @@ class InvestigationPipeline:
         self.recommendation_engine = recommendation_engine
 
 
+
     def register_engine(
         self,
         name: str,
@@ -54,9 +56,8 @@ class InvestigationPipeline:
         self.engines[name] = engine
 
 
-    def _ensure_default_engines(
-        self,
-    ) -> None:
+
+    def _ensure_default_engines(self):
 
         if self.engines:
             return
@@ -78,6 +79,7 @@ class InvestigationPipeline:
                 }
 
 
+
         class AnalysisEngine:
 
             def execute(
@@ -93,10 +95,12 @@ class InvestigationPipeline:
                 }
 
 
+
         self.register_engine(
             "threat_intelligence",
             ThreatIntelligenceEngine(),
         )
+
 
         self.register_engine(
             "analysis_engine",
@@ -104,25 +108,48 @@ class InvestigationPipeline:
         )
 
 
+
     def _execute_engine(
         self,
-        engine: Any,
-        case_id: str,
-        alert: dict[str, Any],
-    ) -> Any:
+        engine,
+        name,
+        case_id,
+        alert,
+        context,
+    ):
+
+        """
+        Backward compatible engine execution.
+
+        Supports:
+        - execute(case_id, alert, context)
+        - execute(case_id, alert)
+        - analyze(alert)
+        - callable()
+        """
 
         if hasattr(engine, "execute"):
 
-            return engine.execute(
-                case_id,
-                alert,
-            )
+            try:
+
+                return engine.execute(
+                    case_id,
+                    alert,
+                    context,
+                )
+
+            except TypeError:
+
+                return engine.execute(
+                    case_id,
+                    alert,
+                )
 
 
         if hasattr(engine, "analyze"):
 
             return engine.analyze(
-                alert,
+                alert
             )
 
 
@@ -134,7 +161,10 @@ class InvestigationPipeline:
             )
 
 
-        return None
+        return {
+            "error": f"Unsupported engine: {name}"
+        }
+
 
 
     def execute(
@@ -147,6 +177,12 @@ class InvestigationPipeline:
         self._ensure_default_engines()
 
 
+        context = InvestigationContext(
+            case_id=case_id,
+            alert=alert,
+        )
+
+
         findings: dict[str, Any] = {}
 
 
@@ -154,15 +190,13 @@ class InvestigationPipeline:
 
             try:
 
-                output = self._execute_engine(
+                findings[name] = self._execute_engine(
                     engine,
+                    name,
                     case_id,
                     alert,
+                    context,
                 )
-
-                if output is not None:
-
-                    findings[name] = output
 
 
             except Exception as exc:
@@ -172,6 +206,7 @@ class InvestigationPipeline:
                 }
 
 
+
         result = InvestigationResult(
             case_id=case_id,
             status="completed",
@@ -179,20 +214,20 @@ class InvestigationPipeline:
         )
 
 
-        if self.ioc_investigator:
-
-            result.update_metadata(
-                {
-                    "ioc_investigator": True
-                }
-            )
+        result.update_metadata(
+            {
+                "investigation_context":
+                    context.snapshot()
+            }
+        )
 
 
         if self.timeline_builder:
 
             result.add_timeline_event(
                 {
-                    "event": "investigation_completed"
+                    "event":
+                    "investigation_completed"
                 }
             )
 
