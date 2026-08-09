@@ -1,124 +1,56 @@
 """
-Sentinel DNA Runtime Intelligence Registry
+Runtime Intelligence Registry
 
-Enterprise intelligence capability registry.
-
-Responsibilities:
-
-- register intelligence services
-- discover capabilities
-- lookup providers
-- maintain registry state
+Dependency registry for intelligence components.
 """
 
-from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
-
-@dataclass
 class RuntimeIntelligenceRegistry:
-    """
-    Intelligence module registry.
-    """
 
-    modules: dict[str, dict[str, Any]] = field(
-        default_factory=dict
-    )
+
+    def __init__(self):
+
+        self.components = {}
+
 
 
     def register(
         self,
         name: str,
-        capabilities: list[str],
-    ) -> None:
-        """
-        Register intelligence module.
-        """
+        component,
+    ):
 
-        self.modules[name] = {
-            "capabilities": capabilities,
-            "active": True,
-        }
+        self.components[name] = component
 
 
 
-    def unregister(
+    def get(
         self,
         name: str,
-    ) -> None:
-        """
-        Remove module.
-        """
+    ):
 
-        self.modules.pop(
+        return self.components.get(
+            name
+        )
+
+
+
+    def available(
+        self,
+    ):
+
+        return list(
+            self.components.keys()
+        )
+
+
+
+    def remove(
+        self,
+        name: str,
+    ):
+
+        return self.components.pop(
             name,
             None,
         )
-
-
-
-    def exists(
-        self,
-        name: str,
-    ) -> bool:
-        """
-        Check module.
-        """
-
-        return name in self.modules
-
-
-
-    def find_provider(
-        self,
-        capability: str,
-    ) -> str | None:
-        """
-        Find module supporting capability.
-        """
-
-        for name, module in self.modules.items():
-
-            if capability in module["capabilities"]:
-                return name
-
-        return None
-
-
-
-    def count(self) -> int:
-        """
-        Return module count.
-        """
-
-        return len(
-            self.modules
-        )
-
-
-
-    def clear(self) -> None:
-        """
-        Reset registry.
-        """
-
-        self.modules.clear()
-
-
-
-    def status(self) -> dict[str, Any]:
-        """
-        Registry status.
-        """
-
-        return {
-            "modules":
-                self.count(),
-
-            "registered":
-                list(
-                    self.modules.keys()
-                ),
-        }
