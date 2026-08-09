@@ -1,18 +1,17 @@
 """
 Sentinel DNA Intelligence Factory
 
-Builds and registers investigation
-intelligence engines.
-
-Central dependency composition layer.
+Creates investigation intelligence pipelines.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 from .investigation_pipeline import (
     InvestigationPipeline,
+)
+
+from services.intelligence.evidence import (
+    EvidenceCollector,
 )
 
 from services.intelligence.mitre import (
@@ -27,29 +26,52 @@ from services.intelligence.recommendation import (
     RecommendationEngine,
 )
 
-from services.intelligence.evidence import (
-    EvidenceCollector,
-)
-
 
 class IntelligenceFactory:
     """
-    Creates production investigation pipelines.
+    Enterprise intelligence dependency factory.
     """
 
+
     @staticmethod
-    def create_pipeline() -> InvestigationPipeline:
-        """
-        Build configured investigation pipeline.
-        """
+    def create_pipeline():
 
-        engines: dict[str, Any] = {
-            "evidence": EvidenceCollector(),
-            "mitre": MitreEngine(),
-            "risk": RiskEngine(),
-            "recommendation": RecommendationEngine(),
-        }
+        pipeline = InvestigationPipeline()
 
-        return InvestigationPipeline(
-            engines=engines
+
+        pipeline.register_engine(
+            "evidence",
+            EvidenceCollector(),
         )
+
+
+        pipeline.register_engine(
+            "mitre",
+            MitreEngine(),
+        )
+
+
+        pipeline.register_engine(
+            "risk",
+            RiskEngine(),
+        )
+
+
+        pipeline.register_engine(
+            "recommendation",
+            RecommendationEngine(),
+        )
+
+
+        return pipeline
+
+
+
+    def build(self):
+
+        return {
+
+            "pipeline":
+                self.create_pipeline()
+
+        }

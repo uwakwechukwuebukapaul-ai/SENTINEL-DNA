@@ -1,7 +1,7 @@
 """
 Sentinel DNA Investigation Pipeline
 
-Executes autonomous investigation workflow.
+Executes intelligence-driven investigation workflow.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from .investigation_result import (
 
 class InvestigationPipeline:
     """
-    Coordinates investigation execution.
+    Coordinates investigation intelligence engines.
     """
 
     def __init__(
@@ -50,26 +50,28 @@ class InvestigationPipeline:
 
             try:
 
+                output = None
+
+
                 if hasattr(
                     engine,
-                    "analyze",
+                    "analyze"
                 ):
-
                     output = engine.analyze(
                         alert
                     )
 
+
                 elif hasattr(
                     engine,
-                    "execute",
+                    "execute"
                 ):
-
                     output = engine.execute(
                         alert
                     )
 
-                else:
 
+                if output is None:
                     continue
 
 
@@ -77,6 +79,56 @@ class InvestigationPipeline:
                     name,
                     output,
                 )
+
+
+                if name == "mitre":
+
+                    techniques = (
+                        output.get(
+                            "techniques",
+                            []
+                        )
+                        if isinstance(output, dict)
+                        else []
+                    )
+
+                    for technique in techniques:
+                        result.add_mitre(
+                            technique
+                        )
+
+
+                if name == "risk":
+
+                    if isinstance(output, dict):
+
+                        result.set_risk(
+                            output.get(
+                                "score",
+                                0
+                            ),
+                            output.get(
+                                "confidence",
+                                0.0
+                            ),
+                        )
+
+
+                if name == "recommendation":
+
+                    recommendations = (
+                        output.get(
+                            "recommendations",
+                            []
+                        )
+                        if isinstance(output, dict)
+                        else []
+                    )
+
+                    for item in recommendations:
+                        result.add_recommendation(
+                            item
+                        )
 
 
             except Exception as exc:

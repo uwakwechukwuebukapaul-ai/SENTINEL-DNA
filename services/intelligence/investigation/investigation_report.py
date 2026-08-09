@@ -1,50 +1,73 @@
 """
 Sentinel DNA Investigation Report
 
-Final analyst-facing investigation object.
+Analyst-facing investigation report.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class InvestigationReport:
+    """
+    Converts investigation results
+    into analyst format.
+    """
 
 
     def __init__(
         self,
-        case_id,
-    ):
+        case_id: str,
+    ) -> None:
 
         self.case_id = case_id
 
-        self.evidence = []
+        self.summary = ""
+
+        self.findings: dict[str, Any] = {}
 
         self.timeline = []
 
-        self.assessment = {}
+        self.recommendations = []
 
 
-
-    def add_evidence(
+    def build_from_result(
         self,
-        evidence,
+        result,
     ):
 
-        self.evidence.append(
-            evidence
+        data = (
+            result.to_dict()
+            if hasattr(
+                result,
+                "to_dict"
+            )
+            else result
         )
 
 
-
-    def add_timeline_event(
-        self,
-        event,
-    ):
-
-        self.timeline.append(
-            event
+        self.findings = data.get(
+            "findings",
+            {}
         )
 
+        self.timeline = data.get(
+            "timeline",
+            []
+        )
+
+        self.recommendations = data.get(
+            "recommendations",
+            []
+        )
+
+        self.summary = (
+            "AI investigation completed"
+        )
+
+
+        return self
 
 
     def to_dict(self):
@@ -54,18 +77,16 @@ class InvestigationReport:
             "case_id":
                 self.case_id,
 
-            "evidence":
-                [
-                    e.to_dict()
-                    for e in self.evidence
-                ],
+            "summary":
+                self.summary,
+
+            "findings":
+                self.findings,
 
             "timeline":
-                [
-                    e.__dict__
-                    for e in self.timeline
-                ],
+                self.timeline,
 
-            "assessment":
-                self.assessment,
+            "recommendations":
+                self.recommendations,
+
         }

@@ -1,119 +1,168 @@
 """
 Sentinel DNA Investigation Executor
 
-Executes investigation plans.
+Backward compatible investigation execution layer.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, UTC
-from typing import Any
-
-from .agent_dispatcher import (
-    InvestigationAgentDispatcher,
-)
 
 
 
 class InvestigationExecutor:
     """
-    Executes investigation workflows.
+    Executes investigation plans.
 
-    Converts investigation plans into
-    agent executions.
+    Supports:
+    - Agent dispatcher execution
+    - Intelligence pipeline execution
     """
-
 
     def __init__(
         self,
-        dispatcher: InvestigationAgentDispatcher | None = None,
+        executor=None,
     ) -> None:
 
-        self.dispatcher = (
-            dispatcher
-            or InvestigationAgentDispatcher()
-        )
+        self.executor = executor
 
-        self.history: list[
-            dict[str, Any]
-        ] = []
-
+        self.history = []
 
 
     def execute(
         self,
-        plan: dict[str, Any],
-        context: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Execute investigation plan.
-        """
+        plan,
+        context,
+    ):
 
         started = datetime.now(
             UTC
         )
 
-
-        findings = []
-
-        errors = []
+        result = None
 
 
-        for task in plan.get(
-            "tasks",
-            [],
+        #
+        # Pipeline execution
+        #
+
+        if hasattr(
+            self.executor,
+            "execute"
         ):
 
             try:
 
-                result = (
-                    self.dispatcher.dispatch(
+                result = self.executor.execute(
+                    plan,
+                    context,
+                )
+
+            except TypeError:
+
+                result = self.executor.execute(
+                    plan.get(
+                        "case_id"
+                    ),
+                    context,
+                )
+
+
+        #
+        # Agent dispatcher execution
+        #
+
+        elif hasattr(
+            self.executor,
+            "dispatch"
+        ):
+
+            findings = []
+
+
+            for task in plan.get(
+                "tasks",
+                []
+            ):
+
+                output = (
+                    self.executor.dispatch(
                         task["name"],
                         context,
                     )
                 )
 
                 findings.append(
-                    result
+                    output
                 )
 
 
-            except Exception as exc:
+            result = {
 
-                errors.append(
-                    {
-                        "task": task.get(
-                            "name"
-                        ),
-                        "error": str(exc),
-                    }
-                )
+                "case_id":
+                    plan.get(
+                        "case_id"
+                    ),
+
+                "status":
+                    "completed",
+
+                "findings":
+                    findings,
+
+            }
 
 
-        completed = datetime.now(
-            UTC
-        )
+        else:
+
+            result = {
+
+                "case_id":
+                    plan.get(
+                        "case_id"
+                    ),
+
+                "status":
+                    "completed",
+
+                "findings":
+                    [],
+
+            }
+
+
+
+        if hasattr(
+            result,
+            "to_dict"
+        ):
+
+            result = result.to_dict()
+
 
 
         execution = {
 
-            "case_id": plan.get(
-                "case_id"
-            ),
+            "status":
+                "completed",
 
-            "status": (
-                "completed"
-                if not errors
-                else "partial"
-            ),
+            "findings":
+                result.get(
+                    "findings",
+                    []
+                ),
 
-            "findings": findings,
+            "result":
+                result,
 
-            "errors": errors,
-
-            "duration_seconds": (
-                completed - started
-            ).total_seconds(),
+            "duration_seconds":
+                (
+                    datetime.now(
+                        UTC
+                    )
+                    -
+                    started
+                ).total_seconds(),
 
         }
 
@@ -127,22 +176,12 @@ class InvestigationExecutor:
 
 
 
-    def get_history(
-        self,
-    ) -> list[dict[str, Any]]:
-        """
-        Return execution history.
-        """
+    def get_history(self):
 
         return self.history
 
 
 
-    def clear_history(
-        self,
-    ) -> None:
-        """
-        Clear execution history.
-        """
+    def clear_history(self):
 
         self.history.clear()
