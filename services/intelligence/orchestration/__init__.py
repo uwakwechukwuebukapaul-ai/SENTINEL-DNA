@@ -1,19 +1,6 @@
 """
-Sentinel DNA Investigation Orchestration Package
-
-Exports orchestration components:
-
-- Workflow state
-- Investigation planning
-- Investigation coordination
-- Autonomous orchestration
+Sentinel DNA Intelligence Orchestration Package
 """
-
-
-from .workflow_state import (
-    WorkflowState,
-    WorkflowPhase,
-)
 
 
 from .investigation_plan import (
@@ -21,9 +8,8 @@ from .investigation_plan import (
 )
 
 
-from .investigation_coordinator import (
-    InvestigationCoordinator,
-    InvestigationResult,
+from .execution_state import (
+    WorkflowState,
 )
 
 
@@ -32,19 +18,26 @@ from .investigation_orchestrator import (
 )
 
 
+try:
+
+    from .investigation_coordinator import (
+        InvestigationCoordinator,
+    )
+
+except ImportError:
+
+    InvestigationCoordinator = None
+
+
 
 __all__ = [
 
-    "WorkflowState",
-
-    "WorkflowPhase",
-
     "InvestigationPlan",
 
-    "InvestigationCoordinator",
-
-    "InvestigationResult",
+    "WorkflowState",
 
     "InvestigationOrchestrator",
+
+    "InvestigationCoordinator",
 
 ]

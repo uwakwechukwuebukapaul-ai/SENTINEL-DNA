@@ -1,68 +1,82 @@
 """
-Execution State Tracking
+Sentinel DNA - Investigation Execution State
+
+Tracks investigation workflow lifecycle.
 """
 
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 
+@dataclass
+class WorkflowState:
+    """
+    Investigation workflow state manager.
+    """
 
-class ExecutionState:
+    current_status: str = "created"
+
+    history: list[str] = field(default_factory=list)
+
+    updated_at: str = field(
+        default_factory=lambda:
+        datetime.now(timezone.utc).isoformat()
+    )
 
 
-    def __init__(
+    def status(self) -> str:
+        """
+        Compatibility API.
+        """
+
+        return self.current_status
+
+
+    def set_status(
         self,
-        investigation_id: str,
+        status: str,
     ):
+        """
+        Update workflow state.
+        """
 
-        self.investigation_id = investigation_id
+        self.current_status = status
 
-        self.status = "created"
+        self.history.append(
+            status
+        )
 
-        self.started_at = None
-
-        self.completed_at = None
-
-
-
-    def start(self):
-
-        self.status = "running"
-
-        self.started_at = (
+        self.updated_at = (
             datetime.now(
                 timezone.utc
             ).isoformat()
         )
 
 
+    def transition(
+        self,
+        status: str,
+    ):
+        """
+        Alias used by future runtime.
+        """
 
-    def complete(self):
-
-        self.status = "completed"
-
-        self.completed_at = (
-            datetime.now(
-                timezone.utc
-            ).isoformat()
+        self.set_status(
+            status
         )
-
 
 
     def to_dict(self):
-
         return {
-
-            "investigation_id":
-                self.investigation_id,
-
             "status":
-                self.status,
+                self.current_status,
 
-            "started_at":
-                self.started_at,
+            "history":
+                self.history,
 
-            "completed_at":
-                self.completed_at,
-
+            "updated_at":
+                self.updated_at,
         }

@@ -1,70 +1,44 @@
 """
-Sentinel DNA Investigation Plan
-
-Defines the execution blueprint
-for autonomous investigations.
+Sentinel DNA - Investigation Plan
 """
 
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass
 class InvestigationPlan:
     """
-    Investigation workflow plan.
-
-    Backward compatible with:
-    - investigation_id
-    - case_id
-    - name
-    - plan_name
-    - agents
-    - stages
+    Investigation execution plan.
     """
 
-    def __init__(
-        self,
-        investigation_id=None,
-        case_id=None,
-        name=None,
-        plan_name=None,
-        agents=None,
-        stages=None,
-    ):
+    case_id: str = "CASE-900"
 
-        self.investigation_id = (
-            investigation_id
-            or case_id
-            or "UNKNOWN"
-        )
+    name: str = (
+        "Security Investigation"
+    )
 
-        self.case_id = (
-            case_id
-            or self.investigation_id
-        )
+    plan_name: str = (
+        "Security Investigation"
+    )
 
-        self.name = (
-            name
-            or plan_name
-            or "Investigation Plan"
-        )
+    agents: list[str] = field(
+        default_factory=list
+    )
 
-        self.plan_name = self.name
-
-        self.agents = (
-            agents
-            or []
-        )
-
-        self.stages = (
-            stages
-            or []
-        )
+    stages: list[str] = field(
+        default_factory=list
+    )
 
 
     def add_stage(
         self,
-        stage,
+        stage: str,
     ):
         """
-        Add workflow stage.
+        Add investigation stage.
         """
 
         self.stages.append(
@@ -74,28 +48,25 @@ class InvestigationPlan:
 
     def add_agent(
         self,
-        agent,
+        agent: str,
     ):
-        """
-        Register execution agent.
-        """
-
         self.agents.append(
             agent
         )
 
 
     def to_dict(self):
-        return {
 
-            "investigation_id":
-                self.investigation_id,
+        return {
 
             "case_id":
                 self.case_id,
 
             "name":
                 self.name,
+
+            "plan_name":
+                self.plan_name,
 
             "agents":
                 self.agents,
