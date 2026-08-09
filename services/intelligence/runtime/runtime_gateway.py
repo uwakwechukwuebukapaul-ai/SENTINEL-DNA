@@ -1,108 +1,286 @@
 """
-Sentinel DNA Runtime Gateway
+Runtime Gateway
 
-External integration boundary
-for Intelligence Runtime Framework.
+Runtime execution boundary.
 
-Responsibilities:
-
-- expose runtime operations
-- submit tasks
-- execute capabilities
-- provide runtime status
+Responsible for:
+- lifecycle control
+- capability registration
+- task submission
+- execution routing
+- runtime status
 """
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any
 
 from .task import Task
-from .execution_result import ExecutionResult
-from .runtime_controller import RuntimeController
+
+from .execution_result import (
+    ExecutionResult,
+)
+
+from .runtime_intelligence_controller import (
+    RuntimeIntelligenceController,
+)
 
 
-@dataclass
+
 class RuntimeGateway:
-    """
-    Enterprise runtime gateway.
-    """
-
-    controller: RuntimeController = field(
-        default_factory=RuntimeController
-    )
 
 
-    def start(self) -> None:
-        """
-        Start runtime service.
-        """
-
-        self.controller.initialize()
-
-
-
-    def stop(self) -> None:
-        """
-        Stop runtime service.
-        """
-
-        self.controller.shutdown()
-
-
-
-    def submit(
+    def __init__(
         self,
-        task: Task,
-    ) -> dict[str, Any]:
-        """
-        Submit task request.
-        """
+        controller=None,
+    ):
 
-        self.controller.submit(
-            task
+        self.controller = (
+            controller
+            if controller is not None
+            else RuntimeIntelligenceController()
         )
 
-        return {
-            "submitted": True,
-            "task_id": task.task_id,
-        }
+        self.handlers = {}
+
+        self.running = False
+
+        self.executions = 0
+
+        self.initialized = True
 
 
+
+    # =================================================
+    # Lifecycle
+    # =================================================
+
+    def start(
+        self,
+    ):
+
+        self.running = True
+
+
+        if hasattr(
+            self.controller,
+            "start",
+        ):
+
+            self.controller.start()
+
+
+        return True
+
+
+
+    def stop(
+        self,
+    ):
+
+        self.running = False
+
+
+        if hasattr(
+            self.controller,
+            "stop",
+        ):
+
+            self.controller.stop()
+
+
+        return False
+
+
+
+    # =================================================
+    # Registration
+    # =================================================
 
     def register_handler(
         self,
-        capability: str,
+        name,
         handler,
-    ) -> None:
-        """
-        Register execution handler.
-        """
+    ):
 
-        self.controller.register(
-            capability,
+        self.handlers[name] = handler
+
+        return True
+
+
+
+    def register(
+        self,
+        name,
+        handler,
+    ):
+
+        return self.register_handler(
+            name,
             handler,
         )
 
 
 
-    def execute(
-        self,
-        task: Task,
-    ) -> ExecutionResult:
-        """
-        Execute runtime task.
-        """
+    # =================================================
+    # Submit
+    # =================================================
 
-        return self.controller.execute(
+    def submit(
+        self,
+        task,
+    ):
+
+        result = self.execute(
             task
         )
 
 
+        return {
 
-    def status(self) -> dict[str, Any]:
-        """
-        Runtime service status.
-        """
+            "submitted":
+                True,
 
-        return self.controller.status()
+            "result":
+                result,
+
+        }
+
+
+
+    # =================================================
+    # Execute
+    # =================================================
+
+    def execute(
+        self,
+        task,
+    ):
+
+        capability = None
+
+        context = None
+
+
+
+        if isinstance(
+            task,
+            Task,
+        ):
+
+            capability = getattr(
+                task,
+                "capability",
+                None,
+            )
+
+
+            context = getattr(
+                task,
+                "payload",
+                None,
+            )
+
+
+
+        elif isinstance(
+            task,
+            dict,
+        ):
+
+            capability = task.get(
+                "capability"
+            )
+
+            context = task.get(
+                "context",
+                task.get(
+                    "payload"
+                )
+            )
+
+
+
+        else:
+
+            capability = task
+
+
+
+        handler = self.handlers.get(
+            capability
+        )
+
+
+        if handler is not None:
+
+            output = handler(
+                context
+            )
+
+
+        else:
+
+            output = self.controller.investigate(
+                {
+
+                    "capability":
+                        capability,
+
+                    "context":
+                        context,
+
+                }
+            )
+
+
+
+        self.executions += 1
+
+
+
+        if isinstance(
+            output,
+            ExecutionResult,
+        ):
+
+            return output
+
+
+
+        return ExecutionResult(
+            success=True,
+            output=output,
+        )
+
+
+
+    # =================================================
+    # Status
+    # =================================================
+
+    def status(
+        self,
+    ):
+
+        return {
+
+            "initialized":
+                self.initialized,
+
+            "running":
+                self.running,
+
+            "healthy":
+                True,
+
+            "handlers":
+                list(
+                    self.handlers.keys()
+                ),
+
+            "executions":
+                self.executions,
+
+        }
+
+
+
+RuntimeIntelligenceGateway = RuntimeGateway

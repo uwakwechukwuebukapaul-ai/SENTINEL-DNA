@@ -1,17 +1,36 @@
 """
-Intelligence Fusion Layer
+Sentinel DNA Intelligence Fusion Layer
 
-Combines multiple threat intelligence providers,
-knowledge graph correlation, and enrichment results
-into a unified intelligence decision.
+Public exports.
 """
 
-from .fusion_engine import FusionEngine
-from .fusion_result import FusionResult
-from .intelligence_pipeline import IntelligencePipeline
+from services.intelligence.fusion.threat_fusion_engine import (
+    ThreatFusionEngine,
+)
+
+
+# Compatibility alias
+FusionEngine = ThreatFusionEngine
+
+
+from services.intelligence.fusion.fusion_result import (
+    FusionResult,
+)
+
+
+from services.intelligence.fusion.intelligence_pipeline import (
+    IntelligencePipeline,
+)
+
 
 __all__ = [
+
     "FusionEngine",
+
+    "ThreatFusionEngine",
+
     "FusionResult",
+
     "IntelligencePipeline",
+
 ]

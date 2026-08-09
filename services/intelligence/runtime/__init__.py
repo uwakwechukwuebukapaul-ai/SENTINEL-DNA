@@ -1,76 +1,93 @@
 """
-Sentinel DNA Intelligence Runtime Package
+Sentinel DNA Runtime Package
 
-Exports:
+Compatibility facade for runtime architecture.
 
-- execution context
-- intelligence results
-- service layer
-- controller layer
-- runtime boundary
-- validation
-- metrics
-- API facade
+Maintains backward compatibility while exposing
+new intelligence runtime components.
 """
 
 
-from services.intelligence.runtime.runtime_intelligence_context import (
+__version__ = "1.0.0"
+
+
+#
+# Legacy Runtime Compatibility
+#
+
+from .execution_context import (
+    ExecutionContext as RuntimeContext,
+)
+
+
+from .execution_result import (
+    ExecutionResult as RuntimeResult,
+)
+
+
+
+#
+# Investigation Runtime
+#
+
+from .investigation_runtime import (
+    InvestigationRuntime,
+)
+
+
+
+#
+# Intelligence Runtime
+#
+
+from .runtime_intelligence_context import (
     RuntimeIntelligenceContext,
 )
 
 
-from services.intelligence.runtime.runtime_intelligence_result import (
+from .runtime_intelligence_result import (
     RuntimeIntelligenceResult,
 )
 
 
-from services.intelligence.runtime.runtime_intelligence_service import (
+from .runtime_intelligence_service import (
     RuntimeIntelligenceService,
 )
 
 
-from services.intelligence.runtime.runtime_intelligence_controller import (
+from .runtime_intelligence_controller import (
     RuntimeIntelligenceController,
 )
 
 
-from services.intelligence.runtime.runtime_intelligence_runtime import (
-    RuntimeIntelligenceRuntime,
-)
 
+#
+# Compatibility aliases
+#
 
-from services.intelligence.runtime.runtime_intelligence_validator import (
-    RuntimeIntelligenceValidator,
-)
+IntelligenceContext = RuntimeIntelligenceContext
 
-
-from services.intelligence.runtime.runtime_intelligence_metrics import (
-    RuntimeIntelligenceMetrics,
-)
-
-
-from services.intelligence.runtime.runtime_intelligence_api import (
-    RuntimeIntelligenceAPI,
-)
+IntelligenceResult = RuntimeIntelligenceResult
 
 
 
 __all__ = [
 
+    # Legacy
+    "RuntimeContext",
+    "RuntimeResult",
+
+    # Investigation
+    "InvestigationRuntime",
+
+    # Intelligence
     "RuntimeIntelligenceContext",
-
     "RuntimeIntelligenceResult",
-
     "RuntimeIntelligenceService",
-
     "RuntimeIntelligenceController",
 
-    "RuntimeIntelligenceRuntime",
-
-    "RuntimeIntelligenceValidator",
-
-    "RuntimeIntelligenceMetrics",
-
-    "RuntimeIntelligenceAPI",
+    # Aliases
+    "IntelligenceContext",
+    "IntelligenceResult",
 
 ]

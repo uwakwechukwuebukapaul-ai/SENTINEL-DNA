@@ -5,12 +5,15 @@ Transforms intelligence outputs into
 SOC analyst decisions.
 """
 
-from .decision import DecisionEngine
-from .risk_decision import RiskDecision
-from .response_planner import ResponsePlanner
+from importlib import import_module
+
+
+def __getattr__(name: str):
+    """Load decision implementations lazily."""
+    if name == "RiskDecision":
+        return getattr(import_module(f"{__name__}.risk_decision"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
-    "DecisionEngine",
     "RiskDecision",
-    "ResponsePlanner",
 ]

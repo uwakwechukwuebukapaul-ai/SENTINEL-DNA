@@ -4,6 +4,7 @@ Sentinel DNA Runtime Controller
 Enterprise runtime control plane.
 
 Responsible for:
+
 - runtime lifecycle
 - task submission
 - execution control
@@ -24,6 +25,9 @@ from .runtime_execution_manager import RuntimeExecutionManager
 class RuntimeController:
     """
     High-level runtime controller.
+
+    Provides a stable API boundary between
+    runtime clients and execution infrastructure.
     """
 
     manager: RuntimeExecutionManager = field(
@@ -33,7 +37,13 @@ class RuntimeController:
     initialized: bool = False
 
 
-    def initialize(self) -> None:
+    # =====================================================
+    # Lifecycle
+    # =====================================================
+
+    def initialize(
+        self,
+    ) -> None:
         """
         Initialize runtime.
         """
@@ -44,7 +54,9 @@ class RuntimeController:
 
 
 
-    def shutdown(self) -> None:
+    def shutdown(
+        self,
+    ) -> None:
         """
         Shutdown runtime.
         """
@@ -55,59 +67,136 @@ class RuntimeController:
 
 
 
+    # =====================================================
+    # Submission
+    # =====================================================
+
     def submit(
         self,
         task: Task,
-    ) -> None:
+    ):
         """
         Submit runtime task.
         """
 
-        self.manager.submit(
+        return self.manager.submit(
             task
         )
 
 
 
+    # =====================================================
+    # Registration
+    # =====================================================
+
     def register(
         self,
         capability: str,
         handler,
-    ) -> None:
+    ) -> bool:
         """
-        Register execution capability.
+        Register runtime capability.
         """
 
-        self.manager.register_handler(
+        return self.manager.register_handler(
             capability,
             handler,
         )
 
 
 
+    # =====================================================
+    # Execution
+    # =====================================================
+
     def execute(
         self,
         task: Task,
     ) -> ExecutionResult:
         """
-        Execute task.
+        Execute runtime task.
+
+        Normalizes every execution response into
+        ExecutionResult.
         """
 
-        return self.manager.execute(
-            task
-        )
+        try:
+
+            capability = getattr(
+                task,
+                "capability",
+                None,
+            )
+
+
+            payload = getattr(
+                task,
+                "payload",
+                None,
+            )
+
+
+            if capability is None:
+
+                return ExecutionResult.failure(
+                    error="Task missing capability."
+                )
+
+
+            result = self.manager.execute(
+                capability,
+                payload,
+            )
+
+
+            if isinstance(
+                result,
+                ExecutionResult,
+            ):
+
+                return result
 
 
 
-    def status(self) -> dict[str, Any]:
+            if result is None:
+
+                return ExecutionResult.failure(
+                    error="Execution returned no result."
+                )
+
+
+
+            return ExecutionResult.success(
+                output=result,
+                data=result,
+            )
+
+
+        except Exception as exc:
+
+            return ExecutionResult.failure(
+                error=str(exc)
+            )
+
+
+
+    # =====================================================
+    # Status
+    # =====================================================
+
+    def status(
+        self,
+    ) -> dict[str, Any]:
         """
         Runtime snapshot.
         """
 
         return {
+
             "initialized":
                 self.initialized,
 
             "runtime":
                 self.manager.status(),
+
         }

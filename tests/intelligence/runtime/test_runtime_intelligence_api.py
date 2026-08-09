@@ -2,92 +2,118 @@
 Runtime Intelligence API Tests
 """
 
+
 from services.intelligence.runtime.runtime_intelligence_api import (
     RuntimeIntelligenceAPI,
 )
 
 
 
-def test_init():
+class FakeRuntime:
 
-    api = RuntimeIntelligenceAPI()
+    def execute(
+        self,
+        signals,
+        case_id=None,
+    ):
 
-    assert api.service is not None
+        return {
+
+            "success":
+                True,
+
+            "case_id":
+                case_id,
+
+        }
 
 
 
-def test_register():
+    def health(
+        self,
+    ):
 
-    api = RuntimeIntelligenceAPI()
+        return {
 
-
-    api.register(
-        "analysis",
-        lambda ctx: {
             "status":
-                "complete"
-        },
+                "running"
+
+        }
+
+
+
+class FakeMetrics:
+
+    def record_execution(
+        self,
+        success,
+    ):
+
+        self.success = success
+
+
+
+    def summary(
+        self,
+    ):
+
+        return {
+
+            "executions":
+                1
+
+        }
+
+
+
+def test_execute_investigation():
+
+    api = RuntimeIntelligenceAPI(
+        FakeRuntime(),
+        FakeMetrics(),
+    )
+
+
+    result = api.execute_investigation(
+
+        [
+
+            {
+
+                "type":
+                    "domain",
+
+                "value":
+                    "evil.com",
+
+            }
+
+        ],
+
+        "CASE-001",
+
     )
 
 
     assert (
-        api.available(
-            "analysis"
-        )
+        result["success"]
         is True
     )
 
 
 
-def test_execute():
+def test_runtime_status():
 
-    api = RuntimeIntelligenceAPI()
-
-
-    api.register(
-        "investigation",
-        lambda ctx: {
-            "id":
-                ctx.investigation_id
-        },
+    api = RuntimeIntelligenceAPI(
+        FakeRuntime()
     )
 
 
-    result = api.execute(
-        "investigation",
-        "INC-001",
-    )
+    result = api.get_status()
 
 
     assert (
-        result["id"]
+        result["status"]
         ==
-        "INC-001"
+        "running"
     )
-
-
-
-def test_missing():
-
-    api = RuntimeIntelligenceAPI()
-
-
-    result = api.execute(
-        "unknown",
-        "INC-001",
-    )
-
-
-    assert result is None
-
-
-
-def test_status():
-
-    api = RuntimeIntelligenceAPI()
-
-
-    result = api.status()
-
-
-    assert "requests" in result

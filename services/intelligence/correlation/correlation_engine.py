@@ -1,14 +1,20 @@
 """
 Sentinel DNA Correlation Engine
 
-Responsible for:
+Core threat intelligence correlation layer.
+
+Responsibilities:
+
 - IOC correlation
 - Threat signal enrichment
 - Attack pattern detection
 - MITRE ATT&CK mapping
-- Confidence scoring
 - Knowledge graph reasoning
+- Confidence scoring
+- Relationship traversal
 """
+
+from __future__ import annotations
 
 from typing import Any
 
@@ -16,10 +22,9 @@ from .correlation_result import CorrelationResult
 from .entity_graph import KnowledgeGraph
 
 
-
 class CorrelationEngine:
     """
-    Core threat intelligence correlation engine.
+    Enterprise correlation engine.
     """
 
 
@@ -33,24 +38,80 @@ class CorrelationEngine:
 
     def correlate(
         self,
-        signals: list[dict[str, Any]],
+        signals: list[dict[str, Any]] | None = None,
+        *,
+        case_id: str | None = None,
+        indicators: list[dict[str, Any]] | None = None,
+        techniques: list[dict[str, Any]] | None = None,
+        reasoning: dict[str, Any] | None = None,
     ) -> CorrelationResult:
         """
-        Correlate security signals.
+        Correlate threat intelligence signals.
 
-        Example:
+        Supports:
 
-        [
-            {
-                "type": "email",
-                "value": "phishing_email"
-            },
-            {
-                "type": "domain",
-                "value": "evil.com"
-            }
-        ]
+        correlate(signals)
+
+        and compatibility:
+
+        correlate(
+            case_id="CASE",
+            indicators=[],
+            techniques=[],
+            reasoning={}
+        )
         """
+
+
+        signals = signals or []
+
+
+        if indicators:
+
+            signals.extend(
+                [
+                    {
+                        "type":
+                            item.get(
+                                "type",
+                                "ioc",
+                            ),
+
+                        "value":
+                            item.get(
+                                "value",
+                                item.get(
+                                    "ioc"
+                                ),
+                            ),
+                    }
+
+                    for item in indicators
+                ]
+            )
+
+
+        if techniques:
+
+            signals.extend(
+                [
+                    {
+                        "type":
+                            "technique",
+
+                        "value":
+                            item.get(
+                                "value",
+                                item.get(
+                                    "technique"
+                                ),
+                            ),
+                    }
+
+                    for item in techniques
+                ]
+            )
+
 
 
         entities = []
@@ -74,8 +135,18 @@ class CorrelationEngine:
 
 
 
+        values = [
+            signal.get(
+                "value"
+            )
+            for signal in signals
+            if signal.get("value")
+        ]
+
+
+
         #
-        # Credential phishing detection
+        # Phishing detection
         #
 
         if (
@@ -88,7 +159,7 @@ class CorrelationEngine:
             )
 
             mitre = [
-                "T1566",
+                "T1566"
             ]
 
             confidence = 0.85
@@ -98,8 +169,22 @@ class CorrelationEngine:
 
 
         #
-        # Multiple indicators increase confidence
+        # Threat artifact detection
         #
+
+        if (
+            "ioc" in signal_types
+            or "domain" in signal_types
+            or "hash" in signal_types
+            or "ip" in signal_types
+        ):
+
+            confidence = max(
+                confidence,
+                0.60,
+            )
+
+
 
         if len(signals) >= 4:
 
@@ -113,7 +198,7 @@ class CorrelationEngine:
 
 
         #
-        # Knowledge graph lookup
+        # Knowledge graph correlation
         #
 
         for signal in signals:
@@ -122,7 +207,6 @@ class CorrelationEngine:
                 "value",
                 "",
             )
-
 
             entity_type = signal.get(
                 "type",
@@ -138,46 +222,77 @@ class CorrelationEngine:
             )
 
 
-            if entity:
+            if not entity:
+
+                continue
+
+
+
+            entities.append(
+                entity.value
+            )
+
+
+            confidence = max(
+                confidence,
+                1.0,
+            )
+
+
+            risk = "high"
+
+
+
+            related = (
+                self.graph.get_relationships(
+                    entity.id
+                )
+            )
+
+
+            relationships.extend(
+                related
+            )
+
+
+            for item in related:
 
                 entities.append(
-                    entity.value
+                    item.value
                 )
 
 
-                confidence = max(
-                    confidence,
-                    1.0,
-                )
-
-
-                risk = "high"
-
-
-
-                related = (
+                nested = (
                     self.graph.get_relationships(
-                        entity.id
+                        item.id
                     )
                 )
 
 
                 relationships.extend(
-                    related
+                    nested
                 )
 
 
-                for item in related:
+                for child in nested:
 
                     entities.append(
-                        item.value
+                        child.value
                     )
 
 
 
         #
-        # Determine match state
+        # Deduplicate
         #
+
+        entities = list(
+            dict.fromkeys(
+                entities
+            )
+        )
+
+
 
         matched = bool(
             entities
@@ -187,7 +302,7 @@ class CorrelationEngine:
 
 
         #
-        # Normalize unknown IOC behavior
+        # Unknown IOC normalization
         #
 
         if not matched:
@@ -206,11 +321,7 @@ class CorrelationEngine:
 
             confidence=confidence,
 
-            entities=list(
-                dict.fromkeys(
-                    entities
-                )
-            ),
+            entities=entities,
 
             relationships=relationships,
 
@@ -218,12 +329,23 @@ class CorrelationEngine:
 
             mitre=mitre,
 
-            entity_type=None,
+            case_id=case_id,
 
-            value=None,
+            indicators=indicators or [],
+
+            techniques=techniques or [],
 
             metadata={
-                "mitre": mitre,
+
+                "mitre":
+                    mitre,
+
+                "case_id":
+                    case_id,
+
+                "reasoning":
+                    reasoning or {},
+
             },
 
         )

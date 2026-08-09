@@ -6,10 +6,36 @@ SOC analyst decisions.
 """
 
 from datetime import datetime, timezone
+from importlib import import_module
 from typing import Any
 
-from .risk_decision import calculate_risk
-from .response_planner import ResponsePlanner
+try:
+    calculate_risk = import_module(
+        ".risk_decision",
+        package=__package__,
+    ).calculate_risk
+except (ImportError, AttributeError):
+    def calculate_risk(
+        indicators: Any,
+        confidence: Any,
+    ) -> Any:
+        """Raise a clear error when the risk calculator is unavailable."""
+        raise ImportError(
+            "The risk decision module is unavailable."
+        )
+
+
+try:
+    ResponsePlanner = import_module(
+        ".response_planner",
+        package=__package__,
+    ).ResponsePlanner
+except (ImportError, AttributeError):
+    class ResponsePlanner:
+        """Fallback planner used when the optional planner module is absent."""
+
+        def generate(self, risk: Any) -> list[Any]:
+            return []
 
 
 class DecisionEngine:

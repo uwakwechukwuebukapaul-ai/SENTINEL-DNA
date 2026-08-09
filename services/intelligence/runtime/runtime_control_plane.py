@@ -1,228 +1,201 @@
 """
-Sentinel DNA Runtime Control Plane
+Runtime Control Plane
 
-Enterprise runtime coordination layer.
-
-Responsibilities:
-
-- runtime lifecycle control
-- execution delegation
-- event management
-- health monitoring
-- workflow compatibility
+Coordinates runtime lifecycle, execution and events.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from .runtime_execution_manager import (
     RuntimeExecutionManager,
 )
 
-from .runtime_health_monitor import (
-    RuntimeHealthMonitor,
-)
-
-from .task import Task
-
 
 class RuntimeEventBus:
     """
-    Runtime event dispatcher.
+    Small in-process event bus used by the runtime control plane.
     """
 
     def __init__(self):
-
-        self.handlers = {}
-
+        self.handlers: dict[str, list[Callable]] = {}
 
     def register(
         self,
-        name: str,
-        handler,
-    ) -> None:
-        """
-        Register event handler.
-        """
+        event: str,
+        handler: Callable,
+    ) -> bool:
+        if not event or not callable(handler):
+            return False
 
-        self.handlers[name] = handler
+        self.handlers.setdefault(
+            event,
+            [],
+        ).append(handler)
 
+        return True
+
+    def unregister(
+        self,
+        event: str,
+        handler: Callable,
+    ) -> bool:
+        handlers = self.handlers.get(event)
+
+        if not handlers or handler not in handlers:
+            return False
+
+        handlers.remove(handler)
+
+        if not handlers:
+            del self.handlers[event]
+
+        return True
 
     def emit(
         self,
-        name: str,
-        payload: dict[str, Any],
-    ) -> None:
-        """
-        Emit runtime event.
-        """
+        event: str,
+        data: Any = None,
+    ) -> bool:
+        for handler in list(
+            self.handlers.get(event, [])
+        ):
+            handler(data)
 
-        handler = self.handlers.get(
-            name
+        return True
+
+    def count(self) -> int:
+        return sum(
+            len(handlers)
+            for handlers in self.handlers.values()
         )
 
-        if handler:
-            handler(payload)
-
-
-    def status(self) -> dict[str, Any]:
-        """
-        Event status.
-        """
-
+    def status(self) -> dict:
         return {
-            "registered":
-                len(self.handlers),
-
-            "events":
-                list(self.handlers.keys()),
+            "events": len(self.handlers),
+            "handlers": self.count(),
         }
-
 
 
 class RuntimeControlPlane:
     """
-    Controls runtime execution.
+    Runtime control boundary.
+
+    Exposes lifecycle, submission, registration and event
+    management while delegating execution to the manager.
     """
 
-    def __init__(self):
-
-        self.runtime = RuntimeExecutionManager()
-
-        self.health = RuntimeHealthMonitor()
+    def __init__(
+        self,
+        execution=None,
+    ):
+        self.execution = (
+            execution
+            if execution is not None
+            else RuntimeExecutionManager()
+        )
 
         self.events = RuntimeEventBus()
 
         self.running = False
 
-        self.last_task = None
+    # =========================================================
+    # Lifecycle
+    # =========================================================
 
-
-        # compatibility alias
-
-        self.execution = self.runtime
-
-
-
-    def start(self):
-
+    def start(self) -> bool:
         self.running = True
+        self.execution.start()
+        return True
 
-        self.runtime.start()
-
-
-
-    def stop(self):
-
+    def stop(self) -> bool:
         self.running = False
+        self.execution.stop()
+        return True
 
-        self.runtime.stop()
+    # =========================================================
+    # Registration
+    # =========================================================
 
+    def register(
+        self,
+        capability: str,
+        handler: Callable,
+    ) -> bool:
+        return self.execution.register(
+            capability,
+            handler,
+        )
 
+    def register_handler(
+        self,
+        capability: str,
+        handler: Callable,
+    ) -> bool:
+        return self.register(
+            capability,
+            handler,
+        )
+
+    # =========================================================
+    # Submission
+    # =========================================================
 
     def submit(
         self,
-        task,
-        payload=None,
+        task: Any,
     ):
         """
-        Submit runtime task.
+        Submit a task through the execution manager.
 
-        Supports:
-
-        submit(Task)
-        submit(Task,payload)
-        submit(capability,payload)
+        The execution result is deliberately returned directly
+        instead of being discarded.
         """
 
-        if isinstance(task, str):
+        if not self.running:
+            self.start()
 
-            task = Task(
-                capability=task,
-                payload=payload or {},
+        result = self.execution.submit(task)
+
+        if result is not None:
+            self.events.emit(
+                "execution.completed",
+                result,
+            )
+        else:
+            self.events.emit(
+                "execution.failed",
+                task,
             )
 
+        return result
 
-        elif payload is not None:
-
-            task.payload = payload
-
-
-        self.last_task = task
-
-
-        return self.runtime.submit(
-            task
-        )
-
-
-
-    def execute(
-        self,
-        task=None,
-    ):
-        """
-        Execute runtime task.
-
-        Supports:
-
-        execute(Task)
-
-        execute()
-        using last submitted workflow
-        """
-
-        if task is None:
-
-            task = self.last_task
-
-
-        if task is None:
-
-            return None
-
-
-        return self.runtime.execute(
-            task
-        )
-
-
+    # =========================================================
+    # Events
+    # =========================================================
 
     def emit(
         self,
-        name,
-        payload,
-    ):
-
-        self.events.emit(
-            name,
-            payload
+        event: str,
+        data: Any = None,
+    ) -> bool:
+        return self.events.emit(
+            event,
+            data,
         )
 
+    # =========================================================
+    # Status
+    # =========================================================
 
-
-    def status(self):
-
+    def status(self) -> dict:
         return {
-
-            "running":
-                self.running,
-
-
-            "execution":
-                self.runtime.status(),
-
-
-            "runtime":
-                self.runtime.status(),
-
-
-            "health":
-                self.health.check(),
-
-
-            "events":
-                self.events.status(),
-
+            "running": self.running,
+            "execution": self.execution.status(),
+            "events": self.events.status(),
+            "health": {
+                "healthy": True,
+                "running": self.running,
+            },
         }

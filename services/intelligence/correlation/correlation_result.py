@@ -1,10 +1,18 @@
 """
-Correlation Result Model
+Sentinel DNA Correlation Result
 
-Unified result object supporting:
-- attribute access
-- dictionary style access
-- serialization
+Unified correlation response contract.
+
+Supports:
+
+- Object access:
+    result.risk
+
+- Dictionary compatibility:
+    result["risk"]
+
+- API serialization:
+    result.to_dict()
 """
 
 from dataclasses import dataclass, field
@@ -13,14 +21,30 @@ from typing import Any
 
 @dataclass
 class CorrelationResult:
+    """
+    Standard correlation engine output.
 
-    matched: bool
+    Shared by:
 
-    risk: str
+    - Correlation Engine
+    - Threat Correlator
+    - Investigation Intelligence
+    - Fusion Layer
+    - API responses
+    """
+
+    # Core result
+
+    matched: bool = False
+
+    risk: str = "unknown"
 
     confidence: float = 0.0
 
-    entities: list[str] = field(
+
+    # Intelligence entities
+
+    entities: list[Any] = field(
         default_factory=list
     )
 
@@ -28,77 +52,193 @@ class CorrelationResult:
         default_factory=list
     )
 
+
+    # Threat classification
+
     attack_pattern: str | None = None
 
     mitre: list[str] = field(
         default_factory=list
     )
 
+
+    # Entity context
+
     entity_type: str | None = None
 
     value: str | None = None
 
-    metadata: dict = field(
+
+    # Correlation metadata
+
+    metadata: dict[str, Any] = field(
         default_factory=dict
     )
 
 
-    def __post_init__(self):
+    # Investigation correlation
 
-        if not self.metadata:
-
-            self.metadata = {}
+    case_id: str | None = None
 
 
-        if "mitre" not in self.metadata:
+    # Investigation compatibility
 
-            self.metadata["mitre"] = self.mitre
+    indicators: list[Any] = field(
+        default_factory=list
+    )
+
+    techniques: list[Any] = field(
+        default_factory=list
+    )
+
+    attack_story: str | None = None
 
 
-        if not self.mitre:
+    # State
 
-            self.mitre = (
-                self.metadata.get(
-                    "mitre",
-                    []
-                )
-            )
+    status: str = "completed"
 
+
+    # =====================================================
+    # Dictionary Compatibility
+    # =====================================================
 
     def __getitem__(
         self,
         key: str,
     ):
+        """
+        Allow:
 
-        return getattr(
-            self,
+            result["risk"]
+        """
+
+        return self.to_dict()[key]
+
+
+    def get(
+        self,
+        key: str,
+        default=None,
+    ):
+        """
+        Dictionary-style get().
+        """
+
+        return self.to_dict().get(
             key,
-            self.metadata.get(key),
+            default,
         )
 
 
-    def to_dict(self):
+    # =====================================================
+    # Serialization
+    # =====================================================
+
+    def to_dict(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Convert result into API-safe dictionary.
+        """
 
         return {
 
-            "matched": self.matched,
+            "matched":
+                self.matched,
 
-            "risk": self.risk,
 
-            "confidence": self.confidence,
+            "risk":
+                self.risk,
 
-            "entities": self.entities,
 
-            "relationships": self.relationships,
+            "confidence":
+                self.confidence,
 
-            "attack_pattern": self.attack_pattern,
 
-            "mitre": self.mitre,
+            "entities":
+                self.entities,
 
-            "entity_type": self.entity_type,
 
-            "value": self.value,
+            "relationships":
+                self.relationships,
 
-            "metadata": self.metadata,
+
+            "attack_pattern":
+                self.attack_pattern,
+
+
+            "mitre":
+                self.mitre,
+
+
+            "entity_type":
+                self.entity_type,
+
+
+            "value":
+                self.value,
+
+
+            "metadata":
+                dict(
+                    self.metadata
+                ),
+
+
+            "case_id":
+                self.case_id,
+
+
+            "indicators":
+                self.indicators,
+
+
+            "techniques":
+                self.techniques,
+
+
+            "attack_story":
+                self.attack_story,
+
+
+            "status":
+                self.status,
 
         }
+
+
+    # =====================================================
+    # Runtime Helpers
+    # =====================================================
+
+    def update_metadata(
+        self,
+        values: dict[str, Any] | None = None,
+        **kwargs,
+    ):
+        """
+        Add metadata values.
+        """
+
+        if values:
+            self.metadata.update(
+                values
+            )
+
+        if kwargs:
+            self.metadata.update(
+                kwargs
+            )
+
+        return self
+
+
+    def __bool__(
+        self,
+    ):
+        """
+        Truth value follows match state.
+        """
+
+        return self.matched

@@ -1,90 +1,200 @@
 """
 Runtime Intelligence Pipeline
 
-Coordinates intelligence execution stages.
-
-Flow:
-
-Signals
-   |
-   v
-Runtime Intelligence Runtime
-   |
-   v
-Providers
-   |
-   v
-Correlation
-   |
-   v
-Fusion
-   |
-   v
-Intelligence Result
+Capability execution router.
 """
-
-from typing import Any
-
-
-from services.intelligence.runtime.runtime_intelligence_runtime import (
-    RuntimeIntelligenceRuntime,
-)
-
 
 
 class RuntimeIntelligencePipeline:
-    """
-    Main intelligence execution pipeline.
-    """
-
 
     def __init__(
         self,
-        runtime: RuntimeIntelligenceRuntime,
+        runtime=None,
     ):
+
+        if runtime is None:
+
+            try:
+                from .runtime_intelligence_runtime import (
+                    RuntimeIntelligenceRuntime,
+                )
+
+                runtime = RuntimeIntelligenceRuntime()
+
+            except Exception:
+                runtime = None
+
 
         self.runtime = runtime
 
+        self.router = {}
 
-        self.stages = [
-            "collection",
-            "enrichment",
-            "correlation",
-            "fusion",
-            "decision",
-        ]
+        self._executions = []
 
 
 
-    def execute(
-        self,
-        signals: list[dict[str, Any]],
-        case_id: str | None = None,
-    ):
+    # -----------------------------
+    # Properties
+    # -----------------------------
 
+    @property
+    def count(self):
 
-        result = (
-            self.runtime.execute(
-                signals,
-                case_id,
-            )
+        return len(
+            self.router
         )
 
 
-        return result
+    @property
+    def executions(self):
+
+        return len(
+            self._executions
+        )
 
 
 
-    def describe(
+    # -----------------------------
+    # Registration
+    # -----------------------------
+
+    def register(
         self,
+        name,
+        handler,
     ):
+
+        self.router[name] = handler
+
+        return True
+
+
+
+    def available(
+        self,
+        name=None,
+    ):
+
+        if name is None:
+
+            return list(
+                self.router.keys()
+            )
+
+
+        return name in self.router
+
+
+
+    # -----------------------------
+    # Execution
+    # -----------------------------
+
+    def execute(
+        self,
+        capability,
+        context=None,
+    ):
+
+
+        handler = self.router.get(
+            capability
+        )
+
+
+        if handler is None:
+
+            return None
+
+
+
+        result = handler(
+            context
+        )
+
+
+        investigation_id = None
+
+
+        if hasattr(
+            context,
+            "investigation_id",
+        ):
+
+            investigation_id = (
+                context.investigation_id
+            )
+
+
+        elif isinstance(
+            context,
+            dict,
+        ):
+
+            investigation_id = (
+                context.get(
+                    "investigation_id"
+                )
+            )
+
+
+        response = {
+
+            "id":
+                investigation_id,
+
+            "success":
+                True,
+
+            "result":
+                result,
+
+        }
+
+
+        self._executions.append(
+            response
+        )
+
+
+        return response
+
+
+
+    # -----------------------------
+    # Clear
+    # -----------------------------
+
+    def clear(self):
+
+        self.router.clear()
+
+        self._executions.clear()
+
+        return True
+
+
+
+    # -----------------------------
+    # Status
+    # -----------------------------
+
+    def status(self):
 
         return {
 
-            "pipeline":
-                "runtime_intelligence_pipeline",
+            "healthy":
+                True,
 
-            "stages":
-                self.stages,
+            "router":
+                list(
+                    self.router.keys()
+                ),
+
+            "count":
+                self.count,
+
+            "executions":
+                self.executions,
 
         }

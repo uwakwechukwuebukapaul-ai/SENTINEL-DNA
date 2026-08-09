@@ -1,208 +1,350 @@
 """
 Sentinel DNA Runtime Execution Result
 
-Enterprise execution result contract.
+Unified execution response object.
 
-Responsibilities:
+Supports:
 
-- standardize runtime responses
-- support dictionary compatibility
-- expose execution metadata
-- support workflow consumers
+- Runtime Engine
+- Execution Manager
+- Runtime Gateway
+- Runtime Controller
+- Workflow Executor
+- Runtime Intelligence layers
+
+Provides both:
+
+Object usage:
+    result.success
+    result.output
+
+Dictionary compatibility:
+    result["success"]
+    result["report"]
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 
 @dataclass
 class ExecutionResult:
     """
-    Runtime execution response object.
+    Standard runtime execution response.
     """
 
     success: bool = False
 
+    status: str = "failed"
+
+    message: Optional[str] = None
+
+    error: Optional[str] = None
+
+
+    # Correlation
+
+    case_id: Optional[str] = None
+
+    investigation_id: Optional[str] = None
+
+
+    # Runtime objects
+
+    investigation: Any = None
+
+    execution: Any = None
+
+    report: Any = None
+
+
+    # Payloads
+
     output: Any = None
 
-    error: str | None = None
+    result: Any = None
 
-    confidence: float | None = None
+    data: Any = None
 
-    metadata: dict[str, Any] = field(
+
+    # Intelligence metadata
+
+    confidence: float = 0.0
+
+    metadata: dict = field(
         default_factory=dict
     )
 
 
+    # ==================================================
+    # Factory Methods
+    # ==================================================
+
     @classmethod
     def ok(
         cls,
-        data: Any = None,
-        output: Any = None,
-        confidence: float | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> "ExecutionResult":
-        """
-        Create successful execution result.
-        """
+        result=None,
+        message=None,
+        **kwargs,
+    ):
 
-        if output is None:
-            output = data
+        values = dict(kwargs)
+
+
+        values.setdefault(
+            "success",
+            True,
+        )
+
+        values.setdefault(
+            "status",
+            "completed",
+        )
+
+        values.setdefault(
+            "output",
+            result,
+        )
+
+        values.setdefault(
+            "result",
+            result,
+        )
+
+        values.setdefault(
+            "data",
+            result,
+        )
+
+        values.setdefault(
+            "message",
+            message,
+        )
 
 
         return cls(
-            success=True,
-            output=output,
-            confidence=confidence,
-            metadata=metadata or {},
+            **values
+        )
+
+
+    @classmethod
+    def success_result(
+        cls,
+        result=None,
+        message=None,
+        **kwargs,
+    ):
+
+        return cls.ok(
+            result=result,
+            message=message,
+            **kwargs,
         )
 
 
     @classmethod
     def failure(
         cls,
-        error: str,
-        confidence: float | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> "ExecutionResult":
-        """
-        Create failed execution result.
-        """
+        error=None,
+        message=None,
+        **kwargs,
+    ):
 
-        return cls(
-            success=False,
-            error=error,
-            confidence=confidence,
-            metadata=metadata or {},
+        values = dict(kwargs)
+
+
+        values.setdefault(
+            "success",
+            False,
+        )
+
+        values.setdefault(
+            "status",
+            "failed",
+        )
+
+        values.setdefault(
+            "error",
+            error,
+        )
+
+        values.setdefault(
+            "message",
+            message,
         )
 
 
+        return cls(
+            **values
+        )
+
+
+    @classmethod
+    def fail(
+        cls,
+        error=None,
+        message=None,
+        **kwargs,
+    ):
+
+        return cls.failure(
+            error,
+            message,
+            **kwargs,
+        )
+
+
+    @classmethod
+    def failure_result(
+        cls,
+        error=None,
+        message=None,
+        **kwargs,
+    ):
+
+        return cls.failure(
+            error,
+            message,
+            **kwargs,
+        )
+
+
+    # ==================================================
+    # State
+    # ==================================================
+
     @property
-    def failed(self) -> bool:
-        """
-        Check execution failure.
-        """
-
-        return not self.success
-
-
-    @property
-    def data(self):
-        """
-        Compatibility alias.
-        """
-
-        return self.output
-
-
-    def add_metadata(
+    def failed(
         self,
-        key: str,
-        value: Any,
-    ) -> None:
-        """
-        Add execution metadata.
-        """
+    ):
 
-        self.metadata[key] = value
+        return self.success is False
 
 
 
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Convert result to dictionary.
-        """
+    def is_success(
+        self,
+    ):
 
-        return {
-            "success": self.success,
-            "output": self.output,
-            "error": self.error,
-            "confidence": self.confidence,
-            "metadata": self.metadata,
-        }
+        return self.success is True
 
 
+
+    def is_failed(
+        self,
+    ):
+
+        return self.failed
+
+
+
+    def __bool__(
+        self,
+    ):
+
+        return self.success is True
+
+
+
+    # ==================================================
+    # Dictionary Compatibility
+    # ==================================================
 
     def __getitem__(
         self,
-        key: str,
+        key,
     ):
-        """
-        Dictionary compatibility access.
 
-        Supports:
+        values = {
 
-        result["done"]
+            "success":
+                self.success,
 
-        when output:
+            "status":
+                self.status,
 
-        {
-            "done": True
+            "message":
+                self.message,
+
+            "error":
+                self.error,
+
+
+            "case_id":
+                self.case_id,
+
+            "investigation_id":
+                self.investigation_id,
+
+
+            "investigation":
+                self.investigation,
+
+            "execution":
+                self.execution,
+
+            "report":
+                self.report,
+
+
+            "output":
+                self.output,
+
+            "result":
+                self.result,
+
+            "data":
+                self.data,
+
+
+            "confidence":
+                self.confidence,
+
+
+            "metadata":
+                self.metadata,
+
+
+            # compatibility
+
+            "ok":
+                self.success,
+
+            "done":
+                self.success,
+
         }
 
-        or:
 
-        {
-            "result": {
-                "done": True
-            }
-        }
-        """
+        if key in values:
 
-        if isinstance(
-            self.output,
-            dict,
-        ):
-
-            if key in self.output:
-                return self.output[key]
+            return values[key]
 
 
-            nested = self.output.get(
-                "result"
-            )
-
-
-            if isinstance(
-                nested,
-                dict,
-            ):
-
-                return nested[key]
-
-
-        return self.to_dict()[key]
+        raise KeyError(key)
 
 
 
     def get(
         self,
-        key: str,
+        key,
         default=None,
     ):
-        """
-        Dictionary-style get support.
-        """
 
         try:
+
             return self[key]
 
         except KeyError:
+
             return default
 
 
 
     def __contains__(
         self,
-        key: str,
-    ) -> bool:
-        """
-        Support:
-
-        key in result
-        """
+        key,
+    ):
 
         try:
 
@@ -216,9 +358,103 @@ class ExecutionResult:
 
 
 
-    def __bool__(self):
-        """
-        Truth evaluation.
-        """
+    # ==================================================
+    # Metadata
+    # ==================================================
 
-        return self.success
+    def add_metadata(
+        self,
+        key,
+        value,
+    ):
+
+        self.metadata[key] = value
+
+        return self
+
+
+
+    def update_metadata(
+        self,
+        values=None,
+        **kwargs,
+    ):
+
+        if values:
+
+            self.metadata.update(
+                values
+            )
+
+
+        if kwargs:
+
+            self.metadata.update(
+                kwargs
+            )
+
+
+        return self
+
+
+
+    # ==================================================
+    # Serialization
+    # ==================================================
+
+    def to_dict(
+        self,
+    ):
+
+        return {
+
+            "success":
+                self.success,
+
+            "status":
+                self.status,
+
+            "message":
+                self.message,
+
+            "error":
+                self.error,
+
+
+            "case_id":
+                self.case_id,
+
+            "investigation_id":
+                self.investigation_id,
+
+
+            "investigation":
+                self.investigation,
+
+            "execution":
+                self.execution,
+
+            "report":
+                self.report,
+
+
+            "output":
+                self.output,
+
+            "result":
+                self.result,
+
+            "data":
+                self.data,
+
+
+            "confidence":
+                self.confidence,
+
+
+            "metadata":
+                dict(
+                    self.metadata
+                ),
+
+        }

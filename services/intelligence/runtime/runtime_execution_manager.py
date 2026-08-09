@@ -1,155 +1,331 @@
 """
 Sentinel DNA Runtime Execution Manager
 
-Enterprise runtime execution coordinator.
+Enterprise execution coordinator.
 
 Responsibilities:
 
-- runtime lifecycle management
+- runtime lifecycle
 - capability registration
+- task submission
 - task execution
-- execution tracking
-- metrics reporting
+- result normalization
+- pipeline management
+- metrics
+- health reporting
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 from .execution_result import ExecutionResult
-from .runtime_metrics_collector import (
-    RuntimeMetricsCollector,
-)
-from .runtime_worker_pool import (
-    RuntimeWorkerPool,
-)
-from .task import Task
 
 
-@dataclass
+class RuntimeExecutionPipeline:
+    """
+    Runtime execution queue/pipeline.
+    """
+
+    def __init__(
+        self,
+        manager: "RuntimeExecutionManager",
+    ) -> None:
+
+        self.manager = manager
+
+        self.queue: list[Any] = []
+
+
+    def submit(
+        self,
+        task: Any,
+    ):
+
+        self.queue.append(task)
+
+        return self.manager.execute(
+            task
+        )
+
+
+    def size(
+        self,
+    ) -> int:
+
+        return len(
+            self.queue
+        )
+
+
+    def clear(
+        self,
+    ):
+
+        self.queue.clear()
+
+        return True
+
+
+
 class RuntimeExecutionManager:
     """
-    Coordinates runtime execution.
+    Core Sentinel DNA runtime execution manager.
     """
 
-    workers: RuntimeWorkerPool = field(
-        default_factory=RuntimeWorkerPool
-    )
-
-    metrics: RuntimeMetricsCollector = field(
-        default_factory=RuntimeMetricsCollector
-    )
-
-    running: bool = False
-
-
-    @property
-    def pipeline(self):
-        """
-        Compatibility alias.
-
-        Used by:
-        RuntimeOrchestrationService tests
-        """
-
-        return self.workers
-
-
-    def start(self) -> None:
-        """
-        Start execution runtime.
-        """
-
-        self.running = True
-
-        if self.workers.active_workers() == 0:
-            self.workers.start_workers(1)
-
-
-    def stop(self) -> None:
-        """
-        Stop execution runtime.
-        """
+    def __init__(
+        self,
+    ) -> None:
 
         self.running = False
 
-        self.workers.stop_workers()
+
+        self.handlers: dict[str, Any] = {}
 
 
-    def register(
-        self,
-        capability: str,
-        handler,
-    ) -> None:
-        """
-        Register execution capability.
-        """
+        self.metrics = type(
+            "RuntimeMetrics",
+            (),
+            {}
+        )()
 
-        self.workers.executor.register(
-            capability,
-            handler,
+        self.metrics.executions = 0
+
+        self.metrics.failures = 0
+
+        self.metrics.submissions = 0
+
+
+
+        self.pipeline = RuntimeExecutionPipeline(
+            self
         )
 
+
+        # Compatibility layer
+        self.workers = type(
+            "RuntimeWorkers",
+            (),
+            {}
+        )()
+
+        self.workers.executor = self
+
+
+
+    # ==================================================
+    # LIFECYCLE
+    # ==================================================
+
+    def start(
+        self,
+    ) -> bool:
+
+        self.running = True
+
+        return True
+
+
+
+    def stop(
+        self,
+    ) -> bool:
+
+        self.running = False
+
+        return True
+
+
+
+    def clear(
+        self,
+    ) -> bool:
+
+        self.handlers.clear()
+
+        self.pipeline.clear()
+
+
+        self.metrics.executions = 0
+
+        self.metrics.failures = 0
+
+        self.metrics.submissions = 0
+
+
+        return True
+
+
+
+    # ==================================================
+    # REGISTRATION
+    # ==================================================
 
     def register_handler(
         self,
         capability: str,
         handler,
-    ) -> None:
-        """
-        Compatibility registration.
-        """
+    ) -> bool:
 
-        self.register(
+
+        if not capability:
+
+            return False
+
+
+        if not callable(handler):
+
+            return False
+
+
+        self.handlers[capability] = handler
+
+
+        return True
+
+
+
+    def register(
+        self,
+        capability,
+        handler,
+    ):
+
+        return self.register_handler(
             capability,
             handler,
         )
 
 
+
+    def exists(
+        self,
+        capability,
+    ):
+
+        return capability in self.handlers
+
+
+
+    # ==================================================
+    # EXECUTION
+    # ==================================================
+
     def execute(
         self,
-        task: Task,
+        *args,
     ) -> ExecutionResult:
-        """
-        Execute runtime task.
-        """
-
-        if not self.running:
-            self.start()
 
 
-        try:
+        if len(args) == 1:
 
-            result = self.workers.submit(
-                task
-            )
-
-
-            self.metrics.record_execution(
-                task.capability
-            )
-
-
-            return ExecutionResult.ok(
-                data={
-                    "result": result
-                }
-            )
-
-
-        except Exception as exc:
+            task = args[0]
 
             capability = getattr(
                 task,
                 "capability",
-                "unknown",
+                None,
             )
 
 
-            self.metrics.record_failure(
-                capability
+        elif len(args) == 2:
+
+            capability = args[0]
+
+            task = args[1]
+
+
+        else:
+
+            return ExecutionResult.failure(
+                "Invalid execution arguments."
             )
+
+
+
+        if not capability:
+
+            self.metrics.failures += 1
+
+            return ExecutionResult.failure(
+                "Missing capability."
+            )
+
+
+
+        handler = self.handlers.get(
+            capability
+        )
+
+
+
+        if handler is None:
+
+            self.metrics.failures += 1
+
+            return ExecutionResult.failure(
+                f"No handler registered for {capability}"
+            )
+
+
+
+        try:
+
+            output = handler(
+                task
+            )
+
+
+            self.metrics.executions += 1
+
+
+            return ExecutionResult.ok(
+                result=output,
+                output=output,
+                data=output,
+            )
+
+
+
+        except TypeError:
+
+            try:
+
+                output = handler(
+                    getattr(
+                        task,
+                        "payload",
+                        task,
+                    )
+                )
+
+
+                self.metrics.executions += 1
+
+
+                return ExecutionResult.ok(
+                    result=output,
+                    output=output,
+                    data=output,
+                )
+
+
+            except Exception as exc:
+
+
+                self.metrics.failures += 1
+
+
+                return ExecutionResult.failure(
+                    str(exc)
+                )
+
+
+
+        except Exception as exc:
+
+
+            self.metrics.failures += 1
 
 
             return ExecutionResult.failure(
@@ -157,68 +333,33 @@ class RuntimeExecutionManager:
             )
 
 
+
+    # ==================================================
+    # SUBMISSION
+    # ==================================================
+
     def submit(
         self,
         task,
-        payload=None,
-    ) -> Any:
-        """
-        Submit runtime task.
-
-        Supported:
-
-        submit(Task)
-
-        submit(Task, payload)
-
-        submit("capability", payload)
-        """
+    ):
 
 
-        # legacy string capability API
-        if isinstance(task, str):
-
-            task = Task(
-                capability=task,
-                payload=payload or {},
-            )
+        self.metrics.submissions += 1
 
 
-        elif payload is not None:
-
-            task.payload = payload
-
-
-        result = self.execute(
+        return self.pipeline.submit(
             task
         )
 
 
-        if hasattr(result, "data"):
 
-            return result.data.get(
-                "result"
-            )
+    # ==================================================
+    # STATUS
+    # ==================================================
 
-
-        return result
-
-
-    def clear(self) -> None:
-        """
-        Clear runtime state.
-        """
-
-        self.metrics.clear()
-
-        self.workers.clear()
-
-
-
-    def status(self) -> dict[str, Any]:
-        """
-        Runtime status.
-        """
+    def status(
+        self,
+    ):
 
         return {
 
@@ -226,11 +367,39 @@ class RuntimeExecutionManager:
                 self.running,
 
 
+            "handlers":
+                list(
+                    self.handlers.keys()
+                ),
+
+
             "workers":
-                self.workers.status(),
+                {
+                    "executor": True
+                },
+
+
+            "pipeline":
+                {
+                    "size":
+                        self.pipeline.size()
+                },
 
 
             "metrics":
-                self.metrics.status(),
+                {
+
+                    "executions":
+                        self.metrics.executions,
+
+
+                    "failures":
+                        self.metrics.failures,
+
+
+                    "submissions":
+                        self.metrics.submissions,
+
+                },
 
         }

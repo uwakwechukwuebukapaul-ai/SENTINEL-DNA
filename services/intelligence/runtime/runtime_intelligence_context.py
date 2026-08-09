@@ -1,191 +1,305 @@
 """
 Runtime Intelligence Context
 
-Shared state container for runtime intelligence execution.
-
-Stores:
-
-- signals
-- provider intelligence
-- correlations
-- fusion outputs
-- decisions
-- execution metadata
+Shared investigation state passed between
+runtime intelligence capabilities.
 """
 
-from dataclasses import dataclass, field
-from typing import Any
 
-
-
-@dataclass
 class RuntimeIntelligenceContext:
     """
-    Runtime intelligence execution context.
+    Shared runtime investigation context.
+
+    Provides a stable contract for:
+    - Runtime controller
+    - Runtime facade
+    - Runtime pipeline
+    - Intelligence services
+    - Execution engines
     """
 
 
-    case_id: str | None = None
+    def __init__(
+        self,
+        investigation_id=None,
+        case_id=None,
+        metadata=None,
+        signals=None,
+        evidence=None,
+        iocs=None,
+        mitre=None,
+        events=None,
+        **kwargs,
+    ):
+
+        self.investigation_id = investigation_id
+
+        self.case_id = (
+            case_id
+            or investigation_id
+        )
+
+        self.metadata = metadata or {}
+
+        self.signals = signals or []
+
+        self.evidence = evidence or []
+
+        self.iocs = iocs or []
+
+        self.mitre = mitre or []
+
+        self.events = events or []
+
+        self._status = "initialized"
 
 
-    signals: list[dict[str, Any]] = field(
-        default_factory=list
-    )
+
+    # ---------------------------------
+    # Evidence
+    # ---------------------------------
+
+    def add_evidence(
+        self,
+        evidence,
+    ):
+
+        self.evidence.append(
+            evidence
+        )
+
+        return True
 
 
-    intelligence_records: list[Any] = field(
-        default_factory=list
-    )
+
+    # ---------------------------------
+    # IOC
+    # ---------------------------------
+
+    def add_ioc(
+        self,
+        ioc,
+    ):
+
+        self.iocs.append(
+            ioc
+        )
+
+        return True
 
 
-    entities: list[Any] = field(
-        default_factory=list
-    )
+
+    # ---------------------------------
+    # MITRE
+    # ---------------------------------
+
+    def add_mitre(
+        self,
+        technique,
+    ):
+
+        self.mitre.append(
+            technique
+        )
+
+        return True
 
 
-    correlations: list[Any] = field(
-        default_factory=list
-    )
 
-
-    fusion_results: list[Any] = field(
-        default_factory=list
-    )
-
-
-    decisions: list[Any] = field(
-        default_factory=list
-    )
-
-
-    timeline: list[dict[str, Any]] = field(
-        default_factory=list
-    )
-
-
-    metadata: dict[str, Any] = field(
-        default_factory=dict
-    )
-
-
-    status: str = "initialized"
-
-
+    # ---------------------------------
+    # Signals
+    # ---------------------------------
 
     def add_signal(
         self,
-        signal: dict[str, Any],
+        signal,
     ):
 
         self.signals.append(
             signal
         )
 
-
-
-    def add_record(
-        self,
-        record: Any,
-    ):
-
-        self.intelligence_records.append(
-            record
-        )
+        return True
 
 
 
-    def add_entity(
-        self,
-        entity: Any,
-    ):
-
-        self.entities.append(
-            entity
-        )
-
-
-
-    def add_correlation(
-        self,
-        correlation: Any,
-    ):
-
-        self.correlations.append(
-            correlation
-        )
-
-
-
-    def add_fusion_result(
-        self,
-        result: Any,
-    ):
-
-        self.fusion_results.append(
-            result
-        )
-
-
-
-    def add_decision(
-        self,
-        decision: Any,
-    ):
-
-        self.decisions.append(
-            decision
-        )
-
-
+    # ---------------------------------
+    # Events
+    # ---------------------------------
 
     def add_event(
         self,
-        event: dict[str, Any],
+        event,
     ):
 
-        self.timeline.append(
+        self.events.append(
             event
         )
 
+        return True
 
+
+
+    # ---------------------------------
+    # Metadata
+    # ---------------------------------
+
+    def update_metadata(
+        self,
+        key,
+        value=None,
+    ):
+
+        if isinstance(
+            key,
+            dict,
+        ):
+
+            self.metadata.update(
+                key
+            )
+
+        else:
+
+            self.metadata[key] = value
+
+
+        return True
+
+
+
+    # ---------------------------------
+    # Status
+    # ---------------------------------
 
     def update_status(
         self,
-        status: str,
+        status,
     ):
 
-        self.status = status
+        self._status = status
+
+        return True
 
 
 
-    def summary(
+    def status(
         self,
     ):
 
         return {
 
+            "investigation_id":
+                self.investigation_id,
+
             "case_id":
                 self.case_id,
 
-            "signals":
-                len(self.signals),
-
-            "records":
-                len(self.intelligence_records),
-
-            "entities":
-                len(self.entities),
-
-            "correlations":
-                len(self.correlations),
-
-            "fusion_results":
-                len(self.fusion_results),
-
-            "decisions":
-                len(self.decisions),
-
             "status":
-                self.status,
+                self._status,
+
+            "evidence_count":
+                len(
+                    self.evidence
+                ),
+
+            "ioc_count":
+                len(
+                    self.iocs
+                ),
+
+            "mitre_count":
+                len(
+                    self.mitre
+                ),
+
+            "signal_count":
+                len(
+                    self.signals
+                ),
+
+            "event_count":
+                len(
+                    self.events
+                ),
+
+            "metadata":
+                self.metadata,
 
         }
+
+
+
+    # ---------------------------------
+    # Compatibility Helpers
+    # ---------------------------------
+
+    def get(
+        self,
+        key,
+        default=None,
+    ):
+
+        if hasattr(
+            self,
+            key,
+        ):
+
+            return getattr(
+                self,
+                key,
+            )
+
+        return self.metadata.get(
+            key,
+            default,
+        )
+
+
+
+    def to_dict(
+        self,
+    ):
+
+        return {
+
+            "investigation_id":
+                self.investigation_id,
+
+            "case_id":
+                self.case_id,
+
+            "status":
+                self._status,
+
+            "metadata":
+                self.metadata,
+
+            "signals":
+                self.signals,
+
+            "evidence":
+                self.evidence,
+
+            "iocs":
+                self.iocs,
+
+            "mitre":
+                self.mitre,
+
+            "events":
+                self.events,
+
+        }
+
+
+
+    def __repr__(
+        self,
+    ):
+
+        return (
+            "RuntimeIntelligenceContext("
+            f"investigation_id={self.investigation_id!r}, "
+            f"status={self._status!r})"
+        )

@@ -1,127 +1,223 @@
 """
 Runtime Intelligence Runtime
 
-Execution boundary for Sentinel DNA
-intelligence operations.
+Top-level lifecycle and execution boundary for
+Sentinel DNA runtime intelligence capabilities.
 
-Responsible for:
-
-- runtime lifecycle
-- intelligence execution
-- service coordination
-- health reporting
+The runtime intentionally remains thin. Request
+normalization belongs to the facade/controller layer.
 """
 
-from typing import Any
-
+from .runtime_intelligence_facade import (
+    RuntimeIntelligenceFacade,
+)
 
 
 class RuntimeIntelligenceRuntime:
     """
-    Main runtime execution container.
-    """
+    Top-level runtime intelligence lifecycle component.
 
+    Responsibilities:
+
+    - runtime lifecycle
+    - capability registration
+    - execution delegation
+    - health/status reporting
+
+    The runtime does not construct investigation
+    contexts itself. That responsibility belongs to
+    RuntimeIntelligenceFacade and
+    RuntimeIntelligenceController.
+    """
 
     def __init__(
         self,
-        controller,
+        facade=None,
     ):
+        self.facade = (
+            facade
+            if facade is not None
+            else RuntimeIntelligenceFacade()
+        )
 
-        self.controller = controller
+        self.running = False
 
-        self.status = "initialized"
+        self.requests = 0
 
         self.executions = 0
 
+        self.failures = 0
 
+    # =========================================================
+    # LIFECYCLE
+    # =========================================================
 
     def start(
         self,
     ):
-
         """
-        Start runtime.
+        Start the runtime.
         """
 
-        self.status = "running"
+        self.running = True
 
-        return {
-
-            "status":
-                self.status,
-
-            "component":
-                "runtime_intelligence_runtime",
-
-        }
-
-
+        return True
 
     def stop(
         self,
     ):
-
         """
-        Stop runtime.
+        Stop the runtime.
         """
 
-        self.status = "stopped"
+        self.running = False
 
+        return True
 
-        return {
+    # =========================================================
+    # REGISTRATION
+    # =========================================================
 
-            "status":
-                self.status,
+    def register(
+        self,
+        capability,
+        handler,
+    ):
+        """
+        Register an intelligence capability.
 
-            "component":
-                "runtime_intelligence_runtime",
+        Registration is delegated to the facade so that
+        the runtime does not duplicate registry logic.
+        """
 
-        }
+        return self.facade.register_capability(
+            capability,
+            handler,
+        )
 
-
+    # =========================================================
+    # EXECUTION
+    # =========================================================
 
     def execute(
         self,
-        signals: list[dict[str, Any]],
-        case_id: str | None = None,
+        capability,
+        investigation_id=None,
+        payload=None,
+        case_id=None,
+        metadata=None,
     ):
-
         """
-        Execute intelligence workflow.
+        Execute an intelligence capability.
+
+        Public contract:
+
+            runtime.execute(
+                "investigation",
+                "INC-001",
+            )
+
+        The second positional argument is explicitly the
+        investigation identifier.
+
+        It is passed to the facade using the named
+        ``investigation_id`` parameter to prevent positional
+        argument drift between runtime layers.
         """
 
-        if self.status != "running":
-
+        if not self.running:
             self.start()
 
+        self.requests += 1
 
-        self.executions += 1
-
-
-        return (
-            self.controller.execute(
-                signals,
-                case_id,
-            )
+        result = self.facade.execute(
+            capability=capability,
+            investigation_id=investigation_id,
+            payload=payload,
+            case_id=case_id,
+            metadata=metadata,
         )
 
+        if not isinstance(
+            result,
+            dict,
+        ):
+            self.failures += 1
 
+            return {
+                "success": False,
+                "result": None,
+                "error":
+                    "Runtime intelligence facade returned "
+                    "an invalid response.",
+                "investigation_id":
+                    investigation_id,
+                "case_id":
+                    case_id,
+            }
+
+        if result.get(
+            "success"
+        ) is True:
+
+            self.executions += 1
+
+        else:
+
+            self.failures += 1
+
+        return result
+
+    # =========================================================
+    # HEALTH
+    # =========================================================
 
     def health(
         self,
     ):
+        """
+        Return runtime health information.
+
+        Keep this intentionally compatible with the
+        existing runtime intelligence health contract.
+        """
+
+        facade_status = self.facade.status()
 
         return {
+            "healthy": True,
 
-            "component":
-                "runtime_intelligence_runtime",
+            "running":
+                self.running,
 
+            "intelligence":
+                True,
 
-            "status":
-                self.status,
+            "components":
+                [],
 
+            "requests":
+                self.requests,
 
             "executions":
                 self.executions,
 
+            "failures":
+                self.failures,
+
+            "facade":
+                facade_status,
         }
+
+    # =========================================================
+    # STATUS
+    # =========================================================
+
+    def status(
+        self,
+    ):
+        """
+        Alias for health().
+        """
+
+        return self.health()

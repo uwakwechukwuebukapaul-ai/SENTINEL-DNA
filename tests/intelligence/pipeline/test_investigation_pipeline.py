@@ -5,9 +5,17 @@ Validates end-to-end intelligence
 pipeline execution flow.
 """
 
-from services.intelligence.pipeline import (
-    InvestigationPipeline,
-)
+from importlib import import_module
+
+
+try:
+    InvestigationPipeline = import_module(
+        "services.intelligence.pipeline"
+    ).InvestigationPipeline
+except ModuleNotFoundError:
+    InvestigationPipeline = import_module(
+        "src.services.intelligence.pipeline"
+    ).InvestigationPipeline
 
 
 class FakeAnalyzer:

@@ -1,119 +1,242 @@
 """
-Threat Intelligence Correlation Engine.
+Sentinel DNA Threat Correlator
 
-Connects IOC evidence with knowledge graph
-relationships and produces intelligence.
+High-level threat correlation layer.
+
+Responsibilities:
+
+- IOC relationship analysis
+- Threat entity matching
+- Malware / actor correlation
+- Confidence calculation
+- Relationship expansion
+- CorrelationResult normalization
 """
 
+from __future__ import annotations
 
-from .ioc_matcher import IOCMatcher
+from typing import Any
+
 from .correlation_result import CorrelationResult
-
+from .entity_graph import KnowledgeGraph
 
 
 class ThreatCorrelator:
+    """
+    Threat intelligence correlation service.
+    """
 
 
     def __init__(
         self,
-        knowledge_graph
-    ):
+        graph: KnowledgeGraph | None = None,
+    ) -> None:
 
-        self.graph = knowledge_graph
-
-        self.matcher = IOCMatcher(
-            knowledge_graph
-        )
+        self.graph = graph or KnowledgeGraph()
 
 
 
     def correlate(
         self,
-        indicator: str,
-        indicator_type: str | None = None,
-    ):
+        indicators: list[dict[str, Any]],
+    ) -> CorrelationResult:
+        """
+        Correlate threat indicators.
 
-        matches = self.matcher.match(
-            indicator,
-            indicator_type,
-        )
+        Example:
 
-
-        if not matches:
-
-            return CorrelationResult(
-                matched=False,
-                risk="unknown",
-                confidence=0.0,
-            )
-
-
+        [
+            {
+                "type": "domain",
+                "value": "malicious.com"
+            }
+        ]
+        """
 
         entities = []
 
-        techniques = []
+        relationships = []
 
-        confidence = 0.5
+        confidence = 0.0
+
+        risk = "unknown"
+
+        matched = False
+
+        attack_story = None
 
 
-        for entity in matches:
+
+        for indicator in indicators:
+
+            value = indicator.get(
+                "value"
+            )
+
+            entity_type = indicator.get(
+                "type",
+                indicator.get(
+                    "entity_type"
+                ),
+            )
+
+
+            entity = self.graph.find_entity(
+                value,
+                entity_type,
+            )
+
+
+            if not entity:
+                continue
+
+
+            matched = True
+
 
             entities.append(
                 entity.value
             )
 
 
-            relationships = (
-                self.graph.get_relationships(
-                    entity.id
-                )
+            confidence = max(
+                confidence,
+                0.80,
             )
 
 
-            for relationship in relationships:
+            risk = "high"
 
-                target = (
-                    relationship.target
+
+
+            related_entities = (
+                self.graph.get_relationship_objects(
+                    entity.id
+                )
+                if hasattr(
+                    self.graph,
+                    "get_relationship_objects",
+                )
+                else []
+            )
+
+
+            for relation in related_entities:
+
+                relationships.append(
+                    relation
                 )
 
 
-                linked = (
-                    self.graph.get_entity(
-                        target
-                    )
-                )
-
-
-                if linked:
+                if hasattr(
+                    relation,
+                    "value",
+                ):
 
                     entities.append(
-                        linked.value
+                        relation.value
                     )
 
 
-                    if (
-                        linked.entity_type
-                        == "mitre"
-                    ):
 
-                        techniques.append(
-                            linked.value
-                        )
+        #
+        # IOC relationship reasoning
+        #
+
+        if relationships:
+
+            confidence = max(
+                confidence,
+                0.90,
+            )
+
+
+            attack_story = (
+                "Indicator linked to known "
+                "threat intelligence entities."
+            )
 
 
 
-            confidence = 0.9
+        #
+        # Deduplicate entities
+        #
+
+        entities = list(
+            dict.fromkeys(
+                entities
+            )
+        )
+
+
+
+        #
+        # Unknown indicator handling
+        #
+
+        if not matched:
+
+            return CorrelationResult(
+
+                matched=False,
+
+                risk="unknown",
+
+                confidence=0.0,
+
+                entities=[],
+
+                relationships=[],
+
+                attack_story=None,
+
+                metadata={
+                    "reason":
+                        "No matching threat intelligence found"
+                },
+
+            )
 
 
 
         return CorrelationResult(
+
             matched=True,
-            risk="high",
+
+            risk=risk,
+
             confidence=confidence,
-            entities=list(
-                set(entities)
-            ),
-            techniques=list(
-                set(techniques)
-            ),
+
+            entities=entities,
+
+            relationships=relationships,
+
+            attack_story=attack_story,
+
+            metadata={
+
+                "entity_count":
+                    len(entities),
+
+                "relationship_count":
+                    len(relationships),
+
+            },
+
+        )
+
+
+
+    def correlate_ioc(
+        self,
+        ioc: dict[str, Any],
+    ) -> CorrelationResult:
+        """
+        Compatibility wrapper.
+        """
+
+        return self.correlate(
+            [
+                ioc
+            ]
         )

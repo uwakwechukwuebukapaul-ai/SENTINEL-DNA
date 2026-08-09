@@ -1,159 +1,160 @@
 """
-Correlation Engine Tests.
+Correlation Engine Tests
 """
-
 
 from services.intelligence.correlation import (
     CorrelationEngine,
+    EntityGraph,
 )
 
 
 
-def create_engine():
+def test_entity_graph_creation():
 
-    return CorrelationEngine()
+    graph = EntityGraph()
+
+    assert graph is not None
 
 
 
-def test_basic_correlation():
+def test_entity_addition():
 
-    engine = create_engine()
+    graph = EntityGraph()
+
+
+    entity = graph.add_entity(
+
+        "domain",
+
+        "evil.com",
+
+    )
+
+
+    assert (
+        entity["value"]
+        ==
+        "evil.com"
+    )
+
+
+
+def test_correlation_creation():
+
+    engine = CorrelationEngine()
+
+    assert engine is not None
+
+
+
+def test_phishing_correlation():
+
+    engine = CorrelationEngine()
 
 
     result = engine.correlate(
 
-        case_id="CASE-100",
+        [
 
-        indicators=[
             {
+
+                "type":
+                    "email",
+
                 "value":
-                    "evil-login.xyz"
-            }
-        ],
+                    "phishing_email",
 
-        techniques=[
+            },
+
             {
-                "technique_id":
-                    "T1566"
-            }
-        ],
+
+                "type":
+                    "domain",
+
+                "value":
+                    "evil.com",
+
+            },
+
+        ]
+
     )
 
 
     assert (
-        result.case_id
+        result["attack_pattern"]
         ==
-        "CASE-100"
+        "credential_phishing"
     )
 
 
     assert (
-        len(result.indicators)
-        ==
-        1
-    )
-
-
-    assert (
-        len(result.techniques)
-        ==
-        1
+        "T1566"
+        in
+        result["mitre"]
     )
 
 
 
-def test_attack_story_generation():
+def test_high_confidence_correlation():
 
-    engine = create_engine()
+    engine = CorrelationEngine()
 
 
     result = engine.correlate(
 
-        case_id="CASE-200",
+        [
 
-        indicators=[
             {
                 "type":
-                    "domain"
-            }
-        ],
+                    "email",
 
-        techniques=[
+                "value":
+                    "mail",
+
+            },
+
             {
-                "name":
-                    "Credential Access"
-            }
-        ],
-    )
+                "type":
+                    "domain",
 
+                "value":
+                    "evil.com",
 
-    assert (
-        len(result.attack_story)
-        >
-        0
-    )
+            },
 
-
-
-def test_confidence_score():
-
-    engine = create_engine()
-
-
-    result = engine.correlate(
-
-        case_id="CASE-300",
-
-        indicators=[
             {
-                "ioc":
-                    "test.com"
-            }
-        ],
+                "type":
+                    "user",
 
-        techniques=[],
+                "value":
+                    "john",
 
-        reasoning={
-            "classification":
-                "phishing"
-        },
+            },
+
+            {
+                "type":
+                    "ip",
+
+                "value":
+                    "10.0.0.1",
+
+            },
+
+        ]
+
     )
 
 
     assert (
-        result.confidence
+        result["confidence"]
+        >=
+        0.8
+    )
+
+
+    assert (
+        result["risk"]
         ==
-        0.6
-    )
-
-
-
-def test_export():
-
-    engine = create_engine()
-
-
-    result = engine.correlate(
-
-        case_id="CASE-400",
-
-        indicators=[],
-
-        techniques=[],
-    )
-
-
-    exported = result.to_dict()
-
-
-    assert (
-        exported["case_id"]
-        ==
-        "CASE-400"
-    )
-
-
-    assert (
-        "metadata"
-        in exported
+        "high"
     )

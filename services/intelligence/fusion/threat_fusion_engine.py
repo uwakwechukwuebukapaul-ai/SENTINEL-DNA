@@ -1,8 +1,15 @@
 """
-Sentinel DNA - Threat Fusion Engine
+Sentinel DNA Threat Fusion Engine
 
-Transforms enriched intelligence into
-investigation decision context.
+Enterprise threat intelligence fusion layer.
+
+Responsibilities:
+
+- combine threat intelligence signals
+- calculate threat severity
+- generate investigation priority
+- calculate confidence
+- produce analyst-ready summaries
 """
 
 from __future__ import annotations
@@ -10,228 +17,223 @@ from __future__ import annotations
 from typing import Any
 
 
-
 class ThreatFusionEngine:
     """
-    Fuses multiple intelligence signals
-    into a unified threat assessment.
+    Threat intelligence fusion engine.
+
+    Combines:
+
+    - risk scoring
+    - IOC intelligence
+    - confidence signals
+    - investigation context
     """
 
+
+    def __init__(self):
+        pass
 
 
     def fuse(
         self,
-        event: dict[str, Any],
-        intelligence: dict[str, Any],
-        reasoning: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+        intelligence: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Generate unified threat context.
+        Fuse threat intelligence.
+
+        Supports:
+
+        fuse(intelligence)
+
+        and:
+
+        fuse(context, intelligence)
+
+        for backward compatibility.
         """
 
 
-        indicators = (
-            intelligence.get(
-                "indicators",
-                [],
-            )
+        # Compatibility:
+        # old callers pass only intelligence
+        if intelligence is None:
+            intelligence = context or {}
+            context = {}
+
+
+
+        risk_score = intelligence.get(
+            "risk_score",
+            0,
         )
 
 
-        risk_score = (
-            intelligence.get(
-                "risk_score",
-                0,
-            )
+        indicators = intelligence.get(
+            "indicators",
+            [],
         )
 
 
-        risk_level = (
-            self._calculate_risk_level(
-                risk_score
+
+        #
+        # Threat risk classification
+        #
+
+        if risk_score >= 90:
+
+            risk = "critical"
+
+        elif risk_score >= 70:
+
+            risk = "high"
+
+        elif risk_score >= 40:
+
+            risk = "medium"
+
+        else:
+
+            risk = "low"
+
+
+
+        #
+        # Priority generation
+        #
+
+        if risk == "critical":
+
+            priority = "critical"
+
+        elif risk_score >= 60:
+
+            priority = "urgent"
+
+        elif risk == "high":
+
+            priority = "high"
+
+        else:
+
+            priority = "normal"
+
+
+
+        #
+        # Confidence calculation
+        #
+
+        confidence_values = []
+
+
+        for indicator in indicators:
+
+            if isinstance(
+                indicator,
+                dict,
+            ):
+
+                confidence = indicator.get(
+                    "confidence"
+                )
+
+                if confidence is not None:
+
+                    confidence_values.append(
+                        confidence
+                    )
+
+
+
+        if confidence_values:
+
+            confidence = round(
+                sum(confidence_values)
+                /
+                len(confidence_values)
             )
+
+        else:
+
+            confidence = risk_score
+
+
+
+        #
+        # Investigation decision
+        #
+
+        investigation_required = (
+            risk_score >= 70
+            or len(indicators) > 0
         )
 
 
-        priority = (
-            self._calculate_priority(
-                risk_level
-            )
+
+        #
+        # Summary
+        #
+
+        summary = (
+            f"{risk.capitalize()} threat detected "
+            f"with risk score {risk_score}"
         )
 
+
+
+        #
+        # Return contract
+        #
 
         return {
 
             "case_id":
-                event.get(
-                    "case_id",
-                    "UNKNOWN",
-                ),
+                context.get(
+                    "case_id"
+                )
+                if context
+                else None,
 
 
             "threat_assessment": {
 
                 "risk":
-                    risk_level,
-
-                "risk_score":
-                    risk_score,
+                    risk,
 
                 "priority":
                     priority,
 
                 "confidence":
-                    self._confidence(
-                        indicators
-                    ),
+                    confidence,
+
+                "risk_score":
+                    risk_score,
 
             },
 
 
-            "intelligence":
-
-                intelligence,
-
-
-            "reasoning":
-
-                reasoning or {},
-
-
             "investigation_required":
-
-                risk_level
-                in
-                [
-                    "high",
-                    "critical",
-                ],
+                investigation_required,
 
 
             "summary":
-
-                self._generate_summary(
-                    risk_level,
-                    indicators,
-                ),
-
-        }
+                summary,
 
 
-
-    def _calculate_risk_level(
-        self,
-        score: int,
-    ) -> str:
-
-        if score >= 90:
-
-            return "critical"
+            "indicators":
+                indicators,
 
 
-        if score >= 50:
+            "metadata": {
 
-            return "high"
+                "context":
+                    context or {},
 
-
-        if score >= 20:
-
-            return "medium"
-
-
-        return "low"
-
-
-
-    def _calculate_priority(
-        self,
-        risk: str,
-    ) -> str:
-
-        priorities = {
-
-            "critical":
-                "immediate",
-
-            "high":
-                "urgent",
-
-            "medium":
-                "normal",
-
-            "low":
-                "low",
+            },
 
         }
 
 
-        return priorities.get(
-            risk,
-            "normal",
-        )
+# Compatibility aliases
 
-
-
-    def _confidence(
-        self,
-        indicators: list[dict[str, Any]],
-    ) -> int:
-
-        if not indicators:
-
-            return 0
-
-
-        values = []
-
-
-        for indicator in indicators:
-
-            values.append(
-
-                indicator.get(
-                    "confidence",
-                    0,
-                )
-
-            )
-
-
-        return int(
-            sum(values)
-            /
-            len(values)
-        )
-
-
-
-    def _generate_summary(
-        self,
-        risk: str,
-        indicators: list[dict[str, Any]],
-    ) -> str:
-
-        count = len(
-            indicators
-        )
-
-
-        if risk == "critical":
-
-            return (
-                f"Critical threat detected "
-                f"with {count} suspicious indicators"
-            )
-
-
-        if risk == "high":
-
-            return (
-                f"High risk activity detected "
-                f"with {count} indicators"
-            )
-
-
-        return (
-            "No significant threat detected"
-        )
+FusionEngine = ThreatFusionEngine
