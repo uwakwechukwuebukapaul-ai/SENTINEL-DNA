@@ -1,35 +1,51 @@
 """
-Sentinel DNA AI Decision Engine
+Sentinel DNA Autonomous Decision Engine
 
-Combines intelligence outputs into
-a final security decision.
+Central intelligence layer responsible for
+investigation reasoning and strategy selection.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from .risk_classifier import RiskClassifier
+from .priority_engine import PriorityEngine
+from .investigation_strategy import InvestigationStrategy
+from .threat_reasoner import ThreatReasoner
+
 
 class DecisionEngine:
     """
-    Generates explainable AI security decisions.
+    AI decision intelligence coordinator.
     """
 
     def __init__(
         self,
-        risk_engine=None,
-        recommendation_engine=None,
-        confidence_engine=None,
+        risk_classifier=None,
+        priority_engine=None,
+        strategy=None,
+        reasoner=None,
     ) -> None:
 
-        self.risk_engine = risk_engine
-
-        self.recommendation_engine = (
-            recommendation_engine
+        self.risk_classifier = (
+            risk_classifier
+            or RiskClassifier()
         )
 
-        self.confidence_engine = (
-            confidence_engine
+        self.priority_engine = (
+            priority_engine
+            or PriorityEngine()
+        )
+
+        self.strategy = (
+            strategy
+            or InvestigationStrategy()
+        )
+
+        self.reasoner = (
+            reasoner
+            or ThreatReasoner()
         )
 
         self.history: list[
@@ -37,138 +53,102 @@ class DecisionEngine:
         ] = []
 
 
-    def analyze(
+    def evaluate(
         self,
-        investigation: dict[str, Any],
+        alert: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Integration API.
-
-        Used by InvestigationIntegrator.
-
-        Converts internal AI decisions
-        into SOC workflow actions.
+        Core decision intelligence method.
         """
 
-        result = self.decide(
-            investigation
+        risk = (
+            self.risk_classifier
+            .classify(alert)
         )
 
-        decision_map = {
-            "respond_immediately": "respond",
-            "investigate_further": "investigate",
-            "monitor": "monitor",
-        }
 
-        result["decision"] = decision_map.get(
-            result["decision"],
-            result["decision"],
+        priority = (
+            self.priority_engine
+            .calculate(risk)
         )
 
-        return result
+
+        strategy = (
+            self.strategy
+            .select(alert)
+        )
 
 
-    def decide(
-        self,
-        investigation: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Generate final AI security decision.
-        """
+        actions = (
+            self.reasoner
+            .analyze(alert)
+        )
 
-        risk = {}
 
-        if self.risk_engine:
-
-            risk = self.risk_engine.analyze(
-                investigation
+        decision_action = (
+            self._determine_decision(
+                alert,
+                risk,
             )
-
-
-        recommendations = {}
-
-        if self.recommendation_engine:
-
-            recommendations = (
-                self.recommendation_engine.generate(
-                    investigation
-                )
-            )
-
-
-        confidence = {}
-
-        if self.confidence_engine:
-
-            confidence = (
-                self.confidence_engine.calculate(
-                    investigation
-                )
-            )
+        )
 
 
         decision = {
 
-            "case_id": investigation.get(
-                "id"
-            ),
+            "decision": decision_action,
 
             "risk": risk,
 
-            "recommendations": (
-                recommendations.get(
-                    "recommendations",
-                    [],
-                )
-                if recommendations
-                else []
-            ),
+            "priority": priority,
 
-            "confidence": confidence,
+            "strategy": strategy,
 
-            "decision": self._decision(
-                investigation
-            ),
+            "actions": actions,
+
         }
 
 
         self.history.append(
-            decision
+            {
+                "alert": alert,
+                "decision": decision,
+            }
         )
 
 
         return decision
 
 
-    def _decision(
+
+    def _determine_decision(
         self,
-        investigation: dict[str, Any],
+        alert: dict[str, Any],
+        risk: Any,
     ) -> str:
         """
-        Determine AI security decision.
+        Determine analyst action.
 
-        Internal reasoning states:
-
-        critical/high:
-            respond_immediately
-
-        medium:
-            investigate_further
-
-        low/unknown:
-            monitor
+        Compatibility layer for
+        existing Sentinel DNA workflows.
         """
 
-        severity = investigation.get(
-            "severity",
-            "",
-        ).lower()
+        severity = (
+            str(
+                alert.get(
+                    "severity",
+                    "",
+                )
+            )
+            .lower()
+        )
 
 
-        if severity in (
-            "critical",
-            "high",
-        ):
+        if severity == "critical":
+
+            return "respond"
+
+
+        if severity == "high":
 
             return "respond_immediately"
 
@@ -178,7 +158,41 @@ class DecisionEngine:
             return "investigate_further"
 
 
+        if str(risk).lower() == "high":
+
+            return "respond_immediately"
+
+
         return "monitor"
+
+
+
+    def decide(
+        self,
+        alert: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Backward compatible decision API.
+        """
+
+        return self.evaluate(
+            alert
+        )
+
+
+
+    def analyze(
+        self,
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Integration compatibility API.
+        """
+
+        return self.evaluate(
+            investigation
+        )
+
 
 
     def get_history(
@@ -189,6 +203,7 @@ class DecisionEngine:
         """
 
         return self.history
+
 
 
     def clear_history(
