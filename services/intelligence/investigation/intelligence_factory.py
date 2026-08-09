@@ -1,77 +1,100 @@
 """
 Sentinel DNA Intelligence Factory
 
-Creates investigation intelligence pipelines.
+Creates fully configured investigation intelligence pipelines.
 """
 
 from __future__ import annotations
 
-from .investigation_pipeline import (
-    InvestigationPipeline,
-)
+from .investigation_pipeline import InvestigationPipeline
+from .ioc_investigator import IOCInvestigator
+from .mitre_adapter import MITREAdapter
+from .risk_engine import RiskEngine
+from .recommendation_engine import RecommendationEngine
 
-from services.intelligence.evidence import (
-    EvidenceCollector,
-)
 
-from services.intelligence.mitre import (
-    MitreEngine,
-)
+class ThreatIntelligenceEngine:
+    """
+    Simulated threat intelligence analysis engine.
+    """
 
-from services.intelligence.risk import (
-    RiskEngine,
-)
+    def execute(
+        self,
+        case_id: str,
+        alert: dict,
+    ) -> dict:
 
-from services.intelligence.recommendation import (
-    RecommendationEngine,
-)
+        return {
+            "case_id": case_id,
+            "category": "phishing",
+            "severity": "HIGH",
+            "confidence": 0.9,
+        }
+
+
+
+class AnalysisEngine:
+    """
+    Investigation classification engine.
+    """
+
+    def execute(
+        self,
+        case_id: str,
+        alert: dict,
+    ) -> dict:
+
+        return {
+            "classification":
+                "credential_phishing",
+
+            "source":
+                "sentinel-dna-simulation",
+
+            "confidence":
+                0.9,
+        }
+
 
 
 class IntelligenceFactory:
     """
-    Enterprise intelligence dependency factory.
+    Builds enterprise investigation pipeline.
     """
 
 
     @staticmethod
-    def create_pipeline():
+    def create_pipeline() -> InvestigationPipeline:
+        """
+        Create configured investigation pipeline.
+        """
 
-        pipeline = InvestigationPipeline()
 
+        threat_engine = ThreatIntelligenceEngine()
+
+        analysis_engine = AnalysisEngine()
+
+
+        pipeline = InvestigationPipeline(
+            ioc_investigator=IOCInvestigator(),
+            mitre_adapter=MITREAdapter(),
+            risk_engine=RiskEngine(),
+            recommendation_engine=RecommendationEngine(),
+        )
+
+
+        # Register execution engines
 
         pipeline.register_engine(
-            "evidence",
-            EvidenceCollector(),
+            "threat_intelligence",
+            threat_engine,
         )
 
 
         pipeline.register_engine(
-            "mitre",
-            MitreEngine(),
-        )
-
-
-        pipeline.register_engine(
-            "risk",
-            RiskEngine(),
-        )
-
-
-        pipeline.register_engine(
-            "recommendation",
-            RecommendationEngine(),
+            "analysis_engine",
+            analysis_engine,
         )
 
 
         return pipeline
-
-
-
-    def build(self):
-
-        return {
-
-            "pipeline":
-                self.create_pipeline()
-
-        }
