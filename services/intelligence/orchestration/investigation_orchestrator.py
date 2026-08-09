@@ -1,84 +1,146 @@
 """
-Sentinel DNA Autonomous Investigation Orchestrator
+Investigation Orchestrator
 
-Connects intelligence engines into
-a complete investigation workflow.
+Coordinates autonomous investigation execution.
+
+Responsibilities:
+- manage investigation lifecycle
+- coordinate investigation agents
+- maintain execution history
+- track execution state
 """
 
-from __future__ import annotations
 
 from typing import Any
 
-
-from .investigation_context import (
-    InvestigationContext,
-)
-
-
-from .investigation_plan import (
-    InvestigationPlan,
-)
-
+from .execution_state import ExecutionState
 
 
 class InvestigationOrchestrator:
     """
-    Executes AI investigation workflow.
+    Main investigation workflow coordinator.
     """
 
 
-    def create_plan(
+    def __init__(self):
+
+        self.agents: dict[str, Any] = {}
+
+        self.history: list[dict[str, Any]] = []
+
+
+
+    def register_agent(
         self,
-        case_id: str,
-    ) -> InvestigationPlan:
+        agent: Any,
+    ) -> None:
+        """
+        Register investigation agent.
+        """
 
-        plan = InvestigationPlan(
-            case_id=case_id
+        name = getattr(
+            agent,
+            "name",
+            agent.__class__.__name__,
         )
 
 
-        for stage in [
-
-            "evidence_collection",
-            "mitre_mapping",
-            "risk_analysis",
-            "confidence_analysis",
-            "recommendation_generation",
-            "timeline_generation",
-
-        ]:
-
-            plan.add_stage(
-                stage
-            )
-
-
-        return plan
+        self.agents[name] = agent
 
 
 
-    def investigate(
+    def execute(
         self,
-        case_id: str,
-        alert: dict[str, Any],
-    ) -> InvestigationContext:
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Execute investigation workflow.
+        """
 
-
-        context = InvestigationContext(
-            case_id=case_id,
-            alert=alert,
+        state = ExecutionState(
+            investigation_id=
+                investigation.get(
+                    "id",
+                    "UNKNOWN",
+                )
         )
 
 
-        plan = self.create_plan(
-            case_id
+        state.start()
+
+
+
+        findings = []
+
+
+        for agent in self.agents.values():
+
+            if hasattr(
+                agent,
+                "investigate",
+            ):
+
+                result = agent.investigate(
+                    investigation
+                )
+
+
+                if "findings" in result:
+                    findings.extend(
+                        result["findings"]
+                    )
+
+
+
+        state.complete()
+
+
+
+        result = {
+
+            "investigation_id":
+                investigation.get(
+                    "id",
+                    "UNKNOWN",
+                ),
+
+
+            "findings":
+                findings,
+
+
+            "state":
+                state.to_dict(),
+
+        }
+
+
+
+        self.history.append(
+            result
         )
 
 
-        context.add_result(
-            "plan",
-            plan.to_dict(),
-        )
+        return result
 
 
-        return context
+
+    def get_history(
+        self,
+    ) -> list[dict[str, Any]]:
+        """
+        Return investigation history.
+        """
+
+        return self.history.copy()
+
+
+
+    def clear_history(
+        self,
+    ) -> None:
+        """
+        Clear execution history.
+        """
+
+        self.history.clear()

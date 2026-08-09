@@ -1,102 +1,99 @@
 """
-Sentinel DNA Investigation Memory
+Investigation Memory Intelligence.
 
-Stores historical investigation knowledge.
+Provides learning context from previous investigations.
 """
 
-from __future__ import annotations
 
 from typing import Any
+
+from .memory_store import MemoryStore
+
 
 
 class InvestigationMemory:
     """
-    Investigation historical memory.
-
-    Current:
-        In-memory storage.
-
-    Future:
-        Vector database.
-        Knowledge graph.
-        Enterprise search index.
+    Memory interface for AI investigations.
     """
 
-    def __init__(self) -> None:
 
-        self._memory: dict[
-            str,
-            dict[str, Any],
-        ] = {}
-
-
-    def store(
+    def __init__(
         self,
-        investigation_id: str,
-        data: dict[str, Any],
+        store: MemoryStore | None = None,
+    ):
+
+        self.store = (
+            store
+            or MemoryStore()
+        )
+
+
+
+    def remember(
+        self,
+        investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Store investigation memory.
+        Save investigation knowledge.
         """
 
-        self._memory[investigation_id] = data
-
-        return data
-
-
-    def retrieve(
-        self,
-        investigation_id: str,
-    ) -> dict[str, Any] | None:
-        """
-        Retrieve investigation memory.
-        """
-
-        return self._memory.get(
-            investigation_id
+        return self.store.save(
+            investigation
         )
 
 
-    def exists(
+
+    def recall(
         self,
-        investigation_id: str,
-    ) -> bool:
+    ) -> list[dict[str, Any]]:
         """
-        Check memory existence.
-        """
-
-        return investigation_id in self._memory
-
-
-    def list_all(self) -> list[dict[str, Any]]:
-        """
-        Return all memories.
+        Retrieve all investigations.
         """
 
-        return list(
-            self._memory.values()
+        return self.store.get_all()
+
+
+
+    def find_similar(
+        self,
+        investigation_type: str,
+    ) -> dict[str, Any]:
+        """
+        Find previous similar investigations.
+        """
+
+
+        matches = self.store.find(
+            "type",
+            investigation_type,
         )
 
 
-    def delete(
+        return {
+
+            "query":
+                investigation_type,
+
+            "matches":
+                matches,
+
+            "count":
+                len(matches),
+
+        }
+
+
+
+    def clear(
         self,
-        investigation_id: str,
-    ) -> bool:
-        """
-        Delete memory record.
-        """
+    ):
 
-        if investigation_id not in self._memory:
-            return False
-
-        del self._memory[investigation_id]
-
-        return True
+        self.store.clear()
 
 
-    def clear(self) -> None:
-        """
-        Clear memory.
-        """
 
-        self._memory.clear()
+    def size(
+        self,
+    ) -> int:
+
+        return self.store.count()

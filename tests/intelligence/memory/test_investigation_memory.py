@@ -1,72 +1,107 @@
+"""
+Tests for Investigation Memory Layer.
+"""
+
+
 from services.intelligence.memory import (
     InvestigationMemory,
+    MemoryStore,
 )
 
 
-def test_store_memory():
+
+def test_memory_creation():
 
     memory = InvestigationMemory()
 
-    result = memory.store(
-        "INV-001",
+    assert memory is not None
+
+
+
+def test_remember_investigation():
+
+    memory = InvestigationMemory()
+
+
+    result = memory.remember(
+
         {
-            "threat": "phishing"
-        },
+            "id":
+                "INC-001",
+
+            "type":
+                "phishing",
+
+            "severity":
+                "critical",
+
+        }
+
     )
 
-    assert result["threat"] == "phishing"
+
+    assert (
+        result["id"]
+        ==
+        "INC-001"
+    )
 
 
 
-def test_retrieve_memory():
+def test_recall_memory():
 
     memory = InvestigationMemory()
 
-    memory.store(
-        "INV-001",
+
+    memory.remember(
+
         {
-            "severity": "high"
-        },
+            "id":
+                "INC-002",
+
+            "type":
+                "malware",
+
+        }
+
     )
 
-    result = memory.retrieve(
-        "INV-001"
-    )
 
-    assert result["severity"] == "high"
+    results = memory.recall()
 
 
+    assert len(results) == 1
 
-def test_memory_exists():
+
+
+def test_find_similar():
 
     memory = InvestigationMemory()
 
-    memory.store(
-        "INV-001",
-        {},
+
+    memory.remember(
+
+        {
+            "id":
+                "INC-003",
+
+            "type":
+                "phishing",
+
+        }
+
     )
 
-    assert memory.exists(
-        "INV-001"
+
+    result = memory.find_similar(
+        "phishing"
     )
 
 
-
-def test_delete_memory():
-
-    memory = InvestigationMemory()
-
-    memory.store(
-        "INV-001",
-        {},
-    )
-
-    assert memory.delete(
-        "INV-001"
-    )
-
-    assert not memory.exists(
-        "INV-001"
+    assert (
+        result["count"]
+        ==
+        1
     )
 
 
@@ -75,11 +110,48 @@ def test_clear_memory():
 
     memory = InvestigationMemory()
 
-    memory.store(
-        "INV-001",
-        {},
+
+    memory.remember(
+
+        {
+            "id":
+                "INC-004",
+
+        }
+
     )
+
 
     memory.clear()
 
-    assert memory.list_all() == []
+
+    assert (
+        memory.size()
+        ==
+        0
+    )
+
+
+
+def test_custom_store():
+
+    store = MemoryStore()
+
+    memory = InvestigationMemory(
+        store
+    )
+
+
+    memory.remember(
+        {
+            "id":
+                "CUSTOM-1"
+        }
+    )
+
+
+    assert (
+        memory.size()
+        ==
+        1
+    )
