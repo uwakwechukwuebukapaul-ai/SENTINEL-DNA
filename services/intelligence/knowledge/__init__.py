@@ -1,18 +1,20 @@
 """
-Sentinel DNA Knowledge Intelligence Layer.
+Sentinel DNA Intelligence Knowledge Package
 
-Provides graph-based intelligence
-for investigation correlation.
+Provides shared knowledge graph primitives
+used across threat intelligence, correlation,
+investigation reasoning, and AI analysis.
 """
 
-from .entity import Entity
-from .relationship import Relationship
-from .knowledge_graph import KnowledgeGraph
-from .graph_query import GraphQuery
+from .knowledge_graph import (
+    KnowledgeGraph,
+    Entity,
+    Relationship,
+)
+
 
 __all__ = [
+    "KnowledgeGraph",
     "Entity",
     "Relationship",
-    "KnowledgeGraph",
-    "GraphQuery",
 ]

@@ -1,49 +1,32 @@
-"""
-Correlation data models.
-"""
-
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any
-
+from dataclasses import dataclass
 
 
 @dataclass
 class CorrelationResult:
-    """
-    Output of intelligence correlation.
-    """
 
-    case_id: str
+    matched: bool
 
-    indicators: list[dict[str, Any]] = field(
-        default_factory=list
-    )
+    risk: str
 
-    techniques: list[dict[str, Any]] = field(
-        default_factory=list
-    )
+    entity_type: str | None = None
 
-    attack_story: list[str] = field(
-        default_factory=list
-    )
+    value: str | None = None
 
     confidence: float = 0.0
 
+    entities: list[str] | None = None
 
-    metadata: dict[str, Any] = field(
-        default_factory=dict
-    )
+    relationships: list | None = None
 
 
     def to_dict(self):
 
         return {
-            "case_id": self.case_id,
-            "indicators": self.indicators,
-            "techniques": self.techniques,
-            "attack_story": self.attack_story,
+            "matched": self.matched,
+            "risk": self.risk,
+            "entity_type": self.entity_type,
+            "value": self.value,
             "confidence": self.confidence,
-            "metadata": self.metadata,
+            "entities": self.entities or [],
+            "relationships": self.relationships or [],
         }

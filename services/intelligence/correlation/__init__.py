@@ -1,23 +1,83 @@
 """
-Sentinel DNA Correlation Package
+Sentinel DNA Intelligence Correlation
 """
 
-from .correlation_engine import (
-    CorrelationEngine,
-    CorrelationResult,
-    ThreatCorrelator,
-    ThreatCorrelationResult,
+from .entity_graph import (
+    Entity,
+    Relationship,
+    EntityGraph,
+    KnowledgeGraph,
 )
 
 
+from .correlation_engine import (
+    CorrelationEngine,
+)
+
+
+from .models import (
+    CorrelationResult,
+)
+
+
+
+class ThreatCorrelator:
+
+
+    def __init__(
+        self,
+        graph,
+    ):
+
+        self.engine = CorrelationEngine(
+            graph
+        )
+
+
+
+    def correlate(
+        self,
+        events=None,
+        entities=None,
+    ):
+
+
+        if isinstance(events, str):
+
+            signal = {
+
+                "value": events,
+
+                "type": entities,
+
+            }
+
+
+            return self.engine.correlate(
+                [
+                    signal
+                ]
+            )
+
+
+
+        return self.engine.correlate(
+            events or []
+        )
+
+
+
 __all__ = [
+
+    "Entity",
+    "Relationship",
+    "EntityGraph",
+    "KnowledgeGraph",
 
     "CorrelationEngine",
 
     "CorrelationResult",
 
     "ThreatCorrelator",
-
-    "ThreatCorrelationResult",
 
 ]

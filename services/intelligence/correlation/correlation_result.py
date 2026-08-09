@@ -1,12 +1,11 @@
 """
-Correlation Result
+Correlation Result Model
 
-Data contract representing intelligence
-correlation output between IOC matching,
-threat analysis, and investigation workflows.
+Unified result object supporting:
+- attribute access
+- dictionary style access
+- serialization
 """
-
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,91 +13,73 @@ from typing import Any
 
 @dataclass
 class CorrelationResult:
-    """
-    Intelligence correlation result object.
 
-    Used by:
-    - Correlation Engine
-    - Investigation Intelligence
-    - Analyst APIs
-    - Reporting pipelines
-    """
+    matched: bool
 
-    case_id: str = ""
-
-    matched: bool = False
-
-    risk: str = "unknown"
+    risk: str
 
     confidence: float = 0.0
-
-    indicators: list[dict[str, Any]] = field(
-        default_factory=list
-    )
-
-    matched_iocs: list[Any] = field(
-        default_factory=list
-    )
 
     entities: list[str] = field(
         default_factory=list
     )
 
-    techniques: list[Any] = field(
+    relationships: list[Any] = field(
         default_factory=list
     )
 
-    correlations: Any = field(
+    attack_pattern: str | None = None
+
+    mitre: list[str] = field(
         default_factory=list
     )
 
-    attack_story: str = ""
+    entity_type: str | None = None
 
-    metadata: dict[str, Any] = field(
+    value: str | None = None
+
+    metadata: dict = field(
         default_factory=dict
     )
 
-    created_at: str = ""
-
 
     def __post_init__(self):
-        """
-        Normalize correlation state.
-        """
-
-        if self.matched_iocs:
-            self.matched = True
-
-
-        if self.correlations:
-            if isinstance(
-                self.correlations,
-                dict
-            ):
-                self.risk = (
-                    self.correlations.get(
-                        "risk",
-                        self.risk,
-                    )
-                )
-
 
         if not self.metadata:
-            self.metadata = {
-                "engine": "sentinel-dna-correlation",
-                "version": "1.0",
-            }
+
+            self.metadata = {}
 
 
-    def to_dict(
+        if "mitre" not in self.metadata:
+
+            self.metadata["mitre"] = self.mitre
+
+
+        if not self.mitre:
+
+            self.mitre = (
+                self.metadata.get(
+                    "mitre",
+                    []
+                )
+            )
+
+
+    def __getitem__(
         self,
-    ) -> dict[str, Any]:
-        """
-        Serialize result for APIs.
-        """
+        key: str,
+    ):
+
+        return getattr(
+            self,
+            key,
+            self.metadata.get(key),
+        )
+
+
+    def to_dict(self):
 
         return {
-            "case_id": self.case_id,
 
             "matched": self.matched,
 
@@ -106,19 +87,18 @@ class CorrelationResult:
 
             "confidence": self.confidence,
 
-            "indicators": self.indicators,
-
-            "matched_iocs": self.matched_iocs,
-
             "entities": self.entities,
 
-            "techniques": self.techniques,
+            "relationships": self.relationships,
 
-            "correlations": self.correlations,
+            "attack_pattern": self.attack_pattern,
 
-            "attack_story": self.attack_story,
+            "mitre": self.mitre,
+
+            "entity_type": self.entity_type,
+
+            "value": self.value,
 
             "metadata": self.metadata,
 
-            "created_at": self.created_at,
         }

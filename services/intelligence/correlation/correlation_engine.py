@@ -1,491 +1,229 @@
 """
 Sentinel DNA Correlation Engine
 
-Responsibilities:
-
+Responsible for:
 - IOC correlation
-- Threat relationship discovery
-- Entity graph analysis
+- Threat signal enrichment
+- Attack pattern detection
+- MITRE ATT&CK mapping
 - Confidence scoring
-- Attack story generation
-
-This module provides the intelligence correlation layer
-between evidence collection and AI investigation reasoning.
+- Knowledge graph reasoning
 """
 
+from typing import Any
 
-from datetime import datetime, timezone
-
-
-
-# ==========================================================
-# Correlation Result
-# ==========================================================
-
-class CorrelationResult:
-    """
-    Stable correlation result contract.
-    """
-
-    def __init__(
-        self,
-        case_id,
-        indicators=None,
-        techniques=None,
-        confidence=0.0,
-        attack_story=None,
-        metadata=None,
-    ):
-
-        self.case_id = case_id
-
-        self.indicators = indicators or []
-
-        self.techniques = techniques or []
-
-        self.confidence = confidence
-
-        self.attack_story = attack_story or []
-
-        self.metadata = metadata or {}
+from .correlation_result import CorrelationResult
+from .entity_graph import KnowledgeGraph
 
 
-
-    def to_dict(self):
-
-        return {
-
-            "case_id":
-                self.case_id,
-
-            "indicators":
-                self.indicators,
-
-            "techniques":
-                self.techniques,
-
-            "confidence":
-                self.confidence,
-
-            "attack_story":
-                self.attack_story,
-
-            "metadata":
-                self.metadata,
-
-        }
-
-
-
-
-# ==========================================================
-# Threat Correlation Result
-# ==========================================================
-
-class ThreatCorrelationResult:
-    """
-    Threat graph correlation response.
-    """
-
-    def __init__(
-        self,
-        matched=False,
-        entities=None,
-        risk="unknown",
-        confidence=0.0,
-    ):
-
-        self.matched = matched
-
-        self.entities = entities or []
-
-        self.risk = risk
-
-        self.confidence = confidence
-
-
-
-    def to_dict(self):
-
-        return {
-
-            "matched":
-                self.matched,
-
-            "entities":
-                self.entities,
-
-            "risk":
-                self.risk,
-
-            "confidence":
-                self.confidence,
-
-        }
-
-
-
-
-# ==========================================================
-# Correlation Engine
-# ==========================================================
 
 class CorrelationEngine:
     """
-    Main intelligence correlation engine.
+    Core threat intelligence correlation engine.
     """
+
+
+    def __init__(
+        self,
+        graph: KnowledgeGraph | None = None,
+    ):
+        self.graph = graph or KnowledgeGraph()
 
 
 
     def correlate(
         self,
-        case_id,
-        indicators=None,
-        techniques=None,
-        reason=None,
-        reasoning=None,
-    ):
+        signals: list[dict[str, Any]],
+    ) -> CorrelationResult:
         """
-        Correlate investigation intelligence.
+        Correlate security signals.
 
-        Supports:
+        Example:
 
-        reasoning={
-            "classification":"phishing"
-        }
-
-        and legacy:
-
-        reason="phishing"
+        [
+            {
+                "type": "email",
+                "value": "phishing_email"
+            },
+            {
+                "type": "domain",
+                "value": "evil.com"
+            }
+        ]
         """
 
-        indicators = indicators or []
 
-        techniques = techniques or []
+        entities = []
 
+        relationships = []
 
+        attack_pattern = None
 
-        if reasoning:
-
-            reason = reasoning.get(
-                "classification"
-            )
-
-
+        mitre = []
 
         confidence = 0.0
 
-
-
-        # IOC evidence
-
-        if indicators:
-
-            confidence += 0.3
+        risk = "unknown"
 
 
 
-        # ATT&CK technique mapping
-
-        if techniques:
-
-            confidence += 0.3
-
-
-
-        # Intelligence classification
-
-        if reason:
-
-            confidence += 0.3
+        signal_types = {
+            signal.get("type")
+            for signal in signals
+        }
 
 
 
-        if confidence > 1.0:
+        #
+        # Credential phishing detection
+        #
 
-            confidence = 1.0
+        if (
+            "email" in signal_types
+            and "domain" in signal_types
+        ):
+
+            attack_pattern = (
+                "credential_phishing"
+            )
+
+            mitre = [
+                "T1566",
+            ]
+
+            confidence = 0.85
+
+            risk = "high"
 
 
 
-        attack_story = []
+        #
+        # Multiple indicators increase confidence
+        #
+
+        if len(signals) >= 4:
+
+            confidence = max(
+                confidence,
+                0.90,
+            )
+
+            risk = "high"
 
 
 
-        if indicators:
+        #
+        # Knowledge graph lookup
+        #
 
-            attack_story.append(
-                "IOC indicators correlated"
+        for signal in signals:
+
+            value = signal.get(
+                "value",
+                "",
             )
 
 
-
-        if techniques:
-
-            attack_story.append(
-                "Attack techniques identified"
+            entity_type = signal.get(
+                "type",
+                signal.get(
+                    "entity_type"
+                ),
             )
 
 
-
-        if reason:
-
-            attack_story.append(
-                f"Threat classified as {reason}"
+            entity = self.graph.find_entity(
+                value,
+                entity_type,
             )
+
+
+            if entity:
+
+                entities.append(
+                    entity.value
+                )
+
+
+                confidence = max(
+                    confidence,
+                    1.0,
+                )
+
+
+                risk = "high"
+
+
+
+                related = (
+                    self.graph.get_relationships(
+                        entity.id
+                    )
+                )
+
+
+                relationships.extend(
+                    related
+                )
+
+
+                for item in related:
+
+                    entities.append(
+                        item.value
+                    )
+
+
+
+        #
+        # Determine match state
+        #
+
+        matched = bool(
+            entities
+            or attack_pattern
+        )
+
+
+
+        #
+        # Normalize unknown IOC behavior
+        #
+
+        if not matched:
+
+            risk = "unknown"
+
+            confidence = 0.0
 
 
 
         return CorrelationResult(
 
-            case_id=case_id,
-
-            indicators=indicators,
-
-            techniques=techniques,
-
-            confidence=confidence,
-
-            attack_story=attack_story,
-
-            metadata={
-
-                "created_at":
-                    datetime.now(
-                        timezone.utc
-                    ).isoformat()
-
-            },
-
-        )
-
-
-
-
-
-# ==========================================================
-# Threat Correlator
-# ==========================================================
-
-class ThreatCorrelator:
-    """
-    Knowledge graph threat relationship correlator.
-    """
-
-
-
-    def __init__(
-        self,
-        graph=None,
-    ):
-
-        self.graph = graph
-
-
-
-    def correlate(
-        self,
-        indicator,
-        entity_type=None,
-    ):
-
-        if not self.graph:
-
-            return ThreatCorrelationResult()
-
-
-
-        entities = getattr(
-            self.graph,
-            "entities",
-            []
-        )
-
-
-
-        # Support dict graph storage
-
-        if isinstance(
-            entities,
-            dict,
-        ):
-
-            entities = list(
-                entities.values()
-            )
-
-
-
-        matched_entities = []
-
-
-
-        for entity in entities:
-
-            value = getattr(
-                entity,
-                "value",
-                entity,
-            )
-
-            current_type = getattr(
-                entity,
-                "entity_type",
-                None,
-            )
-
-
-
-            if (
-
-                value == indicator
-
-                and
-
-                (
-                    entity_type is None
-
-                    or
-
-                    current_type == entity_type
-
-                )
-
-            ):
-
-                matched_entities.append(
-                    entity
-                )
-
-
-
-        expanded_entities = list(
-            matched_entities
-        )
-
-
-
-        relationships = getattr(
-            self.graph,
-            "relationships",
-            []
-        )
-
-
-
-        matched_ids = [
-
-            getattr(
-                item,
-                "id",
-                None,
-            )
-
-            for item in matched_entities
-
-        ]
-
-
-
-        # Expand graph relationships
-
-        for relationship in relationships:
-
-
-            source = getattr(
-                relationship,
-                "source",
-                None,
-            )
-
-
-            target = getattr(
-                relationship,
-                "target",
-                None,
-            )
-
-
-
-            if source in matched_ids:
-
-
-                for entity in entities:
-
-
-                    if getattr(
-                        entity,
-                        "id",
-                        None,
-                    ) == target:
-
-                        expanded_entities.append(
-                            entity
-                        )
-
-
-
-            if target in matched_ids:
-
-
-                for entity in entities:
-
-
-                    if getattr(
-                        entity,
-                        "id",
-                        None,
-                    ) == source:
-
-                        expanded_entities.append(
-                            entity
-                        )
-
-
-
-        values = []
-
-
-
-        for entity in expanded_entities:
-
-
-            value = getattr(
-                entity,
-                "value",
-                entity,
-            )
-
-
-            values.append(
-                value
-            )
-
-
-
-        risk = "unknown"
-
-        confidence = 0.0
-
-
-
-        if matched_entities:
-
-            risk = "high"
-
-            confidence = 0.6
-
-
-
-        return ThreatCorrelationResult(
-
-            matched=bool(
-                matched_entities
-            ),
-
-            entities=values,
+            matched=matched,
 
             risk=risk,
 
             confidence=confidence,
+
+            entities=list(
+                dict.fromkeys(
+                    entities
+                )
+            ),
+
+            relationships=relationships,
+
+            attack_pattern=attack_pattern,
+
+            mitre=mitre,
+
+            entity_type=None,
+
+            value=None,
+
+            metadata={
+                "mitre": mitre,
+            },
 
         )

@@ -1,134 +1,138 @@
 """
-Sentinel DNA Knowledge Graph Engine
+Sentinel DNA Knowledge Graph
 
-Stores:
-- Entities
-- Relationships
-- Intelligence connections
+Central intelligence graph used by:
+- Threat correlation
+- IOC enrichment
+- Investigation reasoning
+- Relationship traversal
 """
 
+from dataclasses import dataclass
+from typing import Any
 
-from typing import Dict, List
 
-from .entity import Entity
-from .relationship import Relationship
+@dataclass
+class Entity:
+    id: str
+    entity_type: str
+    value: str
+    metadata: dict[str, Any] | None = None
 
+
+@dataclass
+class Relationship:
+    source: str
+    target: str
+    relation_type: str
 
 
 class KnowledgeGraph:
     """
-    Core graph storage engine.
+    Shared enterprise knowledge graph.
     """
-
 
     def __init__(self):
 
-        self.entities: Dict[str, Entity] = {}
-
-        self.relationships: List[
-            Relationship
-        ] = []
-
+        self.entities: list[Entity] = []
+        self.relationships: list[Relationship] = []
 
 
     def add_entity(
         self,
-        entity: Entity
+        entity: Entity,
     ):
 
-        self.entities[
-            entity.id
-        ] = entity
-
-        return entity
-
-
-
-    def get_entity(
-        self,
-        entity_id: str
-    ):
-
-        return self.entities.get(
-            entity_id
-        )
-
-
-
-    def remove_entity(
-        self,
-        entity_id: str
-    ):
-
-        if entity_id in self.entities:
-
-            del self.entities[
-                entity_id
-            ]
-
-
-        self.relationships = [
-            relationship
-            for relationship in self.relationships
-            if relationship.source != entity_id
-            and relationship.target != entity_id
-        ]
-
-
-        return True
+        self.entities.append(entity)
 
 
 
     def add_relationship(
         self,
-        relationship: Relationship
+        relationship: Relationship,
     ):
 
         self.relationships.append(
             relationship
         )
 
-        return relationship
+
+
+    def find_entity(
+        self,
+        value: str,
+        entity_type: str | None = None,
+    ):
+
+        for entity in self.entities:
+
+            if entity.value != value:
+                continue
+
+            if (
+                entity_type
+                and entity.entity_type != entity_type
+            ):
+                continue
+
+            return entity
+
+        return None
+
+
+
+    def get_entity(
+        self,
+        entity_id: str,
+    ):
+
+        for entity in self.entities:
+
+            if entity.id == entity_id:
+                return entity
+
+        return None
 
 
 
     def get_relationships(
         self,
-        entity_id=None
+        entity_id: str,
     ):
 
-        if entity_id is None:
+        results = []
 
-            return self.relationships
+        for relationship in self.relationships:
+
+            if relationship.source != entity_id:
+                continue
+
+            target = self.get_entity(
+                relationship.target
+            )
+
+            if target:
+                results.append(
+                    target
+                )
+
+        return results
 
 
-        return [
-            relationship
-            for relationship in self.relationships
-            if relationship.source == entity_id
-            or relationship.target == entity_id
-        ]
 
-
-
-    def find_entities(
+    def search(
         self,
-        entity_type=None
+        value: str,
     ):
-
-        entities = list(
-            self.entities.values()
-        )
-
-
-        if entity_type is None:
-
-            return entities
-
 
         return [
             entity
-            for entity in entities
-            if entity.entity_type
-            == entity_type
+            for entity in self.entities
+            if entity.value == value
         ]
+
+
+
+# compatibility
+
+EntityGraph = KnowledgeGraph
