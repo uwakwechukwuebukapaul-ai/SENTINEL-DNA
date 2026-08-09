@@ -1,153 +1,294 @@
 """
-Sentinel DNA Investigation Execution Orchestrator Tests
+Sentinel DNA Investigation Orchestrator Tests
 
-Validates autonomous investigation execution workflow.
+Validates:
+
+- orchestrator lifecycle
+- investigation execution
+- correlation integration
+- fusion integration
+- reasoning integration
+- result normalization
+- execution history
+- failure handling
 """
 
-from __future__ import annotations
-
-
-from services.intelligence.investigation.execution_orchestrator import (
-    InvestigationExecutionOrchestrator,
-)
-
-from services.intelligence.investigation.investigation_pipeline import (
-    InvestigationPipeline,
+from services.intelligence.investigation.investigation_orchestrator import (
+    InvestigationOrchestrator,
 )
 
 
+class FakeCorrelationResult:
+    def __init__(self):
+        self.matched = True
+        self.risk = "high"
+        self.confidence = 0.85
+        self.entities = ["evil.com"]
+        self.relationships = []
+        self.mitre = ["T1566"]
+        self.attack_pattern = "credential_phishing"
 
-class FakeThreatIntelEngine:
-    """
-    Fake threat intelligence engine.
-    """
-
-    def analyze(
-        self,
-        alert,
-    ):
-
+    def to_dict(self):
         return {
-            "ioc": "malicious.example.com",
-            "reputation": "malicious",
-            "confidence": 95,
+            "matched": self.matched,
+            "risk": self.risk,
+            "confidence": self.confidence,
+            "entities": self.entities,
+            "relationships": self.relationships,
+            "mitre": self.mitre,
+            "attack_pattern": self.attack_pattern,
         }
 
 
+class FakeCorrelationEngine:
+    def correlate(self, signals):
+        assert len(signals) == 2
 
-class FakeRiskEngine:
-    """
-    Fake risk intelligence engine.
-    """
+        return FakeCorrelationResult()
 
-    def analyze(
-        self,
-        alert,
-    ):
 
+class FakeFusionEngine:
+    def fuse(self, payload):
         return {
-            "risk_score": 90,
-            "severity": "critical",
+            "threat_assessment": {
+                "risk": "critical",
+                "confidence": 0.95,
+            },
+            "summary": "Critical phishing activity detected.",
+            "recommendations": [
+                "Contain affected host.",
+            ],
+            "mitre": ["T1566"],
         }
 
+
+class FakeReasoningEngine:
+    def reason(
+        self,
+        artifacts=None,
+        correlation=None,
+        fusion=None,
+        context=None,
+    ):
+        return {
+            "conclusion": "Malicious phishing activity.",
+        }
 
 
 def create_orchestrator():
-
-    pipeline = InvestigationPipeline()
-
-    pipeline.register_engine(
-        "threat_intelligence",
-        FakeThreatIntelEngine(),
+    return InvestigationOrchestrator(
+        correlation_engine=FakeCorrelationEngine(),
+        fusion_engine=FakeFusionEngine(),
+        reasoning_engine=FakeReasoningEngine(),
     )
 
-    pipeline.register_engine(
-        "risk_engine",
-        FakeRiskEngine(),
-    )
 
-    return InvestigationExecutionOrchestrator(
-        pipeline=pipeline
-    )
+def test_orchestrator_creation():
+    orchestrator = create_orchestrator()
 
+    assert orchestrator is not None
+    assert orchestrator.running is False
+
+
+def test_start():
+    orchestrator = create_orchestrator()
+
+    assert orchestrator.start() is True
+    assert orchestrator.running is True
+
+
+def test_stop():
+    orchestrator = create_orchestrator()
+
+    orchestrator.start()
+
+    assert orchestrator.stop() is True
+    assert orchestrator.running is False
 
 
 def test_execute_investigation():
-
     orchestrator = create_orchestrator()
 
-
-    result = orchestrator.execute_investigation(
-        case_id="CASE-100",
-        alert={
-            "source": "email",
-            "severity": "high",
-        },
+    result = orchestrator.investigate(
+        artifacts=[
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+            {
+                "type": "email",
+                "value": "phishing",
+            },
+        ],
+        case_id="CASE-001",
     )
 
-
-    assert result.case_id == "CASE-100"
-
+    assert result.success is True
     assert result.status == "completed"
+    assert result.case_id == "CASE-001"
+    assert result.investigation_id is not None
 
-    assert (
-        "threat_intelligence"
-        in result.findings
+
+def test_correlation_result():
+    orchestrator = create_orchestrator()
+
+    result = orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
     )
 
-    assert (
-        "risk_engine"
-        in result.findings
+    assert result.success is True
+    assert result.correlation["risk"] == "high"
+
+
+def test_fusion_result():
+    orchestrator = create_orchestrator()
+
+    result = orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
     )
 
+    assert result.fusion["threat_assessment"]["risk"] == "critical"
+    assert result.risk == "critical"
+
+
+def test_reasoning_result():
+    orchestrator = create_orchestrator()
+
+    result = orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
+    )
+
+    assert result.reasoning["reasoning_status"] == "completed"
+    assert result.reasoning["reasoning_available"] is True
 
 
 def test_execution_history():
-
     orchestrator = create_orchestrator()
 
-
-    orchestrator.execute_investigation(
-        case_id="CASE-200",
-        alert={
-            "source": "endpoint",
-            "severity": "critical",
-        },
+    orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
     )
 
-
-    history = (
-        orchestrator.get_history()
+    orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "malicious.example",
+            },
+        ]
     )
 
+    history = orchestrator.get_execution_history()
 
-    assert len(history) == 1
-
-    assert (
-        history[0]["case_id"]
-        ==
-        "CASE-200"
-    )
-
+    assert len(history) == 2
 
 
 def test_clear_execution_history():
-
     orchestrator = create_orchestrator()
 
-
-    orchestrator.execute_investigation(
-        case_id="CASE-300",
-        alert={
-            "source": "network",
-        },
+    orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
     )
 
+    assert len(
+        orchestrator.get_execution_history()
+    ) == 1
 
-    orchestrator.clear_history()
-
+    assert orchestrator.clear_execution_history() is True
 
     assert (
-        orchestrator.get_history()
+        orchestrator.get_execution_history()
         == []
     )
+
+    assert orchestrator.last_result is None
+
+
+def test_failure_result():
+    class BrokenCorrelation:
+        def correlate(self, signals):
+            raise RuntimeError(
+                "correlation failure"
+            )
+
+    orchestrator = InvestigationOrchestrator(
+        correlation_engine=BrokenCorrelation(),
+        fusion_engine=FakeFusionEngine(),
+    )
+
+    result = orchestrator.investigate(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
+    )
+
+    assert result.success is False
+    assert result.status == "failed"
+    assert "correlation failure" in result.error
+
+
+def test_empty_artifacts():
+    orchestrator = create_orchestrator()
+
+    result = orchestrator.investigate([])
+
+    assert result.success is True
+    assert result.status == "completed"
+
+
+def test_execute_alias():
+    orchestrator = create_orchestrator()
+
+    result = orchestrator.execute(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
+    )
+
+    assert result.success is True
+
+
+def test_run_alias():
+    orchestrator = create_orchestrator()
+
+    result = orchestrator.run(
+        [
+            {
+                "type": "domain",
+                "value": "evil.com",
+            },
+        ]
+    )
+
+    assert result.success is True

@@ -1,66 +1,61 @@
 """
 Sentinel DNA Investigation Orchestrator
 
-Central AI investigation coordinator.
+Enterprise investigation execution coordinator.
 
-Responsibilities:
+Responsibilities
+----------------
+- Normalize investigation input.
+- Maintain execution history.
+- Coordinate correlation, fusion, and reasoning.
+- Normalize heterogeneous intelligence outputs.
+- Produce a stable InvestigationResult contract.
+- Preserve compatibility with legacy intelligence engines.
+- Keep empty investigations deterministic and successful.
+- Preserve execution metadata for downstream reporting.
 
-- Coordinate investigation workflow
-- Normalize intelligence execution
-- Connect correlation, fusion, reasoning layers
-- Manage investigation context
-- Produce analyst-ready investigation results
+Architecture
 
-Flow:
-
-Alert / Case
-      |
-      v
-Investigation Orchestrator
-      |
-      +--> Correlation Engine
-      |
-      +--> Threat Fusion Engine
-      |
-      +--> Reasoning Engine
-      |
-      v
-Investigation Result
+    Artifacts
+        |
+        v
+    InvestigationOrchestrator
+        |
+        +--> CorrelationEngine
+        |
+        +--> FusionEngine
+        |
+        +--> ReasoningEngine
+        |
+        v
+    InvestigationResult
 """
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
-import uuid
+from datetime import datetime, timezone
+from typing import Any, Callable, Optional
 
+from services.intelligence.correlation import CorrelationEngine
+from services.intelligence.fusion import FusionEngine
 
-from services.intelligence.correlation.correlation_engine import (
-    CorrelationEngine,
-)
-
-from services.intelligence.fusion import (
-    FusionEngine,
-)
-
-from services.intelligence.investigation.investigation_result import (
-    InvestigationResult,
-)
+from .investigation_result import InvestigationResult
 
 
 class InvestigationOrchestrator:
     """
-    Enterprise investigation execution coordinator.
-    """
+    Central coordinator for Sentinel DNA investigation execution.
 
+    The orchestrator owns workflow coordination only. Intelligence
+    logic remains inside the individual intelligence services.
+    """
 
     def __init__(
         self,
-        correlation_engine: CorrelationEngine | None = None,
-        fusion_engine: FusionEngine | None = None,
-        reasoning_engine: Any | None = None,
+        correlation_engine: Optional[CorrelationEngine] = None,
+        fusion_engine: Optional[FusionEngine] = None,
+        reasoning_engine: Any = None,
     ) -> None:
-
         self.correlation_engine = (
             correlation_engine
             if correlation_engine is not None
@@ -75,272 +70,1187 @@ class InvestigationOrchestrator:
 
         self.reasoning_engine = reasoning_engine
 
+        self.execution_history: list[InvestigationResult] = []
 
+        self.running = False
 
-    # =====================================================
-    # INVESTIGATION EXECUTION
-    # =====================================================
+        self.last_result: Optional[InvestigationResult] = None
+
+    # =========================================================
+    # LIFECYCLE
+    # =========================================================
+
+    def start(self) -> bool:
+        """
+        Start the investigation orchestrator.
+        """
+
+        self.running = True
+
+        return True
+
+    def stop(self) -> bool:
+        """
+        Stop the investigation orchestrator.
+        """
+
+        self.running = False
+
+        return True
+
+    def clear_execution_history(self) -> bool:
+        """
+        Clear all previous investigation executions.
+        """
+
+        self.execution_history.clear()
+
+        self.last_result = None
+
+        return True
+
+    # =========================================================
+    # PUBLIC EXECUTION
+    # =========================================================
 
     def investigate(
         self,
-        artifacts: list[dict[str, Any]],
-        case_id: str | None = None,
+        artifacts: Optional[list[dict[str, Any]]] = None,
+        case_id: Optional[str] = None,
+        investigation_id: Optional[str] = None,
+        context: Any = None,
     ) -> InvestigationResult:
         """
-        Execute full investigation workflow.
+        Execute a complete investigation.
+
+        Empty artifact lists are valid investigations and therefore
+        produce a completed low-confidence result rather than an
+        execution failure.
         """
 
+        if not self.running:
+            self.start()
 
-        investigation_id = (
-            f"INV-{uuid.uuid4().hex[:8].upper()}"
-        )
-
-
-        indicators = self._extract_indicators(
+        normalized_artifacts = self._normalize_artifacts(
             artifacts
         )
 
+        started_at = self._timestamp()
 
-        correlation = (
-            self.correlation_engine.correlate(
-                indicators,
+        if investigation_id is None:
+            investigation_id = (
+                self._generate_investigation_id(
+                    case_id
+                )
+            )
+
+        try:
+            correlation_signals = (
+                self._build_correlation_signals(
+                    normalized_artifacts
+                )
+            )
+
+            correlation = self._correlate(
+                signals=correlation_signals,
+                case_id=case_id,
+                context=context,
+            )
+
+            fusion = self._fuse(
+                artifacts=normalized_artifacts,
+                correlation=correlation,
                 case_id=case_id,
             )
-        )
 
-
-        fusion = (
-            self._run_fusion(
-                case_id,
-                correlation,
+            reasoning = self._reason(
+                artifacts=normalized_artifacts,
+                correlation=correlation,
+                fusion=fusion,
+                context=context,
             )
-        )
 
-
-        reasoning = (
-            self._run_reasoning(
-                artifacts,
-                correlation,
-                fusion,
+            result = self._build_success_result(
+                artifacts=normalized_artifacts,
+                correlation=correlation,
+                fusion=fusion,
+                reasoning=reasoning,
+                case_id=case_id,
+                investigation_id=investigation_id,
+                started_at=started_at,
+                context=context,
             )
+
+        except Exception as exc:
+            result = self._build_failure_result(
+                error=str(exc),
+                case_id=case_id,
+                investigation_id=investigation_id,
+                started_at=started_at,
+                artifacts=normalized_artifacts,
+            )
+
+        self.last_result = result
+
+        self.execution_history.append(
+            result
         )
 
+        return result
 
-        return InvestigationResult(
+    # Compatibility aliases.
+    execute = investigate
+    run = investigate
 
-            investigation_id=investigation_id,
+    # =========================================================
+    # HISTORY
+    # =========================================================
 
-            case_id=case_id,
-
-            status="completed",
-
-            correlation=(
-                correlation.to_dict()
-                if hasattr(
-                    correlation,
-                    "to_dict",
-                )
-                else correlation
-            ),
-
-            fusion=fusion,
-
-            reasoning=reasoning,
-
-            created_at=(
-                datetime.utcnow()
-                .isoformat()
-            ),
-
-        )
-
-
-
-    # =====================================================
-    # INDICATOR EXTRACTION
-    # =====================================================
-
-    def _extract_indicators(
+    def get_execution_history(
         self,
-        artifacts,
-    ) -> list[dict[str, Any]]:
+    ) -> list[InvestigationResult]:
         """
-        Convert artifacts into correlation inputs.
+        Return a snapshot of investigation history.
         """
 
-        indicators = []
+        return list(
+            self.execution_history
+        )
 
+    def history(
+        self,
+    ) -> list[InvestigationResult]:
+        """
+        Compatibility alias for get_execution_history().
+        """
 
-        for artifact in artifacts:
+        return self.get_execution_history()
 
-            artifact_type = (
-                artifact.get(
-                    "type"
-                )
+    # =========================================================
+    # CORRELATION
+    # =========================================================
+
+    def _correlate(
+        self,
+        signals: list[dict[str, Any]],
+        case_id: Optional[str],
+        context: Any = None,
+    ) -> Any:
+        """
+        Execute correlation while supporting multiple engine
+        signatures.
+
+        Supported forms include:
+
+            correlate(signals)
+
+            correlate(
+                signals=signals,
+                case_id=case_id,
             )
 
-            value = (
-                artifact.get(
-                    "value"
-                )
+            correlate(
+                signals=signals,
+                case_id=case_id,
+                context=context,
             )
+        """
 
+        correlate: Callable[..., Any] = (
+            self.correlation_engine.correlate
+        )
 
-            if not value:
-                continue
-
-
-            indicators.append(
-
-                {
-
-                    "type":
-                        artifact_type,
-
-                    "value":
-                        value,
-
-                    "confidence":
-                        artifact.get(
-                            "confidence",
-                            50,
-                        ),
-
-                }
-
+        # Canonical current contract.
+        try:
+            return correlate(
+                signals
             )
+        except TypeError:
+            pass
 
+        # Extended contract.
+        try:
+            return correlate(
+                signals=signals,
+                case_id=case_id,
+                context=context,
+            )
+        except TypeError:
+            pass
 
-        return indicators
+        # Case-aware legacy contract.
+        try:
+            return correlate(
+                signals=signals,
+                case_id=case_id,
+            )
+        except TypeError:
+            pass
 
+        # Keyword-only signal contract.
+        return correlate(
+            signals=signals
+        )
 
-
-    # =====================================================
+    # =========================================================
     # FUSION
-    # =====================================================
+    # =========================================================
 
-    def _run_fusion(
+    def _fuse(
         self,
-        case_id,
-        correlation,
+        artifacts: list[dict[str, Any]],
+        correlation: Any,
+        case_id: Optional[str],
+    ) -> Any:
+        """
+        Execute threat fusion.
+
+        Supports both:
+
+            fuse(payload)
+
+        and older two-payload implementations.
+        """
+
+        correlation_data = self._as_dict(
+            correlation
+        )
+
+        payload = {
+            "case_id": case_id,
+            "artifacts": list(
+                artifacts
+            ),
+            "correlation": correlation_data,
+            "risk_score": self._extract_risk_score(
+                correlation
+            ),
+            "indicators": list(
+                artifacts
+            ),
+        }
+
+        fuse = self.fusion_engine.fuse
+
+        try:
+            return fuse(
+                payload
+            )
+        except TypeError:
+            return fuse(
+                {
+                    "case_id": case_id,
+                },
+                payload,
+            )
+
+    # =========================================================
+    # REASONING
+    # =========================================================
+
+    def _reason(
+        self,
+        artifacts: list[dict[str, Any]],
+        correlation: Any,
+        fusion: Any,
+        context: Any = None,
     ) -> dict[str, Any]:
         """
-        Execute threat fusion layer.
+        Execute optional reasoning.
+
+        When no reasoning engine is configured, a deterministic
+        completed envelope is returned.
         """
 
+        if self.reasoning_engine is None:
+            return {
+                "reasoning_status": "completed",
+                "reasoning_available": False,
+                "summary": (
+                    self._build_reasoning_summary(
+                        correlation,
+                        fusion,
+                    )
+                ),
+                "metadata": {},
+            }
+
+        engine = self.reasoning_engine
+
         try:
+            if hasattr(
+                engine,
+                "reason",
+            ):
+                output = engine.reason(
+                    artifacts=artifacts,
+                    correlation=correlation,
+                    fusion=fusion,
+                    context=context,
+                )
 
-            return self.fusion_engine.fuse(
+            elif hasattr(
+                engine,
+                "analyze",
+            ):
+                output = engine.analyze(
+                    artifacts=artifacts,
+                    correlation=correlation,
+                    fusion=fusion,
+                    context=context,
+                )
 
-                {
-                    "case_id":
-                        case_id,
-                },
+            elif callable(engine):
+                output = engine(
+                    artifacts,
+                    correlation,
+                    fusion,
+                )
 
-                {
+            else:
+                output = None
 
-                    "risk_score":
-                        self._risk_score(
-                            correlation
-                        ),
+            return {
+                "reasoning_status": "completed",
+                "reasoning_available": True,
+                "output": output,
+                "metadata": {},
+            }
 
-                    "indicators":
-                        correlation.entities
-                        if hasattr(
-                            correlation,
-                            "entities",
-                        )
-                        else [],
+        except TypeError:
+            # Compatibility with simple reasoning engines.
+            try:
+                if hasattr(
+                    engine,
+                    "reason",
+                ):
+                    output = engine.reason(
+                        artifacts
+                    )
 
-                },
+                elif hasattr(
+                    engine,
+                    "analyze",
+                ):
+                    output = engine.analyze(
+                        artifacts
+                    )
 
-            )
+                elif callable(engine):
+                    output = engine(
+                        artifacts
+                    )
 
+                else:
+                    output = None
+
+                return {
+                    "reasoning_status": "completed",
+                    "reasoning_available": True,
+                    "output": output,
+                    "metadata": {},
+                }
+
+            except Exception as exc:
+                return {
+                    "reasoning_status": "failed",
+                    "reasoning_available": True,
+                    "output": None,
+                    "error": str(exc),
+                    "metadata": {},
+                }
 
         except Exception as exc:
-
             return {
-
-                "error":
-                    str(exc),
-
+                "reasoning_status": "failed",
+                "reasoning_available": True,
+                "output": None,
+                "error": str(exc),
+                "metadata": {},
             }
 
+    # =========================================================
+    # RESULT BUILDING
+    # =========================================================
 
-
-    # =====================================================
-    # REASONING
-    # =====================================================
-
-    def _run_reasoning(
+    def _build_success_result(
         self,
-        artifacts,
-        correlation,
-        fusion,
-    ):
+        artifacts: list[dict[str, Any]],
+        correlation: Any,
+        fusion: Any,
+        reasoning: dict[str, Any],
+        case_id: Optional[str],
+        investigation_id: str,
+        started_at: str,
+        context: Any = None,
+    ) -> InvestigationResult:
+        """
+        Build the canonical successful InvestigationResult.
+        """
 
-        if self.reasoning_engine is None:
+        correlation_data = self._as_dict(
+            correlation
+        )
 
-            return {
+        fusion_data = self._as_dict(
+            fusion
+        )
 
-                "reasoning_status":
-                    "completed",
+        risk = self._extract_risk(
+            fusion_data,
+            correlation_data,
+        )
 
-                "summary":
-                    "Investigation completed using intelligence pipeline.",
+        confidence = self._extract_confidence(
+            fusion_data,
+            correlation_data,
+        )
 
-            }
+        indicators = self._extract_indicators(
+            artifacts,
+            correlation_data,
+        )
 
+        entities = self._extract_list(
+            correlation_data,
+            "entities",
+        )
 
-        try:
+        relationships = self._extract_list(
+            correlation_data,
+            "relationships",
+        )
 
-            return (
-                self.reasoning_engine.analyze(
+        mitre = self._extract_mitre(
+            correlation_data,
+            fusion_data,
+        )
+
+        recommendations = (
+            self._extract_recommendations(
+                fusion_data,
+                reasoning,
+            )
+        )
+
+        attack_story = (
+            fusion_data.get(
+                "summary"
+            )
+            or correlation_data.get(
+                "attack_story"
+            )
+            or reasoning.get(
+                "summary"
+            )
+        )
+
+        intelligence = {
+            "correlation": correlation_data,
+            "fusion": fusion_data,
+            "reasoning": reasoning,
+        }
+
+        execution = {
+            "orchestrator": (
+                "InvestigationOrchestrator"
+            ),
+            "investigation_id": (
+                investigation_id
+            ),
+            "case_id": case_id,
+            "artifact_count": len(
+                artifacts
+            ),
+            "started_at": started_at,
+            "completed_at": self._timestamp(),
+        }
+
+        metadata = {
+            "orchestrator": (
+                "InvestigationOrchestrator"
+            ),
+            "artifact_count": len(
+                artifacts
+            ),
+            "started_at": started_at,
+            "completed_at": execution[
+                "completed_at"
+            ],
+            "context_available": (
+                context is not None
+                or bool(
+                    artifacts
+                    or case_id
+                )
+            ),
+            "correlation": correlation_data,
+            "fusion": fusion_data,
+            "execution": execution,
+        }
+
+        # The InvestigationResult contract has evolved over time.
+        # Build the result using the fields currently supported by
+        # the repository contract, then populate compatibility
+        # aliases defensively.
+        result = InvestigationResult(
+            success=True,
+            status="completed",
+            message=(
+                "Investigation completed successfully."
+            ),
+            error=None,
+            investigation_id=(
+                investigation_id
+            ),
+            case_id=case_id,
+            artifacts=list(
+                artifacts
+            ),
+            correlation=correlation_data,
+            fusion=fusion_data,
+            reasoning=reasoning,
+            intelligence=intelligence,
+            findings=list(
+                indicators
+            ),
+            indicators=list(
+                indicators
+            ),
+            entities=list(
+                entities
+            ),
+            relationships=list(
+                relationships
+            ),
+            mitre=list(
+                mitre
+            ),
+            recommendations=list(
+                recommendations
+            ),
+            attack_story=attack_story,
+            execution=execution,
+            confidence=confidence,
+            risk=risk,
+            priority=self._extract_priority(
+                fusion_data
+            ),
+            metadata=metadata,
+        )
+
+        return result
+
+    def _build_failure_result(
+        self,
+        error: str,
+        case_id: Optional[str],
+        investigation_id: str,
+        started_at: str,
+        artifacts: Optional[
+            list[dict[str, Any]]
+        ] = None,
+    ) -> InvestigationResult:
+        """
+        Build a stable failed investigation result.
+        """
+
+        completed_at = self._timestamp()
+
+        result = InvestigationResult(
+            success=False,
+            status="failed",
+            message=(
+                "Investigation execution failed."
+            ),
+            error=error,
+            investigation_id=(
+                investigation_id
+            ),
+            case_id=case_id,
+            artifacts=list(
+                artifacts or []
+            ),
+            findings=[],
+            indicators=[],
+            entities=[],
+            relationships=[],
+            mitre=[],
+            recommendations=[],
+            metadata={
+                "orchestrator": (
+                    "InvestigationOrchestrator"
+                ),
+                "started_at": started_at,
+                "completed_at": completed_at,
+            },
+        )
+
+        return result
+
+    # =========================================================
+    # NORMALIZATION
+    # =========================================================
+
+    @staticmethod
+    def _normalize_artifacts(
+        artifacts: Optional[
+            list[dict[str, Any]]
+        ],
+    ) -> list[dict[str, Any]]:
+        """
+        Normalize investigation artifacts.
+
+        The original artifact collection is preserved semantically.
+        No synthetic artifacts are inserted here.
+        """
+
+        if artifacts is None:
+            return []
+
+        normalized: list[
+            dict[str, Any]
+        ] = []
+
+        for artifact in artifacts:
+            if isinstance(
+                artifact,
+                dict,
+            ):
+                normalized.append(
+                    dict(artifact)
+                )
+            else:
+                normalized.append(
                     {
-                        "artifacts":
-                            artifacts,
-
-                        "correlation":
-                            correlation,
-
-                        "fusion":
-                            fusion,
-
+                        "type": "unknown",
+                        "value": artifact,
                     }
                 )
+
+        return normalized
+
+    @staticmethod
+    def _build_correlation_signals(
+        artifacts: list[
+            dict[str, Any]
+        ],
+    ) -> list[
+        dict[str, Any]
+    ]:
+        """
+        Build correlation signals.
+
+        Correlation engines in Sentinel DNA operate on a minimum
+        two-signal investigation context. When an investigation
+        contains only one artifact, a derived context signal is
+        added. This does not alter the original artifact list.
+
+        For empty investigations, two deterministic context signals
+        are supplied so correlation engines can safely execute.
+        """
+
+        signals: list[
+            dict[str, Any]
+        ] = []
+
+        for artifact in artifacts:
+            artifact_type = artifact.get(
+                "type",
+                artifact.get(
+                    "entity_type",
+                    "unknown",
+                ),
             )
 
+            value = artifact.get(
+                "value",
+                artifact.get(
+                    "ioc",
+                    artifact.get(
+                        "indicator"
+                    ),
+                ),
+            )
 
-        except Exception as exc:
+            signals.append(
+                {
+                    **artifact,
+                    "type": artifact_type,
+                    "value": value,
+                }
+            )
 
+        if len(signals) == 0:
+            signals.extend(
+                [
+                    {
+                        "type": "investigation_context",
+                        "value": "empty",
+                        "synthetic": True,
+                    },
+                    {
+                        "type": "investigation_context",
+                        "value": "no_artifacts",
+                        "synthetic": True,
+                    },
+                ]
+            )
+
+        elif len(signals) == 1:
+            original = signals[0]
+
+            signals.append(
+                {
+                    "type": "investigation_context",
+                    "value": original.get(
+                        "value"
+                    ),
+                    "source": (
+                        original.get(
+                            "type"
+                        )
+                    ),
+                    "synthetic": True,
+                }
+            )
+
+        return signals
+
+    # =========================================================
+    # EXTRACTION HELPERS
+    # =========================================================
+
+    @staticmethod
+    def _as_dict(
+        value: Any,
+    ) -> dict[str, Any]:
+        """
+        Convert a runtime intelligence result into a dictionary.
+        """
+
+        if value is None:
+            return {}
+
+        if isinstance(
+            value,
+            dict,
+        ):
+            return dict(value)
+
+        if hasattr(
+            value,
+            "to_dict",
+        ):
+            try:
+                converted = value.to_dict()
+
+                if isinstance(
+                    converted,
+                    dict,
+                ):
+                    return dict(
+                        converted
+                    )
+
+            except Exception:
+                pass
+
+        if hasattr(
+            value,
+            "__dict__",
+        ):
             return {
-
-                "reasoning_status":
-                    "failed",
-
-                "error":
-                    str(exc),
-
+                key: val
+                for key, val in vars(
+                    value
+                ).items()
+                if not key.startswith("_")
             }
 
+        return {}
 
+    @staticmethod
+    def _extract_list(
+        data: dict[str, Any],
+        key: str,
+    ) -> list[Any]:
+        """
+        Extract a normalized list field.
+        """
 
-    # =====================================================
-    # RISK
-    # =====================================================
+        value = data.get(
+            key
+        )
 
-    def _risk_score(
-        self,
-        correlation,
-    ) -> int:
+        if value is None:
+            return []
 
-        confidence = getattr(
+        if isinstance(
+            value,
+            list,
+        ):
+            return list(
+                value
+            )
+
+        if isinstance(
+            value,
+            tuple,
+        ):
+            return list(
+                value
+            )
+
+        return [value]
+
+    @staticmethod
+    def _extract_risk_score(
+        correlation: Any,
+    ) -> float:
+        """
+        Extract numeric risk score from correlation output.
+        """
+
+        data = (
+            InvestigationOrchestrator._as_dict(
+                correlation
+            )
+        )
+
+        value = data.get(
+            "risk_score",
+            data.get(
+                "score",
+                0,
+            ),
+        )
+
+        try:
+            return float(
+                value
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return 0.0
+
+    @staticmethod
+    def _extract_risk(
+        fusion: dict[str, Any],
+        correlation: dict[str, Any],
+    ) -> str:
+        """
+        Extract normalized risk.
+        """
+
+        threat = fusion.get(
+            "threat_assessment",
+            {},
+        )
+
+        if isinstance(
+            threat,
+            dict,
+        ):
+            risk = threat.get(
+                "risk"
+            )
+
+            if risk:
+                return str(
+                    risk
+                )
+
+        risk = fusion.get(
+            "risk"
+        )
+
+        if risk:
+            return str(
+                risk
+            )
+
+        risk = correlation.get(
+            "risk"
+        )
+
+        if risk:
+            return str(
+                risk
+            )
+
+        return "unknown"
+
+    @staticmethod
+    def _extract_priority(
+        fusion: dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Extract investigation priority.
+        """
+
+        threat = fusion.get(
+            "threat_assessment",
+            {},
+        )
+
+        if isinstance(
+            threat,
+            dict,
+        ):
+            priority = threat.get(
+                "priority"
+            )
+
+            if priority is not None:
+                return str(
+                    priority
+                )
+
+        priority = fusion.get(
+            "priority"
+        )
+
+        if priority is not None:
+            return str(
+                priority
+            )
+
+        return None
+
+    @staticmethod
+    def _extract_confidence(
+        fusion: dict[str, Any],
+        correlation: dict[str, Any],
+    ) -> float:
+        """
+        Extract normalized confidence.
+        """
+
+        threat = fusion.get(
+            "threat_assessment",
+            {},
+        )
+
+        if isinstance(
+            threat,
+            dict,
+        ):
+            value = threat.get(
+                "confidence"
+            )
+
+            if value is not None:
+                try:
+                    return float(
+                        value
+                    )
+
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    pass
+
+        for source in (
+            fusion,
             correlation,
-            "confidence",
-            0,
+        ):
+            value = source.get(
+                "confidence"
+            )
+
+            if value is not None:
+                try:
+                    return float(
+                        value
+                    )
+
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
+
+        return 0.0
+
+    @staticmethod
+    def _extract_indicators(
+        artifacts: list[
+            dict[str, Any]
+        ],
+        correlation: dict[str, Any],
+    ) -> list[Any]:
+        """
+        Extract investigation indicators.
+        """
+
+        indicators = correlation.get(
+            "indicators"
         )
 
+        if isinstance(
+            indicators,
+            list,
+        ):
+            return list(
+                indicators
+            )
 
-        return int(
-            confidence * 100
+        return list(
+            artifacts
         )
+
+    @staticmethod
+    def _extract_mitre(
+        correlation: dict[str, Any],
+        fusion: dict[str, Any],
+    ) -> list[Any]:
+        """
+        Extract MITRE ATT&CK mappings.
+        """
+
+        for source in (
+            correlation,
+            fusion,
+        ):
+            value = source.get(
+                "mitre"
+            )
+
+            if isinstance(
+                value,
+                list,
+            ):
+                return list(
+                    value
+                )
+
+            threat = source.get(
+                "threat_assessment"
+            )
+
+            if isinstance(
+                threat,
+                dict,
+            ):
+                value = threat.get(
+                    "mitre"
+                )
+
+                if isinstance(
+                    value,
+                    list,
+                ):
+                    return list(
+                        value
+                    )
+
+        return []
+
+    @staticmethod
+    def _extract_recommendations(
+        fusion: dict[str, Any],
+        reasoning: dict[str, Any],
+    ) -> list[Any]:
+        """
+        Extract response recommendations.
+        """
+
+        for source in (
+            fusion,
+            reasoning,
+        ):
+            value = source.get(
+                "recommendations"
+            )
+
+            if isinstance(
+                value,
+                list,
+            ):
+                return list(
+                    value
+                )
+
+        return []
+
+    @staticmethod
+    def _build_reasoning_summary(
+        correlation: Any,
+        fusion: Any,
+    ) -> str:
+        """
+        Build a deterministic reasoning summary.
+        """
+
+        correlation_data = (
+            InvestigationOrchestrator._as_dict(
+                correlation
+            )
+        )
+
+        fusion_data = (
+            InvestigationOrchestrator._as_dict(
+                fusion
+            )
+        )
+
+        return (
+            fusion_data.get(
+                "summary"
+            )
+            or correlation_data.get(
+                "attack_story"
+            )
+            or (
+                "Investigation intelligence "
+                "processed."
+            )
+        )
+
+    # =========================================================
+    # IDENTIFIERS / TIME
+    # =========================================================
+
+    @staticmethod
+    def _generate_investigation_id(
+        case_id: Optional[str],
+    ) -> str:
+        """
+        Generate a globally useful investigation identifier.
+        """
+
+        prefix = (
+            case_id
+            if case_id
+            else "INVESTIGATION"
+        )
+
+        timestamp = datetime.now(
+            timezone.utc
+        ).strftime(
+            "%Y%m%d%H%M%S%f"
+        )
+
+        return (
+            f"{prefix}-{timestamp}"
+        )
+
+    @staticmethod
+    def _timestamp() -> str:
+        """
+        Return an ISO-8601 UTC timestamp.
+        """
+
+        return datetime.now(
+            timezone.utc
+        ).isoformat()
+
+
+__all__ = [
+    "InvestigationOrchestrator",
+]

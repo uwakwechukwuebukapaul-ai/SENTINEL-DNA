@@ -1,16 +1,32 @@
 """
 Sentinel DNA Investigation Result
 
-Unified investigation response contract.
+Unified investigation execution response contract.
 
-Used by:
+This contract is shared by:
 
 - Investigation Orchestrator
 - Investigation Pipeline
 - Investigation Service
-- Execution Orchestrator
-- Runtime Intelligence
-- SOC Dashboard
+- Investigation Coordinator
+- Investigation Intelligence
+- Runtime execution layers
+- Correlation layer
+- Threat fusion layer
+- Reasoning layer
+- Reporting layer
+- Investigation history
+
+The object supports both:
+
+    result.success
+
+and:
+
+    result["success"]
+
+The contract intentionally provides compatibility fields and
+helpers for older and newer investigation execution components.
 """
 
 from __future__ import annotations
@@ -22,30 +38,56 @@ from typing import Any, Optional
 @dataclass
 class InvestigationResult:
     """
-    Standard AI investigation output contract.
+    Standard Sentinel DNA investigation execution result.
+
+    This is the canonical result envelope for the investigation
+    execution layer.
+
+    Supports:
+
+    - Attribute-style access
+    - Dictionary-style access
+    - Success/failure factories
+    - Metadata mutation
+    - Intelligence result attachment
+    - Investigation findings
+    - IOC/indicator collections
+    - Backward compatibility
     """
 
-    # =====================================================
-    # Identity
-    # =====================================================
+    # =========================================================
+    # EXECUTION STATE
+    # =========================================================
+
+    success: bool = False
+
+    status: str = "failed"
+
+    message: Optional[str] = None
+
+    error: Optional[str] = None
+
+    # =========================================================
+    # CORRELATION IDENTIFIERS
+    # =========================================================
 
     investigation_id: Optional[str] = None
 
     case_id: Optional[str] = None
 
+    execution_id: Optional[str] = None
 
-    # =====================================================
-    # State
-    # =====================================================
+    # =========================================================
+    # INVESTIGATION INPUT
+    # =========================================================
 
-    status: str = "pending"
+    artifacts: list[Any] = field(
+        default_factory=list
+    )
 
-    message: Optional[str] = None
-
-
-    # =====================================================
-    # Intelligence Outputs
-    # =====================================================
+    # =========================================================
+    # INTELLIGENCE RESULTS
+    # =========================================================
 
     correlation: Any = None
 
@@ -53,10 +95,11 @@ class InvestigationResult:
 
     reasoning: Any = None
 
+    intelligence: Any = None
 
-    # =====================================================
-    # Findings
-    # =====================================================
+    # =========================================================
+    # INVESTIGATION FINDINGS
+    # =========================================================
 
     findings: list[Any] = field(
         default_factory=list
@@ -74,75 +117,266 @@ class InvestigationResult:
         default_factory=list
     )
 
+    mitre: list[Any] = field(
+        default_factory=list
+    )
 
-    # =====================================================
-    # Threat Assessment
-    # =====================================================
+    recommendations: list[Any] = field(
+        default_factory=list
+    )
 
-    risk_level: str = "unknown"
+    attack_story: Optional[str] = None
 
-    risk_score: int = 0
+    # =========================================================
+    # EXECUTION / WORKFLOW RESULTS
+    # =========================================================
+
+    execution: Any = None
+
+    workflow: Any = None
+
+    report: Any = None
+
+    # =========================================================
+    # GENERIC RESULT PAYLOADS
+    # =========================================================
+
+    output: Any = None
+
+    result: Any = None
+
+    data: Any = None
+
+    # =========================================================
+    # INTELLIGENCE METADATA
+    # =========================================================
 
     confidence: float = 0.0
 
+    risk: Optional[str] = None
 
-    # =====================================================
-    # Response Intelligence
-    # =====================================================
+    priority: Optional[str] = None
 
-    mitre: list[str] = field(
-        default_factory=list
-    )
-
-    recommendations: list[str] = field(
-        default_factory=list
-    )
-
-
-    # =====================================================
-    # Metadata
-    # =====================================================
+    # =========================================================
+    # METADATA
+    # =========================================================
 
     metadata: dict[str, Any] = field(
         default_factory=dict
     )
 
+    # =========================================================
+    # SUCCESS FACTORIES
+    # =========================================================
 
-    created_at: Optional[str] = None
+    @classmethod
+    def ok(
+        cls,
+        result: Any = None,
+        message: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "InvestigationResult":
+        """
+        Create a successful investigation result.
 
+        Explicit caller values always take precedence.
+        """
 
+        values = dict(kwargs)
 
-    # =====================================================
-    # Metadata Compatibility
-    # =====================================================
+        values.setdefault(
+            "success",
+            True,
+        )
+
+        values.setdefault(
+            "status",
+            "completed",
+        )
+
+        values.setdefault(
+            "message",
+            message,
+        )
+
+        values.setdefault(
+            "output",
+            result,
+        )
+
+        values.setdefault(
+            "result",
+            result,
+        )
+
+        values.setdefault(
+            "data",
+            result,
+        )
+
+        return cls(
+            **values
+        )
+
+    @classmethod
+    def success_result(
+        cls,
+        result: Any = None,
+        message: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "InvestigationResult":
+        """
+        Compatibility alias for ok().
+        """
+
+        return cls.ok(
+            result=result,
+            message=message,
+            **kwargs,
+        )
+
+    # =========================================================
+    # FAILURE FACTORIES
+    # =========================================================
+
+    @classmethod
+    def fail(
+        cls,
+        error: Optional[str] = None,
+        message: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "InvestigationResult":
+        """
+        Create a failed investigation result.
+        """
+
+        values = dict(kwargs)
+
+        values.setdefault(
+            "success",
+            False,
+        )
+
+        values.setdefault(
+            "status",
+            "failed",
+        )
+
+        values.setdefault(
+            "message",
+            message,
+        )
+
+        values.setdefault(
+            "error",
+            error,
+        )
+
+        return cls(
+            **values
+        )
+
+    @classmethod
+    def failure(
+        cls,
+        error: Optional[str] = None,
+        message: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "InvestigationResult":
+        """
+        Compatibility factory for fail().
+        """
+
+        return cls.fail(
+            error=error,
+            message=message,
+            **kwargs,
+        )
+
+    @classmethod
+    def failure_result(
+        cls,
+        error: Optional[str] = None,
+        message: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "InvestigationResult":
+        """
+        Compatibility alias for failure().
+        """
+
+        return cls.failure(
+            error=error,
+            message=message,
+            **kwargs,
+        )
+
+    # =========================================================
+    # STATE HELPERS
+    # =========================================================
+
+    @property
+    def failed(self) -> bool:
+        """
+        True when the investigation did not succeed.
+        """
+
+        return self.success is False
+
+    @property
+    def completed(self) -> bool:
+        """
+        True when the investigation completed successfully.
+        """
+
+        return (
+            self.success is True
+            and self.status == "completed"
+        )
+
+    @property
+    def successful(self) -> bool:
+        """
+        Compatibility alias for success.
+        """
+
+        return self.success is True
+
+    # =========================================================
+    # METADATA HELPERS
+    # =========================================================
 
     def add_metadata(
         self,
         key: str,
         value: Any,
-    ):
+    ) -> "InvestigationResult":
         """
-        Add single metadata value.
+        Add or replace one metadata value.
         """
 
         self.metadata[key] = value
 
         return self
 
-
-
     def update_metadata(
         self,
         values: Optional[dict[str, Any]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> "InvestigationResult":
         """
-        Update metadata values.
+        Update multiple metadata values.
 
-        Compatible with:
-        - Investigation Pipeline
-        - Investigation Service
-        - Runtime consumers
+        Supports:
+
+            result.update_metadata(
+                {"key": "value"}
+            )
+
+        and:
+
+            result.update_metadata(
+                key="value"
+            )
         """
 
         if values:
@@ -157,17 +391,245 @@ class InvestigationResult:
 
         return self
 
+    # =========================================================
+    # RESULT ATTACHMENT HELPERS
+    # =========================================================
 
-
-    # =====================================================
-    # Serialization
-    # =====================================================
-
-    def to_dict(
+    def set_correlation(
         self,
-    ) -> dict[str, Any]:
+        correlation: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach correlation output.
+        """
+
+        self.correlation = correlation
+
+        return self
+
+    def set_fusion(
+        self,
+        fusion: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach threat-fusion output.
+        """
+
+        self.fusion = fusion
+
+        return self
+
+    def set_reasoning(
+        self,
+        reasoning: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach reasoning output.
+        """
+
+        self.reasoning = reasoning
+
+        return self
+
+    def set_intelligence(
+        self,
+        intelligence: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach aggregate intelligence output.
+        """
+
+        self.intelligence = intelligence
+
+        return self
+
+    def set_report(
+        self,
+        report: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach investigation report.
+        """
+
+        self.report = report
+
+        return self
+
+    def set_findings(
+        self,
+        findings: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach investigation findings.
+        """
+
+        self.findings = self._normalize_list(
+            findings
+        )
+
+        return self
+
+    def set_indicators(
+        self,
+        indicators: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach investigation indicators / IOCs.
+        """
+
+        self.indicators = self._normalize_list(
+            indicators
+        )
+
+        return self
+
+    def set_recommendations(
+        self,
+        recommendations: Any,
+    ) -> "InvestigationResult":
+        """
+        Attach investigation recommendations.
+        """
+
+        self.recommendations = (
+            self._normalize_list(
+                recommendations
+            )
+        )
+
+        return self
+
+    # =========================================================
+    # NORMALIZATION
+    # =========================================================
+
+    @staticmethod
+    def _normalize_list(
+        value: Any,
+    ) -> list[Any]:
+        """
+        Normalize an arbitrary value into a list.
+        """
+
+        if value is None:
+            return []
+
+        if isinstance(
+            value,
+            list,
+        ):
+            return list(value)
+
+        if isinstance(
+            value,
+            tuple,
+        ):
+            return list(value)
+
+        return [value]
+
+    # =========================================================
+    # DICTIONARY COMPATIBILITY
+    # =========================================================
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> Any:
+        """
+        Dictionary-style access.
+
+        Examples:
+
+            result["success"]
+            result["correlation"]
+            result["fusion"]
+            result["reasoning"]
+            result["indicators"]
+            result["findings"]
+        """
+
+        return self.to_dict()[key]
+
+    def get(
+        self,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        """
+        Dictionary-style get().
+        """
+
+        return self.to_dict().get(
+            key,
+            default,
+        )
+
+    def keys(self):
+        """
+        Dictionary compatibility.
+        """
+
+        return self.to_dict().keys()
+
+    def values(self):
+        """
+        Dictionary compatibility.
+        """
+
+        return self.to_dict().values()
+
+    def items(self):
+        """
+        Dictionary compatibility.
+        """
+
+        return self.to_dict().items()
+
+    def __contains__(
+        self,
+        key: str,
+    ) -> bool:
+        """
+        Dictionary compatibility.
+        """
+
+        return key in self.to_dict()
+
+    # =========================================================
+    # SERIALIZATION
+    # =========================================================
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the investigation result into an
+        API-friendly dictionary.
+
+        Runtime objects are intentionally preserved here.
+        Higher-level API serializers may normalize them
+        at their transport boundaries.
+        """
 
         return {
+            # -------------------------------------------------
+            # Execution state
+            # -------------------------------------------------
+
+            "success":
+                self.success,
+
+            "status":
+                self.status,
+
+            "message":
+                self.message,
+
+            "error":
+                self.error,
+
+            # -------------------------------------------------
+            # Identifiers
+            # -------------------------------------------------
 
             "investigation_id":
                 self.investigation_id,
@@ -175,11 +637,21 @@ class InvestigationResult:
             "case_id":
                 self.case_id,
 
-            "status":
-                self.status,
+            "execution_id":
+                self.execution_id,
 
-            "message":
-                self.message,
+            # -------------------------------------------------
+            # Input
+            # -------------------------------------------------
+
+            "artifacts":
+                list(
+                    self.artifacts
+                ),
+
+            # -------------------------------------------------
+            # Intelligence
+            # -------------------------------------------------
 
             "correlation":
                 self.correlation,
@@ -190,141 +662,130 @@ class InvestigationResult:
             "reasoning":
                 self.reasoning,
 
+            "intelligence":
+                self.intelligence,
+
+            # -------------------------------------------------
+            # Findings
+            # -------------------------------------------------
+
             "findings":
-                self.findings,
+                list(
+                    self.findings
+                ),
 
             "indicators":
-                self.indicators,
+                list(
+                    self.indicators
+                ),
 
             "entities":
-                self.entities,
+                list(
+                    self.entities
+                ),
 
             "relationships":
-                self.relationships,
-
-            "risk":
-
-                {
-                    "level":
-                        self.risk_level,
-
-                    "score":
-                        self.risk_score,
-
-                    "confidence":
-                        self.confidence,
-                },
-
+                list(
+                    self.relationships
+                ),
 
             "mitre":
-                self.mitre,
+                list(
+                    self.mitre
+                ),
 
             "recommendations":
-                self.recommendations,
+                list(
+                    self.recommendations
+                ),
+
+            "attack_story":
+                self.attack_story,
+
+            # -------------------------------------------------
+            # Execution
+            # -------------------------------------------------
+
+            "execution":
+                self.execution,
+
+            "workflow":
+                self.workflow,
+
+            "report":
+                self.report,
+
+            # -------------------------------------------------
+            # Generic payloads
+            # -------------------------------------------------
+
+            "output":
+                self.output,
+
+            "result":
+                self.result,
+
+            "data":
+                self.data,
+
+            # -------------------------------------------------
+            # Intelligence metadata
+            # -------------------------------------------------
+
+            "confidence":
+                self.confidence,
+
+            "risk":
+                self.risk,
+
+            "priority":
+                self.priority,
+
+            # -------------------------------------------------
+            # Metadata
+            # -------------------------------------------------
 
             "metadata":
                 dict(
                     self.metadata
                 ),
-
-            "created_at":
-                self.created_at,
         }
 
+    # =========================================================
+    # BOOLEAN COMPATIBILITY
+    # =========================================================
 
-
-    # =====================================================
-    # Dictionary Compatibility
-    # =====================================================
-
-    def __getitem__(
-        self,
-        key: str,
-    ):
-        return self.to_dict()[key]
-
-
-
-    def get(
-        self,
-        key: str,
-        default=None,
-    ):
-        return self.to_dict().get(
-            key,
-            default,
-        )
-
-
-
-    # =====================================================
-    # Status Helpers
-    # =====================================================
-
-    @property
-    def completed(
+    def is_success(
         self,
     ) -> bool:
+        """
+        Return True when the investigation succeeded.
+        """
 
-        return self.status == "completed"
+        return self.success is True
 
-
-
-    @property
-    def failed(
+    def is_failed(
         self,
     ) -> bool:
+        """
+        Return True when the investigation failed.
+        """
 
-        return self.status == "failed"
-
-
+        return self.failed
 
     def __bool__(
         self,
-    ):
+    ) -> bool:
+        """
+        Allow:
 
-        return self.completed
+            if result:
+                ...
+        """
 
-
-
-    # =====================================================
-    # Factories
-    # =====================================================
-
-    @classmethod
-    def success(
-        cls,
-        **kwargs,
-    ):
-
-        kwargs.setdefault(
-            "status",
-            "completed",
-        )
-
-        return cls(
-            **kwargs
-        )
+        return self.success is True
 
 
-
-    @classmethod
-    def failure(
-        cls,
-        error: str,
-        **kwargs,
-    ):
-
-        kwargs.setdefault(
-            "status",
-            "failed",
-        )
-
-        kwargs.setdefault(
-            "message",
-            error,
-        )
-
-        return cls(
-            **kwargs
-        )
+__all__ = [
+    "InvestigationResult",
+]
