@@ -1,18 +1,16 @@
 """
-Sentinel DNA Threat Simulation Framework
-
-Provides controlled security scenario execution
-for AI investigation validation.
+Sentinel DNA Simulation Package
 """
 
 from .scenario_loader import ScenarioLoader
-from .simulation_engine import SimulationEngine
-from .simulation_runner import SimulationRunner
-from .simulation_result import SimulationResult
+from .simulation_executor import SimulationExecutor
+from .investigation_simulator import (
+    InvestigationSimulator
+)
+
 
 __all__ = [
     "ScenarioLoader",
-    "SimulationEngine",
-    "SimulationRunner",
-    "SimulationResult",
+    "SimulationExecutor",
+    "InvestigationSimulator",
 ]
