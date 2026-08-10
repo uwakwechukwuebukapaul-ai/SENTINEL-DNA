@@ -6,7 +6,7 @@ workflows from security cases.
 """
 
 
-from .models import (
+from ...models import (
     InvestigationPlan,
     InvestigationTask,
 )
