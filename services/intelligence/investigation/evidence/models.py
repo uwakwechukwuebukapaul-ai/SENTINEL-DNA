@@ -1,36 +1,79 @@
 """
-Evidence data models.
+Sentinel DNA Evidence Intelligence Models.
+
+Defines structured contracts for investigation evidence.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from typing import Any
 
 
 @dataclass
 class EvidenceArtifact:
     """
-    Represents collected investigation evidence.
+    Represents a normalized investigation artifact.
     """
 
-    evidence_type: str
-    value: str
-    source: str
+    artifact_type: str
 
-    metadata: dict = field(
-        default_factory=dict
+    value: Any
+
+    source: str = "unknown"
+
+    risk: str = "low"
+
+    confidence: int = 50
+
+    indicators: list[str] = field(
+        default_factory=list
     )
 
-    created_at: str = field(
-        default_factory=lambda:
-        datetime.utcnow().isoformat()
+    metadata: dict[str, Any] = field(
+        default_factory=dict
     )
 
 
     def to_dict(self):
         return {
-            "evidence_type": self.evidence_type,
+            "artifact_type": self.artifact_type,
             "value": self.value,
             "source": self.source,
+            "risk": self.risk,
+            "confidence": self.confidence,
+            "indicators": self.indicators,
             "metadata": self.metadata,
-            "created_at": self.created_at,
+        }
+
+
+@dataclass
+class EvidenceCollection:
+    """
+    Container for investigation evidence artifacts.
+    """
+
+    case_id: str
+
+    artifacts: list[EvidenceArtifact] = field(
+        default_factory=list
+    )
+
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+
+    def to_dict(self):
+
+        return {
+            "case_id": self.case_id,
+            "artifacts": [
+                artifact.to_dict()
+                if hasattr(
+                    artifact,
+                    "to_dict",
+                )
+                else artifact
+                for artifact in self.artifacts
+            ],
+            "metadata": self.metadata,
         }

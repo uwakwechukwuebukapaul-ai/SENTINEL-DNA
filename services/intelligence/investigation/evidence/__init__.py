@@ -1,11 +1,22 @@
 """
-Sentinel DNA Evidence Package.
+Sentinel DNA Investigation Evidence Intelligence Layer.
+
+Provides evidence normalization, artifact classification,
+indicator extraction, and investigation context preparation.
 """
 
+from .models import (
+    EvidenceArtifact,
+    EvidenceCollection,
+)
 
-from .evidence_model import Evidence
-from .evidence_store import EvidenceStore
+from .engine import (
+    EvidenceIntelligenceEngine,
+)
+
+
 __all__ = [
-    "Evidence",
-    "EvidenceStore",
+    "EvidenceArtifact",
+    "EvidenceCollection",
+    "EvidenceIntelligenceEngine",
 ]
