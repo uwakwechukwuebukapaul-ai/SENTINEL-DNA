@@ -8,25 +8,36 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.intelligence.cases.case_timeline import (
+from .case_timeline import (
     CaseTimeline,
 )
 
-from services.intelligence.cases.evidence_graph import (
+from .evidence_graph import (
     EvidenceGraph,
 )
 
-from services.intelligence.cases.investigation_state import (
+from .investigation_state import (
     InvestigationState,
 )
 
 
 class CaseManager:
+    """
+    Enterprise case lifecycle manager.
+    """
 
-    def __init__(self):
+
+    def __init__(
+        self,
+    ) -> None:
 
         self.cases: dict[str, dict[str, Any]] = {}
 
+
+
+    # =====================================================
+    # CREATE CASE
+    # =====================================================
 
     def create_case(
         self,
@@ -40,11 +51,14 @@ class CaseManager:
 
             "alert": alert,
 
-            "state": InvestigationState.CREATED.value,
+            "state":
+                InvestigationState.CREATED.value,
 
-            "timeline": CaseTimeline(),
+            "timeline":
+                CaseTimeline(),
 
-            "evidence": EvidenceGraph(),
+            "evidence":
+                EvidenceGraph(),
 
         }
 
@@ -62,6 +76,10 @@ class CaseManager:
 
 
 
+    # =====================================================
+    # GET CASE
+    # =====================================================
+
     def get_case(
         self,
         case_id: str,
@@ -72,6 +90,10 @@ class CaseManager:
         )
 
 
+
+    # =====================================================
+    # UPDATE STATE
+    # =====================================================
 
     def update_state(
         self,
@@ -97,6 +119,117 @@ class CaseManager:
         case["timeline"].add_event(
             "state_changed",
             f"Case moved to {state.value}",
+        )
+
+
+        return case
+
+
+
+    # =====================================================
+    # ATTACH INVESTIGATION RESULT
+    # =====================================================
+
+    def update_investigation_result(
+        self,
+        case_id: str,
+        result: dict[str, Any],
+    ):
+        """
+        Attach intelligence output
+        to an existing investigation case.
+        """
+
+
+        case = self.cases.get(
+            case_id
+        )
+
+
+        if not case:
+
+            raise ValueError(
+                "Case not found"
+            )
+
+
+        case["investigation_id"] = (
+            result.get(
+                "investigation_id"
+            )
+        )
+
+
+        case["risk"] = (
+            result.get(
+                "risk",
+                {
+                    "level": "unknown",
+                    "score": 0,
+                },
+            )
+        )
+
+
+        case["confidence"] = (
+            result.get(
+                "confidence",
+                0.0,
+            )
+        )
+
+
+        case["findings"] = (
+            result.get(
+                "findings",
+                [],
+            )
+        )
+
+
+        case["indicators"] = (
+            result.get(
+                "indicators",
+                [],
+            )
+        )
+
+
+        case["mitre"] = (
+            result.get(
+                "mitre",
+                [],
+            )
+        )
+
+
+        case["timeline_data"] = (
+            result.get(
+                "timeline",
+                [],
+            )
+        )
+
+
+        case["recommendations"] = (
+            result.get(
+                "recommendations",
+                [],
+            )
+        )
+
+
+        case["report"] = (
+            result.get(
+                "report",
+                {},
+            )
+        )
+
+
+        case["timeline"].add_event(
+            "investigation_completed",
+            "Investigation results attached",
         )
 
 

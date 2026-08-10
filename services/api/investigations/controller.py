@@ -7,23 +7,17 @@ HTTP routes and intelligence engine.
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
-
-from .schemas import InvestigationResponseSchema
-
+from importlib import import_module
 
 
 def _load_orchestrator():
     """
-    Dynamically load InvestigationOrchestrator.
-
-    Supports current and future package layouts.
+    Locate investigation orchestrator.
     """
 
     module_names = (
         "services.intelligence.investigation.investigation_orchestrator",
-        "services.intelligence.investigations.investigation_orchestrator",
         "services.intelligence.investigation.orchestrator",
         "services.intelligence.orchestration.investigation_orchestrator",
     )
@@ -41,10 +35,12 @@ def _load_orchestrator():
                 module.InvestigationOrchestrator
             )
 
+
         except (
             ImportError,
             AttributeError,
         ):
+
             continue
 
 
@@ -54,15 +50,13 @@ def _load_orchestrator():
 
 
 
-InvestigationOrchestrator = (
-    _load_orchestrator()
-)
+InvestigationOrchestrator = _load_orchestrator()
 
 
 
 class InvestigationController:
     """
-    Executes security investigations.
+    API controller for investigations.
     """
 
 
@@ -71,10 +65,12 @@ class InvestigationController:
         orchestrator=None,
     ) -> None:
 
+
         self.orchestrator = (
             orchestrator
             or InvestigationOrchestrator()
         )
+
 
 
     def run(
@@ -88,32 +84,9 @@ class InvestigationController:
 
 
         result = self.orchestrator.investigate(
+            case_id=case_id or "UNKNOWN",
             artifacts=artifacts,
-            case_id=case_id,
         )
-
-
-        serialized = (
-            self._serialize_result(
-                result
-            )
-        )
-
-
-        return (
-            InvestigationResponseSchema.build(
-                serialized
-            )
-        )
-
-
-    @staticmethod
-    def _serialize_result(
-        result: Any,
-    ) -> dict[str, Any]:
-        """
-        Convert engine result into dictionary.
-        """
 
 
         if hasattr(
@@ -121,13 +94,8 @@ class InvestigationController:
             "to_dict",
         ):
 
-            converted = result.to_dict()
+            return result.to_dict()
 
-            if isinstance(
-                converted,
-                dict,
-            ):
-                return converted
 
 
         if isinstance(
@@ -135,15 +103,17 @@ class InvestigationController:
             dict,
         ):
 
-            return dict(
-                result
-            )
+            return result
+
 
 
         return {
+
             "success": False,
+
             "status": "failed",
-            "error": (
-                "Invalid investigation result"
-            ),
+
+            "error":
+                "Invalid investigation result",
+
         }

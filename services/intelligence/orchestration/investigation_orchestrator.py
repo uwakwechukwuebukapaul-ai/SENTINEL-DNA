@@ -1,17 +1,23 @@
 """
-Sentinel DNA - Investigation Orchestrator
+Sentinel DNA - Investigation Orchestrator.
 
-Coordinates investigation execution workflow.
+Coordinates autonomous investigation execution workflow.
 
 Flow:
 
 Case
- ↓
+  |
+  v
 Investigation
- ↓
+  |
+  v
 Execution
- ↓
+  |
+  v
 Report
+  |
+  v
+Case Update
 """
 
 from __future__ import annotations
@@ -24,6 +30,13 @@ from .execution_state import WorkflowState
 class InvestigationOrchestrator:
     """
     Main investigation workflow coordinator.
+
+    Responsibilities:
+
+    - Coordinate investigation lifecycle
+    - Execute intelligence workflow
+    - Generate final report
+    - Update case management state
     """
 
 
@@ -33,8 +46,9 @@ class InvestigationOrchestrator:
         executor=None,
         reporter=None,
         decision_engine=None,
+        case_manager=None,
         **kwargs,
-    ):
+    ) -> None:
 
         self.investigator = investigator
 
@@ -44,21 +58,35 @@ class InvestigationOrchestrator:
 
         self.decision_engine = decision_engine
 
+        self.case_manager = case_manager
+
         self.state = WorkflowState()
 
 
+
+    # =====================================================
+    # MAIN EXECUTION
+    # =====================================================
 
     def investigate(
         self,
         case_id: str,
         artifacts=None,
         **kwargs,
-    ):
+    ) -> dict[str, Any]:
+        """
+        Execute complete investigation workflow.
+        """
 
         artifacts = artifacts or []
 
 
         try:
+
+            self.state.set_status(
+                "running"
+            )
+
 
             investigation_result = (
                 self._run_investigator(
@@ -85,29 +113,43 @@ class InvestigationOrchestrator:
             )
 
 
-            self.state.set_status(
-                "completed"
-            )
-
-
-            return {
+            result = {
 
                 "case_id":
                     case_id,
 
+
                 "status":
                     "completed",
+
 
                 "investigation":
                     investigation_result,
 
+
                 "execution":
                     execution_result,
+
 
                 "report":
                     report_result,
 
             }
+
+
+            self._update_case(
+                case_id,
+                result,
+            )
+
+
+            self.state.set_status(
+                "completed"
+            )
+
+
+            return result
+
 
 
         except Exception as exc:
@@ -117,13 +159,15 @@ class InvestigationOrchestrator:
             )
 
 
-            return {
+            failure = {
 
                 "case_id":
                     case_id,
 
+
                 "status":
                     "failed",
+
 
                 "error":
                     str(exc),
@@ -131,13 +175,54 @@ class InvestigationOrchestrator:
             }
 
 
+            self._update_case(
+                case_id,
+                failure,
+            )
+
+
+            return failure
+
+
+
+    # =====================================================
+    # CASE MANAGEMENT INTEGRATION
+    # =====================================================
+
+    def _update_case(
+        self,
+        case_id: str,
+        result: dict[str, Any],
+    ) -> None:
+        """
+        Update investigation case state.
+        """
+
+        if not self.case_manager:
+            return
+
+
+        if hasattr(
+            self.case_manager,
+            "update_investigation_result",
+        ):
+
+            self.case_manager.update_investigation_result(
+                case_id,
+                result,
+            )
+
+
+
+    # =====================================================
+    # INVESTIGATION ENGINE
+    # =====================================================
 
     def _run_investigator(
         self,
-        case_id,
+        case_id: str,
         artifacts,
     ):
-
 
         if self.investigator:
 
@@ -165,27 +250,43 @@ class InvestigationOrchestrator:
 
         return {
 
-            "analysis":
+            "risk":
             {
-
-                "risk":
+                "level":
                     "high",
 
+                "score":
+                    90,
+            },
+
+
+            "analysis":
+            {
                 "threat":
                     "credential_phishing",
+            },
 
-            }
+
+            "findings":
+            [],
+
+
+            "indicators":
+            [],
 
         }
 
 
+
+    # =====================================================
+    # ACTION EXECUTION
+    # =====================================================
 
     def _run_execution(
         self,
         case_id,
         investigation,
     ):
-
 
         if self.executor:
 
@@ -216,12 +317,17 @@ class InvestigationOrchestrator:
             "action":
                 "contain",
 
+
             "status":
                 "completed",
 
         }
 
 
+
+    # =====================================================
+    # REPORT GENERATION
+    # =====================================================
 
     def _generate_report(
         self,
@@ -259,10 +365,15 @@ class InvestigationOrchestrator:
 
         return {
 
+            "case_id":
+                case_id,
+
+
             "status":
                 "completed",
 
-            "case_id":
-                case_id,
+
+            "summary":
+                "Investigation completed",
 
         }
