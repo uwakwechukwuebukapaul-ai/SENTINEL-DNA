@@ -1,223 +1,163 @@
 """
 Sentinel DNA Investigation View
 
-Creates analyst-readable investigation summaries.
+Provides analyst-facing investigation representation.
 
-Consumes:
-
-- InvestigationResult
-- InvestigationReport
-- Correlation output
-- Threat fusion output
-- Reasoning output
+Responsibilities:
+- Transform investigation intelligence into workspace format
+- Prepare SOC analyst view payloads
+- Preserve investigation context
+- Support dashboard/API serialization
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 
 class InvestigationView:
     """
-    Analyst investigation summary builder.
+    Analyst investigation workspace view builder.
     """
 
+    def __init__(self) -> None:
 
-    def build(
+        self.history: list[dict[str, Any]] = []
+
+
+    # =====================================================
+    # MAIN VIEW RENDERING
+    # =====================================================
+
+    def render(
         self,
-        investigation: dict[str, Any],
+        investigation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Build investigation analyst view.
+        Render analyst-ready investigation view.
         """
 
-        correlation = self._normalize(
-            investigation.get(
-                "correlation"
-            )
-        )
-
-        fusion = self._normalize(
-            investigation.get(
-                "fusion"
-            )
-        )
-
-        reasoning = self._normalize(
-            investigation.get(
-                "reasoning"
-            )
+        investigation = (
+            investigation
+            or {}
         )
 
 
-        threat = self._normalize(
-            fusion.get(
-                "threat_assessment"
-            )
-        )
-
-
-        return {
+        view = {
 
             "case_id":
                 investigation.get(
                     "case_id"
                 ),
 
-            "investigation_id":
-                investigation.get(
-                    "investigation_id"
-                ),
-
 
             "risk":
-                (
-                    investigation.get(
-                        "risk"
-                    )
-                    or threat.get(
-                        "risk"
-                    )
-                    or correlation.get(
-                        "risk"
-                    )
-                    or "unknown"
-                ),
-
-
-            "severity":
-                (
-                    investigation.get(
-                        "severity"
-                    )
-                    or threat.get(
-                        "priority"
-                    )
-                    or "unknown"
+                investigation.get(
+                    "risk",
+                    "unknown",
                 ),
 
 
             "confidence":
-                (
-                    investigation.get(
-                        "confidence"
-                    )
-                    or correlation.get(
-                        "confidence"
-                    )
-                    or threat.get(
-                        "confidence"
-                    )
-                    or 0.0
+                investigation.get(
+                    "confidence",
+                    0.0,
                 ),
 
 
-            "attack_story":
-                (
-                    investigation.get(
-                        "attack_story"
-                    )
-                    or fusion.get(
-                        "summary"
-                    )
-                    or correlation.get(
-                        "attack_story"
-                    )
-                    or reasoning.get(
-                        "summary"
-                    )
-                    or ""
-                ),
-
-
-            "entities":
-                correlation.get(
-                    "entities",
+            "findings":
+                investigation.get(
+                    "findings",
                     [],
                 ),
 
 
-            "relationships":
-                correlation.get(
-                    "relationships",
+            "indicators":
+                investigation.get(
+                    "indicators",
                     [],
                 ),
 
 
             "mitre":
-                (
-                    correlation.get(
-                        "mitre"
-                    )
-                    or fusion.get(
-                        "mitre"
-                    )
-                    or []
+                investigation.get(
+                    "mitre",
+                    [],
                 ),
 
 
             "recommendations":
-                (
-                    fusion.get(
-                        "recommendations"
-                    )
-                    or reasoning.get(
-                        "recommendations"
-                    )
-                    or []
-                ),
-
-
-            "status":
                 investigation.get(
-                    "status",
-                    "completed",
+                    "recommendations",
+                    [],
                 ),
+
+
+            "generated_at":
+                self._timestamp(),
+
         }
 
 
+        self.history.append(
+            view
+        )
 
-    @staticmethod
-    def _normalize(
-        value: Any,
+
+        return view
+
+
+
+    # =====================================================
+    # SERIALIZATION
+    # =====================================================
+
+    def to_dict(
+        self,
     ) -> dict[str, Any]:
         """
-        Normalize nested intelligence objects.
+        Return latest workspace state.
         """
 
-        if value is None:
+        if not self.history:
+
             return {}
 
 
-        if isinstance(
-            value,
-            dict,
-        ):
-            return dict(value)
+        return self.history[-1]
 
 
-        if hasattr(
-            value,
-            "to_dict",
-        ):
 
-            try:
-                return value.to_dict()
+    # =====================================================
+    # HISTORY
+    # =====================================================
 
-            except Exception:
-                pass
+    def get_history(
+        self,
+    ) -> list[dict[str, Any]]:
 
-
-        if hasattr(
-            value,
-            "__dict__",
-        ):
-
-            return {
-                key: item
-                for key, item in vars(value).items()
-                if not key.startswith("_")
-            }
+        return self.history
 
 
-        return {}
+
+    def clear_history(
+        self,
+    ) -> bool:
+
+        self.history.clear()
+
+        return True
+
+
+
+    # =====================================================
+    # INTERNALS
+    # =====================================================
+
+    @staticmethod
+    def _timestamp() -> str:
+
+        return datetime.now(
+            timezone.utc
+        ).isoformat()
