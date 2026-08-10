@@ -6,6 +6,10 @@ Registers API and platform services.
 
 from flask import Flask
 
+from services.api.investigations import (
+    investigation_bp,
+)
+
 
 def create_app():
 
@@ -18,19 +22,8 @@ def create_app():
     # API BLUEPRINTS
     # ==================================
 
-    from services.api.investigations import (
-        investigation_bp,
-        register_compatibility_routes,
-    )
-
-
     app.register_blueprint(
         investigation_bp
-    )
-
-
-    register_compatibility_routes(
-        app
     )
 
 
@@ -44,7 +37,7 @@ def create_app():
         return {
             "status": "running",
             "service": "Sentinel DNA",
-            "version": "1.0",
+            "version": "1.0"
         }
 
 
@@ -52,9 +45,11 @@ def create_app():
 
 
 
-if __name__ == "__main__":
+app = create_app()
 
-    app = create_app()
+
+
+if __name__ == "__main__":
 
     app.run(
         host="0.0.0.0",
