@@ -1,16 +1,23 @@
+"""
+Sentinel DNA Reasoning Intelligence Layer.
+
+Autonomous investigation reasoning components.
+"""
+
+
 from .reasoning_engine import (
-    InvestigationReasoner,
-    ReasoningEngine,
-    ReasoningResult,
+    InvestigationReasoningEngine,
 )
+
+
+# Backward-compatible public name
+InvestigationReasoner = InvestigationReasoningEngine
 
 
 __all__ = [
 
     "InvestigationReasoner",
 
-    "ReasoningEngine",
-
-    "ReasoningResult",
+    "InvestigationReasoningEngine",
 
 ]

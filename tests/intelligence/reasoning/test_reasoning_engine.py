@@ -1,54 +1,37 @@
-from services.intelligence.reasoning.reasoning_engine import (
-    ReasoningEngine,
+from services.intelligence.reasoning import (
+    InvestigationReasoningEngine,
 )
 
+
+class FakeContext:
+
+    artifacts = [
+        {
+            "url":
+            "http://evil-login.com"
+        }
+    ]
 
 
 def test_reasoning_engine():
 
-
-    engine = ReasoningEngine()
-
-
-    evidence = [
-
-        {
-            "type": "ioc",
-            "value": "malicious-domain.xyz",
-        },
-
-        {
-            "type": "threat",
-            "value": "phishing",
-        },
-
-    ]
+    engine = InvestigationReasoningEngine()
 
 
-
-    result = engine.analyze(
-        evidence
+    result = engine.reason(
+        FakeContext()
     )
 
 
     assert (
-        result["reasoning_status"]
+        result["threat"]
         ==
-        "completed"
+        "credential_phishing"
     )
 
 
     assert (
-        len(
-            result["hypotheses"]
-        )
-        ==
-        2
-    )
-
-
-    assert (
-        result["confidence"]
-        ==
-        40
+        result["risk"]["confidence"]
+        >
+        0
     )
