@@ -4,10 +4,15 @@ Sentinel DNA Application Entry Point.
 Registers API and platform services.
 """
 
+from __future__ import annotations
+
 from flask import Flask
 
 
-def create_app():
+def create_app() -> Flask:
+    """
+    Application factory.
+    """
 
     app = Flask(
         __name__
@@ -23,6 +28,12 @@ def create_app():
         register_compatibility_routes,
     )
 
+    from services.api.dashboard.routes import (
+        dashboard_bp,
+    )
+
+
+    # Investigation API
 
     app.register_blueprint(
         investigation_bp
@@ -31,6 +42,13 @@ def create_app():
 
     register_compatibility_routes(
         app
+    )
+
+
+    # Dashboard API
+
+    app.register_blueprint(
+        dashboard_bp
     )
 
 
@@ -51,6 +69,10 @@ def create_app():
     return app
 
 
+
+# ==================================
+# DEVELOPMENT SERVER
+# ==================================
 
 if __name__ == "__main__":
 
