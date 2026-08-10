@@ -1,13 +1,17 @@
 """
 Sentinel DNA Investigation Executor.
 
-Responsible for running investigation tasks.
+Executes investigation plans.
 """
 
 
 from ...models import (
     InvestigationResult,
     TaskExecutionResult,
+)
+
+from ..evidence.collector import (
+    EvidenceCollector,
 )
 
 
@@ -17,12 +21,19 @@ class InvestigationExecutor:
     """
 
 
+    def __init__(self):
+
+        self.evidence_collector = (
+            EvidenceCollector()
+        )
+
+
     def execute(
         self,
         plan,
     ) -> InvestigationResult:
         """
-        Execute all tasks inside a plan.
+        Execute investigation workflow.
         """
 
         result = InvestigationResult(
@@ -32,6 +43,13 @@ class InvestigationExecutor:
 
         for task in plan.tasks:
 
+            evidence = (
+                self.evidence_collector.collect(
+                    task
+                )
+            )
+
+
             task.status = "completed"
 
 
@@ -39,9 +57,10 @@ class InvestigationExecutor:
                 task_name=task.name,
                 status="completed",
                 output={
-                    "message": (
-                        f"{task.name} executed"
-                    )
+                    "evidence": [
+                        item.to_dict()
+                        for item in evidence
+                    ]
                 },
             )
 
