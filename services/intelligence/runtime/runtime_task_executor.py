@@ -1,7 +1,7 @@
 """
 Sentinel DNA Runtime Task Executor
 
-Enterprise execution engine.
+Canonical enterprise runtime execution engine.
 
 Responsibilities:
 
@@ -9,7 +9,16 @@ Responsibilities:
 - Execute runtime tasks
 - Track execution metrics
 - Report runtime status
-- Handle failures
+- Handle execution failures
+- Maintain compatibility with legacy runtime APIs
+
+Architecture:
+
+InvestigationCoordinator
+    -> InvestigationOrchestrator
+        -> RuntimeTaskExecutor
+            -> registered capability handler
+                -> agent/service execution
 """
 
 from __future__ import annotations
@@ -26,7 +35,13 @@ TaskHandler = Callable[[dict[str, Any]], Any]
 @dataclass
 class RuntimeTaskExecutor:
     """
-    Runtime task execution engine.
+    Canonical Sentinel DNA runtime task execution engine.
+
+    The executor owns capability registration and task execution
+    state for a runtime instance.
+
+    A handler receives the task payload and returns the execution
+    result.
     """
 
     handlers: dict[str, TaskHandler] = field(
@@ -37,6 +52,9 @@ class RuntimeTaskExecutor:
 
     failed: int = 0
 
+    # ------------------------------------------------------------------
+    # Capability registration
+    # ------------------------------------------------------------------
 
     def register(
         self,
@@ -44,35 +62,90 @@ class RuntimeTaskExecutor:
         handler: TaskHandler,
     ) -> None:
         """
-        Register capability handler.
+        Register a handler for a runtime capability.
+
+        Re-registering a capability intentionally replaces the
+        existing handler. This allows application bootstrap to
+        refresh capability implementations safely.
         """
+
+        if not isinstance(capability, str):
+            raise TypeError(
+                "capability must be a string."
+            )
+
+        capability = capability.strip()
+
+        if not capability:
+            raise ValueError(
+                "capability must not be empty."
+            )
+
+        if not callable(handler):
+            raise TypeError(
+                "handler must be callable."
+            )
 
         self.handlers[capability] = handler
 
+    # ------------------------------------------------------------------
+    # Capability discovery
+    # ------------------------------------------------------------------
 
     def available(
         self,
         capability: str,
     ) -> bool:
         """
-        Check capability availability.
+        Check whether a capability has a registered handler.
         """
 
         return capability in self.handlers
 
+    def capabilities(self) -> list[str]:
+        """
+        Return all registered runtime capabilities.
+        """
+
+        return list(self.handlers.keys())
+
+    # ------------------------------------------------------------------
+    # Task execution
+    # ------------------------------------------------------------------
 
     def execute(
         self,
         task: Task,
     ) -> Any:
         """
-        Execute task.
+        Execute a runtime task through its registered capability.
+
+        Lifecycle:
+
+        PENDING
+            -> RUNNING
+            -> COMPLETED
+
+        or:
+
+        PENDING
+            -> RUNNING
+            -> FAILED
+
+        Unknown capabilities fail deterministically and are counted
+        as failed executions.
         """
 
-        if not self.available(
-            task.capability
-        ):
+        if not isinstance(task, Task):
+            raise TypeError(
+                "task must be a Task instance."
+            )
 
+        handler = self.handlers.get(
+            task.capability
+        )
+
+        if handler is None:
             task.fail(
                 f"No handler registered for {task.capability}"
             )
@@ -81,70 +154,60 @@ class RuntimeTaskExecutor:
 
             return None
 
-
         task.start()
 
-
         try:
-
-            handler = self.handlers[
-                task.capability
-            ]
-
             result = handler(
                 task.payload
             )
-
 
             task.complete(
                 result
             )
 
-
             self.executed += 1
-
 
             return result
 
-
         except Exception as exc:
-
             task.fail(
                 str(exc)
             )
 
-
             self.failed += 1
-
 
             return None
 
+    # ------------------------------------------------------------------
+    # Runtime management
+    # ------------------------------------------------------------------
 
-    def capabilities(self) -> list[str]:
+    def clear(self) -> None:
         """
-        List registered capabilities.
+        Clear all registered capability handlers.
+
+        Execution metrics are intentionally preserved.
         """
 
-        return list(
-            self.handlers.keys()
-        )
+        self.handlers.clear()
 
+    # ------------------------------------------------------------------
+    # Metrics / status
+    # ------------------------------------------------------------------
 
     def status(self) -> dict[str, Any]:
         """
-        Runtime execution status.
+        Return runtime execution status.
         """
 
+        capabilities = self.capabilities()
+
         return {
-            "handlers": list(
-                self.handlers.keys()
-            ),
+            "handlers": capabilities,
             "registered_handlers": len(
-                self.handlers
+                capabilities
             ),
             "executed": self.executed,
             "failed": self.failed,
-            "available": list(
-                self.handlers.keys()
-            ),
+            "available": capabilities,
         }
