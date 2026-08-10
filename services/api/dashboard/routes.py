@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify
 
-from services.intelligence.dashboard.dashboard_adapter import (
-    DashboardAdapter,
+from services.intelligence.dashboard.dashboard_service import (
+    DashboardService,
 )
 
 
@@ -20,74 +20,26 @@ dashboard_bp = Blueprint(
 )
 
 
-adapter = DashboardAdapter()
+service = DashboardService()
 
 
 
 @dashboard_bp.route(
-    "/investigation",
+    "/investigation/<case_id>",
     methods=[
         "GET",
     ],
 )
-def investigation_dashboard():
+def investigation_dashboard(
+    case_id: str,
+):
     """
     Return dashboard-ready investigation payload.
     """
 
-    sample_view = {
 
-        "case_id": "CASE-001",
-
-        "investigation_id": "INV-001",
-
-        "status": "completed",
-
-        "risk": "high",
-
-        "confidence": 0.95,
-
-        "summary": {
-
-            "finding_count": 2,
-
-            "indicator_count": 4,
-
-        },
-
-        "findings": [
-
-            "Suspicious authentication activity",
-
-        ],
-
-        "indicators": [
-
-            "evil.com",
-
-        ],
-
-        "mitre": [
-
-            "T1566",
-
-        ],
-
-        "timeline": [],
-
-        "recommendations": [
-
-            "Reset credentials",
-
-        ],
-
-        "report": {},
-
-    }
-
-
-    result = adapter.build(
-        sample_view
+    result = service.get_dashboard(
+        case_id
     )
 
 
