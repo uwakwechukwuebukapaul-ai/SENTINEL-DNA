@@ -1,675 +1,609 @@
 """
 Sentinel DNA Investigation Timeline Intelligence Engine.
 
-Transforms raw investigation events into a normalized,
-chronological, analyst-ready investigation timeline.
+Builds a normalized, chronological investigation timeline from
+evidence, IOC intelligence, threat intelligence, and runtime events.
 
-Responsibilities:
-
-    Raw Events
-        ↓
-    Normalization
-        ↓
-    Chronological Ordering
-        ↓
-    Risk Assessment
-        ↓
-    Investigation Phase Detection
-        ↓
-    Timeline Narrative
+Design goals:
+- deterministic
+- analyst-readable
+- backwards compatible
+- security-first
+- dependency-light
+- suitable for future event-stream expansion
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
-
-from .models import (
-    InvestigationTimeline,
-    TimelineEvent,
-)
 
 
 class InvestigationTimelineEngine:
     """
-    Builds deterministic investigation timelines.
+    Builds a unified investigation timeline.
 
-    The engine is intentionally provider-independent.
-
-    External enrichment remains the responsibility of:
-
-        - IOC intelligence
-        - Threat intelligence
-        - Evidence intelligence
-        - Graph intelligence
-        - Detection providers
-
-    This engine focuses specifically on temporal
-    investigation intelligence.
+    The engine accepts heterogeneous event dictionaries and produces
+    a stable InvestigationTimeline-compatible representation.
     """
-
-    RISK_ORDER = {
-        "unknown": 0,
-        "low": 1,
-        "medium": 2,
-        "high": 3,
-        "critical": 4,
-    }
-
-    PHASE_KEYWORDS = {
-        "initial_access": {
-            "phishing",
-            "initial access",
-            "email",
-            "attachment",
-            "malicious link",
-            "credential harvesting",
-            "credential phishing",
-        },
-        "execution": {
-            "execution",
-            "command execution",
-            "script",
-            "powershell",
-            "process",
-            "payload",
-            "malware execution",
-        },
-        "persistence": {
-            "persistence",
-            "scheduled task",
-            "registry",
-            "startup",
-            "service",
-            "autorun",
-        },
-        "credential_access": {
-            "credential",
-            "password",
-            "credential harvesting",
-            "keylogging",
-            "authentication",
-            "credential dumping",
-        },
-        "discovery": {
-            "discovery",
-            "enumeration",
-            "scan",
-            "scanning",
-            "reconnaissance",
-            "system discovery",
-            "network discovery",
-        },
-        "lateral_movement": {
-            "lateral",
-            "lateral movement",
-            "remote",
-            "rdp",
-            "smb",
-            "movement",
-            "remote service",
-        },
-        "collection": {
-            "collection",
-            "archive",
-            "staging",
-            "data collection",
-            "file collection",
-        },
-        "command_and_control": {
-            "c2",
-            "command and control",
-            "beacon",
-            "callback",
-            "remote control",
-            "command channel",
-        },
-        "exfiltration": {
-            "exfiltration",
-            "exfil",
-            "data transfer",
-            "upload",
-            "data theft",
-        },
-        "impact": {
-            "impact",
-            "ransomware",
-            "encryption",
-            "destruction",
-            "denial of service",
-            "data destruction",
-        },
-    }
 
     def build(
         self,
         case_id: str,
-        events: list[Any] | None = None,
-    ) -> InvestigationTimeline:
+        events: Any = None,
+        evidence: Any = None,
+        iocs: Any = None,
+        threats: Any = None,
+    ):
         """
-        Build an investigation timeline.
+        Build a normalized investigation timeline.
 
         Parameters
         ----------
         case_id:
-            Investigation/case identifier.
+            Investigation case identifier.
 
         events:
-            Raw investigation events.
+            Optional explicit timeline events.
+
+        evidence:
+            Optional evidence records.
+
+        iocs:
+            Optional IOC records.
+
+        threats:
+            Optional threat intelligence records.
 
         Returns
         -------
         InvestigationTimeline
-            Normalized and chronologically ordered timeline.
+            Normalized timeline model.
         """
 
-        normalized_events = self._normalize_events(
-            events or []
-        )
+        normalized_events: list[Any] = []
+
+        # ---------------------------------------------------------
+        # 1. Explicit runtime events
+        # ---------------------------------------------------------
+
+        for event in self._normalize_collection(events):
+            normalized_events.append(
+                self._normalize_event(
+                    event,
+                    source="runtime",
+                )
+            )
+
+        # ---------------------------------------------------------
+        # 2. Evidence events
+        # ---------------------------------------------------------
+
+        for item in self._normalize_collection(evidence):
+            normalized_events.append(
+                self._normalize_event(
+                    item,
+                    source="evidence",
+                    default_event_type="evidence_observed",
+                )
+            )
+
+        # ---------------------------------------------------------
+        # 3. IOC events
+        # ---------------------------------------------------------
+
+        for item in self._normalize_collection(iocs):
+            normalized_events.append(
+                self._normalize_event(
+                    item,
+                    source="ioc_intelligence",
+                    default_event_type="ioc_identified",
+                )
+            )
+
+        # ---------------------------------------------------------
+        # 4. Threat intelligence events
+        # ---------------------------------------------------------
+
+        for item in self._normalize_collection(threats):
+            normalized_events.append(
+                self._normalize_event(
+                    item,
+                    source="threat_intelligence",
+                    default_event_type="threat_identified",
+                )
+            )
+
+        # ---------------------------------------------------------
+        # 5. Stable chronological ordering
+        # ---------------------------------------------------------
 
         normalized_events.sort(
-            key=self._timestamp_sort_key
+            key=self._event_sort_key
         )
+
+        # ---------------------------------------------------------
+        # 6. Calculate timeline risk
+        # ---------------------------------------------------------
 
         risk = self._calculate_risk(
             normalized_events
         )
 
-        phases = self._detect_phases(
-            normalized_events
+        first_event = (
+            normalized_events[0]
+            if normalized_events
+            else None
         )
 
-        narrative = self._build_narrative(
-            normalized_events,
-            risk,
-            phases,
+        last_event = (
+            normalized_events[-1]
+            if normalized_events
+            else None
         )
 
-        return InvestigationTimeline(
+        metadata = {
+            "engine": "investigation_timeline_intelligence",
+            "event_count": len(
+                normalized_events
+            ),
+            "risk": risk,
+            "first_event": (
+                self._event_timestamp(
+                    first_event
+                )
+                if first_event
+                else None
+            ),
+            "last_event": (
+                self._event_timestamp(
+                    last_event
+                )
+                if last_event
+                else None
+            ),
+        }
+
+        return self._create_timeline(
             case_id=case_id,
             events=normalized_events,
             risk=risk,
-            phases=phases,
-            narrative=narrative,
-            metadata={
-                "engine": (
-                    "investigation_timeline_intelligence"
-                ),
-                "event_count": len(
-                    normalized_events
-                ),
-                "phase_count": len(
-                    phases
-                ),
-                "high_risk_event_count": sum(
-                    1
-                    for event in normalized_events
-                    if event.risk
-                    in {
-                        "high",
-                        "critical",
-                    }
-                ),
-                "critical_event_count": sum(
-                    1
-                    for event in normalized_events
-                    if event.risk == "critical"
-                ),
-            },
+            metadata=metadata,
         )
 
-    def _normalize_events(
+    # =============================================================
+    # Normalization
+    # =============================================================
+
+    def _normalize_collection(
         self,
-        events: list[Any],
-    ) -> list[TimelineEvent]:
+        value: Any,
+    ) -> list[Any]:
         """
-        Normalize arbitrary event input.
+        Normalize arbitrary input into a list.
         """
 
-        result: list[TimelineEvent] = []
+        if value is None:
+            return []
 
-        for index, event in enumerate(events):
-            if isinstance(
-                event,
-                TimelineEvent,
-            ):
-                result.append(
-                    event
-                )
-                continue
+        if isinstance(value, list):
+            return list(value)
 
-            if hasattr(
-                event,
-                "to_dict",
-            ):
-                event = event.to_dict()
+        if isinstance(value, tuple):
+            return list(value)
 
-            if not isinstance(
-                event,
-                dict,
-            ):
-                event = {
-                    "description": str(
-                        event
-                    )
-                }
+        if isinstance(value, set):
+            return list(value)
 
-            result.append(
-                self._normalize_event(
-                    event,
-                    index,
-                )
-            )
-
-        return result
+        return [value]
 
     def _normalize_event(
         self,
-        event: dict[str, Any],
-        index: int,
-    ) -> TimelineEvent:
+        event: Any,
+        source: str,
+        default_event_type: str = "investigation_event",
+    ) -> dict[str, Any]:
         """
-        Convert one raw event into a TimelineEvent.
+        Convert an arbitrary event object into a stable dictionary.
         """
 
-        timestamp = str(
-            event.get(
-                "timestamp",
-                event.get(
-                    "time",
-                    event.get(
-                        "created_at",
-                        "",
-                    ),
-                ),
+        if event is None:
+            data: dict[str, Any] = {}
+
+        elif isinstance(event, dict):
+            data = dict(event)
+
+        else:
+            to_dict = getattr(
+                event,
+                "to_dict",
+                None,
             )
-            or ""
+
+            if callable(to_dict):
+                converted = to_dict()
+
+                if isinstance(
+                    converted,
+                    dict,
+                ):
+                    data = dict(converted)
+
+                else:
+                    data = {
+                        "value": converted,
+                    }
+
+            else:
+                data = {
+                    "value": str(event),
+                }
+
+        timestamp = self._extract_timestamp(
+            data
         )
 
-        event_type = str(
-            event.get(
-                "event_type",
-                event.get(
-                    "type",
-                    "observation",
-                ),
-            )
-            or "observation"
+        event_type = (
+            data.get("event_type")
+            or data.get("type")
+            or data.get("category")
+            or default_event_type
         )
 
-        source = str(
-            event.get(
-                "source",
-                "unknown",
-            )
-            or "unknown"
-        )
-
-        description = str(
-            event.get(
-                "description",
-                event.get(
-                    "message",
-                    event.get(
-                        "value",
-                        event_type,
-                    ),
-                ),
-            )
+        value = (
+            data.get("value")
+            or data.get("indicator")
+            or data.get("name")
+            or data.get("description")
             or event_type
         )
 
-        severity = self._normalize_risk(
-            event.get(
-                "severity",
-                event.get(
-                    "risk",
-                    "low",
-                ),
-            )
-        )
-
         risk = self._normalize_risk(
-            event.get(
+            data.get(
                 "risk",
-                event.get(
+                data.get(
                     "severity",
                     "low",
                 ),
             )
         )
 
-        entity = event.get(
-            "entity"
+        normalized = {
+            "timestamp": timestamp,
+            "event_type": str(
+                event_type
+            ),
+            "source": str(
+                data.get(
+                    "source",
+                    source,
+                )
+            ),
+            "value": str(
+                value
+            ),
+            "risk": risk,
+            "attributes": data,
+        }
+
+        return normalized
+
+    # =============================================================
+    # Timestamp handling
+    # =============================================================
+
+    def _extract_timestamp(
+        self,
+        data: dict[str, Any],
+    ) -> str:
+        """
+        Extract and normalize an event timestamp.
+
+        Supported fields:
+        - timestamp
+        - time
+        - event_time
+        - occurred_at
+        - created_at
+        """
+
+        candidates = (
+            "timestamp",
+            "time",
+            "event_time",
+            "occurred_at",
+            "created_at",
         )
 
-        indicator = event.get(
-            "indicator"
+        for field in candidates:
+            value = data.get(field)
+
+            if value is None:
+                continue
+
+            if isinstance(
+                value,
+                datetime,
+            ):
+                return self._normalize_datetime(
+                    value
+                )
+
+            text = str(
+                value
+            ).strip()
+
+            if text:
+                parsed = self._parse_datetime(
+                    text
+                )
+
+                if parsed is not None:
+                    return self._normalize_datetime(
+                        parsed
+                    )
+
+                return text
+
+        return self._current_timestamp()
+
+    def _parse_datetime(
+        self,
+        value: str,
+    ) -> datetime | None:
+        """
+        Parse common ISO-8601 timestamps.
+        """
+
+        text = value.strip()
+
+        if text.endswith("Z"):
+            text = (
+                text[:-1]
+                + "+00:00"
+            )
+
+        try:
+            return datetime.fromisoformat(
+                text
+            )
+
+        except ValueError:
+            return None
+
+    def _normalize_datetime(
+        self,
+        value: datetime,
+    ) -> str:
+        """
+        Normalize datetime values to UTC ISO-8601.
+        """
+
+        if value.tzinfo is None:
+            value = value.replace(
+                tzinfo=timezone.utc
+            )
+
+        value = value.astimezone(
+            timezone.utc
         )
 
-        mitre_techniques = self._normalize_strings(
-            event.get(
-                "mitre_techniques",
-                event.get(
-                    "attack_patterns",
-                    [],
+        return value.isoformat()
+
+    def _current_timestamp(
+        self,
+    ) -> str:
+        """
+        Generate a UTC timestamp.
+
+        Kept isolated so deterministic testing can monkeypatch
+        this method if necessary.
+        """
+
+        return datetime.now(
+            timezone.utc
+        ).isoformat()
+
+    def _event_sort_key(
+        self,
+        event: dict[str, Any],
+    ):
+        """
+        Produce a stable chronological sorting key.
+        """
+
+        timestamp = event.get(
+            "timestamp",
+            "",
+        )
+
+        parsed = self._parse_datetime(
+            str(timestamp)
+        )
+
+        if parsed is None:
+            return (
+                datetime.max.replace(
+                    tzinfo=timezone.utc
                 ),
+                str(timestamp),
             )
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(
+                tzinfo=timezone.utc
+            )
+
+        return (
+            parsed.astimezone(
+                timezone.utc
+            ),
+            str(timestamp),
         )
 
-        event_id = str(
-            event.get(
-                "event_id",
-                f"event-{index + 1}",
-            )
+    def _event_timestamp(
+        self,
+        event: dict[str, Any],
+    ) -> str | None:
+        """
+        Safely extract an event timestamp.
+        """
+
+        if not event:
+            return None
+
+        value = event.get(
+            "timestamp"
         )
 
-        return TimelineEvent(
-            event_id=event_id,
-            timestamp=timestamp,
-            event_type=event_type,
-            source=source,
-            description=description,
-            severity=severity,
-            risk=risk,
-            entity=(
-                str(entity)
-                if entity is not None
-                else None
-            ),
-            indicator=(
-                str(indicator)
-                if indicator is not None
-                else None
-            ),
-            mitre_techniques=mitre_techniques,
-            attributes=dict(
-                event
-            ),
-        )
+        if value is None:
+            return None
+
+        return str(value)
+
+    # =============================================================
+    # Risk
+    # =============================================================
 
     def _normalize_risk(
         self,
-        value: Any,
+        risk: Any,
     ) -> str:
         """
         Normalize risk/severity labels.
         """
 
-        normalized = str(
-            value or "low"
+        value = str(
+            risk or "low"
         ).strip().lower()
 
-        if normalized in {
+        aliases = {
+            "informational": "low",
+            "info": "low",
+            "warning": "medium",
+            "moderate": "medium",
+            "severe": "high",
+            "urgent": "critical",
+        }
+
+        value = aliases.get(
+            value,
+            value,
+        )
+
+        if value in {
             "critical",
             "high",
             "medium",
             "low",
             "unknown",
         }:
-            return normalized
-
-        if normalized in {
-            "severe",
-            "urgent",
-            "emergency",
-        }:
-            return "critical"
-
-        if normalized in {
-            "moderate",
-            "warning",
-            "warn",
-        }:
-            return "medium"
-
-        if normalized in {
-            "dangerous",
-            "elevated",
-        }:
-            return "high"
-
-        if normalized in {
-            "informational",
-            "info",
-            "notice",
-        }:
-            return "low"
+            return value
 
         return "unknown"
-
-    def _normalize_strings(
-        self,
-        values: Any,
-    ) -> list[str]:
-        """
-        Normalize values into unique strings
-        while preserving insertion order.
-        """
-
-        if values is None:
-            return []
-
-        if not isinstance(
-            values,
-            (
-                list,
-                tuple,
-                set,
-            ),
-        ):
-            values = [
-                values
-            ]
-
-        result: list[str] = []
-
-        for value in values:
-            text = str(
-                value
-            ).strip()
-
-            if (
-                text
-                and text not in result
-            ):
-                result.append(
-                    text
-                )
-
-        return result
-
-    def _timestamp_sort_key(
-        self,
-        event: TimelineEvent,
-    ):
-        """
-        Produce a stable chronological sort key.
-
-        Valid timestamps are ordered first.
-
-        Missing or invalid timestamps are placed after
-        valid timestamps while maintaining deterministic
-        event ordering.
-        """
-
-        if not event.timestamp:
-            return (
-                1,
-                datetime.max,
-                event.event_id,
-            )
-
-        value = event.timestamp.strip()
-
-        try:
-            normalized = value.replace(
-                "Z",
-                "+00:00",
-            )
-
-            parsed = datetime.fromisoformat(
-                normalized
-            )
-
-            if parsed.tzinfo is not None:
-                parsed = parsed.astimezone().replace(
-                    tzinfo=None
-                )
-
-            return (
-                0,
-                parsed,
-                event.event_id,
-            )
-
-        except (
-            ValueError,
-            TypeError,
-        ):
-            return (
-                1,
-                datetime.max,
-                event.event_id,
-            )
 
     def _calculate_risk(
         self,
-        events: list[TimelineEvent],
+        events: list[dict[str, Any]],
     ) -> str:
         """
-        Calculate overall timeline risk.
-
-        The highest observed event risk becomes the
-        timeline risk.
+        Calculate highest observed timeline risk.
         """
 
-        if not events:
-            return "low"
+        priority = {
+            "unknown": 0,
+            "low": 1,
+            "medium": 2,
+            "high": 3,
+            "critical": 4,
+        }
 
-        highest_score = max(
-            (
-                self.RISK_ORDER.get(
-                    event.risk,
-                    0,
-                )
-                for event in events
-            ),
-            default=1,
-        )
-
-        for risk, score in (
-            self.RISK_ORDER.items()
-        ):
-            if score == highest_score:
-                return risk
-
-        return "unknown"
-
-    def _detect_phases(
-        self,
-        events: list[TimelineEvent],
-    ) -> list[str]:
-        """
-        Infer investigation phases from event content.
-
-        Phase ordering follows chronological discovery
-        rather than dictionary ordering.
-        """
-
-        phases: list[str] = []
+        highest = "low"
 
         for event in events:
-            searchable = " ".join(
-                [
-                    event.event_type,
-                    event.description,
-                    event.source,
-                    event.indicator or "",
-                    " ".join(
-                        event.mitre_techniques
-                    ),
-                ]
-            ).lower()
+            risk = self._normalize_risk(
+                event.get(
+                    "risk",
+                    "low",
+                )
+            )
 
-            for phase, keywords in (
-                self.PHASE_KEYWORDS.items()
+            if priority.get(
+                risk,
+                0,
+            ) > priority.get(
+                highest,
+                0,
             ):
-                if any(
-                    keyword in searchable
-                    for keyword in keywords
-                ):
-                    if phase not in phases:
-                        phases.append(
-                            phase
-                        )
+                highest = risk
 
-        return phases
+        return highest
 
-    def _build_narrative(
+    # =============================================================
+    # Model compatibility
+    # =============================================================
+
+    def _create_timeline(
         self,
-        events: list[TimelineEvent],
+        case_id: str,
+        events: list[dict[str, Any]],
         risk: str,
-        phases: list[str],
-    ) -> str:
+        metadata: dict[str, Any],
+    ):
         """
-        Build deterministic analyst-readable narrative.
+        Construct the project timeline model.
+
+        Supports both the current model contract and compatible
+        constructor variants used by earlier Sentinel DNA layers.
         """
 
-        if not events:
-            return (
-                "No investigation events were available "
-                "to construct a timeline."
+        from .models import (
+            InvestigationTimeline,
+        )
+
+        payload = {
+            "case_id": case_id,
+            "events": events,
+            "risk": risk,
+            "metadata": metadata,
+        }
+
+        try:
+            return InvestigationTimeline(
+                **payload
             )
 
-        event_count = len(
-            events
-        )
-
-        phase_text = (
-            ", ".join(
-                phases
-            )
-            if phases
-            else "no distinct attack phases"
-        )
-
-        high_risk_count = sum(
-            1
-            for event in events
-            if event.risk
-            in {
-                "high",
-                "critical",
-            }
-        )
-
-        if risk in {
-            "critical",
-            "high",
-        }:
-            opening = (
-                "The investigation timeline contains "
-                f"{event_count} event(s) and reaches "
-                f"{risk} risk."
-            )
-        else:
-            opening = (
-                "The investigation timeline contains "
-                f"{event_count} event(s) with an overall "
-                f"{risk} risk assessment."
+        except TypeError:
+            # Compatibility with models that may not expose
+            # risk directly.
+            payload.pop(
+                "risk",
+                None,
             )
 
-        risk_statement = (
-            f" {high_risk_count} high-severity event(s) "
-            "require analyst attention."
-            if high_risk_count
-            else ""
-        )
+            try:
+                return InvestigationTimeline(
+                    **payload
+                )
 
-        return (
-            f"{opening}"
-            f"{risk_statement} "
-            "Observed investigation phases: "
-            f"{phase_text}."
-        )
+            except TypeError:
+                # Final compatibility fallback for models with
+                # minimal constructor contracts.
+                timeline = InvestigationTimeline(
+                    case_id=case_id,
+                    events=events,
+                )
+
+                if hasattr(
+                    timeline,
+                    "risk",
+                ):
+                    timeline.risk = risk
+
+                if hasattr(
+                    timeline,
+                    "metadata",
+                ):
+                    timeline.metadata = metadata
+
+                return timeline
