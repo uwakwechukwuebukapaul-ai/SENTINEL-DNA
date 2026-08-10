@@ -2,7 +2,7 @@
 Sentinel DNA Dashboard Repository.
 
 Retrieves investigation data from
-existing case management services.
+case intelligence services.
 """
 
 from __future__ import annotations
@@ -19,11 +19,20 @@ class DashboardRepository:
     def __init__(
         self,
         case_repository=None,
+        fallback_provider=None,
     ) -> None:
 
         self.case_repository = case_repository
 
+        self.fallback_provider = (
+            fallback_provider
+        )
 
+
+
+    # =====================================================
+    # INVESTIGATION RETRIEVAL
+    # =====================================================
 
     def get_investigation(
         self,
@@ -46,28 +55,25 @@ class DashboardRepository:
 
 
 
-        # Compatibility fallback
-        # until database adapter is connected.
+        if self.fallback_provider:
+
+            return self.fallback_provider.get(
+                case_id
+            )
+
+
 
         return {
-
             "case_id": case_id,
 
-            "investigation_id": (
-                f"INV-{case_id}"
-            ),
-
-            "status": "completed",
+            "status": "unknown",
 
             "risk": {
-
-                "level": "high",
-
-                "score": 90,
-
+                "level": "unknown",
+                "score": 0,
             },
 
-            "confidence": 0.95,
+            "confidence": 0.0,
 
             "findings": [],
 
