@@ -3,37 +3,67 @@ Investigation API Controller.
 
 Application service layer between
 HTTP routes and intelligence engine.
+
+Responsible for:
+- request normalization
+- orchestrator execution
+- result serialization
+- API-safe error handling
 """
 
-from typing import Any
+from __future__ import annotations
+
 from importlib import import_module
+from typing import Any
 
 
 def _load_orchestrator():
-    """Load the investigation orchestrator from the available package layout."""
+    """
+    Locate InvestigationOrchestrator.
+
+    Supports multiple package layouts
+    during architecture evolution.
+    """
+
     module_names = (
-        "...intelligence.investigation.investigation_orchestrator",
-        "...intelligence.investigations.investigation_orchestrator",
-        "...intelligence.investigation.orchestrator",
+        "services.intelligence.investigation.investigation_orchestrator",
+        "services.intelligence.investigations.investigation_orchestrator",
+        "services.intelligence.investigation.orchestrator",
     )
 
+
     for module_name in module_names:
+
         try:
-            module = import_module(module_name, package=__package__)
+            module = import_module(
+                module_name
+            )
+
             return module.InvestigationOrchestrator
-        except (ImportError, AttributeError):
+
+        except (
+            ImportError,
+            AttributeError,
+        ):
             continue
 
-    raise ImportError("Could not locate InvestigationOrchestrator")
+
+    raise ImportError(
+        "Could not locate InvestigationOrchestrator"
+    )
 
 
-InvestigationOrchestrator = _load_orchestrator()
+InvestigationOrchestrator = (
+    _load_orchestrator()
+)
+
 
 
 class InvestigationController:
     """
-    Executes investigations.
+    Investigation execution service.
     """
+
 
     def __init__(
         self,
@@ -46,25 +76,83 @@ class InvestigationController:
         )
 
 
+    # =================================================
+    # EXECUTION
+    # =================================================
+
     def run(
         self,
-        artifacts: list[dict[str, Any]],
+        artifacts: list[dict[str, Any]] | None = None,
         case_id: str | None = None,
     ) -> dict[str, Any]:
         """
-        Execute investigation.
+        Execute investigation workflow.
         """
 
-        result = self.orchestrator.investigate(
-            artifacts=artifacts,
-            case_id=case_id,
+
+        artifacts = (
+            artifacts
+            or []
         )
+
+
+        try:
+
+            result = (
+                self.orchestrator.investigate(
+                    artifacts=artifacts,
+                    case_id=case_id,
+                )
+            )
+
+
+            return self._serialize_result(
+                result
+            )
+
+
+        except Exception as exc:
+
+            return {
+                "success": False,
+                "status": "failed",
+                "message": (
+                    "Investigation execution failed."
+                ),
+                "error": str(exc),
+                "artifacts": artifacts,
+                "case_id": case_id,
+            }
+
+
+
+    # =================================================
+    # SERIALIZATION
+    # =================================================
+
+    @staticmethod
+    def _serialize_result(
+        result: Any,
+    ) -> dict[str, Any]:
+        """
+        Convert orchestrator output
+        into API response format.
+        """
+
 
         if hasattr(
             result,
             "to_dict",
         ):
-            return result.to_dict()
+
+            payload = result.to_dict()
+
+            if isinstance(
+                payload,
+                dict,
+            ):
+                return payload
+
 
 
         if isinstance(
@@ -74,8 +162,11 @@ class InvestigationController:
             return result
 
 
+
         return {
             "success": False,
             "status": "failed",
-            "error": "Invalid investigation result",
+            "message": (
+                "Invalid investigation result."
+            ),
         }

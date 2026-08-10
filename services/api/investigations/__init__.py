@@ -1,68 +1,26 @@
 """
-Sentinel DNA Investigation API.
+Investigation API Package.
 
-Provides investigation execution endpoints.
+Exports investigation blueprint
+and compatibility routes.
 """
 
-from flask import (
-    Blueprint,
-    request,
-    jsonify,
+from flask import Flask
+
+from .routes import (
+    investigation_bp,
+    run_investigation,
 )
 
 
-investigation_bp = Blueprint(
-    "investigations",
-    __name__,
-    url_prefix="/api/investigations",
-)
-
-
-def _handle_investigation():
-    """
-    Shared investigation request handler.
-    """
-
-    payload = request.get_json(
-        silent=True
-    ) or {}
-
-
-    return jsonify(
-        {
-            "status": "received",
-            "investigation": payload,
-        }
-    ), 200
-
-
-
-# =================================================
-# PRIMARY API ENDPOINT
-# =================================================
-
-@investigation_bp.route(
-    "/run",
-    methods=[
-        "POST",
-    ],
-)
-def run_investigation():
-
-    return _handle_investigation()
-
-
-
-# =================================================
-# LEGACY COMPATIBILITY ENDPOINT
-# =================================================
-
-def register_compatibility_routes(app):
+def register_compatibility_routes(
+    app: Flask,
+):
     """
     Register legacy endpoint.
 
-    Keeps older integrations working:
-    POST /investigate
+    Keeps backwards compatibility
+    with older API clients.
     """
 
     @app.route(
@@ -73,4 +31,11 @@ def register_compatibility_routes(app):
     )
     def investigate():
 
-        return _handle_investigation()
+        return run_investigation()
+
+
+
+__all__ = [
+    "investigation_bp",
+    "register_compatibility_routes",
+]

@@ -1,22 +1,18 @@
 """
 Investigation API Routes.
 
-REST interface for Sentinel DNA investigations.
+HTTP interface for Sentinel DNA investigations.
 """
+
+from __future__ import annotations
 
 from flask import (
     Blueprint,
-    jsonify,
     request,
+    jsonify,
 )
 
-from .controller import (
-    InvestigationController,
-)
-
-from .schemas import (
-    InvestigationRequest,
-)
+from .controller import InvestigationController
 
 
 investigation_bp = Blueprint(
@@ -29,53 +25,67 @@ investigation_bp = Blueprint(
 controller = InvestigationController()
 
 
+# =================================================
+# RUN INVESTIGATION
+# =================================================
+
 @investigation_bp.route(
     "/run",
-    methods=["POST"],
+    methods=[
+        "POST",
+    ],
 )
 def run_investigation():
+    """
+    Execute security investigation.
+    """
 
-    try:
 
-        payload = request.get_json(
+    payload = (
+        request.get_json(
             silent=True
-        ) or {}
-
-
-        schema = InvestigationRequest(
-            payload
         )
+        or {}
+    )
 
 
-        schema.validate()
-
-
-        result = controller.run(
-            artifacts=schema.artifacts,
-            case_id=schema.case_id,
+    artifacts = (
+        payload.get(
+            "artifacts",
+            [],
         )
+    )
 
 
-        return jsonify(
-            result
-        ), 200
+    case_id = (
+        payload.get(
+            "case_id"
+        )
+    )
 
 
-    except ValueError as exc:
-
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 400
+    result = controller.run(
+        artifacts=artifacts,
+        case_id=case_id,
+    )
 
 
-    except Exception as exc:
+    return jsonify(
+        result
+    ), 200
 
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+
+
+# =================================================
+# COMPATIBILITY ROUTE
+# =================================================
+
+@investigation_bp.route(
+    "/investigate",
+    methods=[
+        "POST",
+    ],
+)
+def investigate():
+
+    return run_investigation()
