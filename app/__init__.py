@@ -1,22 +1,31 @@
 """
-Sentinel DNA Application Entry Point.
+Sentinel DNA Application Factory.
 
-Registers API and platform services.
+Bootstraps enterprise services
+and API layers.
 """
-
-from __future__ import annotations
 
 from flask import Flask
 
 
-def create_app() -> Flask:
-    """
-    Application factory.
-    """
+from services.core.application_container import (
+    build_container,
+)
+
+
+
+def create_app():
 
     app = Flask(
         __name__
     )
+
+
+    # ==================================
+    # SERVICE CONTAINER
+    # ==================================
+
+    app.container = build_container()
 
 
     # ==================================
@@ -28,12 +37,6 @@ def create_app() -> Flask:
         register_compatibility_routes,
     )
 
-    from services.api.dashboard.routes import (
-        dashboard_bp,
-    )
-
-
-    # Investigation API
 
     app.register_blueprint(
         investigation_bp
@@ -45,7 +48,10 @@ def create_app() -> Flask:
     )
 
 
-    # Dashboard API
+    from services.api.dashboard.routes import (
+        dashboard_bp,
+    )
+
 
     app.register_blueprint(
         dashboard_bp
@@ -60,26 +66,14 @@ def create_app() -> Flask:
     def home():
 
         return {
+
             "status": "running",
+
             "service": "Sentinel DNA",
+
             "version": "1.0",
+
         }
 
 
     return app
-
-
-
-# ==================================
-# DEVELOPMENT SERVER
-# ==================================
-
-if __name__ == "__main__":
-
-    app = create_app()
-
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True,
-    )

@@ -1,82 +1,57 @@
 """
-Sentinel DNA - Investigation Execution State
+Sentinel DNA Workflow Execution State.
 
 Tracks investigation workflow lifecycle.
 """
 
-
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
-
-@dataclass
 class WorkflowState:
     """
     Investigation workflow state manager.
     """
 
-    current_status: str = "created"
+    def __init__(self) -> None:
 
-    history: list[str] = field(default_factory=list)
-
-    updated_at: str = field(
-        default_factory=lambda:
-        datetime.now(timezone.utc).isoformat()
-    )
+        self._status = "created"
 
 
-    def status(self) -> str:
-        """
-        Compatibility API.
-        """
-
-        return self.current_status
-
+    # =====================================================
+    # STATUS MANAGEMENT
+    # =====================================================
 
     def set_status(
         self,
         status: str,
-    ):
+    ) -> None:
         """
-        Update workflow state.
+        Update workflow status.
         """
 
-        self.current_status = status
-
-        self.history.append(
-            status
-        )
-
-        self.updated_at = (
-            datetime.now(
-                timezone.utc
-            ).isoformat()
-        )
+        self._status = status
 
 
-    def transition(
+
+    def status(
         self,
-        status: str,
-    ):
+    ) -> str:
         """
-        Alias used by future runtime.
+        Return current workflow status.
         """
 
-        self.set_status(
-            status
-        )
+        return self._status
 
 
-    def to_dict(self):
+
+    # =====================================================
+    # SERIALIZATION
+    # =====================================================
+
+    def to_dict(
+        self,
+    ) -> dict[str, str]:
+
         return {
-            "status":
-                self.current_status,
-
-            "history":
-                self.history,
-
-            "updated_at":
-                self.updated_at,
+            "status": self._status
         }

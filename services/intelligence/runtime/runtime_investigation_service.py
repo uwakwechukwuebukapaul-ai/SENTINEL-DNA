@@ -2,80 +2,99 @@
 Runtime Investigation Service
 
 Coordinates investigation execution.
+
+Supports:
+- Runtime context creation
+- Investigation orchestration
+- Intelligence execution
+- Result generation
 """
 
-from typing import Any
+from __future__ import annotations
 
+from typing import Any
 
 from services.intelligence.runtime.runtime_investigation_context import (
     RuntimeInvestigationContext,
 )
-
 
 from services.intelligence.runtime.runtime_investigation_result import (
     RuntimeInvestigationResult,
 )
 
 
-
 class RuntimeInvestigationService:
-
+    """
+    Runtime investigation execution boundary.
+    """
 
     def __init__(
         self,
-        intelligence_service,
-    ):
+        intelligence_service=None,
+        investigation_orchestrator=None,
+    ) -> None:
 
         self.intelligence_service = (
             intelligence_service
         )
 
+        self.investigation_orchestrator = (
+            investigation_orchestrator
+        )
 
+
+    # =====================================================
+    # MAIN INVESTIGATION ENTRY
+    # =====================================================
 
     def investigate(
         self,
         investigation_id: str,
         signals: list[dict[str, Any]],
-    ):
-
+    ) -> RuntimeInvestigationResult:
+        """
+        Execute investigation workflow.
+        """
 
         context = RuntimeInvestigationContext(
 
-            investigation_id=
-                investigation_id,
+            investigation_id=(
+                investigation_id
+            ),
 
-            signals=
-                signals,
+            signals=(
+                signals
+            ),
 
         )
 
 
         context.add_event(
             {
-                "stage":
-                    "started",
+                "stage": "started",
 
-                "signal_count":
-                    len(signals),
+                "signal_count": len(signals),
             }
         )
 
 
         intelligence = (
-            self.intelligence_service.investigate(
+            self._execute_investigation(
+                investigation_id,
                 signals,
-                case_id=investigation_id,
             )
         )
 
 
-        context.intelligence_result = intelligence
+        context.intelligence_result = (
+            intelligence
+        )
 
 
         context.add_event(
             {
                 "stage":
-                    "intelligence_completed",
+                    "investigation_completed",
             }
         )
 
@@ -85,12 +104,67 @@ class RuntimeInvestigationService:
         )
 
 
+    # =====================================================
+    # EXECUTION ROUTER
+    # =====================================================
+
+    def _execute_investigation(
+        self,
+        investigation_id: str,
+        signals: list[dict[str, Any]],
+    ):
+        """
+        Prefer orchestrated execution.
+
+        Falls back to intelligence service
+        for compatibility.
+        """
+
+        if self.investigation_orchestrator:
+
+            return (
+                self.investigation_orchestrator.investigate(
+                    investigation_id,
+                    signals,
+                )
+            )
+
+
+        if self.intelligence_service:
+
+            return (
+                self.intelligence_service.investigate(
+                    signals,
+                    case_id=investigation_id,
+                )
+            )
+
+
+        return {
+
+            "risk":
+                "unknown",
+
+            "confidence":
+                0.0,
+
+            "findings":
+                [],
+
+        }
+
+
+    # =====================================================
+    # RESULT BUILDER
+    # =====================================================
 
     def _build_result(
         self,
-        context,
-    ):
-
+        context: RuntimeInvestigationContext,
+    ) -> RuntimeInvestigationResult:
+        """
+        Convert runtime context into result.
+        """
 
         intelligence = (
             context.intelligence_result
@@ -101,32 +175,72 @@ class RuntimeInvestigationService:
 
             success=True,
 
-            investigation_id=
-                context.investigation_id,
+            investigation_id=(
+                context.investigation_id
+            ),
 
-            risk=
-                getattr(
+            risk=(
+                self._extract_value(
                     intelligence,
                     "risk",
                     "unknown",
-                ),
+                )
+            ),
 
-            confidence=
-                getattr(
+            confidence=(
+                self._extract_value(
                     intelligence,
                     "confidence",
                     0.0,
-                ),
+                )
+            ),
 
-            intelligence=
-                intelligence,
+            intelligence=(
+                intelligence
+            ),
 
-            timeline=
-                context.timeline,
+            timeline=(
+                context.timeline
+            ),
 
-            metadata=
-                {
-                    "signals":
-                        len(context.signals)
-                },
+            metadata={
+
+                "signals":
+                    len(context.signals),
+
+                "orchestrated":
+                    self.investigation_orchestrator
+                    is not None,
+
+            },
+
+        )
+
+
+    # =====================================================
+    # SAFE VALUE EXTRACTION
+    # =====================================================
+
+    @staticmethod
+    def _extract_value(
+        source,
+        key,
+        default,
+    ):
+
+        if isinstance(
+            source,
+            dict,
+        ):
+
+            return source.get(
+                key,
+                default,
+            )
+
+
+        return getattr(
+            source,
+            key,
+            default,
         )

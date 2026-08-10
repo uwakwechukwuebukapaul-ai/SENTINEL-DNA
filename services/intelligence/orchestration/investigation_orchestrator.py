@@ -6,17 +6,17 @@ Coordinates autonomous investigation execution workflow.
 Flow:
 
 Case
-  |
-  v
+|
+v
 Investigation
-  |
-  v
+|
+v
 Execution
-  |
-  v
+|
+v
 Report
-  |
-  v
+|
+v
 Case Update
 """
 
@@ -25,6 +25,14 @@ from __future__ import annotations
 from typing import Any
 
 from .execution_state import WorkflowState
+
+from services.intelligence.cases.case_manager import (
+    CaseManager,
+)
+
+from services.intelligence.cases.investigation_state import (
+    InvestigationState,
+)
 
 
 class InvestigationOrchestrator:
@@ -58,7 +66,10 @@ class InvestigationOrchestrator:
 
         self.decision_engine = decision_engine
 
-        self.case_manager = case_manager
+        self.case_manager = (
+            case_manager
+            or CaseManager()
+        )
 
         self.state = WorkflowState()
 
@@ -74,9 +85,6 @@ class InvestigationOrchestrator:
         artifacts=None,
         **kwargs,
     ) -> dict[str, Any]:
-        """
-        Execute complete investigation workflow.
-        """
 
         artifacts = artifacts or []
 
@@ -85,6 +93,12 @@ class InvestigationOrchestrator:
 
             self.state.set_status(
                 "running"
+            )
+
+
+            self._ensure_case(
+                case_id,
+                artifacts,
             )
 
 
@@ -115,21 +129,15 @@ class InvestigationOrchestrator:
 
             result = {
 
-                "case_id":
-                    case_id,
+                "case_id": case_id,
 
-
-                "status":
-                    "completed",
-
+                "status": "completed",
 
                 "investigation":
                     investigation_result,
 
-
                 "execution":
                     execution_result,
-
 
                 "report":
                     report_result,
@@ -161,24 +169,13 @@ class InvestigationOrchestrator:
 
             failure = {
 
-                "case_id":
-                    case_id,
+                "case_id": case_id,
 
+                "status": "failed",
 
-                "status":
-                    "failed",
-
-
-                "error":
-                    str(exc),
+                "error": str(exc),
 
             }
-
-
-            self._update_case(
-                case_id,
-                failure,
-            )
 
 
             return failure
@@ -186,31 +183,71 @@ class InvestigationOrchestrator:
 
 
     # =====================================================
-    # CASE MANAGEMENT INTEGRATION
+    # CASE MANAGEMENT
     # =====================================================
+
+    def _ensure_case(
+        self,
+        case_id,
+        artifacts,
+    ):
+
+        existing = (
+            self.case_manager.get_case(
+                case_id
+            )
+        )
+
+
+        if existing:
+            return existing
+
+
+        return self.case_manager.create_case(
+            case_id,
+            {
+                "artifacts": artifacts,
+            },
+        )
+
+
 
     def _update_case(
         self,
         case_id: str,
         result: dict[str, Any],
     ) -> None:
-        """
-        Update investigation case state.
-        """
 
-        if not self.case_manager:
+
+        case = (
+            self.case_manager.get_case(
+                case_id
+            )
+        )
+
+
+        if not case:
             return
 
 
+        case["result"] = result
+
+
         if hasattr(
-            self.case_manager,
-            "update_investigation_result",
+            case.get("timeline"),
+            "add_event",
         ):
 
-            self.case_manager.update_investigation_result(
-                case_id,
-                result,
+            case["timeline"].add_event(
+                "investigation_completed",
+                "Investigation workflow completed",
             )
+
+
+        self.case_manager.update_state(
+            case_id,
+            InvestigationState.COMPLETED,
+        )
 
 
 
@@ -220,9 +257,10 @@ class InvestigationOrchestrator:
 
     def _run_investigator(
         self,
-        case_id: str,
+        case_id,
         artifacts,
     ):
+
 
         if self.investigator:
 
@@ -250,29 +288,18 @@ class InvestigationOrchestrator:
 
         return {
 
-            "risk":
-            {
-                "level":
-                    "high",
+            "risk": {
 
-                "score":
-                    90,
+                "level": "high",
+
+                "score": 90,
+
             },
 
 
-            "analysis":
-            {
-                "threat":
-                    "credential_phishing",
-            },
+            "findings": [],
 
-
-            "findings":
-            [],
-
-
-            "indicators":
-            [],
+            "indicators": [],
 
         }
 
@@ -287,6 +314,7 @@ class InvestigationOrchestrator:
         case_id,
         investigation,
     ):
+
 
         if self.executor:
 
@@ -314,12 +342,9 @@ class InvestigationOrchestrator:
 
         return {
 
-            "action":
-                "contain",
+            "action": "contain",
 
-
-            "status":
-                "completed",
+            "status": "completed",
 
         }
 
@@ -365,13 +390,9 @@ class InvestigationOrchestrator:
 
         return {
 
-            "case_id":
-                case_id,
+            "case_id": case_id,
 
-
-            "status":
-                "completed",
-
+            "status": "completed",
 
             "summary":
                 "Investigation completed",

@@ -1,7 +1,9 @@
 """
-Investigation API Routes.
+Sentinel DNA Investigation API Routes.
 
 HTTP interface for Sentinel DNA investigations.
+
+Uses application container dependency injection.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from flask import (
     Blueprint,
     request,
     jsonify,
+    current_app,
 )
 
 from .controller import InvestigationController
@@ -22,12 +25,29 @@ investigation_bp = Blueprint(
 )
 
 
-controller = InvestigationController()
+# =====================================================
+# DEPENDENCY RESOLUTION
+# =====================================================
+
+def get_controller() -> InvestigationController:
+    """
+    Resolve investigation controller from application container.
+    """
+
+    orchestrator = current_app.container.get(
+        "investigation_orchestrator"
+    )
 
 
-# =================================================
+    return InvestigationController(
+        orchestrator=orchestrator,
+    )
+
+
+
+# =====================================================
 # RUN INVESTIGATION
-# =================================================
+# =====================================================
 
 @investigation_bp.route(
     "/run",
@@ -59,9 +79,12 @@ def run_investigation():
 
     case_id = (
         payload.get(
-            "case_id"
+            "case_id",
         )
     )
+
+
+    controller = get_controller()
 
 
     result = controller.run(
@@ -76,9 +99,9 @@ def run_investigation():
 
 
 
-# =================================================
+# =====================================================
 # COMPATIBILITY ROUTE
-# =================================================
+# =====================================================
 
 @investigation_bp.route(
     "/investigate",
@@ -87,5 +110,10 @@ def run_investigation():
     ],
 )
 def investigate():
+    """
+    Legacy compatibility endpoint.
+
+    Maps to /run.
+    """
 
     return run_investigation()
