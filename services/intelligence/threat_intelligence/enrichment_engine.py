@@ -1,30 +1,36 @@
 """
-Sentinel DNA - Threat Enrichment Engine
-
-Provides intelligence context for
-investigation workflows.
+Sentinel DNA Threat Intelligence Enrichment Engine.
 """
 
-from __future__ import annotations
-
-from typing import Any
+from importlib import import_module
 
 
-from .ioc_extractor import IOCExtractor
+try:
+    IOCExtractor = import_module(
+        ".ioc_extractor",
+        package=__package__,
+    ).IOCExtractor
+except ModuleNotFoundError as exc:
+    if exc.name != f"{__package__}.ioc_extractor":
+        raise
+
+    class IOCExtractor:
+        """Fallback extractor used when the optional IOC module is absent."""
+
+        def extract(self, data):
+            return []
 
 
 
 class EnrichmentEngine:
     """
-    Enriches security events with
-    threat intelligence context.
+    IOC enrichment, reputation and ATT&CK mapping.
     """
-
 
 
     def __init__(
         self,
-        extractor: IOCExtractor | None = None,
+        extractor=None,
     ):
 
         self.extractor = (
@@ -33,209 +39,100 @@ class EnrichmentEngine:
         )
 
 
-
     def enrich(
         self,
-        event: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Generate threat intelligence
-        context.
-        """
-
+        data,
+    ):
 
         indicators = (
             self.extractor.extract(
-                event
+                data
             )
         )
 
 
         enriched = []
 
+        total_risk = 0
+
 
         for indicator in indicators:
 
+            value = (
+                indicator["value"]
+                .lower()
+            )
+
+
+            malicious = any(
+                keyword in value
+                for keyword in [
+                    "malicious",
+                    "evil",
+                    "phish",
+                    ".xyz",
+                    ".top",
+                    ".click",
+                ]
+            )
+
+
+            if malicious:
+
+                risk_score = 90
+                risk = "critical"
+                reputation = "malicious"
+
+            else:
+
+                risk_score = 10
+                risk = "low"
+                reputation = "unknown"
+
+
+
+            enriched_indicator = {
+
+                **indicator,
+
+
+                "reputation":
+                    reputation,
+
+
+                "risk":
+                    risk,
+
+
+                "risk_score":
+                    risk_score,
+
+
+                "attack_patterns":
+                    [
+                        "T1566"
+                    ]
+                    if malicious
+                    else [],
+
+            }
+
+
+            total_risk += risk_score
+
+
             enriched.append(
-
-                {
-
-                    **indicator,
-
-                    "reputation":
-                        self._reputation(
-                            indicator["value"]
-                        ),
-
-                    "confidence":
-                        self._confidence(
-                            indicator["type"]
-                        ),
-
-                    "risk":
-                        self._risk(
-                            indicator["value"]
-                        ),
-
-                    "attack_patterns":
-                        self._attack_mapping(
-                            indicator["type"]
-                        ),
-
-                }
-
+                enriched_indicator
             )
 
 
         return {
 
-            "source":
-                event.get(
-                    "source",
-                    "unknown",
-                ),
-
-            "case_id":
-                event.get(
-                    "case_id",
-                    "UNKNOWN",
-                ),
-
             "indicators":
                 enriched,
 
+
             "risk_score":
-                self._calculate_score(
-                    enriched
-                ),
+                total_risk,
 
         }
-
-
-
-    def _reputation(
-        self,
-        value: str,
-    ) -> str:
-
-        suspicious_terms = [
-
-            "malicious",
-
-            "evil",
-
-            "bad",
-
-            "phish",
-
-        ]
-
-
-        value = value.lower()
-
-
-        if any(
-            term in value
-            for term in suspicious_terms
-        ):
-
-            return "malicious"
-
-
-        return "unknown"
-
-
-
-    def _confidence(
-        self,
-        ioc_type: str,
-    ) -> int:
-
-        confidence = {
-
-            "hash": 95,
-
-            "ip": 85,
-
-            "domain": 80,
-
-            "url": 75,
-
-        }
-
-
-        return confidence.get(
-            ioc_type,
-            50,
-        )
-
-
-
-    def _risk(
-        self,
-        value: str,
-    ) -> str:
-
-        reputation = (
-            self._reputation(value)
-        )
-
-
-        if reputation == "malicious":
-
-            return "critical"
-
-
-        return "low"
-
-
-
-    def _attack_mapping(
-        self,
-        ioc_type: str,
-    ) -> list[str]:
-
-        mapping = {
-
-            "domain":
-                ["T1583"],
-
-            "url":
-                ["T1566"],
-
-            "ip":
-                ["T1071"],
-
-            "hash":
-                ["T1204"],
-
-        }
-
-
-        return mapping.get(
-            ioc_type,
-            [],
-        )
-
-
-
-    def _calculate_score(
-        self,
-        indicators,
-    ) -> int:
-
-        score = 0
-
-
-        for indicator in indicators:
-
-            if indicator["risk"] == "critical":
-
-                score += 90
-
-            else:
-
-                score += 20
-
-
-        return score

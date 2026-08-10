@@ -1,15 +1,20 @@
 """
-Sentinel DNA - Threat Intelligence
-
-Provides IOC extraction and threat
-enrichment capabilities.
+Sentinel DNA Threat Intelligence Layer.
 """
 
-from .ioc_extractor import IOCExtractor
-from .enrichment_engine import EnrichmentEngine
+try:
+    from .ioc_extractor import IOCExtractor  # type: ignore[import-not-found]
+except ImportError:
+    IOCExtractor = None
+try:
+    from .enrichment_engine import EnrichmentEngine  # type: ignore[import-not-found]
+except ImportError:
+    EnrichmentEngine = None
 
 
 __all__ = [
+
     "IOCExtractor",
     "EnrichmentEngine",
+
 ]
