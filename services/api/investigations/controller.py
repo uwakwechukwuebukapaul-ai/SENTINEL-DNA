@@ -3,12 +3,6 @@ Investigation API Controller.
 
 Application service layer between
 HTTP routes and intelligence engine.
-
-Responsible for:
-- request normalization
-- orchestrator execution
-- result serialization
-- API-safe error handling
 """
 
 from __future__ import annotations
@@ -16,30 +10,36 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
+from .schemas import InvestigationResponseSchema
+
+
 
 def _load_orchestrator():
     """
-    Locate InvestigationOrchestrator.
+    Dynamically load InvestigationOrchestrator.
 
-    Supports multiple package layouts
-    during architecture evolution.
+    Supports current and future package layouts.
     """
 
     module_names = (
         "services.intelligence.investigation.investigation_orchestrator",
         "services.intelligence.investigations.investigation_orchestrator",
         "services.intelligence.investigation.orchestrator",
+        "services.intelligence.orchestration.investigation_orchestrator",
     )
 
 
     for module_name in module_names:
 
         try:
+
             module = import_module(
                 module_name
             )
 
-            return module.InvestigationOrchestrator
+            return (
+                module.InvestigationOrchestrator
+            )
 
         except (
             ImportError,
@@ -53,6 +53,7 @@ def _load_orchestrator():
     )
 
 
+
 InvestigationOrchestrator = (
     _load_orchestrator()
 )
@@ -61,7 +62,7 @@ InvestigationOrchestrator = (
 
 class InvestigationController:
     """
-    Investigation execution service.
+    Executes security investigations.
     """
 
 
@@ -76,13 +77,9 @@ class InvestigationController:
         )
 
 
-    # =================================================
-    # EXECUTION
-    # =================================================
-
     def run(
         self,
-        artifacts: list[dict[str, Any]] | None = None,
+        artifacts: list[dict[str, Any]],
         case_id: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -90,53 +87,32 @@ class InvestigationController:
         """
 
 
-        artifacts = (
-            artifacts
-            or []
+        result = self.orchestrator.investigate(
+            artifacts=artifacts,
+            case_id=case_id,
         )
 
 
-        try:
-
-            result = (
-                self.orchestrator.investigate(
-                    artifacts=artifacts,
-                    case_id=case_id,
-                )
-            )
-
-
-            return self._serialize_result(
+        serialized = (
+            self._serialize_result(
                 result
             )
+        )
 
 
-        except Exception as exc:
+        return (
+            InvestigationResponseSchema.build(
+                serialized
+            )
+        )
 
-            return {
-                "success": False,
-                "status": "failed",
-                "message": (
-                    "Investigation execution failed."
-                ),
-                "error": str(exc),
-                "artifacts": artifacts,
-                "case_id": case_id,
-            }
-
-
-
-    # =================================================
-    # SERIALIZATION
-    # =================================================
 
     @staticmethod
     def _serialize_result(
         result: Any,
     ) -> dict[str, Any]:
         """
-        Convert orchestrator output
-        into API response format.
+        Convert engine result into dictionary.
         """
 
 
@@ -145,28 +121,29 @@ class InvestigationController:
             "to_dict",
         ):
 
-            payload = result.to_dict()
+            converted = result.to_dict()
 
             if isinstance(
-                payload,
+                converted,
                 dict,
             ):
-                return payload
-
+                return converted
 
 
         if isinstance(
             result,
             dict,
         ):
-            return result
 
+            return dict(
+                result
+            )
 
 
         return {
             "success": False,
             "status": "failed",
-            "message": (
-                "Invalid investigation result."
+            "error": (
+                "Invalid investigation result"
             ),
         }
