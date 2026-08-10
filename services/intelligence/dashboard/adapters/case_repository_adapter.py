@@ -1,63 +1,139 @@
 """
 Sentinel DNA Case Repository Adapter.
 
-Provides dashboard access to investigation cases.
-
-Keeps dashboard layer independent from
-case management implementation.
+Bridges dashboard services with
+the investigation case management layer.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from services.intelligence.cases.case_manager import (
+    CaseManager,
+)
+
+
 
 class CaseRepositoryAdapter:
     """
-    Adapter between dashboard and case services.
+    Dashboard-facing case repository.
+
+    Converts CaseManager objects into
+    dashboard-consumable dictionaries.
     """
+
 
 
     def __init__(
         self,
-        case_manager=None,
+        case_manager: CaseManager | None = None,
     ) -> None:
 
-        self.case_manager = case_manager
+
+        self.case_manager = (
+            case_manager
+            or CaseManager()
+        )
 
 
+
+    # =====================================================
+    # GET CASE
+    # =====================================================
 
     def get(
         self,
         case_id: str,
     ) -> dict[str, Any] | None:
         """
-        Retrieve case information.
+        Retrieve case from CaseManager.
         """
 
 
-        if self.case_manager is None:
+        case = self.case_manager.get_case(
+            case_id
+        )
+
+
+        if not case:
+
             return None
 
 
-        if hasattr(
-            self.case_manager,
-            "get_case",
-        ):
 
-            return self.case_manager.get_case(
-                case_id
-            )
+        return self._normalize(
+            case
+        )
 
 
-        if hasattr(
-            self.case_manager,
-            "get",
-        ):
 
-            return self.case_manager.get(
-                case_id
-            )
+    # =====================================================
+    # NORMALIZATION
+    # =====================================================
+
+    def _normalize(
+        self,
+        case: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Convert internal case object
+        into dashboard format.
+        """
 
 
-        return None
+        timeline = case.get(
+            "timeline"
+        )
+
+
+        evidence = case.get(
+            "evidence"
+        )
+
+
+        return {
+
+            "case_id": (
+                case.get(
+                    "case_id"
+                )
+            ),
+
+
+            "status": (
+                case.get(
+                    "state",
+                    "unknown",
+                )
+            ),
+
+
+            "alert": (
+                case.get(
+                    "alert",
+                    {},
+                )
+            ),
+
+
+            "timeline": (
+                timeline.events
+                if timeline and hasattr(
+                    timeline,
+                    "events",
+                )
+                else []
+            ),
+
+
+            "evidence": (
+                evidence.nodes
+                if evidence and hasattr(
+                    evidence,
+                    "nodes",
+                )
+                else []
+            ),
+
+        }

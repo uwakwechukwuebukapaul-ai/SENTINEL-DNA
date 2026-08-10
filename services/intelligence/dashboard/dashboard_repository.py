@@ -16,17 +16,26 @@ class DashboardRepository:
     """
 
 
+
     def __init__(
         self,
         case_repository=None,
-        fallback_provider=None,
     ) -> None:
 
-        self.case_repository = case_repository
 
-        self.fallback_provider = (
-            fallback_provider
-        )
+        if case_repository is None:
+
+            from services.intelligence.dashboard.adapters.case_repository_adapter import (
+                CaseRepositoryAdapter,
+            )
+
+
+            case_repository = (
+                CaseRepositoryAdapter()
+            )
+
+
+        self.case_repository = case_repository
 
 
 
@@ -49,41 +58,55 @@ class DashboardRepository:
                 case_id
             )
 
+
             if case:
 
                 return case
 
 
 
-        if self.fallback_provider:
-
-            return self.fallback_provider.get(
-                case_id
-            )
-
-
+        # Compatibility response
+        # Used when case does not exist yet.
 
         return {
+
             "case_id": case_id,
+
+
+            "investigation_id": (
+                f"INV-{case_id}"
+            ),
+
 
             "status": "unknown",
 
+
             "risk": {
+
                 "level": "unknown",
+
                 "score": 0,
+
             },
+
 
             "confidence": 0.0,
 
+
             "findings": [],
+
 
             "indicators": [],
 
+
             "mitre": [],
+
 
             "timeline": [],
 
+
             "recommendations": [],
+
 
             "report": {},
 

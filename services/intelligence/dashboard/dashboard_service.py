@@ -17,21 +17,10 @@ from services.intelligence.dashboard.dashboard_adapter import (
     DashboardAdapter,
 )
 
-from services.intelligence.dashboard.fallback_provider import (
-    DashboardFallbackProvider,
-)
-
-
 
 class DashboardService:
     """
     Dashboard application service.
-
-    Responsibilities:
-
-    - Retrieve investigation data
-    - Transform investigation data
-    - Provide dashboard payloads
     """
 
 
@@ -45,9 +34,7 @@ class DashboardService:
 
         self.repository = (
             repository
-            or DashboardRepository(
-                fallback_provider=DashboardFallbackProvider()
-            )
+            or DashboardRepository()
         )
 
 
@@ -67,7 +54,7 @@ class DashboardService:
         investigation: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Build dashboard payload from investigation data.
+        Build dashboard payload.
         """
 
 
@@ -78,7 +65,7 @@ class DashboardService:
 
 
     # =====================================================
-    # GET INVESTIGATION DASHBOARD
+    # GET DASHBOARD
     # =====================================================
 
     def get_dashboard(
@@ -86,7 +73,7 @@ class DashboardService:
         case_id: str,
     ) -> dict[str, Any]:
         """
-        Retrieve and build dashboard payload.
+        Retrieve case and build dashboard.
         """
 
 
@@ -104,16 +91,13 @@ class DashboardService:
 
 
     # =====================================================
-    # COMPATIBILITY ALIAS
+    # COMPATIBILITY
     # =====================================================
 
     def get(
         self,
         case_id: str,
     ) -> dict[str, Any]:
-        """
-        Compatibility alias.
-        """
 
         return self.get_dashboard(
             case_id
