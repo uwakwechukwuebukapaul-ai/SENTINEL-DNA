@@ -1,30 +1,22 @@
 """
-Sentinel DNA Investigation Pipeline.
+Sentinel DNA Investigation Intelligence Pipeline.
+
+Public package exports for the investigation pipeline layer.
 """
 
 from .models import (
     InvestigationPipelineResult,
+    InvestigationPipelineStage,
 )
 
 from .orchestrator import (
+    InvestigationPipeline,
     InvestigationPipelineOrchestrator,
 )
 
-
-class InvestigationPipeline(
-    InvestigationPipelineOrchestrator
-):
-    """
-    Backward compatible investigation pipeline API.
-
-    Delegates execution to the orchestrator.
-    """
-
-    pass
-
-
 __all__ = [
     "InvestigationPipeline",
-    "InvestigationPipelineResult",
     "InvestigationPipelineOrchestrator",
+    "InvestigationPipelineResult",
+    "InvestigationPipelineStage",
 ]
