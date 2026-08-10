@@ -1,163 +1,133 @@
 """
-Sentinel DNA Investigation View
+Sentinel DNA Investigation View.
 
-Provides analyst-facing investigation representation.
-
-Responsibilities:
-- Transform investigation intelligence into workspace format
-- Prepare SOC analyst view payloads
-- Preserve investigation context
-- Support dashboard/API serialization
+Transforms workspace data into
+analyst-facing investigation representation.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
+
 
 
 class InvestigationView:
     """
-    Analyst investigation workspace view builder.
+    Analyst investigation presentation layer.
     """
 
-    def __init__(self) -> None:
-
-        self.history: list[dict[str, Any]] = []
-
-
-    # =====================================================
-    # MAIN VIEW RENDERING
-    # =====================================================
 
     def render(
         self,
-        investigation: dict[str, Any] | None = None,
+        workspace: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Render analyst-ready investigation view.
+        Generate analyst view payload.
         """
 
-        investigation = (
-            investigation
-            or {}
+        workspace = workspace or {}
+
+
+        findings = workspace.get(
+            "findings",
+            [],
         )
 
 
-        view = {
+        indicators = workspace.get(
+            "indicators",
+            [],
+        )
 
-            "case_id":
-                investigation.get(
+
+        return {
+
+            "case_id": (
+                workspace.get(
                     "case_id"
-                ),
+                )
+            ),
 
 
-            "risk":
-                investigation.get(
+            "investigation_id": (
+                workspace.get(
+                    "investigation_id"
+                )
+            ),
+
+
+            "status": (
+                workspace.get(
+                    "status",
+                    "unknown",
+                )
+            ),
+
+
+            "risk": (
+                workspace.get(
                     "risk",
                     "unknown",
-                ),
+                )
+            ),
 
 
-            "confidence":
-                investigation.get(
+            "confidence": (
+                workspace.get(
                     "confidence",
-                    0.0,
+                    0,
+                )
+            ),
+
+
+            "summary": {
+
+                "finding_count": len(
+                    findings
                 ),
 
-
-            "findings":
-                investigation.get(
-                    "findings",
-                    [],
+                "indicator_count": len(
+                    indicators
                 ),
 
-
-            "indicators":
-                investigation.get(
-                    "indicators",
-                    [],
-                ),
+            },
 
 
-            "mitre":
-                investigation.get(
+            "findings": findings,
+
+
+            "indicators": indicators,
+
+
+            "mitre": (
+                workspace.get(
                     "mitre",
                     [],
-                ),
+                )
+            ),
 
 
-            "recommendations":
-                investigation.get(
+            "timeline": (
+                workspace.get(
+                    "timeline",
+                    [],
+                )
+            ),
+
+
+            "recommendations": (
+                workspace.get(
                     "recommendations",
                     [],
-                ),
+                )
+            ),
 
 
-            "generated_at":
-                self._timestamp(),
+            "report": (
+                workspace.get(
+                    "report",
+                    {},
+                )
+            ),
 
         }
-
-
-        self.history.append(
-            view
-        )
-
-
-        return view
-
-
-
-    # =====================================================
-    # SERIALIZATION
-    # =====================================================
-
-    def to_dict(
-        self,
-    ) -> dict[str, Any]:
-        """
-        Return latest workspace state.
-        """
-
-        if not self.history:
-
-            return {}
-
-
-        return self.history[-1]
-
-
-
-    # =====================================================
-    # HISTORY
-    # =====================================================
-
-    def get_history(
-        self,
-    ) -> list[dict[str, Any]]:
-
-        return self.history
-
-
-
-    def clear_history(
-        self,
-    ) -> bool:
-
-        self.history.clear()
-
-        return True
-
-
-
-    # =====================================================
-    # INTERNALS
-    # =====================================================
-
-    @staticmethod
-    def _timestamp() -> str:
-
-        return datetime.now(
-            timezone.utc
-        ).isoformat()

@@ -1,12 +1,12 @@
 """
-Sentinel DNA Analyst Workspace
+Sentinel DNA Analyst Workspace.
 
 Provides analyst-facing investigation workspace state.
 
 Responsibilities:
-- Load investigations
-- Normalize investigation data
-- Provide analyst workspace payload
+
+- Load investigation responses
+- Normalize analyst data
 - Track workspace history
 - Support dashboard/API consumption
 """
@@ -17,10 +17,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+
 class AnalystWorkspace:
     """
     Analyst workspace manager.
     """
+
 
     def __init__(
         self,
@@ -29,6 +31,7 @@ class AnalystWorkspace:
         self.current: dict[str, Any] | None = None
 
         self.history: list[dict[str, Any]] = []
+
 
 
     # =====================================================
@@ -40,8 +43,9 @@ class AnalystWorkspace:
         investigation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Load investigation into analyst workspace.
+        Load normalized investigation into workspace.
         """
+
 
         investigation = (
             investigation
@@ -49,64 +53,133 @@ class AnalystWorkspace:
         )
 
 
+        risk = investigation.get(
+            "risk",
+            {},
+        )
+
+
+        if isinstance(
+            risk,
+            dict,
+        ):
+
+            risk_level = risk.get(
+                "level",
+                "unknown",
+            )
+
+            risk_score = risk.get(
+                "score",
+                0,
+            )
+
+        else:
+
+            risk_level = risk
+
+            risk_score = investigation.get(
+                "risk_score",
+                0,
+            )
+
+
         workspace = {
 
-            "status":
+            "status": (
                 investigation.get(
                     "status",
                     "unknown",
-                ),
+                )
+            ),
 
 
-            "case_id":
+            "investigation_id": (
+                investigation.get(
+                    "investigation_id",
+                )
+            ),
+
+
+            "case_id": (
                 investigation.get(
                     "case_id",
-                ),
+                )
+            ),
 
 
-            "risk":
-                investigation.get(
-                    "risk",
-                    "unknown",
-                ),
+            "risk": risk_level,
 
 
-            "confidence":
+            "risk_score": risk_score,
+
+
+            "confidence": (
                 investigation.get(
                     "confidence",
                     0.0,
-                ),
+                )
+            ),
 
 
-            "findings":
+            "findings": (
                 investigation.get(
                     "findings",
                     [],
-                ),
+                )
+            ),
 
 
-            "indicators":
+            "indicators": (
                 investigation.get(
                     "indicators",
                     [],
-                ),
+                )
+            ),
 
 
-            "recommendations":
+            "mitre": (
+                investigation.get(
+                    "mitre",
+                    [],
+                )
+            ),
+
+
+            "timeline": (
+                investigation.get(
+                    "timeline",
+                    [],
+                )
+            ),
+
+
+            "recommendations": (
                 investigation.get(
                     "recommendations",
                     [],
-                ),
+                )
+            ),
 
 
-            "error":
+            "report": (
+                investigation.get(
+                    "report",
+                    {},
+                )
+            ),
+
+
+            "error": (
                 investigation.get(
                     "error",
-                ),
+                )
+            ),
 
 
-            "loaded_at":
-                self._timestamp(),
+            "loaded_at": (
+                self._timestamp()
+            ),
 
         }
 
