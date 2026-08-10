@@ -1,11 +1,13 @@
 """
-Sentinel DNA AI Investigator Runtime.
-
-Unified investigation execution layer.
+Sentinel DNA Investigation Runtime API.
 """
 
 from .investigator import (
+    AIInvestigator,
     AIInvestigatorRuntime,
+    Investigator,
+    InvestigationRuntimeAPI,
+    investigate,
 )
 
 from .models import (
@@ -14,6 +16,17 @@ from .models import (
 
 
 __all__ = [
+
+    "AIInvestigator",
+
     "AIInvestigatorRuntime",
+
+    "Investigator",
+
+    "InvestigationRuntimeAPI",
+
     "RuntimeResult",
+
+    "investigate",
+
 ]
