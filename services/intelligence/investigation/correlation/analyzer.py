@@ -4,7 +4,6 @@ Sentinel DNA Evidence Correlation Analyzer.
 Transforms evidence into intelligence findings.
 """
 
-
 from .models import (
     CorrelationFinding,
     IntelligenceResult,
@@ -15,7 +14,6 @@ class EvidenceCorrelationAnalyzer:
     """
     Analyzes investigation evidence.
     """
-
 
     SUSPICIOUS_TERMS = [
         "malicious",
@@ -35,52 +33,95 @@ class EvidenceCorrelationAnalyzer:
         result = IntelligenceResult()
 
 
+        # Normalize dictionary input
+        if isinstance(
+            evidence_items,
+            dict,
+        ):
+            evidence_items = list(
+                evidence_items.values()
+            )
+
+
         for evidence in evidence_items:
 
-            value = str(
-                evidence.value
-            ).lower()
-
-
-            if any(
-                term in value
-                for term in self.SUSPICIOUS_TERMS
+            if hasattr(
+                evidence,
+                "value",
             ):
 
-                finding = CorrelationFinding(
-                    category="suspicious_indicator",
-                    value=evidence.value,
-                    risk="high",
-                    confidence=85,
-                    metadata={
-                        "source":
-                            evidence.source,
-                        "evidence_type":
-                            evidence.evidence_type,
-                    },
+                value = str(
+                    evidence.value
                 )
 
-                result.add(
-                    finding
+                source = (
+                    evidence.source
                 )
 
+                evidence_type = (
+                    evidence.evidence_type
+                )
 
             else:
 
-                finding = CorrelationFinding(
-                    category="observed_artifact",
-                    value=evidence.value,
-                    risk="low",
-                    confidence=50,
-                    metadata={
-                        "source":
-                            evidence.source,
-                    },
+                value = str(
+                    evidence
                 )
 
-                result.add(
-                    finding
+                source = (
+                    "pipeline_input"
                 )
+
+                evidence_type = (
+                    "unknown"
+                )
+
+
+            normalized_value = (
+                value.lower()
+            )
+
+
+            suspicious = any(
+                term in normalized_value
+                for term in self.SUSPICIOUS_TERMS
+            )
+
+
+            finding = CorrelationFinding(
+                category=(
+                    "suspicious_indicator"
+                    if suspicious
+                    else
+                    "observed_artifact"
+                ),
+
+                value=value,
+
+                risk=(
+                    "high"
+                    if suspicious
+                    else
+                    "low"
+                ),
+
+                confidence=(
+                    85
+                    if suspicious
+                    else
+                    50
+                ),
+
+                metadata={
+                    "source": source,
+                    "evidence_type": evidence_type,
+                },
+            )
+
+
+            result.add(
+                finding
+            )
 
 
         return result
