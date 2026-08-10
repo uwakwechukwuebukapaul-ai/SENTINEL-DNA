@@ -1,12 +1,13 @@
 """
-Sentinel DNA Investigation Intelligence Layer
+Sentinel DNA Investigation Intelligence Layer.
+
+Provides shared investigation state
+and workflow context.
 """
 
-from .investigation_intelligence import (
-    InvestigationIntelligence,
-)
+from .context import InvestigationContext
 
 
 __all__ = [
-    "InvestigationIntelligence",
+    "InvestigationContext",
 ]

@@ -1,50 +1,24 @@
 """
-Sentinel DNA - Investigation Orchestrator.
+Sentinel DNA Investigation Orchestrator.
 
-Coordinates autonomous investigation execution workflow.
-
-Flow:
-
-Case
-|
-v
-Investigation
-|
-v
-Execution
-|
-v
-Report
-|
-v
-Case Update
+Coordinates autonomous investigation workflow.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from services.intelligence.investigation.context import (
+    InvestigationContext,
+)
+
 from .execution_state import WorkflowState
 
-from services.intelligence.cases.case_manager import (
-    CaseManager,
-)
-
-from services.intelligence.cases.investigation_state import (
-    InvestigationState,
-)
 
 
 class InvestigationOrchestrator:
     """
     Main investigation workflow coordinator.
-
-    Responsibilities:
-
-    - Coordinate investigation lifecycle
-    - Execute intelligence workflow
-    - Generate final report
-    - Update case management state
     """
 
 
@@ -58,6 +32,7 @@ class InvestigationOrchestrator:
         **kwargs,
     ) -> None:
 
+
         self.investigator = investigator
 
         self.executor = executor
@@ -66,18 +41,11 @@ class InvestigationOrchestrator:
 
         self.decision_engine = decision_engine
 
-        self.case_manager = (
-            case_manager
-            or CaseManager()
-        )
+        self.case_manager = case_manager
 
         self.state = WorkflowState()
 
 
-
-    # =====================================================
-    # MAIN EXECUTION
-    # =====================================================
 
     def investigate(
         self,
@@ -85,8 +53,29 @@ class InvestigationOrchestrator:
         artifacts=None,
         **kwargs,
     ) -> dict[str, Any]:
+        """
+        Execute complete investigation workflow.
+        """
 
         artifacts = artifacts or []
+
+
+        context = InvestigationContext(
+
+            case_id=case_id,
+
+            investigation_id=f"INV-{case_id}",
+
+            artifacts=artifacts,
+
+        )
+
+
+        context.add_event(
+            {
+                "stage": "started",
+            }
+        )
 
 
         try:
@@ -96,59 +85,38 @@ class InvestigationOrchestrator:
             )
 
 
-            self._ensure_case(
-                case_id,
-                artifacts,
-            )
-
-
-            investigation_result = (
+            investigation = (
                 self._run_investigator(
-                    case_id,
-                    artifacts,
+                    context
                 )
             )
 
 
-            execution_result = (
+            context.set_intelligence(
+                investigation
+            )
+
+
+            execution = (
                 self._run_execution(
-                    case_id,
-                    investigation_result,
+                    context
                 )
             )
 
 
-            report_result = (
+            report = (
                 self._generate_report(
-                    case_id,
-                    investigation_result,
-                    execution_result,
+                    context
                 )
             )
 
 
-            result = {
-
-                "case_id": case_id,
-
-                "status": "completed",
-
-                "investigation":
-                    investigation_result,
-
-                "execution":
-                    execution_result,
-
-                "report":
-                    report_result,
-
-            }
-
-
-            self._update_case(
-                case_id,
-                result,
+            context.set_report(
+                report
             )
+
+
+            context.complete()
 
 
             self.state.set_status(
@@ -156,98 +124,66 @@ class InvestigationOrchestrator:
             )
 
 
-            return result
+            #
+            # Backward compatible response
+            #
+            return {
+
+                "case_id":
+                    context.case_id,
+
+
+                "status":
+                    context.status,
+
+
+                "investigation":
+                    investigation,
+
+
+                "execution":
+                    execution,
+
+
+                "report":
+                    report,
+
+
+                #
+                # New architecture exposure
+                #
+                "context":
+                    context.to_dict(),
+
+            }
 
 
 
         except Exception as exc:
+
+
+            context.fail()
+
 
             self.state.set_status(
                 "failed"
             )
 
 
-            failure = {
+            return {
 
-                "case_id": case_id,
+                "case_id":
+                    case_id,
 
-                "status": "failed",
 
-                "error": str(exc),
+                "status":
+                    "failed",
+
+
+                "error":
+                    str(exc),
 
             }
-
-
-            return failure
-
-
-
-    # =====================================================
-    # CASE MANAGEMENT
-    # =====================================================
-
-    def _ensure_case(
-        self,
-        case_id,
-        artifacts,
-    ):
-
-        existing = (
-            self.case_manager.get_case(
-                case_id
-            )
-        )
-
-
-        if existing:
-            return existing
-
-
-        return self.case_manager.create_case(
-            case_id,
-            {
-                "artifacts": artifacts,
-            },
-        )
-
-
-
-    def _update_case(
-        self,
-        case_id: str,
-        result: dict[str, Any],
-    ) -> None:
-
-
-        case = (
-            self.case_manager.get_case(
-                case_id
-            )
-        )
-
-
-        if not case:
-            return
-
-
-        case["result"] = result
-
-
-        if hasattr(
-            case.get("timeline"),
-            "add_event",
-        ):
-
-            case["timeline"].add_event(
-                "investigation_completed",
-                "Investigation workflow completed",
-            )
-
-
-        self.case_manager.update_state(
-            case_id,
-            InvestigationState.COMPLETED,
-        )
 
 
 
@@ -257,8 +193,7 @@ class InvestigationOrchestrator:
 
     def _run_investigator(
         self,
-        case_id,
-        artifacts,
+        context: InvestigationContext,
     ):
 
 
@@ -271,8 +206,8 @@ class InvestigationOrchestrator:
             ):
 
                 return self.investigator.investigate(
-                    case_id,
-                    artifacts,
+                    context.case_id,
+                    context.artifacts,
                 )
 
 
@@ -281,38 +216,49 @@ class InvestigationOrchestrator:
             ):
 
                 return self.investigator(
-                    case_id,
-                    artifacts,
+                    context.case_id,
+                    context.artifacts,
                 )
+
 
 
         return {
 
-            "risk": {
+            "analysis":
+            {
 
-                "level": "high",
-
-                "score": 90,
+                "risk":
+                    "high",
 
             },
 
 
-            "findings": [],
+            "risk":
+            {
 
-            "indicators": [],
+                "level":
+                    "high",
+
+                "score":
+                    90,
+
+            },
+
+
+            "findings":
+                [],
 
         }
 
 
 
     # =====================================================
-    # ACTION EXECUTION
+    # EXECUTION ENGINE
     # =====================================================
 
     def _run_execution(
         self,
-        case_id,
-        investigation,
+        context: InvestigationContext,
     ):
 
 
@@ -325,8 +271,8 @@ class InvestigationOrchestrator:
             ):
 
                 return self.executor.execute(
-                    case_id,
-                    investigation,
+                    context.case_id,
+                    context.intelligence,
                 )
 
 
@@ -335,30 +281,36 @@ class InvestigationOrchestrator:
             ):
 
                 return self.executor(
-                    case_id,
-                    investigation,
+                    context.case_id,
+                    context.intelligence,
                 )
+
 
 
         return {
 
-            "action": "contain",
+            "action":
+                "contain",
 
-            "status": "completed",
+
+            "status":
+                "completed",
+
+
+            "actions":
+                [],
 
         }
 
 
 
     # =====================================================
-    # REPORT GENERATION
+    # REPORT ENGINE
     # =====================================================
 
     def _generate_report(
         self,
-        case_id,
-        investigation,
-        execution,
+        context: InvestigationContext,
     ):
 
 
@@ -371,9 +323,8 @@ class InvestigationOrchestrator:
             ):
 
                 return self.reporter.generate(
-                    case_id,
-                    investigation,
-                    execution,
+                    context.case_id,
+                    context.intelligence,
                 )
 
 
@@ -382,17 +333,21 @@ class InvestigationOrchestrator:
             ):
 
                 return self.reporter(
-                    case_id,
-                    investigation,
-                    execution,
+                    context.case_id,
+                    context.intelligence,
                 )
+
 
 
         return {
 
-            "case_id": case_id,
+            "case_id":
+                context.case_id,
 
-            "status": "completed",
+
+            "status":
+                "completed",
+
 
             "summary":
                 "Investigation completed",
