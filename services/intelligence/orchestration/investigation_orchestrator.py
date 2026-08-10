@@ -2,6 +2,25 @@
 Sentinel DNA Investigation Orchestrator.
 
 Coordinates autonomous investigation workflow.
+
+Flow:
+
+Case
+ |
+ v
+Context
+ |
+ v
+Memory
+ |
+ v
+Investigation
+ |
+ v
+Execution
+ |
+ v
+Report
 """
 
 from __future__ import annotations
@@ -10,6 +29,10 @@ from typing import Any
 
 from services.intelligence.investigation.context import (
     InvestigationContext,
+)
+
+from services.intelligence.investigation.memory import (
+    InvestigationMemory,
 )
 
 from .execution_state import WorkflowState
@@ -45,6 +68,8 @@ class InvestigationOrchestrator:
 
         self.state = WorkflowState()
 
+        self.memory_store: dict[str, InvestigationMemory] = {}
+
 
 
     def investigate(
@@ -54,8 +79,9 @@ class InvestigationOrchestrator:
         **kwargs,
     ) -> dict[str, Any]:
         """
-        Execute complete investigation workflow.
+        Execute autonomous investigation workflow.
         """
+
 
         artifacts = artifacts or []
 
@@ -71,9 +97,19 @@ class InvestigationOrchestrator:
         )
 
 
+        memory = InvestigationMemory(
+            investigation_id=f"INV-{case_id}"
+        )
+
+
+        self.memory_store[case_id] = memory
+
+
+
         context.add_event(
             {
-                "stage": "started",
+                "stage":
+                    "started",
             }
         )
 
@@ -97,11 +133,25 @@ class InvestigationOrchestrator:
             )
 
 
+            self._update_memory_from_investigation(
+                memory,
+                investigation,
+            )
+
+
+
             execution = (
                 self._run_execution(
                     context
                 )
             )
+
+
+            self._update_memory_from_execution(
+                memory,
+                execution,
+            )
+
 
 
             report = (
@@ -124,9 +174,7 @@ class InvestigationOrchestrator:
             )
 
 
-            #
-            # Backward compatible response
-            #
+
             return {
 
                 "case_id":
@@ -149,11 +197,12 @@ class InvestigationOrchestrator:
                     report,
 
 
-                #
-                # New architecture exposure
-                #
                 "context":
                     context.to_dict(),
+
+
+                "memory":
+                    memory.snapshot(),
 
             }
 
@@ -188,8 +237,9 @@ class InvestigationOrchestrator:
 
 
     # =====================================================
-    # INVESTIGATION ENGINE
+    # INVESTIGATION
     # =====================================================
+
 
     def _run_investigator(
         self,
@@ -239,6 +289,7 @@ class InvestigationOrchestrator:
                 "level":
                     "high",
 
+
                 "score":
                     90,
 
@@ -248,13 +299,18 @@ class InvestigationOrchestrator:
             "findings":
                 [],
 
+
+            "indicators":
+                [],
+
         }
 
 
 
     # =====================================================
-    # EXECUTION ENGINE
+    # EXECUTION
     # =====================================================
+
 
     def _run_execution(
         self,
@@ -305,8 +361,9 @@ class InvestigationOrchestrator:
 
 
     # =====================================================
-    # REPORT ENGINE
+    # REPORTING
     # =====================================================
+
 
     def _generate_report(
         self,
@@ -353,3 +410,105 @@ class InvestigationOrchestrator:
                 "Investigation completed",
 
         }
+
+
+
+    # =====================================================
+    # MEMORY MANAGEMENT
+    # =====================================================
+
+
+    def _update_memory_from_investigation(
+        self,
+        memory: InvestigationMemory,
+        investigation,
+    ):
+
+
+        if not isinstance(
+            investigation,
+            dict,
+        ):
+
+            return
+
+
+
+        for finding in investigation.get(
+            "findings",
+            [],
+        ):
+
+            memory.add_finding(
+                {
+                    "finding":
+                        finding,
+                }
+            )
+
+
+
+        for indicator in investigation.get(
+            "indicators",
+            [],
+        ):
+
+            memory.add_indicator(
+                {
+                    "indicator":
+                        indicator,
+                }
+            )
+
+
+
+        risk = investigation.get(
+            "risk"
+        )
+
+
+        if isinstance(
+            risk,
+            dict,
+        ):
+
+            score = risk.get(
+                "score"
+            )
+
+
+            if score is not None:
+
+                memory.add_confidence(
+                    float(score) / 100
+                )
+
+
+
+    def _update_memory_from_execution(
+        self,
+        memory: InvestigationMemory,
+        execution,
+    ):
+
+
+        if not isinstance(
+            execution,
+            dict,
+        ):
+
+            return
+
+
+
+        for action in execution.get(
+            "actions",
+            [],
+        ):
+
+            memory.add_action(
+                {
+                    "action":
+                        action,
+                }
+            )
