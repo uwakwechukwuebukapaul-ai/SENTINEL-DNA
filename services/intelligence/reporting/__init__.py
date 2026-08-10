@@ -1,12 +1,11 @@
 """
-Investigation Reporting Package.
+Sentinel DNA Investigation Reporting Package.
 
-Provides analyst-ready security investigation reports.
+Provides analyst-ready investigation reporting contracts
+and report generation services.
 """
 
-from .investigation_report import (
-    InvestigationReport,
-)
+from .investigation_report import InvestigationReport
 
 __all__ = [
     "InvestigationReport",

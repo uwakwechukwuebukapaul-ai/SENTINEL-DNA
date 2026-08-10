@@ -9,7 +9,18 @@ Validates:
 - serialization
 """
 
-from services.intelligence.execution import (
+import sys
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SOURCE_ROOT = PROJECT_ROOT / "src"
+for import_root in (PROJECT_ROOT, SOURCE_ROOT):
+    if import_root.is_dir() and str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
+
+
+from services.intelligence.execution import (  # type: ignore[import-not-found]
     ExecutionEngine,
 )
 

@@ -1,17 +1,12 @@
 """
-Sentinel DNA Timeline Intelligence Layer
+Sentinel DNA Timeline Intelligence Package.
 
-Tracks investigation events and creates
-AI investigation timelines.
+Provides investigation event reconstruction.
 """
 
-from .timeline_event import TimelineEvent
 from .timeline_builder import TimelineBuilder
-from .timeline_engine import TimelineEngine
 
 
 __all__ = [
-    "TimelineEvent",
     "TimelineBuilder",
-    "TimelineEngine",
 ]

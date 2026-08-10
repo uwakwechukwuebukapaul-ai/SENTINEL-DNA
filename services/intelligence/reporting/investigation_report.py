@@ -1,33 +1,51 @@
 """
-Investigation Report Generator
+Sentinel DNA Investigation Reporting Contract
 
-Creates final investigation reports from
-correlation, decision, and intelligence results.
+Unified analyst-ready investigation report.
+
+Used by:
+
+- Investigation Report Builder
+- Investigation Orchestrator
+- Investigation Service
+- Analyst Dashboard
+- Reporting APIs
+- Investigation History
 """
 
+from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 
 class InvestigationReport:
     """
-    Investigation reporting service.
+    Enterprise investigation report object.
 
-    Responsibilities:
-    - Build analyst-ready reports
-    - Preserve investigation history
-    - Provide serialization
+    Supports:
+
+        report.case_id
+
+    and:
+
+        report["case_id"]
     """
-
 
     def __init__(
         self,
-        case_id: str = None,
+        case_id: Optional[str] = None,
         severity: str = "unknown",
         risk_score: float = 0.0,
-        findings=None,
-        recommendations=None,
-        agent_results=None,
+        findings: Optional[list[Any]] = None,
+        recommendations: Optional[list[Any]] = None,
+        agent_results: Optional[dict[str, Any]] = None,
+        attack_story: str = "",
+        indicators: Optional[list[Any]] = None,
+        techniques: Optional[list[Any]] = None,
+        confidence: float = 0.0,
+        decision: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ):
 
         self.case_id = case_id
@@ -46,31 +64,32 @@ class InvestigationReport:
             agent_results or {}
         )
 
-        self.history = []
+        self.attack_story = attack_story
+
+        self.indicators = indicators or []
+
+        self.techniques = techniques or []
+
+        self.confidence = confidence
+
+        self.decision = decision
+
+        self.metadata = metadata or {}
+
+        self.history: list[dict[str, Any]] = []
 
 
+    # --------------------------------------------------
+    # GENERATION
+    # --------------------------------------------------
 
     def generate(
         self,
-        investigation: dict,
-    ) -> dict:
+        investigation: dict[str, Any],
+    ) -> dict[str, Any]:
         """
-        Generate investigation report.
-
-        Compatible with:
-        - correlation output
-        - decision engine output
-        - analyst dashboard
+        Generate analyst-ready report.
         """
-
-
-        case_id = (
-            investigation.get(
-                "case_id",
-                self.case_id,
-            )
-        )
-
 
         correlation = (
             investigation.get(
@@ -79,8 +98,14 @@ class InvestigationReport:
             )
         )
 
+        if hasattr(
+            correlation,
+            "to_dict",
+        ):
+            correlation = correlation.to_dict()
 
-        decision = (
+
+        decision_data = (
             investigation.get(
                 "decision",
                 {},
@@ -88,52 +113,79 @@ class InvestigationReport:
         )
 
 
-        confidence = (
-            correlation.get(
-                "confidence",
-                0.0,
+        if hasattr(
+            decision_data,
+            "to_dict",
+        ):
+            decision_data = decision_data.to_dict()
+
+
+        self.case_id = (
+            investigation.get(
+                "case_id",
+                self.case_id,
             )
         )
 
 
-        indicators = (
+        self.agent_results = (
+            investigation.get(
+                "agent_results",
+                investigation.get(
+                    "agents",
+                    self.agent_results,
+                ),
+            )
+        )
+
+
+        self.attack_story = (
+            investigation.get(
+                "attack_story",
+                correlation.get(
+                    "attack_story",
+                    self.attack_story,
+                ),
+            )
+        )
+
+
+        self.indicators = (
             correlation.get(
                 "indicators",
-                [],
+                self.indicators,
             )
         )
 
 
-        techniques = (
+        self.techniques = (
             correlation.get(
                 "techniques",
-                [],
+                self.techniques,
             )
         )
 
 
-        attack_story = (
+        self.confidence = (
             correlation.get(
-                "attack_story",
-                "",
+                "confidence",
+                self.confidence,
             )
         )
 
 
-        response = (
-            decision.get(
+        self.decision = (
+            decision_data.get(
                 "decision",
-                "monitor",
+                self.decision,
             )
         )
 
 
-        risk_rating = (
-            self._calculate_risk(
-                confidence,
-                indicators,
-                response,
-            )
+        self.severity = self._calculate_risk(
+            confidence=self.confidence,
+            indicators=self.indicators,
+            decision=self.decision,
         )
 
 
@@ -142,43 +194,35 @@ class InvestigationReport:
             "status":
                 "completed",
 
-
             "case_id":
-                case_id,
-
-
-            "risk_rating":
-                risk_rating,
-
+                self.case_id,
 
             "severity":
-                risk_rating,
+                self.severity,
 
+            "risk_rating":
+                self.severity,
 
             "confidence":
-                confidence,
-
+                self.confidence,
 
             "attack_story":
-                attack_story,
-
+                self.attack_story,
 
             "indicators":
-                indicators,
-
+                self.indicators,
 
             "techniques":
-                techniques,
-
+                self.techniques,
 
             "decision":
-                response,
+                self.decision,
 
+            "agent_results":
+                self.agent_results,
 
             "generated_at":
-                datetime.now(
-                    timezone.utc
-                ).isoformat(),
+                self._timestamp(),
 
         }
 
@@ -191,13 +235,16 @@ class InvestigationReport:
         return report
 
 
+    # --------------------------------------------------
+    # RISK ENGINE
+    # --------------------------------------------------
 
     def _calculate_risk(
         self,
-        confidence,
-        indicators,
-        decision,
-    ):
+        confidence: float,
+        indicators: list[Any],
+        decision: Optional[str],
+    ) -> str:
 
         if decision == "respond":
             return "critical"
@@ -211,7 +258,7 @@ class InvestigationReport:
             return "medium"
 
 
-        if len(indicators) > 0:
+        if indicators:
             return "medium"
 
 
@@ -219,19 +266,34 @@ class InvestigationReport:
 
 
 
-    def get_history(self):
+    # --------------------------------------------------
+    # HISTORY
+    # --------------------------------------------------
 
-        return self.history
+    def get_history(
+        self,
+    ) -> list[dict[str, Any]]:
+
+        return list(
+            self.history
+        )
 
 
-
-    def clear_history(self):
+    def clear_history(
+        self,
+    ) -> None:
 
         self.history.clear()
 
 
 
-    def to_dict(self):
+    # --------------------------------------------------
+    # SERIALIZATION
+    # --------------------------------------------------
+
+    def to_dict(
+        self,
+    ) -> dict[str, Any]:
 
         return {
 
@@ -253,4 +315,63 @@ class InvestigationReport:
             "agent_results":
                 self.agent_results,
 
+            "attack_story":
+                self.attack_story,
+
+            "indicators":
+                self.indicators,
+
+            "techniques":
+                self.techniques,
+
+            "confidence":
+                self.confidence,
+
+            "decision":
+                self.decision,
+
+            "metadata":
+                self.metadata,
         }
+
+
+    # --------------------------------------------------
+    # DICT COMPATIBILITY
+    # --------------------------------------------------
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> Any:
+
+        return self.to_dict()[key]
+
+
+    def get(
+        self,
+        key: str,
+        default=None,
+    ) -> Any:
+
+        return self.to_dict().get(
+            key,
+            default,
+        )
+
+
+    # --------------------------------------------------
+    # TIME
+    # --------------------------------------------------
+
+    @staticmethod
+    def _timestamp() -> str:
+
+        return datetime.now(
+            timezone.utc
+        ).isoformat()
+
+
+
+__all__ = [
+    "InvestigationReport",
+]
