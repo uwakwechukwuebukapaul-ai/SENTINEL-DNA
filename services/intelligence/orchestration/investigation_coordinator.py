@@ -46,6 +46,7 @@ from typing import Any, Optional
 
 
 from .investigation_plan import InvestigationPlan
+from .investigation_orchestrator import InvestigationOrchestrator
 
 from services.intelligence.runtime.task import Task
 
@@ -105,10 +106,16 @@ class InvestigationCoordinator:
         self,
         registry: Any = None,
         runtime: Any = None,
+        orchestrator: Any = None,
     ) -> None:
 
         self.registry = registry
         self.runtime = runtime
+        self.orchestrator = (
+            orchestrator
+            if orchestrator is not None
+            else InvestigationOrchestrator()
+        )
 
 
     # ========================================================
@@ -273,6 +280,12 @@ class InvestigationCoordinator:
                 }
             )
 
+        workflow = self.orchestrator.investigate(
+            case_id=case_id,
+            artifacts=normalized_artifacts,
+            alert=alert_data,
+            **kwargs,
+        )
 
         plan = self.create_plan(
             case_id,
@@ -301,6 +314,7 @@ class InvestigationCoordinator:
             "results": [],
             "errors": [],
             "tasks": [],
+            "workflow": workflow,
         }
 
 
@@ -320,7 +334,12 @@ class InvestigationCoordinator:
                 plan=plan,
                 plan_name=plan.plan_name,
                 execution=execution,
+                results=[],
                 artifacts=normalized_artifacts,
+                findings=[],
+                intelligence={
+                    "workflow": workflow,
+                },
                 errors=[
                     "Runtime task executor is not configured."
                 ],
@@ -348,7 +367,12 @@ class InvestigationCoordinator:
                 plan=plan,
                 plan_name=plan.plan_name,
                 execution=execution,
+                results=[],
                 artifacts=normalized_artifacts,
+                findings=[],
+                intelligence={
+                    "workflow": workflow,
+                },
                 errors=[
                     error_message
                 ],
@@ -456,5 +480,6 @@ class InvestigationCoordinator:
                 ),
                 "capabilities": capabilities,
                 "execution": execution,
+                "workflow": workflow,
             },
         )

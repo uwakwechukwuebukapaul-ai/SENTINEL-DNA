@@ -24,6 +24,26 @@ from services.intelligence.orchestration.investigation_orchestrator import (
     InvestigationOrchestrator,
 )
 
+from services.intelligence.orchestration.investigation_coordinator import (
+    InvestigationCoordinator,
+)
+
+from services.intelligence.agents.agent_registry import (
+    AgentRegistry,
+)
+
+from services.intelligence.agents.bootstrap import (
+    bootstrap_agents,
+)
+
+from services.intelligence.agents.runtime_adapter import (
+    AgentRuntimeAdapter,
+)
+
+from services.intelligence.runtime.runtime_task_executor import (
+    RuntimeTaskExecutor,
+)
+
 from services.intelligence.dashboard.dashboard_service import (
     DashboardService,
 )
@@ -36,6 +56,14 @@ def build_container() -> ServiceRegistry:
     Dependency graph:
 
         CaseManager
+
+        AgentRegistry
+             |
+             v
+        RuntimeTaskExecutor
+             |
+             v
+        InvestigationCoordinator
              |
              v
         InvestigationOrchestrator
@@ -54,8 +82,27 @@ def build_container() -> ServiceRegistry:
 
     case_manager = CaseManager()
 
+    agent_registry = AgentRegistry()
+
+    runtime_executor = RuntimeTaskExecutor()
+
+    runtime_adapter = AgentRuntimeAdapter(
+        runtime_executor,
+    )
+
+    bootstrap_agents(
+        agent_registry,
+        runtime_adapter=runtime_adapter,
+    )
+
     orchestrator = InvestigationOrchestrator(
         case_manager=case_manager,
+    )
+
+    coordinator = InvestigationCoordinator(
+        registry=agent_registry,
+        runtime=runtime_executor,
+        orchestrator=orchestrator,
     )
 
     dashboard_service = DashboardService()
@@ -70,8 +117,23 @@ def build_container() -> ServiceRegistry:
     )
 
     registry.register(
+        "agent_registry",
+        agent_registry,
+    )
+
+    registry.register(
+        "runtime_task_executor",
+        runtime_executor,
+    )
+
+    registry.register(
+        "investigation_coordinator",
+        coordinator,
+    )
+
+    registry.register(
         "investigation_orchestrator",
-        orchestrator,
+        coordinator,
     )
 
     registry.register(
