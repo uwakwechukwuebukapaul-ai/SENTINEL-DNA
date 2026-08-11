@@ -9,3 +9,6 @@ venv/
 reports/
 logs/
 .coverage
+.pytest_cache/
+work/pytest-packages/
+work/pytest-runner/
