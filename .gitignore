@@ -1,4 +1,4 @@
-__pycache__/
+**pycache**/
 *.pyc
 soc.db
 .env
@@ -8,3 +8,4 @@ venv/
 .idea/
 reports/
 logs/
+.coverage
