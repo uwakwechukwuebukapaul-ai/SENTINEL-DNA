@@ -1,43 +1,31 @@
 """
-Sentinel DNA Intelligence Orchestration Package
-"""
+Sentinel DNA Intelligence Orchestration Package.
 
+Canonical public orchestration API.
+"""
 
 from .investigation_plan import (
     InvestigationPlan,
 )
 
-
 from .execution_state import (
     WorkflowState,
 )
 
-
 from .investigation_orchestrator import (
     InvestigationOrchestrator,
+    InvestigationWorkflow,
+)
+
+from .investigation_coordinator import (
+    InvestigationCoordinator,
 )
 
 
-try:
-
-    from .investigation_coordinator import (
-        InvestigationCoordinator,
-    )
-
-except ImportError:
-
-    InvestigationCoordinator = None
-
-
-
 __all__ = [
-
     "InvestigationPlan",
-
     "WorkflowState",
-
+    "InvestigationWorkflow",
     "InvestigationOrchestrator",
-
     "InvestigationCoordinator",
-
 ]

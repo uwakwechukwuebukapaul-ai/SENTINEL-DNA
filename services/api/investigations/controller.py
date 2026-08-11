@@ -20,8 +20,7 @@ class InvestigationController:
     API controller for investigations.
 
     Uses the canonical Sentinel DNA investigation
-    orchestration layer rather than dynamically
-    discovering legacy orchestrator implementations.
+    orchestration layer.
     """
 
     def __init__(
@@ -38,6 +37,8 @@ class InvestigationController:
         self,
         artifacts: list[dict[str, Any]],
         case_id: str | None = None,
+        alert: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Execute an investigation workflow.
@@ -46,6 +47,8 @@ class InvestigationController:
         result = self.orchestrator.investigate(
             case_id=case_id or "UNKNOWN",
             artifacts=artifacts,
+            alert=alert,
+            **kwargs,
         )
 
         if hasattr(result, "to_dict"):
@@ -59,3 +62,8 @@ class InvestigationController:
             "status": "failed",
             "error": "Invalid investigation result",
         }
+
+
+__all__ = [
+    "InvestigationController",
+]
