@@ -1,0 +1,26 @@
+{
+  "title": "Suspicious credential verification email",
+  "description": "User reported a possible phishing email requesting MFA verification.",
+  "severity": "high",
+  "status": "open",
+  "case_id": "case-b0e8d135535f",
+  "created_at": "2026-07-30T22:30:28.273675+00:00",
+  "updated_at": "2026-07-30T22:30:28.274746+00:00",
+  "evidence_ids": [
+    "ev-d352296a2f68"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-07-30T22:30:28.273675+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-d352296a2f68",
+      "timestamp": "2026-07-30T22:30:28.274746+00:00",
+      "metadata": {}
+    }
+  ]
+}

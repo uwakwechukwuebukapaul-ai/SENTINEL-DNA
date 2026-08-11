@@ -1,0 +1,83 @@
+{
+  "title": "Suspicious Authentication Activity",
+  "description": "Verify account at https://example-login.com/security",
+  "severity": "high",
+  "status": "open",
+  "case_id": "gateway-demo-002",
+  "created_at": "2026-08-11T23:43:35.454052+00:00",
+  "updated_at": "2026-08-11T23:43:35.455982+00:00",
+  "evidence_ids": [
+    "ev-75288df3a3ed"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-08-11T23:43:35.454061+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "investigation_triggered",
+      "message": "Investigation triggered",
+      "timestamp": "2026-08-11T23:43:35.454068+00:00",
+      "metadata": {
+        "alert": {
+          "alert_id": "GW-DEMO-002",
+          "source": "Microsoft Defender for Cloud/Microsoft Sentinel",
+          "timestamp": "2026-08-12T00:00:00Z",
+          "title": "Suspicious Authentication Activity",
+          "subject": "Suspicious Authentication Activity",
+          "severity": "high",
+          "description": "Verify account at https://example-login.com/security",
+          "body": "Verify account at https://example-login.com/security\nEntities: users: alice@example.com; ips: 203.0.113.50; domains: example-login.com",
+          "entities": {
+            "users": [
+              "alice@example.com"
+            ],
+            "hosts": [],
+            "ips": [
+              "203.0.113.50"
+            ],
+            "domains": [
+              "example-login.com"
+            ],
+            "hashes": []
+          },
+          "metadata": {
+            "provider": "Microsoft Defender for Cloud",
+            "product": "Microsoft Sentinel"
+          },
+          "raw_event": {
+            "SystemAlertId": "GW-DEMO-002",
+            "AlertName": "Suspicious Authentication Activity",
+            "Description": "Verify account at https://example-login.com/security",
+            "Severity": "High",
+            "TimeGenerated": "2026-08-12T00:00:00Z",
+            "ProviderName": "Microsoft Defender for Cloud",
+            "ProductName": "Microsoft Sentinel",
+            "Entities": [
+              {
+                "Type": "account",
+                "Name": "alice@example.com"
+              },
+              {
+                "Type": "ip",
+                "Address": "203.0.113.50"
+              },
+              {
+                "Type": "dns",
+                "DomainName": "example-login.com"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-75288df3a3ed",
+      "timestamp": "2026-08-11T23:43:35.455975+00:00",
+      "metadata": {}
+    }
+  ]
+}

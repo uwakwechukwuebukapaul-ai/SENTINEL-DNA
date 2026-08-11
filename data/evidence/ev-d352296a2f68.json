@@ -1,0 +1,17 @@
+{
+  "source": "gmail",
+  "evidence_type": "email",
+  "summary": "Email from security-alert@example-login.com: Urgent MFA password verification required",
+  "raw": {
+    "sender": "security-alert@example-login.com",
+    "subject": "Urgent MFA password verification required",
+    "body": "Verify your password at https://example-login.com/security to avoid account lockout."
+  },
+  "confidence": 0.95,
+  "evidence_id": "ev-d352296a2f68",
+  "observed_at": "2026-07-30T22:30:28.273675+00:00",
+  "indicators": [
+    "https://example-login.com/security",
+    "security-alert@example-login.com"
+  ]
+}
