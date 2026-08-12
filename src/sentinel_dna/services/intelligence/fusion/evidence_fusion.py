@@ -1,8 +1,9 @@
 from typing import Any
 
-from sentinel_dna.investigation.context import (
-    InvestigationContext,
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sentinel_dna.investigation.context import InvestigationContext
 
 from .models import (
     FusionEvidence,

@@ -6,9 +6,11 @@ from sentinel_dna.evidence.models import Evidence
 
 from sentinel_dna.investigation.trace import InvestigationTrace
 from sentinel_dna.investigation.graph import InvestigationGraph
+
 from sentinel_dna.investigation.provenance import (
     InvestigationProvenance,
 )
+
 from sentinel_dna.investigation.replay import (
     InvestigationReplay,
 )
@@ -24,19 +26,27 @@ class InvestigationContext:
     Holds:
 
     - case context
-    - evidence
+    - alert data
+    - evidence collection
     - IOC intelligence
-    - correlations
+    - evidence fusion intelligence
+    - entity correlations
     - MITRE ATT&CK mappings
-    - risk
-    - reasoning
+    - threat classification
+    - risk analysis
+    - confidence scoring
+    - reasoning output
     - decision intelligence
+    - recommendations
+    - reporting
     - investigation graph
     - provenance lineage
     - replay history
     """
 
+
     case_id: str
+
 
     alert: dict[str, Any]
 
@@ -57,6 +67,10 @@ class InvestigationContext:
     intelligence: dict[str, Any] = field(
         default_factory=dict
     )
+
+
+    # Evidence fusion intelligence output
+    fusion: Any | None = None
 
 
     correlations: list[dict[str, Any]] = field(

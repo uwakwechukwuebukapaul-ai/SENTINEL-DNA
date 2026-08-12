@@ -42,6 +42,9 @@ from sentinel_dna.risk.risk_engine import (
     RiskEngine,
 )
 
+from sentinel_dna.services.intelligence.fusion.evidence_fusion import (
+    EvidenceFusionEngine,
+)
 from .runtime import (
     RuntimeTask,
     RuntimeTaskExecutor,
@@ -100,44 +103,37 @@ class InvestigationOrchestrator:
         planner: InvestigationPlanner | None = None,
         reporter: InvestigationReporter | None = None,
     ) -> None:
-
-
         self.case_store = CaseStore(
             data_dir
         )
-
 
         self.evidence_engine = EvidenceEngine(
             data_dir
         )
 
-
         self.risk_engine = RiskEngine()
 
+        self.fusion_engine = EvidenceFusionEngine()
 
         self.reporter = (
             reporter
             or InvestigationReporter()
         )
 
-
         # Public compatibility contract
         self.investigation_engine = (
             self.reporter
         )
-
 
         self.runtime = (
             runtime
             or RuntimeTaskExecutor()
         )
 
-
         self.planner = (
             planner
             or InvestigationPlanner()
         )
-
 
         self.lineage_store = (
             InvestigationLineageStore(
@@ -202,76 +198,75 @@ class InvestigationOrchestrator:
             context
         )
 
-
         self.calculate_risk(
             context
         )
 
-
-        self.calculate_confidence(
-            context
-        )
-
-
         self.perform_reasoning(
             context
         )
-
 
         plan = self.planner.create_plan(
             context,
             self,
         )
 
-
         self.runtime.execute(
             context,
             plan,
         )
 
-
         self.build_timeline(
             context
         )
 
+        context.fusion = (
+            self.fusion_engine.fuse(
+                context
+            )
+        )
 
         self.generate_decision_intelligence(
             context
         )
 
-
         self.produce_recommendations(
             context
         )
 
-
         self.generate_report(
             context
         )
-
 
         results = self._assemble_results(
             context,
             plan,
         )
 
-
         self.lineage_store.save_context_lineage(
             context
         )
 
-
         if context.trace:
-
             results["audit_trail"] = (
                 context.trace.events
             )
-
 
         return InvestigationResult(
             plan_name=self.planner.plan_name,
             results=results,
             errors=context.errors,
+        )
+
+    def calculate_risk(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+
+        context.risk = (
+            self.risk_engine.assess(
+                context.evidence_items
+            )
         )
 
 
@@ -1210,6 +1205,12 @@ class InvestigationOrchestrator:
 
             "reasoning":
                 context.reasoning or {},
+             "fusion":
+                 (
+                      context.fusion.to_dict()
+                      if context.fusion
+                      else {}
+                 ),
 
 
             "decision_intelligence":
