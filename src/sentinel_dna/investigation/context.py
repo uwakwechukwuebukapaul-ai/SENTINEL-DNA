@@ -3,6 +3,7 @@ from typing import Any
 
 from sentinel_dna.case_management.models import Case
 from sentinel_dna.evidence.models import Evidence
+from sentinel_dna.investigation.trace import InvestigationTrace
 
 
 @dataclass
@@ -27,3 +28,4 @@ class InvestigationContext:
     audit_trail: list[dict[str, Any]] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
     uncertainties: list[str] = field(default_factory=list)
+    trace: InvestigationTrace | None = None

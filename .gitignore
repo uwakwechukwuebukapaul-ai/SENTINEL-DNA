@@ -19,3 +19,7 @@ build/
 *.sqlite3
 
 UsersHPAppDataLocalTempsentinel-pytest/
+
+.pytest_cache/
+
+UsersHPAppDataLocalTempsentinel-pytest/

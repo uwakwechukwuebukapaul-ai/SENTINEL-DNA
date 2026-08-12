@@ -1,21 +1,15 @@
+from sentinel_dna.investigation.context import InvestigationContext
 from sentinel_dna.investigation.trace import InvestigationTrace
 
 
-def attach_trace(context):
-    """
-    Attach investigation trace storage
-    to the investigation context.
-    """
-
+def attach_trace(
+    context: InvestigationContext,
+) -> InvestigationTrace:
     trace = InvestigationTrace(
         case_id=context.case_id
     )
 
+    context.trace = trace
     context.audit_trail = trace.events
-
-    trace.add_event(
-        "trace_initialized",
-        "Investigation trace initialized.",
-    )
 
     return trace
