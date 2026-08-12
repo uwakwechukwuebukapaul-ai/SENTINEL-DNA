@@ -14,7 +14,9 @@ class InvestigationSummary:
     confidence_statement: str
 
 
-class InvestigationEngine:
+class InvestigationReporter:
+    """Builds explainable investigation summaries and recommendations."""
+
     def summarize(
         self,
         case: Case,

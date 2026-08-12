@@ -1,4 +1,4 @@
-from sentinel_dna.ai_investigation.investigation_engine import InvestigationEngine
+﻿from sentinel_dna.investigation.reporting import InvestigationReporter
 from sentinel_dna.case_management.case_store import CaseStore
 from sentinel_dna.evidence.evidence_engine import EvidenceEngine
 from sentinel_dna.risk.risk_engine import RiskEngine
@@ -8,7 +8,7 @@ def test_complete_investigation_flow(tmp_path):
     case_store = CaseStore(tmp_path)
     evidence_engine = EvidenceEngine(tmp_path)
     risk_engine = RiskEngine()
-    investigation_engine = InvestigationEngine()
+    investigation_engine = InvestigationReporter()
 
     case = case_store.create_case("Suspicious email", "Reported credential verification email", "high")
     evidence = evidence_engine.normalize_email(
@@ -31,4 +31,5 @@ def test_complete_investigation_flow(tmp_path):
     assert risk.score > 0
     assert summary.case_id == case.case_id
     assert summary.recommended_actions
+
 

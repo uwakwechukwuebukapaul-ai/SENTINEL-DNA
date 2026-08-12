@@ -1,10 +1,8 @@
-import json
+﻿import json
 
 import pytest
 
-from sentinel_dna.ai_investigation.investigation_engine import (
-    InvestigationEngine,
-)
+from sentinel_dna.investigation.reporting import InvestigationReporter
 from sentinel_dna.investigation import (
     InvestigationContext,
     InvestigationCoordinator,
@@ -213,7 +211,7 @@ def test_orchestrator_creates_execution_plan_only_once(tmp_path):
 
 
 def test_investigation_engine_exposes_public_recommendation_api():
-    engine = InvestigationEngine()
+    engine = InvestigationReporter()
 
     high_actions = engine.recommend_actions("high")
     medium_actions = engine.recommend_actions("medium")
