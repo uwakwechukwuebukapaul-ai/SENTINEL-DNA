@@ -26,6 +26,7 @@ class InvestigationTrace:
                 "timestamp": datetime.now(
                     timezone.utc
                 ).isoformat(),
+                "stage": event_type,
                 "type": event_type,
                 "message": message,
                 "details": details or {},
