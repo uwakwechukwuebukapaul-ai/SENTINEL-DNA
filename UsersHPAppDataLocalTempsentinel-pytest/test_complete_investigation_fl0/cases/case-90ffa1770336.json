@@ -1,0 +1,26 @@
+{
+  "title": "Suspicious email",
+  "description": "Reported credential verification email",
+  "severity": "high",
+  "status": "open",
+  "case_id": "case-90ffa1770336",
+  "created_at": "2026-08-12T01:51:20.441544+00:00",
+  "updated_at": "2026-08-12T01:51:20.442583+00:00",
+  "evidence_ids": [
+    "ev-51e5830aa8ca"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-08-12T01:51:20.441560+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-51e5830aa8ca",
+      "timestamp": "2026-08-12T01:51:20.442574+00:00",
+      "metadata": {}
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "source": "gmail",
+  "evidence_type": "email",
+  "summary": "Email from security@example-login.com: Urgent password verification",
+  "raw": {
+    "sender": "security@example-login.com",
+    "subject": "Urgent password verification",
+    "body": "Verify at https://example-login.com now."
+  },
+  "confidence": 0.93,
+  "evidence_id": "ev-51e5830aa8ca",
+  "observed_at": "2026-08-12T01:51:20.442061+00:00",
+  "indicators": [
+    "https://example-login.com",
+    "security@example-login.com"
+  ]
+}

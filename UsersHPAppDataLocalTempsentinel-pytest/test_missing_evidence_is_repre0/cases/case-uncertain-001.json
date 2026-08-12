@@ -1,0 +1,37 @@
+{
+  "title": "Routine update",
+  "description": "No links or indicators included.",
+  "severity": "medium",
+  "status": "open",
+  "case_id": "case-uncertain-001",
+  "created_at": "2026-08-12T01:51:20.414128+00:00",
+  "updated_at": "2026-08-12T01:51:20.415231+00:00",
+  "evidence_ids": [
+    "ev-cb4c6fe1aa59"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-08-12T01:51:20.414135+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "investigation_triggered",
+      "message": "Investigation triggered",
+      "timestamp": "2026-08-12T01:51:20.414140+00:00",
+      "metadata": {
+        "alert": {
+          "subject": "Routine update",
+          "body": "No links or indicators included."
+        }
+      }
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-cb4c6fe1aa59",
+      "timestamp": "2026-08-12T01:51:20.415221+00:00",
+      "metadata": {}
+    }
+  ]
+}

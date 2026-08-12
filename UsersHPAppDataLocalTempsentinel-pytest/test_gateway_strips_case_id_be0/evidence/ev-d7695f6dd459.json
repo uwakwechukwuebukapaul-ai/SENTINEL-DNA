@@ -1,0 +1,17 @@
+{
+  "source": "gmail",
+  "evidence_type": "email",
+  "summary": "Email from unknown sender: Suspicious Authentication Activity",
+  "raw": {
+    "sender": "unknown sender",
+    "subject": "Suspicious Authentication Activity",
+    "body": "Multiple suspicious authentication attempts detected. Verify activity at https://example-login.com/security.\nEntities: users: alice@example.com; hosts: WORKSTATION-01; ips: 203.0.113.50; domains: example-login.com"
+  },
+  "confidence": 0.69,
+  "evidence_id": "ev-d7695f6dd459",
+  "observed_at": "2026-08-12T01:51:20.544983+00:00",
+  "indicators": [
+    "alice@example.com",
+    "https://example-login.com/security"
+  ]
+}

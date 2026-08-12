@@ -1,0 +1,39 @@
+{
+  "title": "Urgent MFA password verification required",
+  "description": "Verify your password at https://example-login.com/security.",
+  "severity": "high",
+  "status": "open",
+  "case_id": "case-contract-001",
+  "created_at": "2026-08-12T01:51:20.401389+00:00",
+  "updated_at": "2026-08-12T01:51:20.403415+00:00",
+  "evidence_ids": [
+    "ev-90f92210778a"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-08-12T01:51:20.401412+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "investigation_triggered",
+      "message": "Investigation triggered",
+      "timestamp": "2026-08-12T01:51:20.401428+00:00",
+      "metadata": {
+        "alert": {
+          "sender": "security-alert@example-login.com",
+          "subject": "Urgent MFA password verification required",
+          "body": "Verify your password at https://example-login.com/security.",
+          "severity": "high"
+        }
+      }
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-90f92210778a",
+      "timestamp": "2026-08-12T01:51:20.403405+00:00",
+      "metadata": {}
+    }
+  ]
+}

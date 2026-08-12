@@ -1,0 +1,109 @@
+{
+  "title": "Suspicious Authentication Activity",
+  "description": "Multiple suspicious authentication attempts detected. Verify activity at https://example-login.com/security.",
+  "severity": "high",
+  "status": "open",
+  "case_id": "gateway-serialization-001",
+  "created_at": "2026-08-12T01:51:20.569632+00:00",
+  "updated_at": "2026-08-12T01:51:20.571122+00:00",
+  "evidence_ids": [
+    "ev-5435b433ed97"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-08-12T01:51:20.569639+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "investigation_triggered",
+      "message": "Investigation triggered",
+      "timestamp": "2026-08-12T01:51:20.569644+00:00",
+      "metadata": {
+        "alert": {
+          "alert_id": "SENTINEL-GW-001",
+          "source": "Microsoft Defender for Cloud/Microsoft Sentinel",
+          "timestamp": "2026-08-12T00:00:00Z",
+          "title": "Suspicious Authentication Activity",
+          "subject": "Suspicious Authentication Activity",
+          "severity": "high",
+          "description": "Multiple suspicious authentication attempts detected. Verify activity at https://example-login.com/security.",
+          "body": "Multiple suspicious authentication attempts detected. Verify activity at https://example-login.com/security.\nEntities: users: alice@example.com; hosts: WORKSTATION-01; ips: 203.0.113.50; domains: example-login.com",
+          "entities": {
+            "users": [
+              "alice@example.com"
+            ],
+            "hosts": [
+              "WORKSTATION-01"
+            ],
+            "ips": [
+              "203.0.113.50"
+            ],
+            "domains": [
+              "example-login.com"
+            ],
+            "hashes": []
+          },
+          "metadata": {
+            "provider": "Microsoft Defender for Cloud",
+            "product": "Microsoft Sentinel",
+            "tactics": [
+              "CredentialAccess"
+            ],
+            "techniques": [
+              "T1110"
+            ],
+            "compromised_entity": "WORKSTATION-01",
+            "extended_properties": {
+              "RuleId": "AUTH-001"
+            }
+          },
+          "raw_event": {
+            "SystemAlertId": "SENTINEL-GW-001",
+            "AlertName": "Suspicious Authentication Activity",
+            "Description": "Multiple suspicious authentication attempts detected. Verify activity at https://example-login.com/security.",
+            "Severity": "High",
+            "TimeGenerated": "2026-08-12T00:00:00Z",
+            "ProviderName": "Microsoft Defender for Cloud",
+            "ProductName": "Microsoft Sentinel",
+            "CompromisedEntity": "WORKSTATION-01",
+            "Entities": [
+              {
+                "Type": "account",
+                "Name": "alice@example.com"
+              },
+              {
+                "Type": "host",
+                "HostName": "WORKSTATION-01"
+              },
+              {
+                "Type": "ip",
+                "Address": "203.0.113.50"
+              },
+              {
+                "Type": "dns",
+                "DomainName": "example-login.com"
+              }
+            ],
+            "Tactics": [
+              "CredentialAccess"
+            ],
+            "Techniques": [
+              "T1110"
+            ],
+            "ExtendedProperties": {
+              "RuleId": "AUTH-001"
+            }
+          }
+        }
+      }
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-5435b433ed97",
+      "timestamp": "2026-08-12T01:51:20.571114+00:00",
+      "metadata": {}
+    }
+  ]
+}

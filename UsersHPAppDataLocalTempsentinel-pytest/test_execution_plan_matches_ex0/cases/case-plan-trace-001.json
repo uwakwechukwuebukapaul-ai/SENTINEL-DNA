@@ -1,0 +1,37 @@
+{
+  "title": "Suspicious login",
+  "description": "Verify at https://example-login.com.",
+  "severity": "medium",
+  "status": "open",
+  "case_id": "case-plan-trace-001",
+  "created_at": "2026-08-12T01:51:20.436245+00:00",
+  "updated_at": "2026-08-12T01:51:20.437469+00:00",
+  "evidence_ids": [
+    "ev-e3f8c481f8ce"
+  ],
+  "events": [
+    {
+      "event_type": "case_created",
+      "message": "Case created",
+      "timestamp": "2026-08-12T01:51:20.436253+00:00",
+      "metadata": {}
+    },
+    {
+      "event_type": "investigation_triggered",
+      "message": "Investigation triggered",
+      "timestamp": "2026-08-12T01:51:20.436258+00:00",
+      "metadata": {
+        "alert": {
+          "subject": "Suspicious login",
+          "body": "Verify at https://example-login.com."
+        }
+      }
+    },
+    {
+      "event_type": "evidence_attached",
+      "message": "Attached evidence ev-e3f8c481f8ce",
+      "timestamp": "2026-08-12T01:51:20.437463+00:00",
+      "metadata": {}
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "source": "gmail",
+  "evidence_type": "email",
+  "summary": "Email from unknown@example.com: Suspicious login verification",
+  "raw": {
+    "sender": "unknown@example.com",
+    "subject": "Suspicious login verification",
+    "body": "User clicked https://example-login.com."
+  },
+  "confidence": 0.57,
+  "evidence_id": "ev-15fe74dd5b6f",
+  "observed_at": "2026-08-12T01:51:20.409620+00:00",
+  "indicators": [
+    "https://example-login.com",
+    "unknown@example.com"
+  ]
+}
