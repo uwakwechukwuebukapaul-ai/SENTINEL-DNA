@@ -1,0 +1,41 @@
+services:
+  sentinel-dna:
+    build: .
+    ports: ["5000:5000"]
+    environment:
+      SENTINEL_DNA_ENV: production
+      SENTINEL_DNA_HOST: 0.0.0.0
+      SENTINEL_DNA_SAAS_DATABASE_URL: postgresql://sentinel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/sentinel
+      SENTINEL_DNA_REDIS_URL: redis://redis:6379/0
+      SENTINEL_DNA_SECRET_BACKEND: environment
+      SENTINEL_DNA_ENCRYPTION_KEY: ${SENTINEL_DNA_ENCRYPTION_KEY:?set SENTINEL_DNA_ENCRYPTION_KEY}
+      SENTINEL_DNA_RATE_LIMIT_PER_MINUTE: ${SENTINEL_DNA_RATE_LIMIT_PER_MINUTE:-120}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+volumes:
+  postgres-data:
+  redis-data:

@@ -27,6 +27,8 @@ class Case:
     updated_at: str = field(default_factory=utc_now_iso)
     evidence_ids: list[str] = field(default_factory=list)
     events: list[CaseEvent] = field(default_factory=list)
+    tenant_id: str | None = None
+    owner_user_id: str | None = None
 
     def add_event(self, event_type: str, message: str, metadata: dict[str, Any] | None = None) -> None:
         self.events.append(CaseEvent(event_type=event_type, message=message, metadata=metadata or {}))
@@ -36,4 +38,3 @@ class Case:
         if evidence_id not in self.evidence_ids:
             self.evidence_ids.append(evidence_id)
             self.add_event("evidence_attached", f"Attached evidence {evidence_id}")
-

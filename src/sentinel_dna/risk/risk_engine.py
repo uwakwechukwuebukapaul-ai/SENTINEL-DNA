@@ -14,7 +14,8 @@ class RiskAssessment:
 class RiskEngine:
     def assess(self, evidence_items: list[Evidence], intelligence: dict[str, Any] | None = None,
                mitre_attack: list[dict[str, Any]] | None = None,
-               graph_insights: dict[str, Any] | None = None, uncertainties: list[str] | None = None) -> RiskAssessment:
+               graph_insights: dict[str, Any] | None = None, uncertainties: list[str] | None = None,
+               fusion: Any | None = None) -> RiskAssessment:
         score = 0
         reasons = []
         for evidence in evidence_items:
@@ -36,6 +37,13 @@ class RiskEngine:
         if mitre_attack:
             score += min(15, len(mitre_attack) * 5)
             reasons.append(f"{len(mitre_attack)} MITRE technique mappings increased risk")
+        if fusion:
+            if getattr(fusion, "verdict", "") in {"malicious", "high_risk", "suspicious"}:
+                score += 10
+                reasons.append("Evidence fusion verdict increased risk")
+            if getattr(fusion, "confidence", 0.0) >= 0.75:
+                score += 5
+                reasons.append("High-confidence evidence fusion increased risk certainty")
         high_confidence = (graph_insights or {}).get("high_confidence_relationships", [])
         if high_confidence:
             score += min(10, len(high_confidence) * 2)

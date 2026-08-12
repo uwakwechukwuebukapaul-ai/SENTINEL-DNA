@@ -16,6 +16,7 @@ Uses SQLite to provide:
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +54,8 @@ class InvestigationLineageStore:
         self._initialize()
 
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
         connection = sqlite3.connect(
             self.database
         )
@@ -62,7 +64,11 @@ class InvestigationLineageStore:
             sqlite3.Row
         )
 
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
 
 
     def _initialize(self) -> None:

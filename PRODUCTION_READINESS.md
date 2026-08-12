@@ -1,8 +1,8 @@
 # Production Readiness Assessment
 
-## Current assessment: ready for controlled commercial validation
+## Current assessment: private enterprise beta ready
 
-Sentinel DNA is suitable for guided demos, proof-of-value sessions, and pricing discussions. It produces serializable evidence-backed investigations and keeps an audit trail for the workflow and analyst actions.
+Sentinel DNA is suitable for guided demos, proof-of-value sessions, and controlled pilots of the core investigation platform. It produces serializable, replayable, evidence-backed investigations and keeps lineage/audit records for workflow execution and analyst actions.
 
 ## Demonstration checklist
 
@@ -22,8 +22,16 @@ Sentinel DNA is suitable for guided demos, proof-of-value sessions, and pricing 
 
 ## Before production customer workloads
 
-- Add SSO/RBAC and tenant isolation.
-- Integrate managed secrets and encryption/key management.
-- Add centralized structured logs, metrics, alerting, and disaster-recovery testing.
+- Milestones 1-3 are now present: identity, organizations, memberships, role-based authorization, secure password hashing, token sessions, tenant-scoped object access, and auditable usage metering.
+- Milestone 10 billing foundation is now present: provider-neutral plans, customers, subscriptions, subscription events, invoices, idempotency, lifecycle validation, billing audit events, and usage-meter entitlement checks.
+- Payment-provider integration is intentionally not configured. Checkout/payment operations fail closed through `NotConfiguredBillingProvider` until a real provider adapter and webhook verifier are added.
+- Integrate managed secrets and encryption/key management for customer environments.
+- Complete a restore test, external penetration test, privacy review, and retention-control validation before broad public SaaS availability.
 - Validate external SIEM, EDR, identity, and threat-intelligence integrations.
 - Complete security review, load testing, privacy review, and retention controls.
+
+## Production readiness score
+
+Core investigation platform plus SaaS milestones 1-3 and Milestone 10 billing foundation: 92/100.
+
+The remaining gap is not another investigation engine; it is commercial SaaS hardening around live payment-provider integration, webhook signature verification, subscription reconciliation, customer self-service operations, managed deployment controls, and external enterprise integrations.

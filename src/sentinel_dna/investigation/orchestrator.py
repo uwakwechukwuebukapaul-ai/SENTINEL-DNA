@@ -153,69 +153,17 @@ class InvestigationOrchestrator:
         context: InvestigationContext,
     ) -> InvestigationResult:
         """
-        Execute complete investigation workflow.
+        Execute the complete investigation workflow.
 
-        Evidence-first execution order.
+        The orchestrator owns workflow coordination while the
+        planner defines the investigation stages and the runtime
+        executes them.
         """
 
-
         if context.trace is None:
-            attach_trace(
-                context
-            )
+            attach_trace(context)
 
-
-        self._initialize_lineage(
-            context
-        )
-
-
-        self.load_context(
-            context
-        )
-
-
-        self.collect_evidence(
-            context
-        )
-
-
-        self.enrich_iocs(
-            context
-        )
-
-
-        self.evaluate_threat_intelligence(
-            context
-        )
-
-
-        self.correlate_entities(
-            context
-        )
-
-        self.analyze_graph(context)
-
-
-        self.map_mitre_attack(
-            context
-        )
-
-        # Refresh insights now that MITRE nodes can be represented as attack paths.
-        self.analyze_graph(context)
-
-
-        self.classify_threat(
-            context
-        )
-
-        self.calculate_risk(
-            context
-        )
-
-        self.perform_reasoning(
-            context
-        )
+        self._initialize_lineage(context)
 
         plan = self.planner.create_plan(
             context,
@@ -227,67 +175,23 @@ class InvestigationOrchestrator:
             plan,
         )
 
-        self.build_timeline(
-            context
-        )
-
-        context.fusion = (
-            self.fusion_engine.fuse(
-                context
-            )
-        )
-
-        self.generate_decision_intelligence(
-            context
-        )
-
-        self.produce_recommendations(
-            context
-        )
-
-        self.generate_response_recommendations(context)
-        self.generate_detection_recommendations(context)
-
-        self.generate_report(
-            context
-        )
-
         results = self._assemble_results(
             context,
             plan,
         )
 
+        if context.trace:
+            results["audit_trail"] = context.trace.events
+
         self.lineage_store.save_context_lineage(
             context
         )
-
-        if context.trace:
-            results["audit_trail"] = (
-                context.trace.events
-            )
 
         return InvestigationResult(
             plan_name=self.planner.plan_name,
             results=results,
             errors=context.errors,
         )
-
-    def calculate_risk(
-        self,
-        context: InvestigationContext,
-    ) -> None:
-
-        context.risk = (
-            self.risk_engine.assess(context.evidence_items, context.intelligence,
-                                    context.mitre_attack, context.graph_insights,
-                                    context.uncertainties)
-        )
-
-        context.graph.add_node(
-            "risk_signal", context.risk.level,
-            metadata={"score": context.risk.score, "reasons": context.risk.reasons},
-        )
-
 
     def _initialize_lineage(
         self,
@@ -351,6 +255,13 @@ class InvestigationOrchestrator:
                 details,
                 confidence,
             )
+
+        self._record_replay(
+            context,
+            stage=stage,
+            message=f"{action} recorded from {source}",
+            details=details,
+        )
 
     def load_context(
         self,
@@ -683,6 +594,58 @@ class InvestigationOrchestrator:
         context.graph_insights = self.graph_insights_engine.analyze(context.graph)
 
 
+    def fuse_evidence(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+        """
+        Fuse evidence, IOC intelligence, graph correlations, and MITRE mappings
+        before risk and confidence are calculated.
+        """
+
+        context.fusion = self.fusion_engine.fuse(context)
+
+        context.intelligence["fusion"] = context.fusion.to_dict()
+
+        fusion_node = context.graph.add_node(
+            "fusion_verdict",
+            context.fusion.verdict,
+            metadata={
+                "confidence": context.fusion.confidence,
+                "sources": context.fusion.contributing_sources,
+                "evidence_count": context.fusion.evidence_count,
+            },
+        )
+
+        for evidence in context.evidence_items:
+            evidence_node = context.graph.add_node(
+                "evidence",
+                evidence.evidence_id,
+                metadata={"source": evidence.evidence_type, "confidence": evidence.confidence},
+            )
+            context.graph.add_edge(
+                evidence_node,
+                fusion_node,
+                "contributes_to",
+                metadata={"source": "EvidenceFusionEngine"},
+                confidence=evidence.confidence,
+                lineage=[evidence.evidence_id],
+            )
+
+        self._record_provenance(
+            context,
+            stage="fusion",
+            action="evidence_fused",
+            source="EvidenceFusionEngine",
+            details={
+                "verdict": context.fusion.verdict,
+                "confidence": context.fusion.confidence,
+                "sources": context.fusion.contributing_sources,
+            },
+            confidence=context.fusion.confidence,
+        )
+
+
     def build_timeline(
         self,
         context: InvestigationContext,
@@ -822,7 +785,7 @@ class InvestigationOrchestrator:
         context.risk = (
             self.risk_engine.assess(context.evidence_items, context.intelligence,
                                     context.mitre_attack, context.graph_insights,
-                                    context.uncertainties)
+                                    context.uncertainties, context.fusion)
         )
 
         context.graph.add_node(
@@ -1411,13 +1374,3 @@ class InvestigationOrchestrator:
             for key, value in alert.items()
 
         }
-        threat_node = context.graph.add_node(
-            "threat_intelligence", "local_rules",
-            metadata={"suspicious_iocs": suspicious},
-        )
-        for node in context.graph.nodes.values():
-            if node.node_type == "ioc" and node.value in suspicious:
-                context.graph.add_edge(
-                    node, threat_node, "malicious_domain", confidence=0.85,
-                    lineage=context.graph.evidence_lineage(node),
-                )

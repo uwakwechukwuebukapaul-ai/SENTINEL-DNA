@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: sentinel-dna}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector: {matchLabels: {app: sentinel-dna}}
+  template:
+    metadata: {labels: {app: sentinel-dna}}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount }}
+      containers:
+        - name: api
+          image: {{ .Values.image }}
+          ports: [{containerPort: 5000}]
+          envFrom:
+            - secretRef: {name: "{{ .Values.secrets.name }}"}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}
+          readinessProbe: {httpGet: {path: /readyz, port: 5000}}
+          livenessProbe: {httpGet: {path: /healthz, port: 5000}}

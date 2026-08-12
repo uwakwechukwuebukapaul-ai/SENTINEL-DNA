@@ -14,4 +14,5 @@ class Evidence:
     evidence_id: str = field(default_factory=lambda: f"ev-{uuid4().hex[:12]}")
     observed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     indicators: list[str] = field(default_factory=list)
-
+    tenant_id: str | None = None
+    owner_user_id: str | None = None

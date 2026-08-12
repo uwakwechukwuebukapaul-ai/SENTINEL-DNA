@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 
@@ -29,12 +30,18 @@ class EvidenceEngine:
         )
 
     def save(self, evidence: Evidence) -> None:
-        evidence_path = self.evidence_dir / f"{evidence.evidence_id}.json"
+        evidence_path = self._evidence_path(evidence.evidence_id)
         evidence_path.write_text(json.dumps(asdict(evidence), indent=2), encoding="utf-8")
 
     def get(self, evidence_id: str) -> Evidence:
-        evidence_path = self.evidence_dir / f"{evidence_id}.json"
+        evidence_path = self._evidence_path(evidence_id)
         return Evidence(**json.loads(evidence_path.read_text(encoding="utf-8")))
+
+    def get_for_tenant(self, evidence_id: str, tenant_id: str) -> Evidence:
+        evidence = self.get(evidence_id)
+        if evidence.tenant_id != tenant_id:
+            raise PermissionError("evidence is not available in this tenant")
+        return evidence
 
     def _extract_indicators(self, text: str) -> list[str]:
         indicators = []
@@ -46,3 +53,7 @@ class EvidenceEngine:
                 indicators.append(cleaned)
         return sorted(set(indicators))
 
+    def _evidence_path(self, evidence_id: str) -> Path:
+        if not isinstance(evidence_id, str) or not re.fullmatch(r"ev-[A-Za-z0-9]{12}", evidence_id):
+            raise ValueError("evidence_id is invalid")
+        return self.evidence_dir / f"{evidence_id}.json"

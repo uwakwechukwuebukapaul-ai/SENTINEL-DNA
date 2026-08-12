@@ -16,7 +16,27 @@ dependencies = [
 dev = [
   "pytest==8.3.2",
 ]
+postgres = [
+  "psycopg[binary]>=3.2,<4",
+]
+redis = [
+  "redis>=5.0,<6",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+sentinel_dna = ["saas/migrations/*.sql"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-ra"
+testpaths = ["tests"]
+norecursedirs = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "work",
+    "*.egg-info"
+]

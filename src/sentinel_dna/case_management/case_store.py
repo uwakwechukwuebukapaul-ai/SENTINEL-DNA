@@ -13,8 +13,21 @@ class CaseStore:
         self.cases_dir = self.data_dir / "cases"
         self.cases_dir.mkdir(parents=True, exist_ok=True)
 
-    def create_case(self, title: str, description: str, severity: str = "medium") -> Case:
-        case = Case(title=title, description=description, severity=severity)
+    def create_case(
+        self,
+        title: str,
+        description: str,
+        severity: str = "medium",
+        tenant_id: str | None = None,
+        owner_user_id: str | None = None,
+    ) -> Case:
+        case = Case(
+            title=title,
+            description=description,
+            severity=severity,
+            tenant_id=tenant_id,
+            owner_user_id=owner_user_id,
+        )
         case.add_event("case_created", "Case created")
         self.save(case)
         return case
@@ -39,6 +52,19 @@ class CaseStore:
         for case_path in sorted(self.cases_dir.glob("*.json")):
             cases.append(self.get(case_path.stem))
         return cases
+
+    def list_cases_for_tenant(self, tenant_id: str) -> list[Case]:
+        return [
+            case
+            for case in self.list_cases()
+            if case.tenant_id == tenant_id
+        ]
+
+    def get_for_tenant(self, case_id: str, tenant_id: str) -> Case:
+        case = self.get(case_id)
+        if case.tenant_id != tenant_id:
+            raise PermissionError("case is not available in this tenant")
+        return case
 
     def _case_path(self, case_id: str) -> Path:
         if not isinstance(case_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", case_id):
