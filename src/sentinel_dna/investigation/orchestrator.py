@@ -45,6 +45,7 @@ from sentinel_dna.risk.risk_engine import (
 from sentinel_dna.services.intelligence.fusion.evidence_fusion import (
     EvidenceFusionEngine,
 )
+from sentinel_dna.investigation.graph_insights import GraphInsightsEngine
 from .runtime import (
     RuntimeTask,
     RuntimeTaskExecutor,
@@ -114,6 +115,7 @@ class InvestigationOrchestrator:
         self.risk_engine = RiskEngine()
 
         self.fusion_engine = EvidenceFusionEngine()
+        self.graph_insights_engine = GraphInsightsEngine()
 
         self.reporter = (
             reporter
@@ -188,10 +190,15 @@ class InvestigationOrchestrator:
             context
         )
 
+        self.analyze_graph(context)
+
 
         self.map_mitre_attack(
             context
         )
+
+        # Refresh insights now that MITRE nodes can be represented as attack paths.
+        self.analyze_graph(context)
 
 
         self.classify_threat(
@@ -264,9 +271,14 @@ class InvestigationOrchestrator:
     ) -> None:
 
         context.risk = (
-            self.risk_engine.assess(
-                context.evidence_items
-            )
+            self.risk_engine.assess(context.evidence_items, context.intelligence,
+                                    context.mitre_attack, context.graph_insights,
+                                    context.uncertainties)
+        )
+
+        context.graph.add_node(
+            "risk_signal", context.risk.level,
+            metadata={"score": context.risk.score, "reasons": context.risk.reasons},
         )
 
 
@@ -385,6 +397,10 @@ class InvestigationOrchestrator:
 
         context.alert = alert
         context.case = case
+        context.graph.add_node(
+            "alert", context.case_id,
+            metadata={"severity": severity, "title": title},
+        )
 
         self._record_provenance(
             context,
@@ -528,6 +544,10 @@ class InvestigationOrchestrator:
                 "reputation": reputation,
             }
 
+            if "." in normalized:
+                domain = normalized.split("/")[2] if "://" in normalized else normalized
+                context.graph.add_node("domain", domain, metadata={"source_ioc": ioc})
+
 
         context.intelligence["iocs"] = enriched
 
@@ -605,6 +625,7 @@ class InvestigationOrchestrator:
                 context.graph.add_node(
                     "evidence",
                     evidence.evidence_id,
+                    metadata={"source": evidence.evidence_type, "confidence": evidence.confidence},
                 )
             )
 
@@ -614,6 +635,7 @@ class InvestigationOrchestrator:
                     context.graph.add_node(
                         "ioc",
                         ioc,
+                        metadata={"indicator": ioc},
                     )
                 )
 
@@ -621,6 +643,9 @@ class InvestigationOrchestrator:
                     evidence_node,
                     ioc_node,
                     "contains",
+                    metadata={"source": "EvidenceEngine"},
+                    confidence=evidence.confidence,
+                    lineage=[evidence.evidence_id],
                 )
 
                 correlations.append(
@@ -637,6 +662,18 @@ class InvestigationOrchestrator:
             context.uncertainties.append(
                 "No event or entity correlations established."
             )
+
+    def analyze_graph(self, context: InvestigationContext) -> None:
+        """Enrich the evidence graph with threat mappings and calculate graph intelligence."""
+        for mapping in context.mitre_attack:
+            technique = context.graph.add_node(
+                "mitre_attack_technique", mapping["technique_id"],
+                metadata={"technique": mapping["technique"]},
+            )
+            for ioc_node in [node for node in context.graph.nodes.values() if node.node_type == "ioc"]:
+                context.graph.add_edge(ioc_node, technique, "maps_to", confidence=0.8,
+                                       lineage=context.graph.evidence_lineage(ioc_node))
+        context.graph_insights = self.graph_insights_engine.analyze(context.graph)
 
 
     def build_timeline(
@@ -734,6 +771,9 @@ class InvestigationOrchestrator:
 
         context.mitre_attack = mappings
 
+        # Keep direct callers of this stage supplied with current graph intelligence.
+        self.analyze_graph(context)
+
 
 
     def classify_threat(
@@ -773,9 +813,14 @@ class InvestigationOrchestrator:
 
 
         context.risk = (
-            self.risk_engine.assess(
-                context.evidence_items
-            )
+            self.risk_engine.assess(context.evidence_items, context.intelligence,
+                                    context.mitre_attack, context.graph_insights,
+                                    context.uncertainties)
+        )
+
+        context.graph.add_node(
+            "risk_signal", context.risk.level,
+            metadata={"score": context.risk.score, "reasons": context.risk.reasons},
         )
 
 
@@ -837,7 +882,13 @@ class InvestigationOrchestrator:
 
 
             "basis":
-                "Evidence confidence and investigation uncertainty.",
+                "Evidence confidence, IOC intelligence quality, graph relationships, and investigation uncertainty.",
+
+            "factors": [
+                {"name": "evidence_confidence", "score": round(sum(item.confidence for item in context.evidence_items) / len(context.evidence_items), 2) if context.evidence_items else 0.0},
+                {"name": "ioc_intelligence_quality", "score": 1.0 if context.intelligence.get("threat", {}).get("suspicious_iocs") else 0.5},
+                {"name": "graph_relationship_confidence", "score": round(sum(edge.confidence for edge in context.graph.edges) / len(context.graph.edges), 2) if context.graph.edges else 0.0},
+            ],
 
 
             "uncertainties":
@@ -872,6 +923,9 @@ class InvestigationOrchestrator:
 
                     "confidence":
                         evidence.confidence,
+                    "supporting_evidence": [{"artifact": evidence.evidence_type, "indicator": indicator,
+                                               "confidence": evidence.confidence} for indicator in evidence.indicators],
+                    "reasoning_factors": ["Evidence normalized and correlated", "IOC relationship recorded"],
                 }
             )
 
@@ -890,6 +944,13 @@ class InvestigationOrchestrator:
                 self._conclusion(
                     context
                 ),
+            "trace": {
+                "finding": self._conclusion(context),
+                "supporting_evidence": [item for finding in findings for item in finding["supporting_evidence"]],
+                "reasoning": ["Evidence confidence evaluated", "Graph relationships analyzed",
+                              "MITRE techniques mapped" if context.mitre_attack else "No MITRE technique mapped"],
+                "decision": "Escalate investigation" if context.risk and context.risk.level in {"high", "critical"} else "Monitor investigation",
+            },
         }
 
 
@@ -977,6 +1038,18 @@ class InvestigationOrchestrator:
                 ),
         }
 
+        decision = context.graph.add_node(
+            "investigation_decision",
+            context.decision_intelligence["recommended_decision"],
+            metadata={"confidence": context.decision_intelligence["confidence_score"]},
+        )
+        for risk_node in [node for node in context.graph.nodes.values() if node.node_type == "risk_signal"]:
+            context.graph.add_edge(
+                risk_node, decision, "supports",
+                confidence=context.confidence.get("score", 0.0),
+            )
+        context.graph_insights = self.graph_insights_engine.analyze(context.graph)
+
 
 
     def produce_recommendations(
@@ -1059,6 +1132,12 @@ class InvestigationOrchestrator:
             "confidence_statement":
                 summary.confidence_statement,
 
+            "evidence_findings": context.reasoning.get("findings", []),
+            "graph_relationships": context.graph.to_dict().get("edges", []),
+            "mitre_mappings": context.mitre_attack,
+            "risk_explanation": context.risk.reasons,
+            "confidence_explanation": context.confidence,
+
         }
 
 
@@ -1138,6 +1217,8 @@ class InvestigationOrchestrator:
 
                     else {}
                 ),
+
+            "graph_insights": context.graph_insights or {},
 
 
             "provenance":
@@ -1299,3 +1380,13 @@ class InvestigationOrchestrator:
             for key, value in alert.items()
 
         }
+        threat_node = context.graph.add_node(
+            "threat_intelligence", "local_rules",
+            metadata={"suspicious_iocs": suspicious},
+        )
+        for node in context.graph.nodes.values():
+            if node.node_type == "ioc" and node.value in suspicious:
+                context.graph.add_edge(
+                    node, threat_node, "malicious_domain", confidence=0.85,
+                    lineage=context.graph.evidence_lineage(node),
+                )

@@ -11,6 +11,7 @@ class InvestigationPlanner:
             RuntimeTask("collect_evidence", orchestrator.collect_evidence, required=True),
             RuntimeTask("enrich_iocs", orchestrator.enrich_iocs),
             RuntimeTask("correlate_entities", orchestrator.correlate_entities),
+            RuntimeTask("analyze_graph", orchestrator.analyze_graph),
             RuntimeTask("build_timeline", orchestrator.build_timeline),
             RuntimeTask("evaluate_threat_intelligence", orchestrator.evaluate_threat_intelligence),
             RuntimeTask("map_mitre_attack", orchestrator.map_mitre_attack),

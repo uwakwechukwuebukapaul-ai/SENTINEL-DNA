@@ -48,6 +48,10 @@ class GraphEdge:
         default_factory=dict
     )
 
+    confidence: float = 1.0
+
+    lineage: list[str] = field(default_factory=list)
+
 
 class InvestigationGraph:
     """
@@ -97,6 +101,8 @@ class InvestigationGraph:
         target: GraphNode,
         relationship: str,
         metadata: dict[str, Any] | None = None,
+        confidence: float = 1.0,
+        lineage: list[str] | None = None,
     ) -> GraphEdge:
 
         edge = GraphEdge(
@@ -104,11 +110,33 @@ class InvestigationGraph:
             target=target.node_id,
             relationship=relationship,
             metadata=metadata or {},
+            confidence=max(0.0, min(1.0, confidence)),
+            lineage=lineage or [],
         )
 
         self.edges.append(edge)
 
         return edge
+
+    def relationships_for(self, node: GraphNode | str) -> list[GraphEdge]:
+        """Return relationships touching a node, for explainable traversal."""
+        node_id = node if isinstance(node, str) else node.node_id
+        return [edge for edge in self.edges if node_id in (edge.source, edge.target)]
+
+    def evidence_lineage(self, node: GraphNode | str) -> list[str]:
+        """Return evidence IDs that support a node through direct relationships."""
+        node_id = node if isinstance(node, str) else node.node_id
+        lineage = []
+        for edge in self.relationships_for(node_id):
+            lineage.extend(edge.lineage)
+            other_id = edge.target if edge.source == node_id else edge.source
+            other = self.nodes.get(other_id)
+            if other and other.node_type.lower() == "evidence":
+                lineage.append(other.value)
+        return list(dict.fromkeys(lineage))
+
+    def high_confidence_relationships(self, threshold: float = 0.8) -> list[GraphEdge]:
+        return [edge for edge in self.edges if edge.confidence >= threshold]
 
 
     def to_dict(

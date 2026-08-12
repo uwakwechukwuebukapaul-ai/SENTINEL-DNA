@@ -149,6 +149,11 @@ class InvestigationContext:
     )
 
 
+    graph_insights: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+
     # Lazy initialized by InvestigationOrchestrator
     provenance: InvestigationProvenance | None = None
 

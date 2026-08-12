@@ -213,7 +213,7 @@ def test_sentinel_adapter_integrates_with_investigator(tmp_path):
     assert result.plan_name == "ai-investigator-v1"
     assert result.errors == []
     assert result.results["case_id"] == "sentinel-v2-001"
-    assert len(result.results["tasks"]) == 14
+    assert len(result.results["tasks"]) == 15
     assert result.results["evidence"]
     assert result.results["risk"]["score"] > 0
 
