@@ -1,4 +1,6 @@
 import json
+import re
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
@@ -18,11 +20,15 @@ class CaseStore:
         return case
 
     def save(self, case: Case) -> None:
-        case_path = self.cases_dir / f"{case.case_id}.json"
-        case_path.write_text(json.dumps(asdict(case), indent=2), encoding="utf-8")
+        case_path = self._case_path(case.case_id)
+        # Atomic replacement avoids partial case data after an interrupted write.
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=self.cases_dir, delete=False) as handle:
+            handle.write(json.dumps(asdict(case), indent=2))
+            temporary_path = Path(handle.name)
+        temporary_path.replace(case_path)
 
     def get(self, case_id: str) -> Case:
-        case_path = self.cases_dir / f"{case_id}.json"
+        case_path = self._case_path(case_id)
         data = json.loads(case_path.read_text(encoding="utf-8"))
         events = [CaseEvent(**event) for event in data.pop("events", [])]
         return Case(**data, events=events)
@@ -33,3 +39,8 @@ class CaseStore:
         for case_path in sorted(self.cases_dir.glob("*.json")):
             cases.append(self.get(case_path.stem))
         return cases
+
+    def _case_path(self, case_id: str) -> Path:
+        if not isinstance(case_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", case_id):
+            raise ValueError("case_id must contain only letters, numbers, dots, underscores, or hyphens")
+        return self.cases_dir / f"{case_id}.json"

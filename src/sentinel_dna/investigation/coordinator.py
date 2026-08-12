@@ -23,6 +23,11 @@ class InvestigationCoordinator:
         if not isinstance(case_id, str) or not case_id.strip():
             raise ValueError("case_id must be a non-empty string")
 
+        normalized_case_id = case_id.strip()
+        # Delegate final path safety validation to the storage boundary.
+        if len(normalized_case_id) > 128 or any(character in normalized_case_id for character in ("/", "\\")):
+            raise ValueError("case_id contains unsupported characters")
+
         if hasattr(alert, "to_investigation_alert"):
             alert = alert.to_investigation_alert()
 
@@ -30,7 +35,7 @@ class InvestigationCoordinator:
             raise ValueError("alert must be a non-empty dictionary")
 
         context = InvestigationContext(
-            case_id=case_id.strip(),
+            case_id=normalized_case_id,
             alert=alert,
         )
 

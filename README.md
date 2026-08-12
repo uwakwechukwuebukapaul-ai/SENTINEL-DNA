@@ -94,6 +94,8 @@ python -m sentinel_dna.workspace.web_app
 
 Then open `http://127.0.0.1:5000`.
 
+Operational checks are available at `/healthz` and `/readyz`. For container deployment, see [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) and [RELEASE_NOTES_v1.0_BETA.md](RELEASE_NOTES_v1.0_BETA.md).
+
 ## Run Tests
 
 ```powershell
