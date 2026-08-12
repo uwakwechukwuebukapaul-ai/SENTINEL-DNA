@@ -2,6 +2,9 @@ import json
 
 import pytest
 
+from sentinel_dna.ai_investigation.investigation_engine import (
+    InvestigationEngine,
+)
 from sentinel_dna.investigation import (
     InvestigationContext,
     InvestigationCoordinator,
@@ -32,14 +35,22 @@ def test_investigate_preserves_public_result_contract(tmp_path):
     assert "https://example-login.com/security" in result.results["iocs"]
     assert result.results["risk"]["score"] > 0
     assert result.results["confidence"]["score"] > 0
-    assert result.results["decision_intelligence"]["recommended_decision"] == "escalate"
+    assert (
+        result.results["decision_intelligence"]["recommended_decision"]
+        == "escalate"
+    )
     assert result.results["report"]["recommended_actions"]
-    assert set(result.to_dict()) == {"plan_name", "results", "errors"}
+    assert set(result.to_dict()) == {
+        "plan_name",
+        "results",
+        "errors",
+    }
     json.dumps(result.to_dict())
 
 
 def test_orchestrator_runs_evidence_first_pipeline(tmp_path):
     orchestrator = InvestigationOrchestrator(tmp_path)
+
     context = InvestigationContext(
         case_id="case-pipeline-001",
         alert={
@@ -52,12 +63,35 @@ def test_orchestrator_runs_evidence_first_pipeline(tmp_path):
     result = orchestrator.run(context)
 
     assert result.results["evidence"]
-    assert result.results["intelligence"]["iocs"]["https://example-login.com"]["reputation"] == "suspicious"
-    assert result.results["correlations"][0]["relationship"] == "observed_in_evidence"
-    assert result.results["timeline"][0]["evidence_id"] == result.results["evidence"][0]["evidence_id"]
+
+    assert (
+        result.results["intelligence"]["iocs"][
+            "https://example-login.com"
+        ]["reputation"]
+        == "suspicious"
+    )
+
+    assert (
+        result.results["correlations"][0]["relationship"]
+        == "observed_in_evidence"
+    )
+
+    assert (
+        result.results["timeline"][0]["evidence_id"]
+        == result.results["evidence"][0]["evidence_id"]
+    )
+
     assert result.results["mitre_attack"][0]["technique_id"] == "T1566"
-    assert result.results["threat_classification"]["classification"] == "phishing"
-    assert result.results["reasoning"]["findings"][0]["evidence_id"] == result.results["evidence"][0]["evidence_id"]
+    assert (
+        result.results["threat_classification"]["classification"]
+        == "phishing"
+    )
+
+    assert (
+        result.results["reasoning"]["findings"][0]["evidence_id"]
+        == result.results["evidence"][0]["evidence_id"]
+    )
+
     assert result.results["decision_intelligence"]["rationale"]
     assert result.results["audit_trail"][-1]["stage"] == "generate_report"
 
@@ -73,7 +107,11 @@ def test_missing_evidence_is_represented_as_uncertainty(tmp_path):
         },
     )
 
-    assert "No IOCs were discovered in the submitted alert evidence." in result.results["uncertainties"]
+    assert (
+        "No IOCs were discovered in the submitted alert evidence."
+        in result.results["uncertainties"]
+    )
+
     assert result.results["confidence"]["uncertainties"]
     assert result.errors == []
 
@@ -89,7 +127,11 @@ def test_investigate_rejects_malformed_input(tmp_path):
 
 
 def test_runtime_task_executor_records_structured_non_required_errors():
-    context = InvestigationContext(case_id="case-runtime-001", alert={})
+    context = InvestigationContext(
+        case_id="case-runtime-001",
+        alert={},
+    )
+
     executor = RuntimeTaskExecutor()
 
     def fail(_context):
@@ -101,7 +143,11 @@ def test_runtime_task_executor_records_structured_non_required_errors():
             RuntimeTask("optional_intel", fail),
             RuntimeTask(
                 "required_followup",
-                lambda investigation_context: investigation_context.uncertainties.append("continued"),
+                lambda investigation_context: (
+                    investigation_context.uncertainties.append(
+                        "continued"
+                    )
+                ),
                 required=True,
             ),
         ],
@@ -115,6 +161,114 @@ def test_runtime_task_executor_records_structured_non_required_errors():
             "required": False,
         }
     ]
+
     assert context.task_results[0]["status"] == "failed"
     assert context.audit_trail[0]["status"] == "failed"
     assert context.uncertainties == ["continued"]
+
+
+def test_orchestrator_creates_execution_plan_only_once(tmp_path):
+    class CountingPlanner:
+        plan_name = "ai-investigator-v1"
+
+        def __init__(self):
+            self.calls = 0
+
+        def create_plan(self, context, orchestrator):
+            self.calls += 1
+            return [
+                RuntimeTask(
+                    "load_context",
+                    orchestrator.load_context,
+                    required=True,
+                ),
+                RuntimeTask(
+                    "collect_evidence",
+                    orchestrator.collect_evidence,
+                    required=True,
+                ),
+            ]
+
+    planner = CountingPlanner()
+    orchestrator = InvestigationOrchestrator(
+        tmp_path,
+        planner=planner,
+    )
+
+    context = InvestigationContext(
+        case_id="case-plan-once-001",
+        alert={
+            "subject": "Suspicious login",
+            "body": "Verify at https://example-login.com.",
+        },
+    )
+
+    result = orchestrator.run(context)
+
+    assert planner.calls == 1
+    assert result.results["plan"]["tasks"] == [
+        "load_context",
+        "collect_evidence",
+    ]
+
+
+def test_investigation_engine_exposes_public_recommendation_api():
+    engine = InvestigationEngine()
+
+    high_actions = engine.recommend_actions("high")
+    medium_actions = engine.recommend_actions("medium")
+    low_actions = engine.recommend_actions("low")
+
+    assert high_actions
+    assert medium_actions
+    assert low_actions
+    assert "Escalate to senior analyst." in high_actions
+
+
+def test_orchestrator_uses_public_recommendation_api(tmp_path):
+    orchestrator = InvestigationOrchestrator(tmp_path)
+
+    calls = []
+
+    def recommend_actions(level):
+        calls.append(level)
+        return ["test recommendation"]
+
+    orchestrator.investigation_engine.recommend_actions = recommend_actions
+
+    context = InvestigationContext(
+        case_id="case-public-api-001",
+        alert={
+            "subject": "Routine update",
+            "body": "No indicators included.",
+        },
+    )
+
+    result = orchestrator.run(context)
+
+    assert calls == ["low"]
+    assert result.results["recommendations"] == [
+        "test recommendation"
+    ]
+
+
+def test_execution_plan_matches_executed_tasks(tmp_path):
+    orchestrator = InvestigationOrchestrator(tmp_path)
+
+    context = InvestigationContext(
+        case_id="case-plan-trace-001",
+        alert={
+            "subject": "Suspicious login",
+            "body": "Verify at https://example-login.com.",
+        },
+    )
+
+    result = orchestrator.run(context)
+
+    planned_tasks = result.results["plan"]["tasks"]
+    executed_tasks = [
+        item["task"]
+        for item in result.results["tasks"]
+    ]
+
+    assert planned_tasks == executed_tasks
