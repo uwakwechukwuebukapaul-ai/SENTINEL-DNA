@@ -21,5 +21,7 @@ class InvestigationPlanner:
             RuntimeTask("perform_reasoning", orchestrator.perform_reasoning),
             RuntimeTask("generate_decision_intelligence", orchestrator.generate_decision_intelligence),
             RuntimeTask("produce_recommendations", orchestrator.produce_recommendations),
+            RuntimeTask("generate_response_recommendations", orchestrator.generate_response_recommendations),
+            RuntimeTask("generate_detection_recommendations", orchestrator.generate_detection_recommendations),
             RuntimeTask("generate_report", orchestrator.generate_report),
         ]

@@ -275,7 +275,7 @@ def test_gateway_hands_off_to_ai_investigator(tmp_path):
     assert investigation.results["case_id"] == (
         "gateway-investigation-001"
     )
-    assert len(investigation.results["tasks"]) == 15
+    assert len(investigation.results["tasks"]) == 17
 
 
 def test_gateway_returns_alert_when_investigation_handoff_fails(

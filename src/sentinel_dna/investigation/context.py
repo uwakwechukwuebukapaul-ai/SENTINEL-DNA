@@ -115,6 +115,10 @@ class InvestigationContext:
         default_factory=list
     )
 
+    response_recommendations: list[dict[str, Any]] = field(default_factory=list)
+
+    detection_recommendations: list[dict[str, Any]] = field(default_factory=list)
+
 
     report: dict[str, Any] = field(
         default_factory=dict

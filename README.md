@@ -1,4 +1,4 @@
-# Sentinel DNA v0.1
+# Sentinel DNA v1.0 Beta
 
 Sentinel DNA is an AI-native security investigation intelligence platform. This v0.1 codebase evolves the earlier AI SOC Analyst prototype into a structured investigation layer between detection and decision.
 
@@ -51,7 +51,23 @@ print(result.to_dict())
 
 Current v1 capabilities are local and evidence-first: email evidence normalization, IOC extraction/enrichment, entity correlation, timeline construction, deterministic threat intelligence, MITRE ATT&CK mapping, threat classification, risk scoring, confidence scoring, reasoning, recommendations, report generation, and structured task/audit records.
 
-Current limitations: v1 does not yet connect to enterprise SIEM, EDR, identity, ticketing, or external threat-intelligence platforms. Local deterministic findings are labeled as local rules rather than external intelligence.
+## v1.0 Beta capabilities
+
+- Evidence-first investigation with IOC enrichment, lineage, MITRE mapping, graph intelligence, explainable reasoning, confidence, risk, and decision output.
+- Structured analyst report with overview, evidence, attack narrative, response recommendations, detection opportunities, and audit trail.
+- Safe SOAR foundation: all containment actions are recommendations and explicitly require analyst approval.
+- Analyst workspace dashboard and case-detail pages, including confirm, dismiss, escalate, and note actions recorded in case audit history.
+- Demo scenarios for phishing, account compromise, and malware are in `examples/demo_scenarios.json`.
+
+## Demo instructions
+
+Start the workspace with `python -m sentinel_dna.workspace.web_app`, then submit an alert using `InvestigationCoordinator` as shown above. Open the dashboard at `http://127.0.0.1:5000` and select the investigation to review evidence and record analyst actions.
+
+For a CLI-ready phishing example, run `python -m sentinel_dna.workspace.cli --demo`. The account-compromise and malware demo payloads are ready to pass to `InvestigationCoordinator.investigate` from `examples/demo_scenarios.json`.
+
+## Production readiness assessment
+
+Sentinel DNA v1.0 Beta is ready for controlled market-validation demonstrations: its outputs are deterministic, evidence-backed, serializable, and audit-oriented. It is not yet production-deployment ready for autonomous response: integrations with live SIEM/EDR/identity systems, authentication/authorization, multi-user persistence, observability, external threat intelligence, and PDF export remain future hardening work.
 
 ## Install
 

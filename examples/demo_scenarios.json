@@ -1,0 +1,5 @@
+{
+  "phishing": {"case_id": "demo-phishing-001", "alert": {"sender": "security@example-login.com", "subject": "Urgent MFA password verification", "body": "Verify your password at https://example-login.com/security.", "severity": "high"}},
+  "account_compromise": {"case_id": "demo-account-001", "alert": {"source": "identity", "subject": "Suspicious login verification", "body": "Account login requires verification at https://identity-login.example/verify.", "severity": "high"}},
+  "malware": {"case_id": "demo-malware-001", "alert": {"source": "endpoint", "subject": "Potential malware process activity", "body": "Endpoint reported malware process activity and hash indicator https://malware-login.example/hash.", "severity": "high"}}
+}

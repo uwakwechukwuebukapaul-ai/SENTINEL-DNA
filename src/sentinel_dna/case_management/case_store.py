@@ -29,7 +29,7 @@ class CaseStore:
 
     def list_cases(self) -> list[Case]:
         cases = []
-        for case_path in sorted(self.cases_dir.glob("case-*.json")):
+        # Coordinator callers may supply their own stable external case IDs.
+        for case_path in sorted(self.cases_dir.glob("*.json")):
             cases.append(self.get(case_path.stem))
         return cases
-

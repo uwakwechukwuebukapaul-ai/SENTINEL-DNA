@@ -46,6 +46,8 @@ from sentinel_dna.services.intelligence.fusion.evidence_fusion import (
     EvidenceFusionEngine,
 )
 from sentinel_dna.investigation.graph_insights import GraphInsightsEngine
+from sentinel_dna.investigation.response import ResponseRecommendationEngine
+from sentinel_dna.investigation.detection import DetectionRecommendationEngine
 from .runtime import (
     RuntimeTask,
     RuntimeTaskExecutor,
@@ -116,6 +118,8 @@ class InvestigationOrchestrator:
 
         self.fusion_engine = EvidenceFusionEngine()
         self.graph_insights_engine = GraphInsightsEngine()
+        self.response_engine = ResponseRecommendationEngine()
+        self.detection_engine = DetectionRecommendationEngine()
 
         self.reporter = (
             reporter
@@ -240,6 +244,9 @@ class InvestigationOrchestrator:
         self.produce_recommendations(
             context
         )
+
+        self.generate_response_recommendations(context)
+        self.generate_detection_recommendations(context)
 
         self.generate_report(
             context
@@ -1076,6 +1083,12 @@ class InvestigationOrchestrator:
             )
         )
 
+    def generate_response_recommendations(self, context: InvestigationContext) -> None:
+        context.response_recommendations = self.response_engine.recommend(context)
+
+    def generate_detection_recommendations(self, context: InvestigationContext) -> None:
+        context.detection_recommendations = self.detection_engine.generate(context)
+
 
     def generate_report(
         self,
@@ -1131,6 +1144,18 @@ class InvestigationOrchestrator:
 
             "confidence_statement":
                 summary.confidence_statement,
+
+            "investigation_overview": {
+                "case_id": context.case_id,
+                "alert_source": context.alert.get("source", "submitted_alert"),
+                "timestamps": {"created_at": context.case.created_at, "updated_at": context.case.updated_at},
+                "severity": context.case.severity,
+            },
+            "attack_narrative": context.reasoning.get("conclusion", "No supported attack narrative available."),
+            "response_recommendations": context.response_recommendations,
+            "detection_recommendations": context.detection_recommendations,
+            "audit_trail": context.audit_trail,
+            "format_version": "1.0",
 
             "evidence_findings": context.reasoning.get("findings", []),
             "graph_relationships": context.graph.to_dict().get("edges", []),
@@ -1300,6 +1325,12 @@ class InvestigationOrchestrator:
 
             "recommendations":
                 context.recommendations or [],
+
+            "response_recommendations":
+                context.response_recommendations or [],
+
+            "detection_recommendations":
+                context.detection_recommendations or [],
 
 
             "report":

@@ -1,11 +1,12 @@
 import os
 
-from flask import Flask, render_template_string
+from flask import Flask, abort, redirect, render_template_string, request, url_for
 
 from sentinel_dna.case_management.case_store import CaseStore
 from sentinel_dna.evidence.evidence_engine import EvidenceEngine
 from sentinel_dna.investigation.reporting import InvestigationReporter
 from sentinel_dna.risk.risk_engine import RiskEngine
+from sentinel_dna.investigation.analyst_actions import AnalystActionService
 
 
 PAGE = """
@@ -13,7 +14,7 @@ PAGE = """
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Sentinel DNA v0.1</title>
+  <title>Sentinel DNA v1.0 Beta</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -37,7 +38,8 @@ PAGE = """
   </style>
 </head>
 <body>
-  <h1>Sentinel DNA v0.1 Analyst Workspace</h1>
+  <h1>Sentinel DNA v1.0 Beta Analyst Workspace</h1>
+  <p>Investigations: {{ investigations|length }} · Open: {{ investigations|selectattr('case.status', 'equalto', 'open')|list|length }}</p>
 
   {% for item in investigations %}
     <section class="card">
@@ -50,6 +52,8 @@ PAGE = """
       </p>
 
       <p>{{ item.summary.executive_summary }}</p>
+      <p>Confidence: {{ item.confidence }} · Status: {{ item.case.status|upper }}</p>
+      <p><a href="{{ url_for('detail', case_id=item.case.case_id) }}">Open investigation</a></p>
 
       <h3>Recommended Actions</h3>
 
@@ -66,6 +70,16 @@ PAGE = """
   {% endfor %}
 </body>
 </html>
+"""
+
+DETAIL_PAGE = """
+<!doctype html><html><head><meta charset="utf-8"><title>{{ case.case_id }}</title>
+<style>body{font-family:Arial;margin:40px;background:#0f172a;color:#e2e8f0}.card{background:#111827;border:1px solid #334155;border-radius:12px;padding:18px;margin:14px 0}a{color:#93c5fd}textarea,input,select,button{padding:8px;margin:4px}</style></head>
+<body><a href="{{ url_for('index') }}">← Dashboard</a><h1>{{ case.title }}</h1>
+<div class="card"><b>Case:</b> {{ case.case_id }} · <b>Severity:</b> {{ case.severity }} · <b>Status:</b> {{ case.status }}<p>{{ case.description }}</p></div>
+<div class="card"><h2>Evidence</h2>{% for e in evidence %}<p>{{ e.summary }} — confidence {{ e.confidence }}<br>Indicators: {{ e.indicators|join(', ') }}</p>{% else %}<p>No evidence.</p>{% endfor %}</div>
+<div class="card"><h2>Analyst actions</h2><form method="post" action="{{ url_for('action', case_id=case.case_id) }}"><input name="analyst" placeholder="Analyst name" required><select name="action"><option value="confirm_finding">Confirm finding</option><option value="dismiss_finding">Dismiss finding</option><option value="escalate">Escalate</option><option value="add_note">Add note</option></select><textarea name="note" placeholder="Analyst note"></textarea><button>Record action</button></form></div>
+<div class="card"><h2>Audit history</h2>{% for event in case.events %}<p>{{ event.timestamp }} · {{ event.event_type }} · {{ event.message }}</p>{% endfor %}</div></body></html>
 """
 
 
@@ -104,6 +118,7 @@ def create_app(data_dir: str | None = None) -> Flask:
                     "case": case,
                     "risk": risk,
                     "summary": summary,
+                    "confidence": "evidence-backed",
                 }
             )
 
@@ -111,6 +126,24 @@ def create_app(data_dir: str | None = None) -> Flask:
             PAGE,
             investigations=investigations,
         )
+
+    @app.get("/investigations/<case_id>")
+    def detail(case_id: str):
+        case_store = CaseStore(resolved_data_dir)
+        evidence_engine = EvidenceEngine(resolved_data_dir)
+        try:
+            case = case_store.get(case_id)
+        except FileNotFoundError:
+            abort(404)
+        evidence = [evidence_engine.get(evidence_id) for evidence_id in case.evidence_ids]
+        return render_template_string(DETAIL_PAGE, case=case, evidence=evidence)
+
+    @app.post("/investigations/<case_id>/actions")
+    def action(case_id: str):
+        AnalystActionService(resolved_data_dir).record(
+            case_id, request.form.get("action", ""), request.form.get("analyst", ""), request.form.get("note", ""),
+        )
+        return redirect(url_for("detail", case_id=case_id))
 
     return app
 
