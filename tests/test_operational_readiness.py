@@ -37,6 +37,10 @@ def test_health_and_readiness_endpoints_include_security_headers(tmp_path):
     assert ready.status_code == 200
     assert health.headers["X-Content-Type-Options"] == "nosniff"
     assert health.headers["X-Frame-Options"] == "DENY"
+    assert client.get("/version").json["service"] == "sentinel-dna"
+    metrics = client.get("/metrics")
+    assert metrics.status_code == 200
+    assert "sentinel_dna_http_requests_total" in metrics.text
 
 
 def test_environment_configuration_validates_port(monkeypatch):

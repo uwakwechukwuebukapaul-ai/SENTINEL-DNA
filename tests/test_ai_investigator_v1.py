@@ -80,6 +80,11 @@ def test_orchestrator_runs_evidence_first_pipeline(tmp_path):
     )
 
     assert result.results["mitre_attack"][0]["technique_id"] == "T1566"
+    assert result.results["fusion"]["verdict"] in {
+        "suspicious",
+        "malicious",
+    }
+    assert "EvidenceFusionEngine" == result.results["fusion"]["metadata"]["engine"]
     assert (
         result.results["threat_classification"]["classification"]
         == "phishing"
@@ -270,3 +275,35 @@ def test_execution_plan_matches_executed_tasks(tmp_path):
     ]
 
     assert planned_tasks == executed_tasks
+    assert planned_tasks.index("fuse_evidence") < planned_tasks.index(
+        "calculate_risk"
+    )
+    assert planned_tasks.index("calculate_confidence") < planned_tasks.index(
+        "perform_reasoning"
+    )
+
+
+def test_phishing_investigation_creates_lineage_replay_and_reasoning(tmp_path):
+    result = InvestigationCoordinator(tmp_path).investigate(
+        "case-phishing-final-001",
+        {
+            "sender": "security@example-login.com",
+            "subject": "Password verification required",
+            "body": "Confirm MFA and password at https://example-login.com/security.",
+            "severity": "high",
+        },
+    )
+
+    output = result.results
+
+    assert result.errors == []
+    assert output["investigation"]["status"] == "completed"
+    assert output["intelligence"]["threat"]["suspicious_iocs"]
+    assert output["mitre_attack"][0]["technique_id"] == "T1566"
+    assert output["fusion"]["evidence_count"] >= 3
+    assert output["risk"]["score"] >= 50
+    assert output["reasoning"]["trace"]["supporting_evidence"]
+    assert output["decision_intelligence"]["recommended_decision"] == "escalate"
+    assert output["provenance"]["records"]
+    assert output["replay"]["events"]
+    assert output["audit_trail"]
