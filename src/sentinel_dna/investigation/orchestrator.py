@@ -8,7 +8,11 @@ from sentinel_dna.investigation.context import InvestigationContext
 from sentinel_dna.investigation.planning import InvestigationPlanner
 from sentinel_dna.investigation.reporting import InvestigationReporter
 from sentinel_dna.investigation.result import InvestigationResult
-from sentinel_dna.investigation.runtime import RuntimeTask, RuntimeTaskExecutor
+from sentinel_dna.investigation.runtime import (
+    RuntimeTask,
+    RuntimeTaskExecutor,
+)
+from sentinel_dna.investigation.trace_manager import attach_trace
 from sentinel_dna.risk.risk_engine import RiskEngine
 
 
@@ -16,40 +20,30 @@ class InvestigationOrchestrator:
     """
     Canonical Sentinel DNA investigation workflow engine.
 
-    Responsibilities:
-    - execute the investigation plan
-    - load and persist investigation context
-    - collect and enrich evidence
-    - correlate entities and indicators
-    - build the investigation timeline
-    - evaluate threat intelligence
-    - map MITRE ATT&CK techniques
-    - classify threats
-    - calculate risk and confidence
-    - perform evidence-grounded reasoning
-    - generate decision intelligence
-    - produce recommendations
-    - generate the final investigation report
+    Responsible for:
+
+    - investigation planning
+    - runtime execution
+    - evidence collection
+    - IOC enrichment
+    - correlation
+    - MITRE mapping
+    - risk analysis
+    - reasoning
+    - decision intelligence
+    - reporting
 
     Architecture:
 
         InvestigationCoordinator
-                |
-                v
+                 |
+                 v
         InvestigationOrchestrator
-                |
-                +--> InvestigationPlanner
-                |
-                +--> RuntimeTaskExecutor
-                |
-                +--> InvestigationReporter
-                |
-                +--> Evidence / Risk / Case services
+                 |
+        -------------------------
+        |           |           |
+     Planner    Runtime    Reporter
 
-    InvestigationOrchestrator is the workflow engine.
-    RuntimeTaskExecutor is execution infrastructure.
-    InvestigationReporter owns investigation reporting and
-    recommendation logic.
     """
 
     def __init__(
@@ -59,38 +53,107 @@ class InvestigationOrchestrator:
         planner: InvestigationPlanner | None = None,
         reporter: InvestigationReporter | None = None,
     ) -> None:
+
         self.case_store = CaseStore(data_dir)
-        self.evidence_engine = EvidenceEngine(data_dir)
+
+        self.evidence_engine = EvidenceEngine(
+            data_dir
+        )
+
         self.risk_engine = RiskEngine()
 
-        self.reporter = reporter or InvestigationReporter()
+        self.reporter = (
+            reporter
+            or InvestigationReporter()
+        )
 
-        # Compatibility/public service surface.
-        #
-        # Existing callers and tests expect:
-        #
-        #     orchestrator.investigation_engine.recommend_actions(...)
-        #
-        # This is intentionally an alias to the canonical reporting
-        self.investigation_engine = self.reporter
+        # Backward compatibility contract
+        self.investigation_engine = (
+            self.reporter
+        )
 
-        self.runtime = runtime or RuntimeTaskExecutor()
-        self.planner = planner or InvestigationPlanner()
+        self.runtime = (
+            runtime
+            or RuntimeTaskExecutor()
+        )
 
-    def run(self, context: InvestigationContext) -> InvestigationResult:
+        self.planner = (
+            planner
+            or InvestigationPlanner()
+        )
+
+
+    def run(
+        self,
+        context: InvestigationContext,
+    ) -> InvestigationResult:
         """
-        Execute a complete investigation.
-
-        Planning happens once per investigation and the resulting
-        execution plan is passed unchanged to the runtime executor.
+        Execute complete investigation workflow.
         """
-        plan = self.planner.create_plan(context, self)
 
-        self.runtime.execute(context, plan)
+        if context.trace is None:
+            attach_trace(context)
+
+
+        context.trace.add_event(
+            "investigation_started",
+            "Investigation workflow started",
+        )
+
+
+        plan = self.planner.create_plan(
+            context,
+            self,
+        )
+
+
+        context.trace.add_event(
+            "plan_created",
+            "Investigation execution plan generated",
+            {
+                "plan_name": self.planner.plan_name,
+                "task_count": len(plan),
+            },
+        )
+
+
+        self.runtime.execute(
+            context,
+            plan,
+        )
+
+
+        context.trace.add_event(
+            "tasks_completed",
+            "Investigation tasks completed",
+            {
+                "task_count": len(
+                    context.task_results
+                ),
+            },
+        )
+
+
+        results = self._assemble_results(
+            context,
+            plan,
+        )
+
+
+        context.trace.add_event(
+            "generate_report",
+            "Investigation report generated",
+        )
+
+
+        results["audit_trail"] = (
+            context.trace.events
+        )
+
 
         return InvestigationResult(
             plan_name=self.planner.plan_name,
-            results=self._assemble_results(context, plan),
+            results=results,
             errors=context.errors,
         )
 
