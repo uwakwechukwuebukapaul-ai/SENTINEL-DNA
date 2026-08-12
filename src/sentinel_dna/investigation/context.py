@@ -17,11 +17,23 @@ from sentinel_dna.investigation.replay import (
 @dataclass
 class InvestigationContext:
     """
-    Shared investigation state container.
+    Shared Sentinel DNA investigation state.
 
-    Holds all investigation intelligence,
-    evidence relationships, audit lineage,
-    and execution history.
+    Central investigation memory container.
+
+    Holds:
+
+    - case context
+    - evidence
+    - IOC intelligence
+    - correlations
+    - MITRE ATT&CK mappings
+    - risk
+    - reasoning
+    - decision intelligence
+    - investigation graph
+    - provenance lineage
+    - replay history
     """
 
     case_id: str
@@ -123,7 +135,17 @@ class InvestigationContext:
     )
 
 
+    # Lazy initialized by InvestigationOrchestrator
     provenance: InvestigationProvenance | None = None
 
 
+    # Lazy initialized by InvestigationOrchestrator
     replay: InvestigationReplay | None = None
+
+
+    lineage_id: str | None = None
+
+
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
