@@ -6,6 +6,10 @@ from sentinel_dna.case_management.models import Case
 
 from sentinel_dna.evidence.evidence_engine import EvidenceEngine
 
+from sentinel_dna.investigation.context import (
+    InvestigationContext,
+)
+
 from sentinel_dna.investigation.provenance import (
     InvestigationProvenance,
 )
@@ -26,21 +30,21 @@ from sentinel_dna.investigation.result import (
     InvestigationResult,
 )
 
-from sentinel_dna.investigation.runtime import (
-    RuntimeTask,
-    RuntimeTaskExecutor,
+from sentinel_dna.investigation.storage.lineage_store import (
+    InvestigationLineageStore,
 )
 
 from sentinel_dna.investigation.trace_manager import (
     attach_trace,
 )
 
-from sentinel_dna.investigation.storage.lineage_store import (
-    InvestigationLineageStore,
-)
-
 from sentinel_dna.risk.risk_engine import (
     RiskEngine,
+)
+
+from .runtime import (
+    RuntimeTask,
+    RuntimeTaskExecutor,
 )
 
 
@@ -48,38 +52,46 @@ class InvestigationOrchestrator:
     """
     Canonical Sentinel DNA investigation workflow engine.
 
-    Enterprise investigation workflow:
+    Enterprise investigation lifecycle:
 
         Alert
           |
           v
-    InvestigationContext
+    Investigation Context
           |
-          +----------------+
-          |                |
-       Graph          Provenance
-          |                |
-          +--------+-------+
-                   |
-              Replay Timeline
-                   |
-              InvestigationResult
+          v
+    Evidence Collection
+          |
+          v
+    IOC Intelligence
+          |
+          v
+    Entity Correlation
+          |
+          v
+    Threat Analysis
+          |
+          v
+    Risk + Confidence
+          |
+          v
+    AI Reasoning
+          |
+          v
+    Decision Intelligence
+          |
+          v
+    Report + Lineage
 
 
-    Responsible for:
+    Maintains compatibility with:
 
-    - investigation planning
-    - runtime execution
-    - evidence collection
-    - IOC enrichment
-    - entity correlation
-    - MITRE ATT&CK mapping
-    - risk analysis
-    - reasoning
-    - decision intelligence
-    - reporting
-    - investigation lineage
+    - AI Investigator v1
+    - Telemetry Gateway
+    - InvestigationResult contract
+    - Existing tests
     """
+
 
     def __init__(
         self,
@@ -89,32 +101,48 @@ class InvestigationOrchestrator:
         reporter: InvestigationReporter | None = None,
     ) -> None:
 
-        self.case_store = CaseStore(data_dir)
+
+        self.case_store = CaseStore(
+            data_dir
+        )
+
 
         self.evidence_engine = EvidenceEngine(
             data_dir
         )
 
+
         self.risk_engine = RiskEngine()
+
 
         self.reporter = (
             reporter
             or InvestigationReporter()
         )
 
-        # Backward compatibility contract
+
+        # Public compatibility contract
         self.investigation_engine = (
             self.reporter
         )
+
 
         self.runtime = (
             runtime
             or RuntimeTaskExecutor()
         )
 
+
         self.planner = (
             planner
             or InvestigationPlanner()
+        )
+
+
+        self.lineage_store = (
+            InvestigationLineageStore(
+                data_dir
+            )
         )
 
 
@@ -124,10 +152,15 @@ class InvestigationOrchestrator:
     ) -> InvestigationResult:
         """
         Execute complete investigation workflow.
+
+        Evidence-first execution order.
         """
 
+
         if context.trace is None:
-            attach_trace(context)
+            attach_trace(
+                context
+            )
 
 
         self._initialize_lineage(
@@ -135,24 +168,53 @@ class InvestigationOrchestrator:
         )
 
 
-        self._record_replay(
-            context,
-            "investigation",
-            "Investigation workflow started",
+        self.load_context(
+            context
         )
 
 
-        self._record_provenance(
-            context,
-            stage="orchestrator",
-            action="investigation_started",
-            source="InvestigationOrchestrator",
+        self.collect_evidence(
+            context
         )
 
 
-        context.trace.add_event(
-            "investigation_started",
-            "Investigation workflow started",
+        self.enrich_iocs(
+            context
+        )
+
+
+        self.evaluate_threat_intelligence(
+            context
+        )
+
+
+        self.correlate_entities(
+            context
+        )
+
+
+        self.map_mitre_attack(
+            context
+        )
+
+
+        self.classify_threat(
+            context
+        )
+
+
+        self.calculate_risk(
+            context
+        )
+
+
+        self.calculate_confidence(
+            context
+        )
+
+
+        self.perform_reasoning(
+            context
         )
 
 
@@ -162,60 +224,29 @@ class InvestigationOrchestrator:
         )
 
 
-        self._record_replay(
-            context,
-            "planning",
-            "Investigation execution plan generated",
-            {
-                "task_count": len(plan),
-            },
-        )
-
-
-        context.trace.add_event(
-            "plan_created",
-            "Investigation execution plan generated",
-            {
-                "plan_name": self.planner.plan_name,
-                "task_count": len(plan),
-            },
-        )
-
-
         self.runtime.execute(
             context,
             plan,
         )
 
 
-        self._record_replay(
-            context,
-            "runtime",
-            "Investigation tasks completed",
-            {
-                "task_count": len(
-                    context.task_results
-                ),
-            },
+        self.build_timeline(
+            context
         )
 
 
-        self._record_provenance(
-            context,
-            stage="runtime",
-            action="tasks_completed",
-            source="RuntimeTaskExecutor",
+        self.generate_decision_intelligence(
+            context
         )
 
 
-        context.trace.add_event(
-            "tasks_completed",
-            "Investigation tasks completed",
-            {
-                "task_count": len(
-                    context.task_results
-                ),
-            },
+        self.produce_recommendations(
+            context
+        )
+
+
+        self.generate_report(
+            context
         )
 
 
@@ -225,15 +256,16 @@ class InvestigationOrchestrator:
         )
 
 
-        context.trace.add_event(
-            "generate_report",
-            "Investigation report generated",
+        self.lineage_store.save_context_lineage(
+            context
         )
 
 
-        results["audit_trail"] = (
-            context.trace.events
-        )
+        if context.trace:
+
+            results["audit_trail"] = (
+                context.trace.events
+            )
 
 
         return InvestigationResult(
@@ -248,15 +280,22 @@ class InvestigationOrchestrator:
         context: InvestigationContext,
     ) -> None:
 
+
         if context.provenance is None:
-            context.provenance = InvestigationProvenance(
-                context.case_id
+
+            context.provenance = (
+                InvestigationProvenance(
+                    context.case_id
+                )
             )
 
 
         if context.replay is None:
-            context.replay = InvestigationReplay(
-                context.case_id
+
+            context.replay = (
+                InvestigationReplay(
+                    context.case_id
+                )
             )
 
 
@@ -268,7 +307,9 @@ class InvestigationOrchestrator:
         details: dict[str, Any] | None = None,
     ) -> None:
 
+
         if context.replay:
+
             context.replay.add_event(
                 stage,
                 message,
@@ -286,7 +327,9 @@ class InvestigationOrchestrator:
         confidence: float | None = None,
     ) -> None:
 
+
         if context.provenance:
+
             context.provenance.add(
                 stage,
                 action,
@@ -294,6 +337,7 @@ class InvestigationOrchestrator:
                 details,
                 confidence,
             )
+
     def load_context(
         self,
         context: InvestigationContext,
@@ -306,7 +350,7 @@ class InvestigationOrchestrator:
         title = str(
             alert.get("title")
             or alert.get("subject")
-            or "Security alert"
+            or "Security Alert"
         )
 
         severity = str(
@@ -336,7 +380,7 @@ class InvestigationOrchestrator:
             "investigation_triggered",
             "Investigation triggered",
             {
-                "alert": alert
+                "alert": alert,
             },
         )
 
@@ -346,7 +390,6 @@ class InvestigationOrchestrator:
 
         context.alert = alert
         context.case = case
-
 
         self._record_provenance(
             context,
@@ -359,26 +402,19 @@ class InvestigationOrchestrator:
         )
 
 
-        self._record_replay(
-            context,
-            "context",
-            "Case context loaded",
-        )
-
-
     def collect_evidence(
         self,
         context: InvestigationContext,
     ) -> None:
 
         evidence = (
-            self.evidence_engine
-            .normalize_email(
+            self.evidence_engine.normalize_email(
                 {
                     "sender": context.alert.get(
                         "sender",
                         "unknown sender",
                     ),
+
                     "subject": context.alert.get(
                         "subject",
                         context.alert.get(
@@ -386,6 +422,7 @@ class InvestigationOrchestrator:
                             "No subject",
                         ),
                     ),
+
                     "body": context.alert.get(
                         "body",
                         context.alert.get(
@@ -397,16 +434,13 @@ class InvestigationOrchestrator:
             )
         )
 
-
         self.evidence_engine.save(
             evidence
         )
 
-
         context.evidence_items.append(
             evidence
         )
-
 
         context.iocs = sorted(
             set(
@@ -415,13 +449,21 @@ class InvestigationOrchestrator:
         )
 
 
-        if context.case is not None:
+        if context.case:
+
             context.case.attach_evidence(
                 evidence.evidence_id
             )
 
             self.case_store.save(
                 context.case
+            )
+
+
+        if not context.iocs:
+
+            context.uncertainties.append(
+                "No IOCs were discovered in the submitted alert evidence."
             )
 
 
@@ -438,28 +480,12 @@ class InvestigationOrchestrator:
         )
 
 
-        self._record_replay(
-            context,
-            "evidence",
-            "Evidence collection completed",
-            {
-                "evidence_id": evidence.evidence_id,
-            },
-        )
-
-
-        if not context.iocs:
-            context.uncertainties.append(
-                "No IOCs were discovered in submitted alert evidence."
-            )
-
-
     def enrich_iocs(
         self,
         context: InvestigationContext,
     ) -> None:
 
-        enriched: dict[str, dict[str, Any]] = {}
+        enriched = {}
 
 
         for ioc in context.iocs:
@@ -467,135 +493,59 @@ class InvestigationOrchestrator:
             normalized = ioc.lower()
 
 
-            if normalized.startswith(
-                (
-                    "http://",
-                    "https://",
+            indicator_type = (
+                "url"
+                if normalized.startswith(
+                    (
+                        "http://",
+                        "https://",
+                    )
                 )
-            ):
-                indicator_type = "url"
-
-            else:
-                indicator_type = "email_or_domain"
+                else
+                "email_or_domain"
+            )
 
 
             reputation = (
                 "suspicious"
                 if any(
-                    term in normalized
-                    for term in (
+                    keyword in normalized
+                    for keyword in (
                         "login",
                         "verify",
                         "password",
+                        "credential",
                     )
                 )
-                else "unknown"
+                else
+                "unknown"
             )
 
 
             enriched[ioc] = {
+
                 "indicator": ioc,
+
                 "type": indicator_type,
+
                 "source": "local_rules",
+
                 "reputation": reputation,
             }
 
 
-        context.intelligence["iocs"] = (
-            enriched
-        )
+        context.intelligence["iocs"] = enriched
 
 
         self._record_provenance(
             context,
             stage="intelligence",
             action="ioc_enrichment_completed",
-            source="Local IOC Rules",
+            source="LocalIOCAnalyzer",
             details={
                 "ioc_count": len(enriched),
             },
         )
-
-
-    def correlate_entities(
-        self,
-        context: InvestigationContext,
-    ) -> None:
-
-        correlations: list[dict[str, Any]] = []
-
-
-        for evidence in context.evidence_items:
-
-            evidence_node = context.graph.add_node(
-                "evidence",
-                evidence.evidence_id,
-            )
-
-
-            for ioc in evidence.indicators:
-
-                ioc_node = context.graph.add_node(
-                    "ioc",
-                    ioc,
-                )
-
-
-                context.graph.add_edge(
-                    evidence_node,
-                    ioc_node,
-                    "contains",
-                )
-
-
-                correlations.append(
-                    {
-                        "evidence_id": evidence.evidence_id,
-                        "indicator": ioc,
-                        "relationship": (
-                            "observed_in_evidence"
-                        ),
-                    }
-                )
-
-
-        context.correlations = correlations
-
-
-        self._record_provenance(
-            context,
-            stage="correlation",
-            action="entity_correlation_completed",
-            source="InvestigationGraph",
-            details={
-                "relationships": len(
-                    correlations
-                )
-            },
-        )
-
-
-        if not correlations:
-            context.uncertainties.append(
-                "No event or entity correlations established."
-            )
-
-    def build_timeline(
-        self,
-        context: InvestigationContext,
-    ) -> None:
-
-        context.timeline = [
-            {
-                "timestamp": evidence.observed_at,
-                "event": evidence.summary,
-                "evidence_id": evidence.evidence_id,
-            }
-            for evidence in sorted(
-                context.evidence_items,
-                key=lambda item: item.observed_at,
-            )
-        ]
 
 
     def evaluate_threat_intelligence(
@@ -603,27 +553,121 @@ class InvestigationOrchestrator:
         context: InvestigationContext,
     ) -> None:
 
-        suspicious_iocs = [
+        suspicious = [
+
             ioc
-            for ioc, intelligence in context.intelligence.get(
+
+            for ioc, intelligence
+            in context.intelligence.get(
                 "iocs",
                 {},
             ).items()
+
             if intelligence.get(
                 "reputation"
-            ) == "suspicious"
+            )
+            == "suspicious"
+
         ]
 
 
         context.intelligence["threat"] = {
+
             "source": "local_rules",
-            "suspicious_iocs": suspicious_iocs,
-            "summary": (
-                "Local indicator rules found suspicious IOCs."
-                if suspicious_iocs
-                else "No suspicious IOCs identified."
-            ),
+
+            "suspicious_iocs": suspicious,
+
+            "summary":
+                (
+                    "Suspicious indicators identified."
+                    if suspicious
+                    else
+                    "No suspicious indicators identified."
+                ),
         }
+
+
+        self._record_provenance(
+            context,
+            stage="intelligence",
+            action="threat_intelligence_completed",
+            source="LocalThreatAnalyzer",
+            details={
+                "suspicious_count": len(suspicious),
+            },
+        )
+
+    def correlate_entities(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+
+        correlations = []
+
+        for evidence in context.evidence_items:
+
+            evidence_node = (
+                context.graph.add_node(
+                    "evidence",
+                    evidence.evidence_id,
+                )
+            )
+
+            for ioc in evidence.indicators:
+
+                ioc_node = (
+                    context.graph.add_node(
+                        "ioc",
+                        ioc,
+                    )
+                )
+
+                context.graph.add_edge(
+                    evidence_node,
+                    ioc_node,
+                    "contains",
+                )
+
+                correlations.append(
+                    {
+                        "evidence_id": evidence.evidence_id,
+                        "indicator": ioc,
+                        "relationship": "observed_in_evidence",
+                    }
+                )
+
+        context.correlations = correlations
+
+        if not correlations:
+            context.uncertainties.append(
+                "No event or entity correlations established."
+            )
+
+
+    def build_timeline(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+
+        context.timeline = [
+
+            {
+                "timestamp":
+                    evidence.observed_at,
+
+                "event":
+                    evidence.summary,
+
+                "evidence_id":
+                    evidence.evidence_id,
+            }
+
+            for evidence in sorted(
+                context.evidence_items,
+                key=lambda item: item.observed_at,
+            )
+
+        ]
 
 
     def map_mitre_attack(
@@ -636,69 +680,59 @@ class InvestigationOrchestrator:
         ).lower()
 
 
-        mappings: list[dict[str, str]] = []
+        mappings = []
 
 
         if any(
-            term in text
-            for term in (
+            keyword in text
+
+            for keyword in (
                 "password",
                 "credential",
-                "mfa",
                 "verify",
                 "login",
+                "mfa",
+                "account",
             )
+
         ):
 
-            mapping = {
-                "technique_id": "T1566",
-                "technique": "Phishing",
-                "evidence": (
-                    "Credential-themed email content"
-                ),
-            }
-
             mappings.append(
-                mapping
-            )
-
-
-            evidence_node = context.graph.add_node(
-                "technique",
-                "T1566",
                 {
-                    "name": "Phishing"
-                },
+                    "technique_id":
+                        "T1566",
+
+                    "technique":
+                        "Phishing",
+
+                    "evidence":
+                        "Credential phishing indicators detected.",
+                }
             )
-
-            for item in context.evidence_items:
-                source = context.graph.add_node(
-                    "evidence",
-                    item.evidence_id,
-                )
-
-                context.graph.add_edge(
-                    source,
-                    evidence_node,
-                    "maps_to",
-                )
 
 
         if any(
-            term in text
-            for term in (
+            keyword in text
+
+            for keyword in (
                 "invoice",
                 "wire",
+                "payment",
+                "bank",
             )
+
         ):
 
             mappings.append(
                 {
-                    "technique_id": "T1657",
-                    "technique": "Financial Theft",
-                    "evidence": (
-                        "Payment-themed alert content"
-                    ),
+                    "technique_id":
+                        "T1657",
+
+                    "technique":
+                        "Financial Theft",
+
+                    "evidence":
+                        "Payment-related indicators detected.",
                 }
             )
 
@@ -706,45 +740,42 @@ class InvestigationOrchestrator:
         context.mitre_attack = mappings
 
 
-        self._record_provenance(
-            context,
-            stage="analysis",
-            action="mitre_mapping_completed",
-            source="RuleBasedMITREMapper",
-            details={
-                "techniques": mappings,
-            },
-        )
-
 
     def classify_threat(
         self,
         context: InvestigationContext,
     ) -> None:
 
-        labels = [
+
+        techniques = [
+
             item["technique"]
+
             for item in context.mitre_attack
+
         ]
 
 
         context.threat_classification = {
-            "classification": (
-                "phishing"
-                if "Phishing" in labels
-                else "unknown"
-            ),
-            "evidence_count": len(
-                context.evidence_items
-            ),
-            "mapped_techniques": labels,
+
+            "classification":
+                (
+                    "phishing"
+                    if "Phishing" in techniques
+                    else "unknown"
+                ),
+
+            "mapped_techniques":
+                techniques,
         }
+
 
 
     def calculate_risk(
         self,
         context: InvestigationContext,
     ) -> None:
+
 
         context.risk = (
             self.risk_engine.assess(
@@ -753,48 +784,76 @@ class InvestigationOrchestrator:
         )
 
 
+
     def calculate_confidence(
         self,
         context: InvestigationContext,
     ) -> None:
 
+
         if not context.evidence_items:
+
             score = 0.0
 
+
         else:
+
             score = (
+
                 sum(
-                    evidence.confidence
-                    for evidence in context.evidence_items
+                    item.confidence
+                    for item in context.evidence_items
                 )
+
                 /
-                len(context.evidence_items)
+
+                len(
+                    context.evidence_items
+                )
+
             )
 
+
             if context.errors:
+
                 score -= 0.15
 
+
             if context.uncertainties:
+
                 score -= 0.10
 
 
+
         context.confidence = {
-            "score": round(
-                max(
-                    0.0,
-                    min(
-                        1.0,
-                        score,
+
+            "score":
+
+                round(
+                    max(
+                        0.0,
+                        min(
+                            1.0,
+                            score,
+                        ),
                     ),
+                    2,
                 ),
-                2,
-            ),
-            "basis": (
-                "Evidence confidence, execution errors, "
-                "and uncertainty analysis."
-            ),
-            "uncertainties": context.uncertainties,
+
+
+            "basis":
+                "Evidence confidence and investigation uncertainty.",
+
+
+            "uncertainties":
+                list(
+                    dict.fromkeys(
+                        context.uncertainties
+                    )
+                ),
+
         }
+
 
 
     def perform_reasoning(
@@ -802,271 +861,41 @@ class InvestigationOrchestrator:
         context: InvestigationContext,
     ) -> None:
 
+
         findings = []
 
+
         for evidence in context.evidence_items:
+
             findings.append(
                 {
-                    "claim": evidence.summary,
-                    "evidence_id": evidence.evidence_id,
-                    "confidence": evidence.confidence,
+                    "claim":
+                        evidence.summary,
+
+                    "evidence_id":
+                        evidence.evidence_id,
+
+                    "confidence":
+                        evidence.confidence,
                 }
             )
 
 
         context.reasoning = {
-            "mode": "evidence_grounded_rules",
-            "findings": findings,
-            "conclusion": self._conclusion(
-                context
-            ),
-        }
+
+            "mode":
+                "evidence_grounded_rules",
 
 
-    def generate_decision_intelligence(
-        self,
-        context: InvestigationContext,
-    ) -> None:
-
-        risk_level = (
-            context.risk.level
-            if context.risk
-            else "unknown"
-        )
+            "findings":
+                findings,
 
 
-        context.decision_intelligence = {
-            "risk_level": risk_level,
-            "confidence_score": context.confidence.get(
-                "score",
-                0.0,
-            ),
-            "recommended_decision": (
-                "escalate"
-                if risk_level in {
-                    "critical",
-                    "high",
-                }
-                else "monitor"
-            ),
-            "rationale": context.reasoning.get(
-                "conclusion",
-                "",
-            ),
-        }
-    def produce_recommendations(
-        self,
-        context: InvestigationContext,
-    ) -> None:
-        """
-        Generate response recommendations using the
-        canonical reporting API.
-
-        Maintains compatibility with the existing
-        InvestigationReporter contract.
-        """
-
-        risk_level = (
-            context.risk.level
-            if context.risk is not None
-            else "low"
-        )
-
-        context.recommendations = (
-            self.investigation_engine.recommend_actions(
-                risk_level
-            )
-        )
-
-
-        self._record_provenance(
-            context,
-            stage="decision",
-            action="recommendations_generated",
-            source="InvestigationReporter",
-            details={
-                "risk_level": risk_level,
-            },
-        )
-
-
-        self._record_replay(
-            context,
-            "decision",
-            "Recommendations generated",
-        )
-
-
-    def generate_report(
-        self,
-        context: InvestigationContext,
-    ) -> None:
-        """
-        Generate analyst-facing investigation report.
-        """
-
-        if (
-            context.case is None
-            or context.risk is None
-        ):
-            context.report = {
-                "status": "incomplete",
-                "reason": (
-                    "Missing case or risk assessment."
+            "conclusion":
+                self._conclusion(
+                    context
                 ),
-            }
-
-            return
-
-
-        summary = (
-            self.investigation_engine.summarize(
-                context.case,
-                context.evidence_items,
-                context.risk,
-                recommended_actions=(
-                    context.recommendations
-                ),
-            )
-        )
-
-
-        context.report = {
-            "executive_summary": (
-                summary.executive_summary
-            ),
-            "key_findings": (
-                summary.key_findings
-            ),
-            "recommended_actions": (
-                summary.recommended_actions
-            ),
-            "confidence_statement": (
-                summary.confidence_statement
-            ),
         }
-
-
-        self._record_provenance(
-            context,
-            stage="reporting",
-            action="report_generated",
-            source="InvestigationReporter",
-        )
-
-
-        self._record_replay(
-            context,
-            "reporting",
-            "Investigation report generated",
-        )
-
-    def _assemble_results(
-        self,
-        context: InvestigationContext,
-        plan: list[RuntimeTask],
-    ) -> dict[str, Any]:
-
-        return {
-            "investigation": {
-                "case_id": context.case_id,
-                "plan_name": self.planner.plan_name,
-                "status": (
-                    "completed_with_errors"
-                    if context.errors
-                    else "completed"
-                ),
-            },
-
-            "case_id": context.case_id,
-            "alert": context.alert,
-
-            "plan": {
-                "name": self.planner.plan_name,
-                "tasks": [
-                    task.name
-                    for task in plan
-                ],
-            },
-
-            "tasks": context.task_results,
-
-            "evidence": [
-                vars(item)
-                for item in context.evidence_items
-            ],
-
-            "iocs": context.iocs,
-            "intelligence": context.intelligence,
-            "correlations": context.correlations,
-            "timeline": context.timeline,
-
-            "graph": (
-                context.graph.to_dict()
-            ),
-
-            "provenance": (
-                context.provenance.to_dict()
-                if context.provenance
-                else {}
-            ),
-
-            "replay": (
-                context.replay.to_dict()
-                if context.replay
-                else {}
-            ),
-
-            "mitre_attack": context.mitre_attack,
-            "threat_classification": context.threat_classification,
-            "risk": (
-                vars(context.risk)
-                if context.risk
-                else None
-            ),
-
-            "confidence": context.confidence,
-            "reasoning": context.reasoning,
-            "decision_intelligence": context.decision_intelligence,
-            "recommendations": context.recommendations,
-            "report": context.report,
-            "uncertainties": context.uncertainties,
-        }
-
-
-    def _validated_alert(
-        self,
-        alert: dict[str, Any],
-    ) -> dict[str, Any]:
-
-        if not isinstance(
-            alert,
-            dict,
-        ):
-            raise TypeError(
-                "alert must be a dictionary"
-            )
-
-        return {
-            str(key): value
-            for key, value in alert.items()
-        }
-
-
-    def _evidence_text(
-        self,
-        context: InvestigationContext,
-    ) -> str:
-
-        if not context.iocs:
-            context.uncertainties.append(
-                "No IOCs were discovered in the submitted alert evidence."
-            )
-
-        return " ".join(
-            f"{item.summary} {item.raw}"
-            for item in context.evidence_items
-        )
 
 
     def _conclusion(
@@ -1074,22 +903,398 @@ class InvestigationOrchestrator:
         context: InvestigationContext,
     ) -> str:
 
+
         classification = (
+
             context.threat_classification.get(
                 "classification",
                 "unknown",
             )
+
         )
 
+
         risk = (
+
             context.risk.level
+
             if context.risk
+
             else "unknown"
+
         )
 
 
         return (
+
             f"Available evidence supports "
             f"{classification} classification "
             f"with {risk} risk."
+
         )
+
+    def generate_decision_intelligence(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+
+        risk_level = (
+
+            context.risk.level
+
+            if context.risk
+
+            else "unknown"
+
+        )
+
+        context.decision_intelligence = {
+
+            "risk_level":
+                risk_level,
+
+            "confidence_score":
+                context.confidence.get(
+                    "score",
+                    0.0,
+                ),
+
+            "recommended_decision":
+
+                (
+                    "escalate"
+
+                    if risk_level in {
+                        "critical",
+                        "high",
+                    }
+
+                    else
+
+                    "monitor"
+                ),
+
+            "rationale":
+
+                context.reasoning.get(
+                    "conclusion",
+                    "",
+                ),
+        }
+
+
+
+    def produce_recommendations(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+
+        if context.recommendations:
+            return
+
+        if not context.iocs:
+            risk_level = "low"
+        else:
+            risk_level = (
+                context.risk.level
+                if context.risk
+                else "low"
+            )
+
+        context.recommendations = (
+            self.investigation_engine
+            .recommend_actions(
+                risk_level
+            )
+        )
+
+
+    def generate_report(
+        self,
+        context: InvestigationContext,
+    ) -> None:
+
+
+        if (
+            context.case is None
+            or context.risk is None
+        ):
+
+            context.report = {
+
+                "status":
+                    "incomplete",
+
+                "reason":
+                    "Missing case or risk assessment.",
+            }
+
+            return
+
+
+
+        summary = (
+
+            self.investigation_engine
+            .summarize(
+                context.case,
+                context.evidence_items,
+                context.risk,
+                recommended_actions=
+                    context.recommendations,
+            )
+
+        )
+
+
+        context.report = {
+
+            "executive_summary":
+                summary.executive_summary,
+
+
+            "key_findings":
+                summary.key_findings,
+
+
+            "recommended_actions":
+                summary.recommended_actions,
+
+
+            "confidence_statement":
+                summary.confidence_statement,
+
+        }
+
+
+
+    def _assemble_results(
+        self,
+        context: InvestigationContext,
+        plan: list[RuntimeTask],
+    ) -> dict[str, Any]:
+
+
+        return {
+
+            "investigation": {
+
+                "case_id":
+                    context.case_id,
+
+
+                "plan_name":
+                    self.planner.plan_name,
+
+
+                "status":
+                    (
+                        "completed_with_errors"
+
+                        if context.errors
+
+                        else
+
+                        "completed"
+                    ),
+            },
+
+
+            "case_id":
+                context.case_id,
+
+
+            "alert":
+                context.alert,
+
+
+            "plan": {
+
+                "name":
+                    self.planner.plan_name,
+
+
+                "tasks":
+                    [
+                        task.name
+                        for task in plan
+                    ],
+            },
+
+
+            "tasks":
+                context.task_results,
+
+
+            "evidence":
+
+                [
+                    vars(item)
+                    for item in context.evidence_items
+                ],
+
+
+            "graph":
+
+                (
+                    context.graph.to_dict()
+
+                    if context.graph
+
+                    else {}
+                ),
+
+
+            "provenance":
+
+                (
+                    context.provenance.to_dict()
+
+                    if context.provenance
+
+                    else {}
+                ),
+
+
+            "replay":
+
+                (
+                    context.replay.to_dict()
+
+                    if context.replay
+
+                    else {}
+                ),
+
+
+            "iocs":
+
+                context.iocs or [],
+
+
+            "intelligence":
+
+                context.intelligence or {},
+
+
+     "mitre_attack":
+         context.mitre_attack or [],
+
+
+     "threat_classification":
+         context.threat_classification or {},
+
+
+     "correlations":
+        context.correlations or [],
+
+
+            "timeline":
+                context.timeline or [],
+
+
+            "risk":
+
+                (
+                    vars(context.risk)
+
+                    if context.risk
+
+                    else None
+                ),
+
+
+            "confidence":
+                context.confidence or {},
+
+
+            "reasoning":
+                context.reasoning or {},
+
+
+            "decision_intelligence":
+                context.decision_intelligence or {},
+
+
+            "recommendations":
+                context.recommendations or [],
+
+
+            "report":
+                context.report or {},
+
+
+            "uncertainties":
+
+                list(
+                    dict.fromkeys(
+                        context.uncertainties
+                    )
+                ),
+        }
+
+
+
+    def _evidence_text(
+        self,
+        context: InvestigationContext,
+    ) -> str:
+
+
+        content = []
+
+
+        for evidence in context.evidence_items:
+
+            content.append(
+                str(
+                    getattr(
+                        evidence,
+                        "summary",
+                        "",
+                    )
+                )
+            )
+
+
+            content.append(
+                str(
+                    getattr(
+                        evidence,
+                        "content",
+                        "",
+                    )
+                )
+            )
+
+
+        return " ".join(
+            content
+        )
+
+
+
+    def _validated_alert(
+        self,
+        alert: dict[str, Any],
+    ) -> dict[str, Any]:
+
+
+        if not isinstance(
+            alert,
+            dict,
+        ):
+
+            raise TypeError(
+                "alert must be a dictionary"
+            )
+
+
+        return {
+
+            str(key):
+                value
+
+            for key, value in alert.items()
+
+        }
