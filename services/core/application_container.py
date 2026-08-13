@@ -133,7 +133,7 @@ def build_container() -> ServiceRegistry:
 
     registry.register(
         "investigation_orchestrator",
-        coordinator,
+        orchestrator,
     )
 
     registry.register(

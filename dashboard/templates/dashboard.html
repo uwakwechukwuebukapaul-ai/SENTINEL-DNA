@@ -1,19 +1,7 @@
-{% extends "base.html" %}
-
-{% block content %}
-
-<div class="card">
-
-<h2>Dashboard Statistics</h2>
-
-<p>Total Cases: {{ stats.cases }}</p>
-
-<p>Total Evidence: {{ stats.evidence }}</p>
-
-<p>Total Timeline Events: {{ stats.timeline }}</p>
-
-<p>Total IOCs: {{ stats.iocs }}</p>
-
-</div>
-
-{% endblock %}
+{% extends "base.html" %}{% block title %}Sentinel DNA SOC Command Center{% endblock %}{% block content %}
+<header><h1>SOC Command Center</h1><p class="muted">Evidence-backed operational view of current cases and analyst activity.</p></header>
+<section class="grid stats">{% for key,label in [('cases','Total Cases'),('evidence','Evidence'),('timeline','Timeline Events'),('iocs','IOCs'),('high_risk_cases','High/Critical Cases'),('active_cases','Active Cases')] %}<article class="card"><div class="label">{{ label }}</div><div class="metric">{{ stats[key] or 0 }}</div></article>{% endfor %}</section>
+<section class="grid columns"><div><article class="card"><div class="section-title"><h2>Recent cases</h2><span class="muted">{{ cases|length }} shown</span></div><table><thead><tr><th>Case</th><th>Severity</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>{% for c in cases %}<tr><td><strong>{{ c.title }}</strong><br><span class="muted">{{ c.case_id }}</span></td><td><span class="badge {{ c.severity|lower }}">{{ c.severity }}</span></td><td><span class="badge {{ c.status|lower }}">{{ c.status }}</span></td><td>{{ c.created }}</td><td><a class="button" href="/api/cases/{{ c.case_id }}">View API</a></td></tr>{% else %}<tr><td colspan="5" class="muted">No cases available.</td></tr>{% endfor %}</tbody></table></article>
+<article class="card"><div class="section-title"><h2>Investigation</h2><span class="muted">Canonical coordinator path</span></div><p>Run an investigation using the case evidence through <strong>InvestigationCoordinator → InvestigationOrchestrator → RuntimeTaskExecutor</strong>.</p><p class="muted">Use <code>POST /api/investigations/run</code> with <code>{"case_id":"..."}</code>.</p></article>
+<article class="card"><h2>Evidence and timeline</h2><table><thead><tr><th>Case</th><th>Type/event</th><th>Details</th><th>Time</th></tr></thead><tbody>{% for e in evidence %}<tr><td>{{ e.case_id }}</td><td>{{ e.type }}</td><td>{{ e.data }}</td><td>{{ e.created }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No evidence available.</td></tr>{% endfor %}{% for e in timeline %}<tr><td>{{ e.case_id }}</td><td>{{ e.event_type }}</td><td>{{ e.description }} <span class="muted">({{ e.actor }})</span></td><td>{{ e.created }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No timeline events available.</td></tr>{% endfor %}</tbody></table></article></div>
+<aside><article class="card"><h2>IOC intelligence</h2><table><thead><tr><th>Type</th><th>Value</th><th>Case</th></tr></thead><tbody>{% for i in iocs %}<tr><td>{{ i.type }}</td><td>{{ i.value }}</td><td class="muted">{{ i.case_id }}</td></tr>{% else %}<tr><td colspan="3" class="muted">No indicators available.</td></tr>{% endfor %}</tbody></table></article><article class="card"><h2>Analyst actions</h2>{% for a in actions %}<p><strong>{{ a.action }}</strong><br><span class="muted">{{ a.analyst }} · {{ a.case_id }} · {{ a.created }}</span></p>{% else %}<p class="muted">No analyst actions recorded.</p>{% endfor %}</article><article class="card"><h2>MITRE / notes</h2>{% for n in notes %}<p>{{ n.note }}<br><span class="muted">{{ n.case_id }} · {{ n.created }}</span></p>{% else %}<p class="muted">No investigation notes or MITRE mappings available.</p>{% endfor %}</article></aside></section>{% endblock %}

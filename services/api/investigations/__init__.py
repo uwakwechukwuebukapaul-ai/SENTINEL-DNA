@@ -1,9 +1,11 @@
 """
-Investigation API Package.
+Sentinel DNA Investigation API Package.
 
-Exports investigation blueprint
-and compatibility routes.
+Exports the canonical investigation blueprint
+and the legacy root compatibility endpoint.
 """
+
+from __future__ import annotations
 
 from flask import Flask
 
@@ -15,12 +17,16 @@ from .routes import (
 
 def register_compatibility_routes(
     app: Flask,
-):
+) -> None:
     """
-    Register legacy endpoint.
+    Register the legacy root investigation endpoint.
 
-    Keeps backwards compatibility
-    with older API clients.
+    Historical clients may call:
+
+        POST /investigate
+
+    The endpoint delegates to the canonical investigation
+    API implementation.
     """
 
     @app.route(
@@ -30,9 +36,7 @@ def register_compatibility_routes(
         ],
     )
     def investigate():
-
         return run_investigation()
-
 
 
 __all__ = [

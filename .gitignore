@@ -1,7 +1,12 @@
-**pycache**/
+__pycache__/
+**/__pycache__/
 *.pyc
-soc.db
+*.db
+*.sqlite
+*.sqlite3
 .env
+*.bak
+*.log
 venv/
 .venv/
 .vscode/
@@ -12,3 +17,4 @@ logs/
 .pytest_cache/
 work/pytest-packages/
 work/pytest-runner/
+work/

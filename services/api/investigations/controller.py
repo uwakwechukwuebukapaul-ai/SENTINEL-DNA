@@ -1,9 +1,24 @@
 """
 Sentinel DNA Investigation API Controller.
 
-Application service layer between
-HTTP routes and the canonical investigation
-orchestration engine.
+Application service adapter between the HTTP API
+and the canonical InvestigationCoordinator.
+
+Architecture:
+
+HTTP API
+    |
+    v
+InvestigationController
+    |
+    v
+InvestigationCoordinator
+    |
+    v
+InvestigationOrchestrator
+    |
+    v
+RuntimeTaskExecutor
 """
 
 from __future__ import annotations
@@ -11,27 +26,32 @@ from __future__ import annotations
 from typing import Any
 
 from services.intelligence.orchestration import (
-    InvestigationOrchestrator,
+    InvestigationCoordinator,
 )
 
 
 class InvestigationController:
     """
-    API controller for investigations.
+    Thin API controller for investigations.
 
-    Uses the canonical Sentinel DNA investigation
-    orchestration layer.
+    The controller does not own investigation orchestration.
+
+    It delegates investigation execution to the canonical
+    InvestigationCoordinator supplied by the application
+    service container.
     """
 
     def __init__(
         self,
-        orchestrator: InvestigationOrchestrator | None = None,
+        coordinator: InvestigationCoordinator,
     ) -> None:
-        self.orchestrator = (
-            orchestrator
-            if orchestrator is not None
-            else InvestigationOrchestrator()
-        )
+
+        if coordinator is None:
+            raise ValueError(
+                "InvestigationCoordinator is required."
+            )
+
+        self.coordinator = coordinator
 
     def run(
         self,
@@ -41,26 +61,49 @@ class InvestigationController:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
-        Execute an investigation workflow.
+        Execute an investigation through the canonical
+        InvestigationCoordinator.
         """
 
-        result = self.orchestrator.investigate(
-            case_id=case_id or "UNKNOWN",
+        normalized_case_id = (
+            case_id
+            or (
+                alert or {}
+            ).get(
+                "case_id"
+            )
+            or "UNKNOWN"
+        )
+
+        normalized_alert = dict(
+            alert or {}
+        )
+
+        result = self.coordinator.investigate(
+            case_id=normalized_case_id,
+            alert=normalized_alert,
             artifacts=artifacts,
-            alert=alert,
             **kwargs,
         )
 
-        if hasattr(result, "to_dict"):
+        if hasattr(
+            result,
+            "to_dict",
+        ):
             return result.to_dict()
 
-        if isinstance(result, dict):
+        if isinstance(
+            result,
+            dict,
+        ):
             return result
 
         return {
             "success": False,
             "status": "failed",
-            "error": "Invalid investigation result",
+            "error": (
+                "Invalid investigation result"
+            ),
         }
 
 
