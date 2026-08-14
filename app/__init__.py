@@ -115,6 +115,8 @@ def create_app():
     from services.api.dashboard.routes import (
         dashboard_bp,
     )
+    from services.api.soc import soc_api
+    app.register_blueprint(soc_api)
 
 
     app.register_blueprint(
