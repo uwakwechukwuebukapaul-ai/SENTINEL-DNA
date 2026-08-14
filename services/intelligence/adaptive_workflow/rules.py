@@ -1,0 +1,1 @@
+WORKFLOW_RULES={"phishing":["evidence_agent","threat_intel_agent","reporting_agent"],"ransomware":["evidence_agent","hunting_agent","reasoning_agent","detection_agent","reporting_agent"],"credential_theft":["evidence_agent","identity_agent","threat_intel_agent","reasoning_agent"]}
