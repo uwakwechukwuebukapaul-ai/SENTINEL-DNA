@@ -47,3 +47,11 @@ class DetectionPostureSummary:
     detection_gaps: list[Any] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
     def to_dict(self): return asdict(self)
+
+@dataclass
+class SOARPostureSummary:
+    total_playbooks: int = 0
+    pending_approvals: int = 0
+    completed_executions: int = 0
+    blocked_actions: int = 0
+    def to_dict(self): return asdict(self)

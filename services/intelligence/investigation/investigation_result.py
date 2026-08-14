@@ -103,6 +103,8 @@ class InvestigationResult:
 
     threat_intelligence_report: Any = None
 
+    soar_recommendation: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -331,6 +333,8 @@ class InvestigationResult:
             "narrative_report": self.narrative_report.to_dict() if hasattr(self.narrative_report, "to_dict") else self.narrative_report,
 
             "threat_intelligence_report": self.threat_intelligence_report.to_dict() if hasattr(self.threat_intelligence_report, "to_dict") else self.threat_intelligence_report,
+
+            "soar_recommendation": self.soar_recommendation,
 
             "intelligence":
                 self.intelligence,
