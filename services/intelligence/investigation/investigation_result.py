@@ -129,6 +129,8 @@ class InvestigationResult:
 
     adaptive_workflow_context: Any = None
 
+    simulation_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -383,6 +385,8 @@ class InvestigationResult:
             "agent_memory_context": self.agent_memory_context,
 
             "adaptive_workflow_context": self.adaptive_workflow_context.to_dict() if hasattr(self.adaptive_workflow_context, "to_dict") else self.adaptive_workflow_context,
+
+            "simulation_context": self.simulation_context.to_dict() if hasattr(self.simulation_context, "to_dict") else self.simulation_context,
 
             "intelligence":
                 self.intelligence,
