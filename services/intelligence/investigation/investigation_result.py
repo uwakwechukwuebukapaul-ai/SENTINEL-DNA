@@ -143,6 +143,8 @@ class InvestigationResult:
 
     command_center_context: Any = None
 
+    ingestion_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -411,6 +413,8 @@ class InvestigationResult:
             "workspace_context": self.workspace_context,
 
             "command_center_context": self.command_center_context,
+
+            "ingestion_context": self.ingestion_context,
 
             "intelligence":
                 self.intelligence,
