@@ -95,3 +95,8 @@ class SecurityGraphPostureSummary:
 class AttackPathPostureSummary:
     total_paths:int=0; critical_paths:int=0; high_exposure_assets:int=0; average_exposure_score:float=0.0; largest_blast_radius:int=0
     def to_dict(self): return asdict(self)
+
+@dataclass
+class ReasoningPostureSummary:
+    active_hypotheses:int=0; average_confidence:float=0.0; prioritized_evidence_count:int=0; reasoning_quality_score:float=0.0
+    def to_dict(self): return asdict(self)

@@ -121,6 +121,8 @@ class InvestigationResult:
 
     attack_path_context: Any = None
 
+    reasoning_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -367,6 +369,8 @@ class InvestigationResult:
             "security_graph_context": self.security_graph_context,
 
             "attack_path_context": self.attack_path_context,
+
+            "reasoning_context": self.reasoning_context,
 
             "intelligence":
                 self.intelligence,
