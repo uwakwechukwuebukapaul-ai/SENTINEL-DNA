@@ -100,3 +100,8 @@ class AttackPathPostureSummary:
 class ReasoningPostureSummary:
     active_hypotheses:int=0; average_confidence:float=0.0; prioritized_evidence_count:int=0; reasoning_quality_score:float=0.0
     def to_dict(self): return asdict(self)
+
+@dataclass
+class AgentPostureSummary:
+    active_agents:int=0; completed_tasks:int=0; failed_tasks:int=0; approval_required:int=0; agent_health:str="unknown"
+    def to_dict(self): return asdict(self)

@@ -123,6 +123,8 @@ class InvestigationResult:
 
     reasoning_context: Any = None
 
+    agent_execution_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -371,6 +373,8 @@ class InvestigationResult:
             "attack_path_context": self.attack_path_context,
 
             "reasoning_context": self.reasoning_context,
+
+            "agent_execution_context": self.agent_execution_context,
 
             "intelligence":
                 self.intelligence,

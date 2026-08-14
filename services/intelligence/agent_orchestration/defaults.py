@@ -1,0 +1,2 @@
+from .models import SOCAgent
+DEFAULT_AGENTS=[SOCAgent("evidence_agent","Evidence Agent","evidence_agent",capabilities=["evidence"]),SOCAgent("threat_intel_agent","Threat Intel Agent","threat_intel_agent",capabilities=["threat_intel"]),SOCAgent("reasoning_agent","Reasoning Agent","reasoning_agent",capabilities=["reasoning"]),SOCAgent("reporting_agent","Reporting Agent","reporting_agent",capabilities=["reporting"])]
