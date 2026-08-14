@@ -71,6 +71,7 @@ from services.intelligence.reporting.investigation_report import InvestigationRe
 from services.intelligence.repository.report_repository import InvestigationReportRepository
 from services.observability import ObservabilityService
 from services.intelligence.reasoning import EvidenceReasoner
+from services.intelligence.memory import MemoryService
 import time
 
 
@@ -153,6 +154,7 @@ class InvestigationCoordinator:
         self.evidence_reasoner = EvidenceReasoner(
             getattr(runtime, "ai_runtime", None) or getattr(self.orchestrator, "ai_runtime", None)
         )
+        self.memory_service = MemoryService()
 
 
     # ========================================================
@@ -412,7 +414,7 @@ class InvestigationCoordinator:
             ),
             plan,
         )
-        return InvestigationResult(
+        result = InvestigationResult(
             success=True,
             status="completed",
             message="Investigation completed.",
@@ -438,6 +440,19 @@ class InvestigationCoordinator:
             reasoning_report=reasoning_report,
             errors=list(execution["errors"]),
         )
+        try:
+            memory = self.memory_service.store_investigation_memory(
+                self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
+                                    iocs=list(engine_analysis.get("iocs", []) or []),
+                                    timeline=list(normalized_intelligence.timeline or [])),
+                reasoning_report,
+                result,
+            )
+            result.memory_reference = memory.memory_id
+        except Exception:
+            # Memory is post-completion enrichment and must never block execution.
+            result.metadata["memory_storage_error"] = True
+        return result
 
     def get_report_by_case_id(self, case_id: str) -> dict[str, Any] | None:
         return self.report_repository.get_by_case_id(case_id)

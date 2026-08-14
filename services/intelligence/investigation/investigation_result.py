@@ -93,6 +93,8 @@ class InvestigationResult:
 
     reasoning_report: Any = None
 
+    memory_reference: Optional[str] = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -311,6 +313,8 @@ class InvestigationResult:
 
             "reasoning_report":
                 self.reasoning_report.to_dict() if hasattr(self.reasoning_report, "to_dict") else self.reasoning_report,
+
+            "memory_reference": self.memory_reference,
 
             "intelligence":
                 self.intelligence,
