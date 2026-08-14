@@ -76,3 +76,18 @@ class CopilotResponse:
         """
 
         return self.to_dict()[key]
+
+@dataclass
+class ReasoningExplanation:
+    conclusion: str
+    evidence_refs: list[str] = field(default_factory=list)
+    reasoning_steps: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    def to_dict(self): return {"conclusion": self.conclusion, "evidence_refs": self.evidence_refs, "reasoning_steps": self.reasoning_steps, "confidence": self.confidence}
+
+@dataclass
+class ConversationContext:
+    tenant_id: str | None
+    conversation_id: str
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    def to_dict(self): return {"tenant_id": self.tenant_id, "conversation_id": self.conversation_id, "messages": self.messages}

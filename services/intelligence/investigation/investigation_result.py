@@ -159,6 +159,8 @@ class InvestigationResult:
 
     security_analytics_context: Any = None
 
+    copilot_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -443,6 +445,8 @@ class InvestigationResult:
             "security_posture_context": self.security_posture_context,
 
             "security_analytics_context": self.security_analytics_context,
+
+            "copilot_context": self.copilot_context,
 
             "intelligence":
                 self.intelligence,
