@@ -27,6 +27,7 @@ from services.intelligence.orchestration.investigation_orchestrator import (
 from services.intelligence.orchestration.investigation_coordinator import (
     InvestigationCoordinator,
 )
+from services.intelligence.ai_runtime import AIRuntimeService
 
 from services.intelligence.agents.agent_registry import (
     AgentRegistry,
@@ -197,6 +198,7 @@ def build_container() -> ServiceRegistry:
 
     orchestrator = InvestigationOrchestrator(
         case_manager=case_manager,
+        ai_runtime=AIRuntimeService.from_environment(),
     )
 
     coordinator = InvestigationCoordinator(

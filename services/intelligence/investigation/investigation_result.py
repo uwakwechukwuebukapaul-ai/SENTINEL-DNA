@@ -93,6 +93,14 @@ class InvestigationResult:
 
     intelligence: Any = None
 
+    ai_reasoning: Optional[str] = None
+
+    ai_confidence: Optional[float] = None
+
+    ai_evidence_references: list[str] = field(default_factory=list)
+
+    ai_provider: Optional[str] = None
+
 
 
     # =========================================================
@@ -301,6 +309,14 @@ class InvestigationResult:
 
             "intelligence":
                 self.intelligence,
+
+            "ai_reasoning": self.ai_reasoning,
+
+            "ai_confidence": self.ai_confidence,
+
+            "ai_evidence_references": self.ai_evidence_references,
+
+            "ai_provider": self.ai_provider,
 
             "findings":
                 self.findings,

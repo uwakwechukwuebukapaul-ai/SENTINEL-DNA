@@ -184,6 +184,7 @@ class InvestigationOrchestrator:
         investigator: Any = None,
         execution_engine: Any = None,
         reporter: Any = None,
+        ai_runtime: Any = None,
         **kwargs: Any,
     ) -> None:
         self.runtime = runtime
@@ -206,6 +207,8 @@ class InvestigationOrchestrator:
             if reporter is not None
             else _DefaultReporter()
         )
+
+        self.ai_runtime = ai_runtime
 
         # Preserve historical orchestration state contract.
         self.state = _WorkflowState()
@@ -332,6 +335,11 @@ class InvestigationOrchestrator:
                 "executing"
             )
 
+            ai_response = None
+            context = kwargs.get("context")
+            if self.ai_runtime is not None and context is not None:
+                ai_response = self.ai_runtime.reason(context)
+
             # --------------------------------------------------------------
             # Intermediate orchestration result
             # --------------------------------------------------------------
@@ -349,6 +357,14 @@ class InvestigationOrchestrator:
                 "investigation": investigation,
                 "execution": execution,
             }
+
+            if ai_response is not None:
+                orchestration_result.update({
+                    "ai_reasoning": ai_response.content,
+                    "ai_confidence": ai_response.confidence,
+                    "ai_evidence_references": list(ai_response.evidence_references),
+                    "ai_provider": ai_response.metadata.get("provider"),
+                })
 
             # --------------------------------------------------------------
             # Report
@@ -425,6 +441,10 @@ class InvestigationOrchestrator:
                     "execution": execution,
                     "report": report,
                 },
+                "ai_reasoning": orchestration_result.get("ai_reasoning"),
+                "ai_confidence": orchestration_result.get("ai_confidence"),
+                "ai_evidence_references": orchestration_result.get("ai_evidence_references", []),
+                "ai_provider": orchestration_result.get("ai_provider"),
                 "metadata": {
                     "orchestrator": (
                         "InvestigationOrchestrator"

@@ -477,13 +477,6 @@ class InvestigationCoordinator:
                 }
             )
 
-        workflow = self.orchestrator.investigate(
-            case_id=case_id,
-            artifacts=normalized_artifacts,
-            alert=alert_data,
-            **kwargs,
-        )
-
         plan = self.create_plan(
             case_id,
             alert_data,
@@ -499,6 +492,15 @@ class InvestigationCoordinator:
             evidence=evidence,
             iocs=iocs,
             timeline=timeline,
+        )
+
+        orchestrator_kwargs = dict(kwargs)
+        orchestrator_kwargs["context"] = context
+        workflow = self.orchestrator.investigate(
+            case_id=case_id,
+            artifacts=normalized_artifacts,
+            alert=alert_data,
+            **orchestrator_kwargs,
         )
 
 
