@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, jsonify, request, session
 from sqlite3 import IntegrityError
 
 from .auth_service import AuthService
+from .security import csrf_token
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 
@@ -33,8 +34,18 @@ def login():
         return jsonify({"error": "invalid_credentials"}), 401
     session.clear()
     session["user_id"] = user.id
+    session["csrf_token"] = csrf_token()
     current_app.container.get("audit_service").record("USER_LOGIN", user_id=user.id)
-    return jsonify(user.public())
+    payload = user.public()
+    payload["csrf_token"] = session["csrf_token"]
+    return jsonify(payload)
+
+
+@auth_api.get("/csrf")
+def csrf():
+    if "csrf_token" not in session:
+        session["csrf_token"] = csrf_token()
+    return jsonify({"csrf_token": session["csrf_token"]})
 
 
 @auth_api.post("/logout")

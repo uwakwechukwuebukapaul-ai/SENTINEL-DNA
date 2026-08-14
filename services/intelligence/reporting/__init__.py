@@ -1,6 +1,24 @@
-"""Analyst-ready investigation report generation."""
+"""
+Sentinel DNA Intelligence Reporting Package.
 
-from .investigation_report import InvestigationReportGenerator
-from .report_models import InvestigationReport
+Provides:
+- Investigation reports
+- Report generation
+- Backward compatibility exports
+"""
 
-__all__ = ["InvestigationReport", "InvestigationReportGenerator"]
+from .investigation_report import (
+    InvestigationReport,
+    InvestigationReportGenerator,
+)
+
+from .report_builder import (
+    ReportBuilder,
+)
+
+
+__all__ = [
+    "InvestigationReport",
+    "InvestigationReportGenerator",
+    "ReportBuilder",
+]

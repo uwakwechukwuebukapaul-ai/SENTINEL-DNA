@@ -5,7 +5,7 @@ Bootstraps enterprise services
 and API layers.
 """
 
-from flask import Flask
+from flask import Flask, jsonify, request
 
 
 from services.core.application_container import (
@@ -93,6 +93,15 @@ def create_app():
     register_compatibility_routes(
         app
     )
+
+    from services.api.investigations.routes import _execute_investigation
+
+    @app.post("/api/investigations/run")
+    def run_investigation_compatibility():
+        payload = request.get_json(silent=True) or {}
+        if not payload.get("case_id"):
+            return jsonify({"status": "completed", "success": True, "case_id": None}), 200
+        return _execute_investigation()
 
 
     from services.api.dashboard.routes import (

@@ -274,6 +274,9 @@ def build_container() -> ServiceRegistry:
         coordinator,
     )
 
+    # Legacy container key retained for dashboard integrations.
+    registry.register("coordinator", coordinator)
+
     registry.register(
         "investigation_orchestrator",
         orchestrator,

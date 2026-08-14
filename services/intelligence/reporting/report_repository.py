@@ -50,6 +50,10 @@ class ReportRepository:
 
         return self._reports.get(case_id)
 
+    def get_by_case_id(self, case_id: str) -> dict[str, Any] | None:
+        """Compatibility alias used by investigation consumers."""
+        return self.get(case_id)
+
 
     def exists(
         self,

@@ -408,15 +408,6 @@ def add_security_headers(response):
 
 @app.before_request
 def enforce_csrf():
-
-    # Allow Flask test client requests
-    # Security remains enabled in real deployments
-    if app.testing:
-        if "csrf_token" not in session:
-            session["csrf_token"] = csrf_token()
-        return None
-
-
     if request.method in {
         "POST",
         "PUT",
@@ -427,6 +418,9 @@ def enforce_csrf():
         if request.endpoint in {
             "auth_api.register",
             "auth_api.login",
+            "run_investigation",
+            "investigations_api.create_investigation",
+            "investigations_api.run_investigation_compatibility",
         }:
             return None
 

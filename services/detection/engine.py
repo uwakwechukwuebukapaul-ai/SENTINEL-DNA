@@ -3,10 +3,10 @@ class DetectionEngine:
     def __init__(self, rules=None, alert_sink=None): self.rules = rules or self.default_rules(); self.alerts = []; self.alert_sink = alert_sink
     @staticmethod
     def default_rules(): return [
-        SigmaRule("Brute force authentication", ["authentication_failure", "failed_login"], ["failed", "brute"], "T1110", "Credential Access", "Repeated authentication failures", "high"),
-        SigmaRule("Suspicious PowerShell", ["process_creation", "powershell"], ["powershell", "-enc", "encodedcommand"], "T1059.001", "Execution", "Suspicious PowerShell execution", "high"),
-        SigmaRule("Suspicious external IP", ["network_connection", "external_connection"], ["external_ip", "public_ip"], "T1071", "Command and Control", "Connection to an external address", "medium"),
-        SigmaRule("Privilege escalation", ["privilege_change", "role_change", "sudo"], ["admin", "root", "elevated"], "T1068", "Privilege Escalation", "Unexpected privilege elevation", "critical")]
+        SigmaRule("Brute force authentication", ["authentication_failure", "failed_login", "failed_authentication"], ["failed", "brute"], "T1110", "Credential Access", "Repeated authentication failures", "high"),
+        SigmaRule("Suspicious PowerShell", ["process_creation", "powershell", "powershell_execution"], ["powershell", "-enc", "encodedcommand"], "T1059.001", "Execution", "Suspicious PowerShell execution", "high"),
+        SigmaRule("Suspicious external IP", ["network_connection", "external_connection", "suspicious_ip_communication"], ["external_ip", "public_ip"], "T1071", "Command and Control", "Connection to an external address", "medium"),
+        SigmaRule("Privilege escalation", ["privilege_change", "role_change", "sudo", "privilege_escalation"], ["admin", "root", "elevated"], "T1068", "Privilege Escalation", "Unexpected privilege elevation", "critical")]
     def match(self, event):
         text = str(event.raw_data).lower(); result = []
         for rule in self.rules:

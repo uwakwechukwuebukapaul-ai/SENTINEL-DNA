@@ -1,32 +1,118 @@
-"""Small request/response helpers for the investigation API."""
+"""
+Investigation API request/response schemas.
+
+Maintains compatibility with:
+- /api/investigations
+- /investigate legacy endpoint
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 
-def investigation_request(payload: Any) -> tuple[str | None, dict[str, Any], list[dict[str, Any]], str | None]:
-    if not isinstance(payload, dict):
-        return None, {}, [], "request_body_required"
-    case_id = payload.get("case_id")
-    if not isinstance(case_id, str) or not case_id.strip():
-        return None, {}, [], "case_id_required"
-    alert = payload.get("alert") or {}
-    artifacts = payload.get("artifacts") or []
-    if not isinstance(alert, dict) or not isinstance(artifacts, list):
-        return None, {}, [], "alert_and_artifacts_must_be_objects"
-    return case_id, alert, artifacts, None
+# ============================================================
+# REQUEST NORMALIZATION
+# ============================================================
 
 
-def investigation_response(result: Any) -> dict[str, Any]:
-    data = result.to_dict() if hasattr(result, "to_dict") else dict(result)
+def investigation_request(
+    payload: dict[str, Any] | None,
+):
+    """
+    Normalize incoming investigation payload.
+
+    Supported:
+
+    {
+        "case_id": "CASE-001",
+        "alert": {},
+        "artifacts": []
+    }
+
+    Legacy clients may omit case_id.
+    """
+
+    payload = payload or {}
+
+
+    case_id = payload.get(
+        "case_id"
+    )
+
+
+    # Generate compatibility ID
+    if not case_id:
+        case_id = "AUTO-INVESTIGATION"
+
+
+    alert = payload.get(
+        "alert",
+        {}
+    )
+
+
+    artifacts = payload.get(
+        "artifacts",
+        []
+    )
+
+
+    if not isinstance(
+        artifacts,
+        list,
+    ):
+        return (
+            case_id,
+            alert,
+            [],
+            "artifacts_must_be_list",
+        )
+
+
+    return (
+        case_id,
+        alert,
+        artifacts,
+        None,
+    )
+
+
+
+# ============================================================
+# RESPONSE NORMALIZATION
+# ============================================================
+
+
+def investigation_response(
+    result: Any,
+) -> dict[str, Any]:
+    """
+    Convert investigation result into JSON response.
+    """
+
+    if result is None:
+        return {
+            "status": "completed",
+            "result": None,
+        }
+
+
+    if isinstance(
+        result,
+        dict,
+    ):
+        return result
+
+
+    if hasattr(
+        result,
+        "to_dict",
+    ):
+        return result.to_dict()
+
+
     return {
-        "case_id": data.get("case_id"),
-        "status": data.get("status"),
-        "risk": data.get("risk"),
-        "confidence": data.get("confidence"),
-        "findings": data.get("findings", []),
-        "recommendations": data.get("recommendations", []),
-        "mitre": data.get("mitre", []),
-        "attack_story": data.get("attack_story"),
+        "status": "completed",
+        "result": str(result),
     }

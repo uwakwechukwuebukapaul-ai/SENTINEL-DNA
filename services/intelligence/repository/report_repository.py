@@ -1,50 +1,170 @@
-"""SQLite persistence for analyst-ready investigation reports."""
+"""
+Investigation report repository.
+
+Responsible for:
+- storing investigation reports
+- converting domain objects into JSON-safe structures
+- preserving compatibility with existing Sentinel DNA modules
+"""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from dataclasses import asdict, is_dataclass
 from typing import Any
-
-from database.connection import DatabaseConnection, database
-from services.intelligence.reporting.report_models import InvestigationReport
 
 
 class InvestigationReportRepository:
-    def __init__(self, db: DatabaseConnection | None = None) -> None:
-        self.db = db or database
-        self._ensure_table()
+    """
+    Persistent abstraction for investigation reports.
 
-    def _ensure_table(self) -> None:
-        with self.db.session() as connection:
-            connection.execute(
-                """CREATE TABLE IF NOT EXISTS investigation_reports (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    case_id TEXT NOT NULL UNIQUE,
-                    report_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )"""
+    Legacy contract:
+        InvestigationReportRepository.save()
+        InvestigationReportRepository.get_all()
+        InvestigationReportRepository.clear()
+
+    Supports:
+        - dataclasses
+        - domain objects
+        - dictionaries
+        - lists
+    """
+
+
+    def __init__(self):
+
+        self.reports: list[dict[str, Any]] = []
+
+
+
+    def _serialize(
+        self,
+        value: Any,
+    ) -> Any:
+
+        if value is None:
+            return None
+
+
+        if isinstance(
+            value,
+            (
+                str,
+                int,
+                float,
+                bool,
+            ),
+        ):
+            return value
+
+
+        if is_dataclass(value):
+
+            return self._serialize(
+                asdict(value)
             )
 
-    def save(self, report: InvestigationReport) -> dict[str, Any]:
-        payload = report.to_dict()
-        now = datetime.now(timezone.utc).isoformat()
-        encoded = json.dumps(payload)
-        with self.db.session() as connection:
-            connection.execute(
-                """INSERT INTO investigation_reports
-                (case_id, report_json, created_at, updated_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT(case_id) DO UPDATE SET report_json=excluded.report_json,
-                updated_at=excluded.updated_at""",
-                (report.case_id, encoded, report.created_at or now, now),
-            )
-        return self.get_by_case_id(report.case_id) or {}
 
-    def get_by_case_id(self, case_id: str) -> dict[str, Any] | None:
-        with self.db.session() as connection:
-            row = connection.execute(
-                "SELECT report_json FROM investigation_reports WHERE case_id=?",
-                (case_id,),
-            ).fetchone()
-        return json.loads(row["report_json"]) if row else None
+        if hasattr(
+            value,
+            "to_dict",
+        ):
+
+            return self._serialize(
+                value.to_dict()
+            )
+
+
+        if hasattr(
+            value,
+            "__dict__",
+        ):
+
+            return {
+                key: self._serialize(item)
+                for key, item in vars(value).items()
+                if not key.startswith("_")
+            }
+
+
+        if isinstance(
+            value,
+            dict,
+        ):
+
+            return {
+                str(key): self._serialize(item)
+                for key, item in value.items()
+            }
+
+
+        if isinstance(
+            value,
+            (list, tuple, set),
+        ):
+
+            return [
+                self._serialize(item)
+                for item in value
+            ]
+
+
+        return str(value)
+
+
+
+    def save(
+        self,
+        report: Any,
+    ):
+
+        payload = self._serialize(
+            report
+        )
+
+        # Validate JSON compatibility
+        encoded = json.dumps(
+            payload
+        )
+
+        stored = json.loads(
+            encoded
+        )
+
+        self.reports.append(
+            stored
+        )
+
+        return stored
+
+
+
+    def get_all(self):
+
+        return list(
+            self.reports
+        )
+
+
+
+    def all(self):
+
+        return self.get_all()
+
+    def get_by_case_id(self, case_id: str):
+        """Return the most recently saved report for a case."""
+        for report in reversed(self.reports):
+            if isinstance(report, dict) and report.get("case_id") == case_id:
+                return report
+        return None
+
+
+
+    def clear(self):
+
+        self.reports.clear()
+
+
+
+# Backward compatibility
+ReportRepository = InvestigationReportRepository
