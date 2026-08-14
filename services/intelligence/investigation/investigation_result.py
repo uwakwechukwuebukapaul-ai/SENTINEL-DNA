@@ -117,6 +117,8 @@ class InvestigationResult:
 
     vulnerability_context: Any = None
 
+    security_graph_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -359,6 +361,8 @@ class InvestigationResult:
             "asset_context": self.asset_context,
 
             "vulnerability_context": self.vulnerability_context,
+
+            "security_graph_context": self.security_graph_context,
 
             "intelligence":
                 self.intelligence,
