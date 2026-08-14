@@ -141,6 +141,8 @@ class InvestigationResult:
 
     workspace_context: Any = None
 
+    command_center_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -407,6 +409,8 @@ class InvestigationResult:
             "detection_learning_context": self.detection_learning_context,
 
             "workspace_context": self.workspace_context,
+
+            "command_center_context": self.command_center_context,
 
             "intelligence":
                 self.intelligence,
