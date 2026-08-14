@@ -90,3 +90,8 @@ class VulnerabilityPostureSummary:
 class SecurityGraphPostureSummary:
     total_entities:int=0; total_relationships:int=0; active_campaign_links:int=0; attack_paths_found:int=0; enriched_investigations:int=0
     def to_dict(self): return asdict(self)
+
+@dataclass
+class AttackPathPostureSummary:
+    total_paths:int=0; critical_paths:int=0; high_exposure_assets:int=0; average_exposure_score:float=0.0; largest_blast_radius:int=0
+    def to_dict(self): return asdict(self)
