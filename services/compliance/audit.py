@@ -1,0 +1,3 @@
+class ComplianceAuditLogger:
+ def __init__(self): self.events=[]
+ def record(self,event,**data): self.events.append({"event":event,**data}); return self.events[-1]

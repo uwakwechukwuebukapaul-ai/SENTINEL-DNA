@@ -70,3 +70,8 @@ class TenantPostureSummary:
 class GovernancePostureSummary:
     active_policies: int=0; denied_actions: int=0; approval_requests: int=0; compliance_status: str="unknown"
     def to_dict(self): return asdict(self)
+
+@dataclass
+class SecurityPostureSummary:
+    compliance_score: float=0.0; risk_score: float=0.0; control_coverage: float=0.0; open_findings: int=0; framework_status: dict[str,Any]=field(default_factory=dict)
+    def to_dict(self): return asdict(self)
