@@ -1,8 +1,13 @@
-class DetectionOptimizer:
- def recommend(self,metrics,feedback):
-  out=[]
-  if metrics["false_positive_rate"]>.3: out.append({"type":"tuning","recommendation":"Tune rule filters to reduce false positives"})
-  if metrics["precision"]<.5: out.append({"type":"visibility","recommendation":"Improve supporting telemetry and evidence coverage"})
-  for x in feedback:
-   if x.severity_adjustment: out.append({"type":"rule_improvement","recommendation":"Review severity calibration","note":x.tuning_notes})
-  return out
+from .models import DetectionMetrics, Recommendation
+
+class DetectionOptimizationEngine:
+    """Produces advisory recommendations; it never mutates detection rules."""
+    def recommend(self, metrics: DetectionMetrics) -> list[Recommendation]:
+        recommendations = []
+        if metrics.false_positive_rate >= .25:
+            recommendations.append(Recommendation(metrics.detection_id, "rule_improvement", "False positives are high", "high", ("tighten predicates", "add exclusion conditions")))
+        if metrics.confidence < .5:
+            recommendations.append(Recommendation(metrics.detection_id, "visibility_improvement", "Insufficient analyst feedback", "medium", ("collect more verdicts", "instrument analyst outcomes")))
+        if metrics.precision < .6 and metrics.total_feedback:
+            recommendations.append(Recommendation(metrics.detection_id, "tuning", "Precision is below target", "high", ("review threshold", "recalibrate severity")))
+        return recommendations
