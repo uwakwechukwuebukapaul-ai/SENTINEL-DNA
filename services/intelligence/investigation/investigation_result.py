@@ -137,6 +137,8 @@ class InvestigationResult:
 
     detection_intelligence_context: Any = None
 
+    detection_learning_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -399,6 +401,8 @@ class InvestigationResult:
             "intel_pipeline_context": self.intel_pipeline_context,
 
             "detection_intelligence_context": self.detection_intelligence_context,
+
+            "detection_learning_context": self.detection_learning_context,
 
             "intelligence":
                 self.intelligence,
