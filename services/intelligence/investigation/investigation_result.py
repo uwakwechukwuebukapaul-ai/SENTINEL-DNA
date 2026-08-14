@@ -155,6 +155,8 @@ class InvestigationResult:
 
     exposure_management_context: Any = None
 
+    security_posture_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -435,6 +437,8 @@ class InvestigationResult:
             "threat_hunting_context": self.threat_hunting_context,
 
             "exposure_management_context": self.exposure_management_context,
+
+            "security_posture_context": self.security_posture_context,
 
             "intelligence":
                 self.intelligence,
