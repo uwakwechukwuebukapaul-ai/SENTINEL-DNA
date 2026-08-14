@@ -27,6 +27,11 @@ class IntegrationRegistry:
         if credentials: from .models import CredentialRef; ref = CredentialRef(provider, self.credentials.encrypt(credentials))
         item = Integration(name.strip(), provider, kind, config or {}, ref); self.items[item.id] = item; return item
     def get(self, item_id): return self.items.get(item_id)
+    register_connector = lambda self, connector: self.items.setdefault(connector.connector_id, connector)
+    remove_connector = lambda self, item_id: self.items.pop(item_id, None) is not None
+    get_connector = lambda self, item_id: self.items.get(item_id)
+    list_connectors = lambda self: list(self.items.values())
+    get_capabilities = lambda self: {getattr(x, "connector_id", k): list(getattr(x, "capabilities", ())) for k, x in self.items.items()}
     def all(self): return list(self.items.values())
     def adapter(self, item): return ADAPTERS[item.provider](item)
     def test(self, item):

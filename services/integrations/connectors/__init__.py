@@ -1,6 +1,5 @@
-"""Compatibility exports for the enterprise connector foundation."""
-from ..base import IntegrationAdapter, MockEnterpriseAdapter
-from ..models import Integration, CredentialRef
-from ..registry import IntegrationRegistry
-
-__all__ = ["IntegrationAdapter", "MockEnterpriseAdapter", "Integration", "CredentialRef", "IntegrationRegistry"]
+from .siem import SyntheticSIEMConnector
+from .threat_intel import SyntheticThreatIntelConnector
+from .ticketing import SyntheticTicketConnector
+from .webhook import SyntheticWebhookConnector
+__all__=["SyntheticSIEMConnector","SyntheticThreatIntelConnector","SyntheticTicketConnector","SyntheticWebhookConnector"]

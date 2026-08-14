@@ -105,6 +105,8 @@ class InvestigationResult:
 
     soar_recommendation: Any = None
 
+    integration_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -335,6 +337,8 @@ class InvestigationResult:
             "threat_intelligence_report": self.threat_intelligence_report.to_dict() if hasattr(self.threat_intelligence_report, "to_dict") else self.threat_intelligence_report,
 
             "soar_recommendation": self.soar_recommendation,
+
+            "integration_context": self.integration_context,
 
             "intelligence":
                 self.intelligence,

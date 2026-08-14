@@ -55,3 +55,8 @@ class SOARPostureSummary:
     completed_executions: int = 0
     blocked_actions: int = 0
     def to_dict(self): return asdict(self)
+
+@dataclass
+class IntegrationPostureSummary:
+    total_connectors: int=0; active_connectors: int=0; unhealthy_connectors: int=0; last_sync: str|None=None
+    def to_dict(self): return asdict(self)

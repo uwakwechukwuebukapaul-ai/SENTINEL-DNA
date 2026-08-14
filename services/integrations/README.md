@@ -1,3 +1,3 @@
-# Enterprise integrations
+# Security Integration Hub
 
-This vendor-neutral foundation extends the existing integration registry with deterministic SIEM event normalization. It supports future Microsoft Sentinel, Splunk, Elastic, and CrowdStrike adapters without making external calls or changing the investigation workflow.
+The Integration Hub is the external communication boundary. Connector adapters are provider-independent and synthetic by default; credentials are represented only by masked vault references, and all operations are auditable. Existing vendor adapters remain compatible. Future providers include Sentinel, Splunk, CrowdStrike, Elastic, AWS, Azure, ServiceNow, Slack, and Teams.
