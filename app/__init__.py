@@ -24,6 +24,7 @@ def create_app():
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
     app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies)
+    database.database_path = runtime_config.database_path
 
 
     # ==================================
@@ -56,6 +57,8 @@ def create_app():
     from services.pilot_management.routes import pilot_management_api
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
+    from services.auth import auth_api
+    app.register_blueprint(auth_api)
     app.register_blueprint(automation_api)
     app.register_blueprint(integrations_api)
     app.register_blueprint(detection_api)

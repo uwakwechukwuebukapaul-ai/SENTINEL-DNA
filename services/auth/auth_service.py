@@ -37,7 +37,7 @@ class AuthService:
 
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
-            row = connection.execute("SELECT * FROM users WHERE username=? AND is_active=1", (username,)).fetchone()
+            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1", (username, username.strip().lower())).fetchone()
             if not row or not verify_password(row["password_hash"], password):
                 return None
             now = datetime.now(timezone.utc).isoformat()
