@@ -135,6 +135,8 @@ class InvestigationResult:
 
     intel_pipeline_context: Any = None
 
+    detection_intelligence_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -395,6 +397,8 @@ class InvestigationResult:
             "threat_fusion_context": self.threat_fusion_context,
 
             "intel_pipeline_context": self.intel_pipeline_context,
+
+            "detection_intelligence_context": self.detection_intelligence_context,
 
             "intelligence":
                 self.intelligence,
