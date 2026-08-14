@@ -1,0 +1,6 @@
+from uuid import uuid4
+from .models import ExposureFactor, SecurityExposure
+
+class ExposureScoringEngine:
+    def calculate(self, tenant_id, asset_id, asset_criticality="medium", vulnerability_severity="medium", exploit_likelihood=0.0, attack_path_reachability=0.0, threat_activity=0.0, compliance_impact=0.0, business_impact="unknown"):
+        levels={"low":.25,"medium":.5,"high":.75,"critical":1.0}; factors=[ExposureFactor("asset_criticality", levels.get(str(asset_criticality).lower(), .5), .2, "asset_intelligence"), ExposureFactor("vulnerability_severity", levels.get(str(vulnerability_severity).lower(), .5), .2, "vulnerability_intelligence"), ExposureFactor("exploit_likelihood", min(1,float(exploit_likelihood)), .15, "threat_intelligence"), ExposureFactor("attack_path_reachability", min(1,float(attack_path_reachability)), .2, "attack_path_analysis"), ExposureFactor("threat_activity", min(1,float(threat_activity)), .15, "threat_intelligence"), ExposureFactor("compliance_impact", min(1,float(compliance_impact)), .1, "compliance_intelligence")]; score=round(sum(item.value*item.weight for item in factors)*100, 2); severity="critical" if score >= 80 else "high" if score >= 60 else "medium" if score >= 35 else "low"; return SecurityExposure(str(uuid4()), tenant_id, asset_id, score, severity, factors, business_impact)
