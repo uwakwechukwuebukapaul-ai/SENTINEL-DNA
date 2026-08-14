@@ -113,6 +113,8 @@ class InvestigationResult:
 
     compliance_context: Any = None
 
+    asset_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -351,6 +353,8 @@ class InvestigationResult:
             "policy_context": self.policy_context,
 
             "compliance_context": self.compliance_context,
+
+            "asset_context": self.asset_context,
 
             "intelligence":
                 self.intelligence,

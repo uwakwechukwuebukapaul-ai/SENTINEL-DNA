@@ -75,3 +75,8 @@ class GovernancePostureSummary:
 class SecurityPostureSummary:
     compliance_score: float=0.0; risk_score: float=0.0; control_coverage: float=0.0; open_findings: int=0; framework_status: dict[str,Any]=field(default_factory=dict)
     def to_dict(self): return asdict(self)
+
+@dataclass
+class AttackSurfaceSummary:
+    total_assets:int=0; critical_assets:int=0; exposed_assets:int=0; high_risk_assets:int=0; unknown_assets:int=0
+    def to_dict(self): return asdict(self)
