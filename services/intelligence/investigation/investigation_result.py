@@ -131,6 +131,8 @@ class InvestigationResult:
 
     simulation_context: Any = None
 
+    threat_fusion_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -387,6 +389,8 @@ class InvestigationResult:
             "adaptive_workflow_context": self.adaptive_workflow_context.to_dict() if hasattr(self.adaptive_workflow_context, "to_dict") else self.adaptive_workflow_context,
 
             "simulation_context": self.simulation_context.to_dict() if hasattr(self.simulation_context, "to_dict") else self.simulation_context,
+
+            "threat_fusion_context": self.threat_fusion_context,
 
             "intelligence":
                 self.intelligence,
