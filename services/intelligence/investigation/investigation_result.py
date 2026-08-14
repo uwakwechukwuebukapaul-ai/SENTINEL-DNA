@@ -133,6 +133,8 @@ class InvestigationResult:
 
     threat_fusion_context: Any = None
 
+    intel_pipeline_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -391,6 +393,8 @@ class InvestigationResult:
             "simulation_context": self.simulation_context.to_dict() if hasattr(self.simulation_context, "to_dict") else self.simulation_context,
 
             "threat_fusion_context": self.threat_fusion_context,
+
+            "intel_pipeline_context": self.intel_pipeline_context,
 
             "intelligence":
                 self.intelligence,
