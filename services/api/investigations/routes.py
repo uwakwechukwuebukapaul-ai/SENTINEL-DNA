@@ -38,6 +38,7 @@ from .schemas import (
     investigation_response,
 )
 from services.core.serialization import serialize
+from services.core.security_context import authorize_investigation
 
 
 # ============================================================
@@ -80,6 +81,10 @@ def _execute_investigation():
     payload = request.get_json(
         silent=True
     ) or {}
+
+    allowed, error = authorize_investigation(payload, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
 
 
     case_id, alert, artifacts, error = investigation_request(
@@ -139,6 +144,10 @@ def get_investigation(
             case_id
         )
     )
+
+    allowed, error = authorize_investigation(_serialize(intelligence), write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
 
 
     report = (
@@ -206,6 +215,10 @@ def get_investigation_report(
             }
         ),404
 
+    allowed, error = authorize_investigation(_serialize(report), write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+
 
     return jsonify(
         _serialize(report)
@@ -237,6 +250,10 @@ def get_investigation_timeline(
                     "investigation_not_found"
             }
         ),404
+
+    allowed, error = authorize_investigation(_serialize(intelligence), write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
 
 
     data = _serialize(
