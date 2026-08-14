@@ -1,0 +1,2 @@
+from .models import GovernancePolicy
+DEFAULT_POLICIES=[GovernancePolicy("AI-SAFE","default","AI Safety","ai","AI is advisory only",{"execute_actions":False,"modify_evidence":False,"recommendations_require_review":True}),GovernancePolicy("SOAR-SAFE","default","SOAR Safety","automation","Destructive automation is blocked",{"destructive_actions":False,"external_actions_require_approval":True}),GovernancePolicy("INTEGRATION-SAFE","default","Integration Safety","integration","Credentials remain protected",{"expose_credentials":False})]

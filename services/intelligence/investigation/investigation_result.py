@@ -109,6 +109,8 @@ class InvestigationResult:
 
     tenant_context: Any = None
 
+    policy_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -343,6 +345,8 @@ class InvestigationResult:
             "integration_context": self.integration_context,
 
             "tenant_context": self.tenant_context,
+
+            "policy_context": self.policy_context,
 
             "intelligence":
                 self.intelligence,

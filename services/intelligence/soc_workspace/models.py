@@ -65,3 +65,8 @@ class IntegrationPostureSummary:
 class TenantPostureSummary:
     tenant_id: str; users: int=0; active_cases: int=0; investigations: int=0; detections: int=0; integrations: int=0
     def to_dict(self): return asdict(self)
+
+@dataclass
+class GovernancePostureSummary:
+    active_policies: int=0; denied_actions: int=0; approval_requests: int=0; compliance_status: str="unknown"
+    def to_dict(self): return asdict(self)
