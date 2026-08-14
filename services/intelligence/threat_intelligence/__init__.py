@@ -16,5 +16,11 @@ __all__ = [
 
     "IOCExtractor",
     "EnrichmentEngine",
+    "ThreatIndicator", "ThreatMatch", "ThreatIntelligenceReport",
+    "ThreatIntelligenceRepository", "ThreatCorrelationEngine",
 
 ]
+
+from .models import ThreatIndicator, ThreatMatch, ThreatIntelligenceReport
+from .repository import ThreatIntelligenceRepository
+from .correlation_engine import ThreatCorrelationEngine

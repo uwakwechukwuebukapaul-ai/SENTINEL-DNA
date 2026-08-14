@@ -75,6 +75,7 @@ from services.intelligence.memory import MemoryService
 from services.intelligence.decision.engine import DecisionEngine
 from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
+from services.intelligence.threat_intelligence import ThreatCorrelationEngine
 import time
 
 
@@ -161,6 +162,7 @@ class InvestigationCoordinator:
         self.decision_engine = DecisionEngine()
         self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
         self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
+        self.threat_intelligence = ThreatCorrelationEngine()
 
 
     # ========================================================
@@ -420,6 +422,15 @@ class InvestigationCoordinator:
             ),
             plan,
         )
+        threat_report = None
+        try:
+            threat_report = self.threat_intelligence.correlate_case(
+                self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
+                                    iocs=list(engine_analysis.get("iocs", []) or []),
+                                    timeline=list(normalized_intelligence.timeline or [])),
+                normalized_artifacts, list(engine_analysis.get("iocs", []) or []), None)
+        except Exception:
+            pass
         result = InvestigationResult(
             success=True,
             status="completed",
@@ -444,6 +455,7 @@ class InvestigationCoordinator:
                 "workflow": workflow,
             },
             reasoning_report=reasoning_report,
+            threat_intelligence_report=threat_report,
             errors=list(execution["errors"]),
         )
         try:

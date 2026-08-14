@@ -101,6 +101,8 @@ class InvestigationResult:
 
     narrative_report: Any = None
 
+    threat_intelligence_report: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -327,6 +329,8 @@ class InvestigationResult:
             "copilot_summary": self.copilot_summary.to_dict() if hasattr(self.copilot_summary, "to_dict") else self.copilot_summary,
 
             "narrative_report": self.narrative_report.to_dict() if hasattr(self.narrative_report, "to_dict") else self.narrative_report,
+
+            "threat_intelligence_report": self.threat_intelligence_report.to_dict() if hasattr(self.threat_intelligence_report, "to_dict") else self.threat_intelligence_report,
 
             "intelligence":
                 self.intelligence,
