@@ -8,6 +8,8 @@ Autonomous investigation reasoning components.
 from .reasoning_engine import (
     InvestigationReasoningEngine,
 )
+from .autonomous import AutonomousInvestigationEngine, DecisionRecord
+from .routes import reasoning_api
 
 
 # Backward-compatible public name
@@ -19,5 +21,6 @@ __all__ = [
     "InvestigationReasoner",
 
     "InvestigationReasoningEngine",
+    "AutonomousInvestigationEngine", "DecisionRecord", "reasoning_api",
 
 ]

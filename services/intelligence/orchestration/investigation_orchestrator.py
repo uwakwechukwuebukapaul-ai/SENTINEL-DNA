@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Optional
+from services.observability import ObservabilityService
+import time
 
 from services.intelligence.investigation.investigation_result import (
     InvestigationResult,
@@ -253,6 +255,8 @@ class InvestigationOrchestrator:
         Any workflow exception produces a structured failed result.
         """
 
+        started_at = time.perf_counter()
+        observer = ObservabilityService()
         normalized_case_id = str(
             case_id or "UNKNOWN"
         )
@@ -433,6 +437,7 @@ class InvestigationOrchestrator:
                 investigation_id
             ] = result
 
+            observer.event("AGENT_COMPLETED", case_id=normalized_case_id, status="completed", duration_ms=round((time.perf_counter()-started_at)*1000, 2))
             return result
 
         except Exception as exc:
@@ -490,6 +495,7 @@ class InvestigationOrchestrator:
                 investigation_id
             ] = result
 
+            observer.event("AGENT_FAILED", case_id=normalized_case_id, status="failed", duration_ms=round((time.perf_counter()-started_at)*1000, 2), errors=[str(exc)])
             return result
 
     # ========================================================================

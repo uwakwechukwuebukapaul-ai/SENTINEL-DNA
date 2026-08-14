@@ -1,0 +1,2 @@
+def scenario():
+    return {"name": "Synthetic Ransomware Campaign", "target": "finance-workstations", "actor": {"name": "Black Frost", "motivation": "financial", "target": "finance"}, "stages": [{"name": "Phishing", "technique_id": "T1566", "tactic": "Initial Access"}, {"name": "PowerShell", "technique_id": "T1059.001", "tactic": "Execution"}, {"name": "Privilege escalation", "technique_id": "T1068", "tactic": "Privilege Escalation"}, {"name": "Data encrypted", "technique_id": "T1486", "tactic": "Impact"}]}

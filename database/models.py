@@ -292,6 +292,28 @@ def create_tables():
 
 
 
+        # =====================================
+        # ANALYST ACTIONS
+        # =====================================
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS analyst_actions (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            case_id TEXT NOT NULL,
+
+            action TEXT NOT NULL,
+
+            analyst TEXT DEFAULT 'SYSTEM',
+
+            created TEXT NOT NULL
+
+        )
+        """)
+
+
+
     return True
 
 

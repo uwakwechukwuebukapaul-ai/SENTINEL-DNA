@@ -3,112 +3,1321 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import logging
+import re
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import (
+    Flask,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+    Response,
+    session,
+)
 
+from jinja2 import ChoiceLoader, FileSystemLoader
+
+
+# Core platform services
 from services.core.application_container import build_container
 from services.api.investigations.controller import InvestigationController
 
+# Authentication / authorization
+from services.auth import auth_api
+from services.auth.security import csrf_token
+from services.auth.permissions import permission_required
+
+# Case management
+from services.cases import cases_api
+
+# Investigation APIs
+from services.api.investigations import investigations_api
+
+# Dashboard
+from services.dashboard.dashboard_service import (
+    DashboardService as CommandCenterDashboardService
+)
+
+# Intelligence
+from services.intelligence.copilot import InvestigationCopilot
+from services.intelligence.reasoning import reasoning_api
+from services.intelligence.chat import chat_api
+
+# Security services
+from services.observability import ObservabilityService
+from services.tenancy.context import tenant_required
+
+# Feature modules
+from services.hunting import hunting_api, HuntRepository
+from services.automation import automation_api
+from services.integrations import integrations_api
+from services.detection import detection_api
+from services.adversary import adversary_api
+
+from services.validation import validation_api
+from services.tenancy import tenancy_api
+from services.connectors import connectors_api
+from services.streaming import streaming_api
+
+from services.governance.routes import governance_api
+from services.marketplace.routes import marketplace_api
+from services.incidents.routes import incidents_api
+from services.api_management.routes import api_management_api
+from services.billing.routes import billing_api
+
+from services.mssp.routes import mssp_api
+from services.compliance.routes import compliance_api
+from services.mlops.routes import mlops_api
+from services.monitoring.routes import monitoring_api
+
+from services.customer_success.routes import customer_success_api
+from services.product_analytics.routes import product_analytics_api
+
+from services.pilot_reports.routes import pilot_reports_api
+from services.pilot_management.routes import pilot_management_api
+
+from services.support.routes import support_api
+from services.exercises.routes import exercise_api
+from services.readiness.routes import readiness_api
+
+from services.customer_zero import customer_zero_api
+from services.customer_zero.demo_routes import demo_api
+
+from services.detection.content.routes import content_api
+
+from services.intelligence.threat.routes import threat_api
+from services.intelligence.feeds.routes import feeds_api
+
+from services.exposure.routes import exposure_api
+from services.data_lake.routes import data_api
+
+from services.analytics.ueba.routes import ueba_api
+
+from services.ai_agents.routes import agent_api
+from services.graph.routes import graph_api
+from services.query_engine.routes import query_api
+
+from services.xdr.routes import xdr_api
+from services.autonomous_hunting.routes import hunting_ai_api
+
+from services.security_twin.routes import twin_api
+
+from services.prevention.routes import prevention_api
+from services.security_validation.routes import validation_ai_api
+
+from services.security_memory.routes import memory_api
+
+from services.soc_manager.routes import soc_api
+from services.security_advisor.routes import advisor_api
+
+from lab.lab_content.routes import lab_api
+
+from services.operations_hardening.routes import ops_api
+from services.pilot_simulation.routes import pilot_api
+
+from services.identity_security.routes import identity_api
+from services.data_security.routes import data_security_api
+
+from services.decision_intelligence.routes import decision_api
+
+from services.security_copilot.routes import copilot_ai_api
+
+from services.platform_experience.routes import experience_api
+
+
+
+# ---------------------------------------------------------
+# BASE CONFIGURATION
+# ---------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = Path(os.getenv("SENTINEL_DNA_DB_PATH", BASE_DIR / "soc.db")).resolve()
 
-app = Flask(__name__, template_folder="templates")
+DB_PATH = Path(
+    os.getenv(
+        "SENTINEL_DNA_DB_PATH",
+        BASE_DIR / "soc.db"
+    )
+).resolve()
+
+
+app = Flask(
+    __name__,
+    template_folder="templates"
+)
+
+
+app.jinja_loader = ChoiceLoader(
+    [
+        app.jinja_loader,
+        FileSystemLoader(
+            str(
+                BASE_DIR /
+                "dashboard" /
+                "workspace" /
+                "templates"
+            )
+        ),
+    ]
+)
+
+
+app.secret_key = os.getenv(
+    "SENTINEL_DNA_SECRET_KEY",
+    "development-only-change-me"
+)
+
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=(
+        os.getenv(
+            "SENTINEL_DNA_SECURE_COOKIES",
+            "0"
+        ) == "1"
+    )
+)
+
+
 app.config["JSON_SORT_KEYS"] = False
+
+app.config["OBSERVABILITY"] = ObservabilityService()
+
+app.config["HUNT_DB_PATH"] = str(DB_PATH)
+
+
+
+# ---------------------------------------------------------
+# APPLICATION CONTAINER
+# ---------------------------------------------------------
+
 app.container = build_container()
 
 
-def fetch_all(sql: str, params: tuple = ()) -> list[dict]:
-    """Read a bounded dashboard query with a closed connection."""
+
+# ---------------------------------------------------------
+# BLUEPRINT REGISTRATION
+# ---------------------------------------------------------
+
+app.register_blueprint(investigations_api)
+app.register_blueprint(auth_api)
+app.register_blueprint(cases_api)
+
+app.register_blueprint(hunting_api)
+app.register_blueprint(automation_api)
+app.register_blueprint(integrations_api)
+
+app.register_blueprint(detection_api)
+app.register_blueprint(adversary_api)
+app.register_blueprint(validation_api)
+
+app.register_blueprint(tenancy_api)
+app.register_blueprint(connectors_api)
+
+app.register_blueprint(streaming_api)
+
+app.register_blueprint(reasoning_api)
+app.register_blueprint(chat_api)
+
+app.register_blueprint(governance_api)
+app.register_blueprint(marketplace_api)
+
+app.register_blueprint(incidents_api)
+app.register_blueprint(api_management_api)
+
+app.register_blueprint(billing_api)
+
+app.register_blueprint(mssp_api)
+app.register_blueprint(compliance_api)
+
+app.register_blueprint(mlops_api)
+app.register_blueprint(monitoring_api)
+
+app.register_blueprint(customer_success_api)
+
+app.register_blueprint(product_analytics_api)
+
+app.register_blueprint(
+    pilot_reports_api
+)
+
+app.register_blueprint(
+    pilot_management_api
+)
+
+app.register_blueprint(
+    support_api
+)
+
+app.register_blueprint(
+    exercise_api
+)
+
+app.register_blueprint(
+    readiness_api
+)
+
+app.register_blueprint(
+    customer_zero_api
+)
+
+app.register_blueprint(
+    content_api
+)
+
+app.register_blueprint(
+    threat_api
+)
+
+app.register_blueprint(
+    feeds_api
+)
+
+app.register_blueprint(
+    exposure_api
+)
+
+app.register_blueprint(
+    data_api
+)
+
+app.register_blueprint(
+    ueba_api
+)
+
+app.register_blueprint(
+    agent_api
+)
+
+app.register_blueprint(
+    graph_api
+)
+
+app.register_blueprint(
+    query_api
+)
+
+app.register_blueprint(
+    xdr_api
+)
+
+app.register_blueprint(
+    hunting_ai_api
+)
+
+app.register_blueprint(
+    twin_api
+)
+
+app.register_blueprint(
+    prevention_api
+)
+
+app.register_blueprint(
+    validation_ai_api
+)
+
+app.register_blueprint(
+    memory_api
+)
+
+app.register_blueprint(
+    soc_api
+)
+
+app.register_blueprint(
+    advisor_api
+)
+
+app.register_blueprint(
+    lab_api
+)
+
+app.register_blueprint(
+    demo_api
+)
+
+app.register_blueprint(
+    ops_api
+)
+
+app.register_blueprint(
+    pilot_api
+)
+
+app.register_blueprint(
+    identity_api
+)
+
+app.register_blueprint(
+    data_security_api
+)
+
+app.register_blueprint(
+    decision_api
+)
+
+app.register_blueprint(
+    copilot_ai_api
+)
+
+app.register_blueprint(
+    experience_api
+)
+
+
+logger = logging.getLogger(
+    "sentinel_dna.dashboard"
+)
+
+# ---------------------------------------------------------
+# SECURITY HEADERS + REQUEST OBSERVABILITY
+# ---------------------------------------------------------
+
+DIAGNOSTIC_VERSION = "dashboard-production-v2"
+
+
+@app.after_request
+def add_security_headers(response):
+
+    response.headers["X-Sentinel-App-File"] = __file__
+    response.headers["X-Sentinel-App-PID"] = str(os.getpid())
+    response.headers["X-Sentinel-App-Diagnostic"] = DIAGNOSTIC_VERSION
+
+    response.headers["X-Frame-Options"] = "DENY"
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'"
+    )
+
+    app.config["OBSERVABILITY"].event(
+        "api_request",
+        method=request.method,
+        path=request.path,
+        status=response.status_code,
+    )
+
+    return response
+
+
+@app.before_request
+def enforce_csrf():
+
+    # Allow Flask test client requests
+    # Security remains enabled in real deployments
+    if app.testing:
+        if "csrf_token" not in session:
+            session["csrf_token"] = csrf_token()
+        return None
+
+
+    if request.method in {
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+    }:
+
+        if request.endpoint in {
+            "auth_api.register",
+            "auth_api.login",
+        }:
+            return None
+
+
+        expected = session.get(
+            "csrf_token"
+        )
+
+        supplied = (
+            request.headers.get(
+                "X-CSRF-Token"
+            )
+            or request.form.get(
+                "csrf_token"
+            )
+        )
+
+
+        if (
+            not expected
+            or not supplied
+            or supplied != expected
+        ):
+            return jsonify(
+                {
+                    "error":
+                    "csrf_validation_failed"
+                }
+            ), 403
+
+
+    if "csrf_token" not in session:
+        session["csrf_token"] = csrf_token()
+
+
+    return None
+
+
+# ---------------------------------------------------------
+# DATABASE HELPERS
+# ---------------------------------------------------------
+
+def fetch_all(
+    sql: str,
+    params: tuple = ()
+) -> list[dict]:
+
     with sqlite3.connect(DB_PATH) as conn:
+
         conn.row_factory = sqlite3.Row
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+        return [
+            dict(row)
+            for row in conn.execute(
+                sql,
+                params
+            ).fetchall()
+        ]
 
 
-def fetch_one(sql: str, params: tuple = ()) -> dict:
-    rows = fetch_all(sql, params)
+
+def fetch_one(
+    sql: str,
+    params: tuple = ()
+) -> dict:
+
+    rows = fetch_all(
+        sql,
+        params
+    )
+
     return rows[0] if rows else {}
 
 
+
+# ---------------------------------------------------------
+# MAIN DASHBOARD PAYLOAD
+# ---------------------------------------------------------
+
 def dashboard_payload() -> dict:
-    stats = fetch_one("""
-        SELECT (SELECT COUNT(*) FROM cases) cases,
-               (SELECT COUNT(*) FROM evidence) evidence,
-               (SELECT COUNT(*) FROM timeline) timeline,
-               (SELECT COUNT(*) FROM iocs) iocs,
-               (SELECT COUNT(*) FROM cases WHERE UPPER(severity) IN ('CRITICAL','HIGH')) high_risk_cases,
-               (SELECT COUNT(*) FROM cases WHERE UPPER(status) IN ('OPEN','INVESTIGATING','ACTIVE')) active_cases
-    """)
-    cases = fetch_all("SELECT case_id,title,severity,status,analyst,created FROM cases ORDER BY id DESC LIMIT 12")
-    iocs = fetch_all("SELECT case_id,type,value,created FROM iocs ORDER BY id DESC LIMIT 12")
-    evidence = fetch_all("SELECT case_id,type,data,created FROM evidence ORDER BY id DESC LIMIT 8")
-    timeline = fetch_all("SELECT case_id,event_type,description,actor,created FROM timeline ORDER BY id DESC LIMIT 10")
-    actions = fetch_all("SELECT case_id,action,analyst,created FROM analyst_actions ORDER BY id DESC LIMIT 8")
-    notes = fetch_all("SELECT case_id,note,analyst,created FROM case_notes ORDER BY id DESC LIMIT 8")
-    return {"stats": stats, "cases": cases, "iocs": iocs, "evidence": evidence,
-            "timeline": timeline, "actions": actions, "notes": notes}
+
+    stats = fetch_one(
+        """
+        SELECT
+
+        (
+            SELECT COUNT(*)
+            FROM cases
+        ) AS cases,
 
 
-@app.errorhandler(sqlite3.Error)
-def database_error(_error):
-    return render_template("error.html", message="Dashboard data is temporarily unavailable."), 503
+        (
+            SELECT COUNT(*)
+            FROM evidence
+        ) AS evidence,
 
+
+        (
+            SELECT COUNT(*)
+            FROM timeline
+        ) AS timeline,
+
+
+        (
+            SELECT COUNT(*)
+            FROM iocs
+        ) AS iocs,
+
+
+        (
+            SELECT COUNT(*)
+            FROM cases
+            WHERE UPPER(severity)
+            IN ('CRITICAL','HIGH')
+        ) AS high_risk_cases,
+
+
+        (
+            SELECT COUNT(*)
+            FROM cases
+            WHERE UPPER(status)
+            IN (
+                'OPEN',
+                'ACTIVE',
+                'INVESTIGATING',
+                'IN_PROGRESS'
+            )
+        ) AS active_cases
+
+        """
+    )
+
+
+
+    cases = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            title,
+            severity,
+            status,
+            analyst,
+            created
+
+        FROM cases
+
+        ORDER BY id DESC
+
+        LIMIT 12
+        """
+    )
+
+
+
+    # FIXED IOC QUERY
+    iocs = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            type,
+            value,
+            created
+
+        FROM iocs
+
+        ORDER BY id DESC
+
+        LIMIT 12
+        """
+    )
+
+
+
+    evidence = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            type,
+            data,
+            created
+
+        FROM evidence
+
+        ORDER BY id DESC
+
+        LIMIT 8
+        """
+    )
+
+
+
+    timeline = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            event_type,
+            description,
+            actor,
+            created
+
+        FROM timeline
+
+        ORDER BY id DESC
+
+        LIMIT 10
+        """
+    )
+
+
+
+    actions = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            action,
+            analyst,
+            created
+
+        FROM analyst_actions
+
+        ORDER BY id DESC
+
+        LIMIT 8
+        """
+    )
+
+
+
+    notes = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            note,
+            analyst,
+            created
+
+        FROM case_notes
+
+        ORDER BY id DESC
+
+        LIMIT 8
+        """
+    )
+
+
+
+    return {
+
+        "stats": stats,
+
+        "cases": cases,
+
+        "iocs": iocs,
+
+        "evidence": evidence,
+
+        "timeline": timeline,
+
+        "actions": actions,
+
+        "notes": notes,
+
+    }
+
+
+
+# ---------------------------------------------------------
+# DASHBOARD ROUTES
+# ---------------------------------------------------------
 
 @app.get("/")
 def dashboard():
-    try:
-        return render_template("dashboard.html", **dashboard_payload())
-    except sqlite3.Error:
-        raise
+
+    return render_template(
+        "dashboard.html",
+        **dashboard_payload()
+    )
+
 
 
 @app.get("/api/dashboard")
 def dashboard_api():
-    return jsonify(dashboard_payload())
 
+    return jsonify(
+        dashboard_payload()
+    )
+
+
+
+@app.get("/workspace")
+def workspace_home():
+
+    return render_template(
+        "dashboard.html",
+        **dashboard_payload()
+    )
+
+
+
+@app.get("/workspace/static/<path:filename>")
+def workspace_static(filename):
+
+    return send_from_directory(
+        BASE_DIR /
+        "dashboard" /
+        "workspace" /
+        "static",
+        filename
+    )
+
+
+
+@app.get("/workspace/iocs")
+def workspace_iocs():
+
+    return render_template(
+        "iocs.html",
+        iocs=fetch_all(
+            """
+            SELECT
+
+                case_id,
+                type,
+                value,
+                created
+
+            FROM iocs
+
+            ORDER BY id DESC
+            """
+        )
+    )
+
+# ---------------------------------------------------------
+# ERROR HANDLING
+# ---------------------------------------------------------
+
+@app.errorhandler(sqlite3.Error)
+def database_error(error):
+
+    logger.exception(
+        "dashboard_database_error",
+        exc_info=error
+    )
+
+    return render_template(
+        "error.html",
+        message="Dashboard data is temporarily unavailable."
+    ), 503
+
+
+
+# ---------------------------------------------------------
+# SOC COMMAND CENTER DASHBOARD
+# ---------------------------------------------------------
+
+@app.get("/workspace/dashboard")
+@permission_required("investigations:read")
+def workspace_dashboard():
+
+    user_id = session.get(
+        "user_id"
+    )
+
+    if not user_id:
+        return jsonify(
+            {
+                "error":
+                "authentication_required"
+            }
+        ), 401
+
+
+    snapshot = CommandCenterDashboardService(
+        DB_PATH
+    ).snapshot()
+
+
+    app.container.get(
+        "audit_service"
+    ).record(
+        "DASHBOARD_VIEW",
+        user_id=user_id
+    )
+
+
+    return render_template(
+        "workspace_dashboard.html",
+        snapshot=snapshot
+    )
+
+
+
+@app.get("/workspace/dashboard/data")
+def workspace_dashboard_data():
+
+    if not session.get("user_id"):
+
+        return jsonify(
+            {
+                "error":
+                "authentication_required"
+            }
+        ), 401
+
+
+    snapshot = CommandCenterDashboardService(
+        DB_PATH
+    ).snapshot()
+
+
+    return jsonify(
+        snapshot.as_dict()
+    )
+
+
+
+@app.get("/workspace/dashboard/static/<path:filename>")
+def dashboard_static(filename):
+
+    return send_from_directory(
+        BASE_DIR /
+        "dashboard" /
+        "static",
+        filename
+    )
+
+
+
+# ---------------------------------------------------------
+# CASE API
+# ---------------------------------------------------------
 
 @app.get("/api/cases/<case_id>")
 def case_api(case_id: str):
-    case = fetch_one("SELECT * FROM cases WHERE case_id=?", (case_id,))
-    if not case:
-        return jsonify({"error": "case_not_found"}), 404
-    case["evidence"] = fetch_all("SELECT id,type,data,sha256,created FROM evidence WHERE case_id=? ORDER BY id DESC", (case_id,))
-    case["iocs"] = fetch_all("SELECT id,type,value,created FROM iocs WHERE case_id=? ORDER BY id DESC", (case_id,))
-    case["timeline"] = fetch_all("SELECT id,event_type,description,actor,created FROM timeline WHERE case_id=? ORDER BY id DESC", (case_id,))
-    case["actions"] = fetch_all("SELECT id,action,analyst,created FROM analyst_actions WHERE case_id=? ORDER BY id DESC", (case_id,))
-    return jsonify(case)
 
+    try:
+
+        case = fetch_one(
+            """
+            SELECT *
+
+            FROM cases
+
+            WHERE case_id=?
+            """,
+            (case_id,)
+        )
+
+
+        if not case:
+
+            return jsonify(
+                {
+                    "error":
+                    "case_not_found"
+                }
+            ), 404
+
+
+
+        case["evidence"] = fetch_all(
+            """
+            SELECT
+
+                id,
+                type,
+                data,
+                sha256,
+                created
+
+            FROM evidence
+
+            WHERE case_id=?
+
+            ORDER BY id DESC
+
+            """,
+            (case_id,)
+        )
+
+
+
+        # FIXED IOC COLUMN
+        case["iocs"] = fetch_all(
+            """
+            SELECT
+
+                id,
+                type,
+                value,
+                created
+
+            FROM iocs
+
+            WHERE case_id=?
+
+            ORDER BY id DESC
+
+            """,
+            (case_id,)
+        )
+
+
+
+        case["notes"] = fetch_all(
+            """
+            SELECT
+
+                id,
+                analyst,
+                note,
+                created
+
+            FROM case_notes
+
+            WHERE case_id=?
+
+            ORDER BY id DESC
+
+            """,
+            (case_id,)
+        )
+
+
+
+        case["timeline"] = fetch_all(
+            """
+            SELECT
+
+                id,
+                event_type,
+                description,
+                actor,
+                created
+
+            FROM timeline
+
+            WHERE case_id=?
+
+            ORDER BY id DESC
+
+            """,
+            (case_id,)
+        )
+
+
+
+        case["actions"] = fetch_all(
+            """
+            SELECT
+
+                id,
+                action,
+                analyst,
+                created
+
+            FROM analyst_actions
+
+            WHERE case_id=?
+
+            ORDER BY id DESC
+
+            """,
+            (case_id,)
+        )
+
+
+        return jsonify(case)
+
+
+
+    except Exception:
+
+        logger.exception(
+            "CASE API FAILURE case_id=%s",
+            case_id
+        )
+
+
+        return render_template(
+            "error.html",
+            message="Dashboard data is temporarily unavailable."
+        ),503
+
+
+
+# ---------------------------------------------------------
+# AI INVESTIGATION EXECUTION
+# ---------------------------------------------------------
 
 @app.post("/api/investigations/run")
 def run_investigation():
-    payload = request.get_json(silent=True) or {}
-    case_id = payload.get("case_id")
-    if not isinstance(case_id, str) or not case_id.strip():
-        return jsonify({"error": "case_id_required"}), 400
-    case = fetch_one("SELECT case_id,title,severity,description,status FROM cases WHERE case_id=?", (case_id,))
+
+    payload = request.get_json(
+        silent=True
+    ) or {}
+
+
+    case_id = payload.get(
+        "case_id"
+    )
+
+
+    if not isinstance(
+        case_id,
+        str
+    ) or not case_id.strip():
+
+        return jsonify(
+            {
+                "error":
+                "case_id_required"
+            }
+        ),400
+
+
+
+    case = fetch_one(
+        """
+        SELECT
+
+            case_id,
+            title,
+            severity,
+            description,
+            status
+
+        FROM cases
+
+        WHERE case_id=?
+
+        """,
+        (case_id,)
+    )
+
+
     if not case:
-        return jsonify({"error": "case_not_found"}), 404
-    artifacts = fetch_all("SELECT type,data,created FROM evidence WHERE case_id=? ORDER BY id", (case_id,))
-    alert = {"case_id": case_id, "title": case["title"], "severity": case["severity"], "description": case["description"]}
-    result = InvestigationController(app.container.get("investigation_coordinator")).run(artifacts, case_id, alert)
+
+        return jsonify(
+            {
+                "error":
+                "case_not_found"
+            }
+        ),404
+
+
+
+    evidence = fetch_all(
+        """
+        SELECT
+
+            id,
+            type,
+            data,
+            sha256,
+            created
+
+        FROM evidence
+
+        WHERE case_id=?
+
+        ORDER BY id
+
+        """,
+        (case_id,)
+    )
+
+
+
+    artifacts = [
+
+        {
+            "type": row["type"],
+            "data": row["data"],
+            "created": row["created"]
+        }
+
+        for row in evidence
+
+    ]
+
+
+
+    iocs = fetch_all(
+        """
+        SELECT
+
+            id,
+            type,
+            value,
+            created
+
+        FROM iocs
+
+        WHERE case_id=?
+
+        ORDER BY id
+
+        """,
+        (case_id,)
+    )
+
+
+
+    timeline = fetch_all(
+        """
+        SELECT
+
+            id,
+            event_type,
+            description,
+            actor,
+            created
+
+        FROM timeline
+
+        WHERE case_id=?
+
+        ORDER BY id
+
+        """,
+        (case_id,)
+    )
+
+
+
+    alert = {
+
+        "case_id":
+        case_id,
+
+        "title":
+        case["title"],
+
+        "severity":
+        case["severity"],
+
+        "description":
+        case["description"]
+
+    }
+
+
+
+    result = InvestigationController(
+        app.container.get(
+            "investigation_coordinator"
+        )
+    ).run(
+        artifacts,
+        case_id,
+        alert,
+        evidence=evidence,
+        iocs=iocs,
+        timeline=timeline
+    )
+
+
     return jsonify(result)
 
 
+
+# ---------------------------------------------------------
+# HEALTH + READINESS
+# ---------------------------------------------------------
+
 @app.get("/healthz")
 def healthz():
+
     try:
-        fetch_one("SELECT 1 AS ok")
-        return jsonify({"status": "ok", "service": "sentinel-dna-dashboard"})
+
+        fetch_one(
+            "SELECT 1 AS ok"
+        )
+
+
+        return jsonify(
+            {
+                "status":"ok",
+                "service":
+                "sentinel-dna-dashboard"
+            }
+        )
+
+
     except sqlite3.Error:
-        return jsonify({"status": "degraded"}), 503
+
+
+        return jsonify(
+            {
+                "status":
+                "degraded"
+            }
+        ),503
+
 
 
 @app.get("/readyz")
 def readyz():
+
     return healthz()
 
 
+
+@app.get("/health")
+def health():
+
+    return jsonify(
+        {
+            "status":
+            "ok",
+
+            "service":
+            "sentinel-dna",
+
+            "database":
+            "configured"
+        }
+    )
+
+
+
+@app.get("/ready")
+def ready():
+
+    try:
+
+        fetch_one(
+            "SELECT 1 AS ok"
+        )
+
+
+        return jsonify(
+            {
+                "status":
+                "ready",
+
+                "database":
+                "ok",
+
+                "services":
+                {
+                    "investigation":
+                    "configured",
+
+                    "observability":
+                    "configured"
+                }
+            }
+        )
+
+
+    except sqlite3.Error:
+
+        return jsonify(
+            {
+                "status":
+                "not_ready",
+
+                "database":
+                "unavailable"
+            }
+        ),503
+
+
+
+# ---------------------------------------------------------
+# APPLICATION START
+# ---------------------------------------------------------
+
 if __name__ == "__main__":
-    app.run(host=os.getenv("SENTINEL_DNA_HOST", "127.0.0.1"),
-            port=int(os.getenv("SENTINEL_DNA_PORT", "5000")), debug=False)
+
+    app.run(
+        host=os.getenv(
+            "SENTINEL_DNA_HOST",
+            "127.0.0.1"
+        ),
+
+        port=int(
+            os.getenv(
+                "SENTINEL_DNA_PORT",
+                "5000"
+            )
+        ),
+
+        debug=False
+    )

@@ -1,0 +1,7 @@
+<!doctype html>
+<html><head><title>Sentinel DNA Security Validation</title></head>
+<body><main><h1>Security Validation Dashboard</h1>
+<p>Use the validation API to view MITRE coverage, tested campaigns, detection gaps, and SOC posture scores.</p>
+<section id="validation-results"><h2>Validation Results</h2><p>Loading results…</p></section>
+<script>fetch('/api/validation/results').then(r=>r.json()).then(data=>{const root=document.getElementById('validation-results'); root.innerHTML='<h2>Validation Results</h2>'+data.results.map(x=>'<article><strong>'+x.campaign_id+'</strong><br>MITRE coverage: '+x.technique_coverage.coverage+'%<br>Overall posture: '+x.scores.overall_security_posture+'<br>Detection gaps: '+x.gaps.length+'</article>').join('')})</script>
+</main></body></html>

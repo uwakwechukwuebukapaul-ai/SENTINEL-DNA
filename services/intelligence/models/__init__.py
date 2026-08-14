@@ -17,3 +17,6 @@ __all__ = [
     "IntelligenceRecord",
     "InvestigationServiceResult",
 ]
+from .investigation_intelligence import InvestigationIntelligence
+
+__all__ = ["InvestigationIntelligence"]

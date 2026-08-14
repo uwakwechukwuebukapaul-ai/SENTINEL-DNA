@@ -1,0 +1,1 @@
+SCENARIOS={"credential_theft":["T1003","T1078"],"ransomware":["T1486","T1021"],"lateral_movement":["T1021"],"privilege_escalation":["T1068"],"cloud_compromise":["T1078","T1098"],"insider_threat":["T1078","T1560"]}

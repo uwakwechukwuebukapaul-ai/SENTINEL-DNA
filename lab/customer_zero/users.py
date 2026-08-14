@@ -1,0 +1,1 @@
+USERS = [{"username": "ceo", "title": "CEO", "role": "admin"}, {"username": "soc.manager", "title": "SOC Manager", "role": "soc_manager"}, {"username": "analyst.one", "title": "Security Analyst 1", "role": "analyst"}, {"username": "analyst.two", "title": "Security Analyst 2", "role": "analyst"}, {"username": "viewer", "title": "Viewer", "role": "viewer"}]

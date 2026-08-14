@@ -1,0 +1,1 @@
+[{"source":"windows","hostname":"win-lab-01","user":"administrator","event_type":"authentication_failure","severity":"high","message":"failed login from 203.0.113.20"},{"source":"windows","hostname":"win-lab-01","user":"analyst","event_type":"process_creation","severity":"high","message":"powershell -enc suspicious payload"}]

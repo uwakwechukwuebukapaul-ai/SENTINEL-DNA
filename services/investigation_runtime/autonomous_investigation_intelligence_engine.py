@@ -23,6 +23,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
+from services.intelligence.threat_intelligence.ioc_extractor import IOCExtractor
+
 
 class AutonomousInvestigationIntelligenceEngine:
     """
@@ -43,6 +45,7 @@ class AutonomousInvestigationIntelligenceEngine:
     def __init__(self) -> None:
         """Initialize an empty investigation registry."""
         self.investigations: list[dict[str, Any]] = []
+        self.ioc_extractor = IOCExtractor()
 
     @staticmethod
     def _now() -> str:
@@ -414,12 +417,62 @@ class AutonomousInvestigationIntelligenceEngine:
     def investigate(
         self,
         alert: Any,
+        artifacts: list[Any] | None = None,
+        iocs: list[Any] | None = None,
     ) -> dict[str, Any]:
         """
         Investigate a raw alert.
 
         Preserves the original public API.
         """
+        evidence = list(artifacts or [])
+        extracted_iocs: list[dict[str, Any]] = []
+        for item in evidence:
+            extracted_iocs.extend(self.ioc_extractor.extract(item))
+
+        for item in iocs or []:
+            if isinstance(item, dict):
+                value = item.get("value") or item.get("indicator")
+                if value:
+                    extracted_iocs.append({
+                        "type": item.get("type", "unknown"),
+                        "value": str(value),
+                    })
+            elif item:
+                extracted_iocs.append({"type": "unknown", "value": str(item)})
+
+        unique_iocs = []
+        seen = set()
+        for indicator in extracted_iocs:
+            value = indicator["value"]
+            if value not in seen:
+                seen.add(value)
+                unique_iocs.append(indicator)
+
+        text = " ".join(str(item).lower() for item in evidence)
+        findings = []
+        recommendations = []
+        if "failed login" in text or "authentication failure" in text:
+            findings.append("Multiple failed authentication attempts detected")
+            recommendations.append("Check authentication logs")
+        if unique_iocs:
+            findings.append("Suspicious external IP observed")
+            recommendations.extend([
+                "Investigate source IP reputation",
+                "Review affected account activity",
+            ])
+        if any(word in text for word in ("suspicious", "malicious", "credential")):
+            findings.append("Possible credential access activity")
+
+        mitre = ["T1110"] if "failed login" in text or "authentication failure" in text else []
+        risk_score = min(100, len(unique_iocs) * 30 + (35 if findings else 0))
+        confidence = min(1.0, 0.5 + (0.15 * len(findings)))
+        attack_story = (
+            "Authentication activity involving suspicious indicators was observed."
+            if findings
+            else None
+        )
+
         investigation = {
             "type": "investigation",
             "alert": deepcopy(alert),
@@ -429,6 +482,13 @@ class AutonomousInvestigationIntelligenceEngine:
                 "threat_assessment",
             ],
             "status": "completed",
+            "findings": findings,
+            "recommendations": list(dict.fromkeys(recommendations)),
+            "iocs": unique_iocs,
+            "risk_score": risk_score,
+            "confidence": confidence,
+            "mitre": mitre,
+            "attack_story": attack_story,
             "created_at": self._now(),
         }
 

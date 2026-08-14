@@ -1,0 +1,4 @@
+<!doctype html><html><head><title>Exposure Management Center</title></head><body>
+<h1>Exposure Management Center</h1><section><h2>Risk overview</h2><pre id="risk">Loading…</pre></section>
+<script>fetch('/api/exposure/risk').then(r=>r.json()).then(x=>document.getElementById('risk').textContent=JSON.stringify(x,null,2));</script>
+</body></html>

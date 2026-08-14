@@ -1,12 +1,6 @@
-"""
-Sentinel DNA Timeline Intelligence Package.
+"""Investigation timeline services."""
 
-Provides investigation event reconstruction.
-"""
+from .timeline_engine import InvestigationTimelineEngine
+from .timeline_models import InvestigationTimelineEvent
 
-from .timeline_builder import TimelineBuilder
-
-
-__all__ = [
-    "TimelineBuilder",
-]
+__all__ = ["InvestigationTimelineEngine", "InvestigationTimelineEvent"]

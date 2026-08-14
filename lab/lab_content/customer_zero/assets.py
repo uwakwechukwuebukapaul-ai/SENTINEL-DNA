@@ -1,0 +1,1 @@
+ASSETS = [{"hostname": "FIN-WIN-001", "platform": "windows"}, {"hostname": "FIN-WIN-002", "platform": "windows"}, {"hostname": "FIN-LINUX-001", "platform": "linux"}, {"hostname": "AWS-PROD-001", "platform": "cloud"}, {"hostname": "FIREWALL-001", "platform": "network"}]

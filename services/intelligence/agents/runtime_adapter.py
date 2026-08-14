@@ -22,6 +22,7 @@ from services.intelligence.agents.base_agent import (
 from services.intelligence.agents.agent_context import (
     AgentContext,
 )
+from services.intelligence.threat_intelligence.ioc_extractor import IOCExtractor
 
 
 class AgentRuntimeAdapter:
@@ -36,6 +37,7 @@ class AgentRuntimeAdapter:
     ) -> None:
 
         self.runtime_executor = runtime_executor
+        self.ioc_extractor = IOCExtractor()
 
 
 
@@ -132,24 +134,38 @@ class AgentRuntimeAdapter:
 
 
         iocs = []
+        evidence = []
+        timeline = []
+
+        evidence.extend(payload.get("artifacts", []) or [])
 
 
         if investigation_context:
 
-            iocs.extend(
-                getattr(
-                    investigation_context,
-                    "iocs",
-                    [],
-                )
-            )
+            for ioc in getattr(
+                investigation_context,
+                "iocs",
+                [],
+            ):
+                if isinstance(ioc, dict):
+                    value = ioc.get("value") or ioc.get("indicator")
+                    if value:
+                        iocs.append(str(value))
+                elif ioc:
+                    iocs.append(str(ioc))
 
 
-            evidence = getattr(
+            evidence.extend(getattr(
                 investigation_context,
                 "evidence",
                 [],
-            )
+            ))
+
+            timeline.extend(getattr(
+                investigation_context,
+                "timeline",
+                [],
+            ))
 
 
             for item in evidence:
@@ -168,6 +184,9 @@ class AgentRuntimeAdapter:
                             indicator
                         )
 
+                for indicator in self.ioc_extractor.extract(item):
+                    iocs.append(indicator.get("value"))
+
 
 
         indicator = alert.get(
@@ -185,11 +204,7 @@ class AgentRuntimeAdapter:
 
         # Remove duplicate IOCs
 
-        iocs = list(
-            dict.fromkeys(
-                iocs
-            )
-        )
+        iocs = list(dict.fromkeys(iocs))
 
 
 
@@ -200,7 +215,11 @@ class AgentRuntimeAdapter:
 
             alert=alert,
 
+            evidence=evidence,
+
             iocs=iocs,
+
+            timeline=timeline,
 
             shared_data={
                 "case_id": case_id,
@@ -208,5 +227,9 @@ class AgentRuntimeAdapter:
                 "alert": alert,
 
                 "iocs": iocs,
+
+                "evidence": evidence,
+
+                "timeline": timeline,
             },
         )

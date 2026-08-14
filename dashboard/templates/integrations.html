@@ -1,0 +1,5 @@
+<!doctype html><html><head><title>Sentinel DNA Integrations</title></head><body>
+<main><h1>Integration Workspace</h1><p>Tenant-scoped connector health and collection statistics.</p>
+<div id="connectors">Loading connectors…</div>
+<script>fetch('/api/connectors').then(r=>r.json()).then(d=>{document.getElementById('connectors').innerHTML=d.connectors.map(c=>'<article><h2>'+c.name+'</h2><p>Type: '+c.connector_type+' | Health: '+c.status+' | Events: '+c.events_collected+'</p></article>').join('')})</script>
+</main></body></html>

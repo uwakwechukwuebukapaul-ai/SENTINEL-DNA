@@ -1,0 +1,2 @@
+def build(report, timeline=None):
+    return {"timeline": timeline or [], "evidence": report.attack_summary, "indicators": report.detections, "mitre_techniques": report.mitre_techniques, "analyst_recommendations": ["Review detections against expected campaign techniques", "Validate response actions with the case owner"], "ai_reasoning": report.ai_analysis, "response_actions": report.response_actions}

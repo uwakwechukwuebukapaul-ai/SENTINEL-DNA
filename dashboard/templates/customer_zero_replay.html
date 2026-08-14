@@ -1,0 +1,1 @@
+<!doctype html><html><head><title>Customer Zero Replay</title></head><body><main><h1>Attack Replay Timeline</h1><ol id="timeline"></ol><script>fetch('/api/customer-zero/replay').then(r=>r.json()).then(x=>document.getElementById('timeline').innerHTML=x.timeline.map(e=>'<li><b>'+e.timestamp+'</b> '+e.description+'</li>').join(''))</script></main></body></html>

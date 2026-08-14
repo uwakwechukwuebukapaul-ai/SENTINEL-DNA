@@ -1,0 +1,2 @@
+def scenario():
+    return {"name": "Synthetic Insider Threat", "target": "customer-data", "actor": {"name": "Insider-07", "motivation": "financial", "target": "data"}, "stages": [{"name": "Valid account", "technique_id": "T1078", "tactic": "Initial Access"}, {"name": "Archive collected data", "technique_id": "T1560", "tactic": "Defense Evasion"}, {"name": "Exfiltration", "technique_id": "T1041", "tactic": "Impact"}]}

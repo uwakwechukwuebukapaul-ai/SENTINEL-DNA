@@ -1,0 +1,2 @@
+def scenario():
+    return {"name": "Synthetic Credential Theft", "target": "identity-platform", "actor": {"name": "Amber Fox", "motivation": "espionage", "target": "identity"}, "stages": [{"name": "External login", "technique_id": "T1078", "tactic": "Initial Access"}, {"name": "Credential dumping", "technique_id": "T1003", "tactic": "Credential Access"}, {"name": "Valid accounts", "technique_id": "T1078", "tactic": "Persistence"}]}

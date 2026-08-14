@@ -1,0 +1,4 @@
+class ThreatEnrichmentService:
+    def __init__(self, repository): self.repository = repository
+    def enrich(self, organization_id, value):
+        matches = [x for x in self.repository.indicators_for(organization_id) if x.value == value]; campaigns = [x for x in self.repository.campaigns_for(organization_id) if value in x.indicators]; actors = [x for x in self.repository.actors_for(organization_id) if any(x.id == c.actor for c in campaigns)]; return {"ioc": value, "reputation": "malicious" if matches else "unknown", "confidence": max([x.confidence for x in matches], default=0), "threat_actors": [x.name for x in actors], "campaigns": [x.name for x in campaigns], "mitre_techniques": sorted({t for x in campaigns for t in x.techniques}), "previous_incidents": 0, "risk": "CRITICAL" if matches else "LOW", "score": 95 if matches else 5}

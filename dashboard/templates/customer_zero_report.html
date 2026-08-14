@@ -1,0 +1,1 @@
+<!doctype html><html><head><title>Customer Zero Report</title></head><body><main><h1>Customer Zero Executive Report</h1><pre id="report">Loading…</pre><script>fetch('/api/customer-zero/report').then(r=>r.json()).then(x=>document.getElementById('report').textContent=JSON.stringify(x,null,2))</script></main></body></html>

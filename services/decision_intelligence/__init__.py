@@ -1,5 +1,1 @@
-from .decision_engine import DecisionIntelligenceEngine
-
-__all__ = [
-    "DecisionIntelligenceEngine"
-]
+from .service import DecisionIntelligenceService

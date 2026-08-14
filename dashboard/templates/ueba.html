@@ -1,0 +1,1 @@
+<!doctype html><html><body><h1>UEBA Center</h1><pre id="data">Loading...</pre><script>Promise.all(['/api/ueba/users','/api/ueba/anomalies','/api/ueba/risk'].map(fetch)).then(x=>Promise.all(x.map(r=>r.json()))).then(x=>document.getElementById('data').textContent=JSON.stringify(x,null,2));</script></body></html>

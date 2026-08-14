@@ -1,0 +1,2 @@
+def build(report):
+    return {"organization": report.organization_id, "attack_scenario": report.scenario, "business_impact": report.attack_summary, "detection_effectiveness": "Successful" if report.detections else "No detections", "ai_investigation_summary": "Completed" if report.investigations else "Pending", "response_effectiveness": report.response_actions, "security_improvement_score": f"{report.security_score:.0f}%"}

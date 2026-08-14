@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .task import Task
+from services.observability import ObservabilityService
+import time
 
 
 TaskHandler = Callable[[dict[str, Any]], Any]
@@ -141,6 +143,9 @@ class RuntimeTaskExecutor:
                 "task must be a Task instance."
             )
 
+        observer = ObservabilityService()
+        started = time.perf_counter()
+        observer.event("AGENT_STARTED", case_id=task.payload.get("case_id"), agent=task.capability)
         handler = self.handlers.get(
             task.capability
         )
@@ -151,6 +156,7 @@ class RuntimeTaskExecutor:
             )
 
             self.failed += 1
+            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[f"No handler registered for {task.capability}"])
 
             return None
 
@@ -166,6 +172,7 @@ class RuntimeTaskExecutor:
             )
 
             self.executed += 1
+            observer.event("AGENT_COMPLETED", case_id=task.payload.get("case_id"), agent=task.capability, status="completed", duration_ms=round((time.perf_counter()-started)*1000, 2))
 
             return result
 
@@ -175,6 +182,7 @@ class RuntimeTaskExecutor:
             )
 
             self.failed += 1
+            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[type(exc).__name__])
 
             return None
 
