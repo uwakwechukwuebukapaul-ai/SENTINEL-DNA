@@ -91,6 +91,8 @@ class InvestigationResult:
 
     reasoning: Any = None
 
+    reasoning_report: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -306,6 +308,9 @@ class InvestigationResult:
 
             "reasoning":
                 self.reasoning,
+
+            "reasoning_report":
+                self.reasoning_report.to_dict() if hasattr(self.reasoning_report, "to_dict") else self.reasoning_report,
 
             "intelligence":
                 self.intelligence,

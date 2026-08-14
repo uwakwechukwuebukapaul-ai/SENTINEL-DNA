@@ -70,6 +70,7 @@ from services.intelligence.timeline.timeline_engine import InvestigationTimeline
 from services.intelligence.reporting.investigation_report import InvestigationReportGenerator
 from services.intelligence.repository.report_repository import InvestigationReportRepository
 from services.observability import ObservabilityService
+from services.intelligence.reasoning import EvidenceReasoner
 import time
 
 
@@ -149,6 +150,9 @@ class InvestigationCoordinator:
         self.timeline_engine = InvestigationTimelineEngine()
         self.report_generator = InvestigationReportGenerator()
         self.report_repository = InvestigationReportRepository()
+        self.evidence_reasoner = EvidenceReasoner(
+            getattr(runtime, "ai_runtime", None) or getattr(self.orchestrator, "ai_runtime", None)
+        )
 
 
     # ========================================================
@@ -398,6 +402,16 @@ class InvestigationCoordinator:
             confidence_data,
         )
         findings.extend(aggregate.get("findings", []))
+        reasoning_report = self.evidence_reasoner.reason(
+            self.create_context(
+                investigation_id=case_id,
+                artifacts=normalized_artifacts,
+                evidence=[item for item in normalized_artifacts if isinstance(item, dict)] + list(engine_analysis.get("evidence", []) or []),
+                iocs=list(engine_analysis.get("iocs", []) or []),
+                timeline=list(normalized_intelligence.timeline or []),
+            ),
+            plan,
+        )
         return InvestigationResult(
             success=True,
             status="completed",
@@ -421,6 +435,7 @@ class InvestigationCoordinator:
                 "agents": intelligence,
                 "workflow": workflow,
             },
+            reasoning_report=reasoning_report,
             errors=list(execution["errors"]),
         )
 
