@@ -46,3 +46,23 @@ def build_investigation_prompt(
         f"{question}\n\n"
         "Provide an evidence-grounded answer."
     )
+
+
+def _structured(context, result, reasoning, decision, memory):
+    def data(value):
+        if hasattr(value, "to_dict"): return value.to_dict()
+        return value or {}
+    c, r = data(context), data(result)
+    return {"investigation_objective": c.get("alert", {}).get("objective", "investigate security event"), "evidence_summary": c.get("evidence", []), "ioc_information": c.get("iocs", []), "timeline_information": c.get("timeline", []), "reasoning_findings": data(reasoning), "decision_output": data(decision), "historical_memory_reference": memory, "result": r}
+
+
+def build_summary_prompt(context, result, reasoning=None, decision=None, memory=None):
+    return "Summarize this investigation for a SOC analyst.\n" + str(_structured(context, result, reasoning, decision, memory))
+
+
+def build_reasoning_prompt(question, context, result, reasoning=None, decision=None, memory=None):
+    return "Answer the analyst question with evidence-backed context. Question: " + question + "\n" + str(_structured(context, result, reasoning, decision, memory))
+
+
+def build_recommendation_prompt(context, result, reasoning=None, decision=None, memory=None):
+    return "Recommend safe analyst next steps; do not execute actions.\n" + str(_structured(context, result, reasoning, decision, memory))

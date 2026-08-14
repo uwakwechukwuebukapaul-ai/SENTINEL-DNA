@@ -73,6 +73,7 @@ from services.observability import ObservabilityService
 from services.intelligence.reasoning import EvidenceReasoner
 from services.intelligence.memory import MemoryService
 from services.intelligence.decision.engine import DecisionEngine
+from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 import time
 
 
@@ -157,6 +158,7 @@ class InvestigationCoordinator:
         )
         self.memory_service = MemoryService()
         self.decision_engine = DecisionEngine()
+        self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
 
 
     # ========================================================
@@ -457,6 +459,15 @@ class InvestigationCoordinator:
         result.decision_report = self.decision_engine.decide(
             result, reasoning_report, result.memory_reference
         )
+        try:
+            result.copilot_summary = self.copilot.summarize_investigation(
+                self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
+                                    iocs=list(engine_analysis.get("iocs", []) or []),
+                                    timeline=list(normalized_intelligence.timeline or [])),
+                result, reasoning_report, result.decision_report, result.memory_reference
+            )
+        except Exception:
+            result.metadata["copilot_error"] = True
         return result
 
     def get_report_by_case_id(self, case_id: str) -> dict[str, Any] | None:

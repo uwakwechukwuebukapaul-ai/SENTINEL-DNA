@@ -97,6 +97,8 @@ class InvestigationResult:
 
     decision_report: Any = None
 
+    copilot_summary: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -319,6 +321,8 @@ class InvestigationResult:
             "memory_reference": self.memory_reference,
 
             "decision_report": self.decision_report.to_dict() if hasattr(self.decision_report, "to_dict") else self.decision_report,
+
+            "copilot_summary": self.copilot_summary.to_dict() if hasattr(self.copilot_summary, "to_dict") else self.copilot_summary,
 
             "intelligence":
                 self.intelligence,
