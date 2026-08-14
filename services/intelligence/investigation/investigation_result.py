@@ -147,6 +147,8 @@ class InvestigationResult:
 
     correlation_context: Any = None
 
+    response_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -419,6 +421,8 @@ class InvestigationResult:
             "ingestion_context": self.ingestion_context,
 
             "correlation_context": self.correlation_context,
+
+            "response_context": self.response_context,
 
             "intelligence":
                 self.intelligence,
