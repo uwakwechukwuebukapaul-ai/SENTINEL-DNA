@@ -38,3 +38,12 @@ class ThreatPostureSummary:
     top_mitre_techniques: list[str] = field(default_factory=list)
     risk_distribution: dict[str, int] = field(default_factory=dict)
     def to_dict(self): return asdict(self)
+
+@dataclass
+class DetectionPostureSummary:
+    total_rules: int = 0
+    sigma_rules: int = 0
+    mitre_coverage: Any = None
+    detection_gaps: list[Any] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
+    def to_dict(self): return asdict(self)
