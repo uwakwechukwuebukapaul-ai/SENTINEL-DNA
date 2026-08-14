@@ -60,3 +60,8 @@ class SOARPostureSummary:
 class IntegrationPostureSummary:
     total_connectors: int=0; active_connectors: int=0; unhealthy_connectors: int=0; last_sync: str|None=None
     def to_dict(self): return asdict(self)
+
+@dataclass
+class TenantPostureSummary:
+    tenant_id: str; users: int=0; active_cases: int=0; investigations: int=0; detections: int=0; integrations: int=0
+    def to_dict(self): return asdict(self)

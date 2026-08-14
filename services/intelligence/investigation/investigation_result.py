@@ -107,6 +107,8 @@ class InvestigationResult:
 
     integration_context: Any = None
 
+    tenant_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -339,6 +341,8 @@ class InvestigationResult:
             "soar_recommendation": self.soar_recommendation,
 
             "integration_context": self.integration_context,
+
+            "tenant_context": self.tenant_context,
 
             "intelligence":
                 self.intelligence,
