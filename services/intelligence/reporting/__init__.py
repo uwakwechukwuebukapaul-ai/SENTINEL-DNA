@@ -15,10 +15,14 @@ from .investigation_report import (
 from .report_builder import (
     ReportBuilder,
 )
+from .models import InvestigationNarrative
+from .narrative_engine import InvestigationNarrativeEngine
 
 
 __all__ = [
     "InvestigationReport",
     "InvestigationReportGenerator",
     "ReportBuilder",
+    "InvestigationNarrative",
+    "InvestigationNarrativeEngine",
 ]

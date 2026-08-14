@@ -74,6 +74,7 @@ from services.intelligence.reasoning import EvidenceReasoner
 from services.intelligence.memory import MemoryService
 from services.intelligence.decision.engine import DecisionEngine
 from services.intelligence.copilot.copilot_engine import InvestigationCopilot
+from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
 import time
 
 
@@ -159,6 +160,7 @@ class InvestigationCoordinator:
         self.memory_service = MemoryService()
         self.decision_engine = DecisionEngine()
         self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
+        self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
 
 
     # ========================================================
@@ -468,6 +470,14 @@ class InvestigationCoordinator:
             )
         except Exception:
             result.metadata["copilot_error"] = True
+        try:
+            result.narrative_report = self.narrative_engine.generate_report(
+                self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
+                                    iocs=list(engine_analysis.get("iocs", []) or []),
+                                    timeline=list(normalized_intelligence.timeline or [])),
+                result, reasoning_report, result.decision_report, result.copilot_summary, result.memory_reference)
+        except Exception:
+            result.metadata["narrative_error"] = True
         return result
 
     def get_report_by_case_id(self, case_id: str) -> dict[str, Any] | None:

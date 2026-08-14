@@ -99,6 +99,8 @@ class InvestigationResult:
 
     copilot_summary: Any = None
 
+    narrative_report: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -323,6 +325,8 @@ class InvestigationResult:
             "decision_report": self.decision_report.to_dict() if hasattr(self.decision_report, "to_dict") else self.decision_report,
 
             "copilot_summary": self.copilot_summary.to_dict() if hasattr(self.copilot_summary, "to_dict") else self.copilot_summary,
+
+            "narrative_report": self.narrative_report.to_dict() if hasattr(self.narrative_report, "to_dict") else self.narrative_report,
 
             "intelligence":
                 self.intelligence,
