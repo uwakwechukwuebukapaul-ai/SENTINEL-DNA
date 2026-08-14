@@ -336,4 +336,12 @@ def build_container() -> ServiceRegistry:
     registry.register("security_copilot", security_copilot)
     registry.register("platform_experience", platform_experience)
 
+    registry.validate_required((
+        "investigation_coordinator",
+        "investigation_orchestrator",
+        "runtime_task_executor",
+        "audit_service",
+        "auth_service",
+        "tenancy_service",
+    ))
     return registry

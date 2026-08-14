@@ -11,6 +11,8 @@ from flask import Flask, jsonify, request
 from services.core.application_container import (
     build_container,
 )
+from config.runtime import RuntimeConfig
+from database.connection import database
 
 
 
@@ -19,6 +21,9 @@ def create_app():
     app = Flask(
         __name__
     )
+    runtime_config = RuntimeConfig.from_environment()
+    runtime_config.validate()
+    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies)
 
 
     # ==================================
@@ -130,6 +135,25 @@ def create_app():
             "version": "1.0",
 
         }
+
+    @app.get("/health")
+    def health():
+        try:
+            with database.session() as connection:
+                connection.execute("SELECT 1").fetchone()
+            return {"status": "ok", "service": "sentinel-dna", "database": "ok"}
+        except Exception:
+            return {"status": "degraded", "database": "unavailable"}, 503
+
+    @app.get("/ready")
+    def ready():
+        try:
+            app.container.validate_required(("investigation_coordinator", "investigation_orchestrator", "audit_service"))
+            with database.session() as connection:
+                connection.execute("SELECT 1").fetchone()
+            return {"status": "ready", "database": "ok", "services": "registered"}
+        except Exception:
+            return {"status": "not_ready"}, 503
 
 
     return app

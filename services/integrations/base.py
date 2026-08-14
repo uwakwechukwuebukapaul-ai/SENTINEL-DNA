@@ -12,6 +12,9 @@ class IntegrationAdapter(ABC):
         if not self.integration.config: return {"valid": False, "error": "missing_configuration"}
         return {"valid": True, "provider": self.provider}
     def ingest(self, payload: Any = None) -> dict[str, Any]: return {"provider": self.provider, "operation": "ingest", "items": payload or []}
+    def normalize(self, payload: Any) -> dict[str, Any]:
+        from .siem.normalizer import normalize_event
+        return normalize_event(payload, self.provider).public()
     def send(self, payload: Any = None) -> dict[str, Any]: return {"provider": self.provider, "operation": "send", "accepted": True, "payload": payload or {}}
     def health_check(self):
         result = self.connect(); return {"healthy": bool(result.get("connected")), **result}

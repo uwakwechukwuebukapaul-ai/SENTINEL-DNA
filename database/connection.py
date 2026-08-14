@@ -6,6 +6,7 @@ Database Connection Manager
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from .errors import DatabaseError
 
 
 # Database file
@@ -49,10 +50,12 @@ class DatabaseConnection:
 
             connection.commit()
 
-        except Exception:
+        except sqlite3.Error as exc:
 
             connection.rollback()
-
+            raise DatabaseError("Database transaction failed") from exc
+        except Exception:
+            connection.rollback()
             raise
 
         finally:

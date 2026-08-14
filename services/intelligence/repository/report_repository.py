@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, is_dataclass
 from typing import Any
+from .errors import RepositoryError
 
 
 class InvestigationReportRepository:
@@ -131,9 +132,10 @@ class InvestigationReportRepository:
             encoded
         )
 
-        self.reports.append(
-            stored
-        )
+        try:
+            self.reports.append(stored)
+        except Exception as exc:
+            raise RepositoryError("Unable to persist investigation report") from exc
 
         return stored
 

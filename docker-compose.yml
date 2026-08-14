@@ -1,0 +1,19 @@
+services:
+  sentinel-dna:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      SENTINEL_DNA_ENV: ${SENTINEL_DNA_ENV:-development}
+      SENTINEL_DNA_DB_PATH: ${SENTINEL_DNA_DB_PATH:-/var/lib/sentinel/soc.db}
+    volumes:
+      - sentinel_data:/var/lib/sentinel
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  sentinel_data:

@@ -19,6 +19,7 @@ from typing import Any
 from ..models.investigation_intelligence import (
     InvestigationIntelligence,
 )
+from .errors import RepositoryError
 
 
 class IntelligenceRepository:
@@ -101,6 +102,11 @@ class IntelligenceRepository:
 
 
         payload = intelligence.to_dict()
+        try:
+            from services.observability import ObservabilityService
+            ObservabilityService().event("investigation_repository_save", case_id=case_id, operation="save", component="intelligence_repository", status="started")
+        except Exception:
+            pass
 
         now = datetime.now(
             timezone.utc
@@ -167,9 +173,10 @@ class IntelligenceRepository:
         )
 
 
-        with self.db.session() as connection:
+        try:
+            with self.db.session() as connection:
 
-            existing = connection.execute(
+                existing = connection.execute(
                 """
                 SELECT id
                 FROM investigation_intelligence
@@ -183,9 +190,9 @@ class IntelligenceRepository:
             ).fetchone()
 
 
-            if existing:
+                if existing:
 
-                connection.execute(
+                    connection.execute(
                     """
                     UPDATE investigation_intelligence
 
@@ -243,9 +250,9 @@ class IntelligenceRepository:
                 )
 
 
-            else:
+                else:
 
-                connection.execute(
+                    connection.execute(
                     """
                     INSERT INTO investigation_intelligence
                     (
@@ -323,7 +330,16 @@ class IntelligenceRepository:
                 )
 
 
-        return payload
+            return payload
+        except (ValueError, RepositoryError):
+            raise
+        except Exception as exc:
+            try:
+                from services.observability import ObservabilityService
+                ObservabilityService().event("investigation_repository_save", case_id=case_id, operation="save", component="intelligence_repository", status="failed", metadata={"error_type": type(exc).__name__})
+            except Exception:
+                pass
+            raise RepositoryError("Unable to persist investigation intelligence") from exc
 
 
 

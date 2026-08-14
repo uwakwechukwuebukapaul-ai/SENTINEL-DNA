@@ -39,6 +39,9 @@ from .schemas import (
 )
 from services.core.serialization import serialize
 from services.core.security_context import authorize_investigation
+from services.core.security_context import request_context
+from services.observability import ObservabilityService
+import time
 
 
 # ============================================================
@@ -77,6 +80,8 @@ def _coordinator():
 
 
 def _execute_investigation():
+    started = time.perf_counter()
+    observer = ObservabilityService()
 
     payload = request.get_json(
         silent=True
@@ -108,6 +113,8 @@ def _execute_investigation():
     )
 
 
+    security_context = request_context()
+    observer.event("investigation_api_completed", case_id=case_id, operation="investigate", component="api", status="completed", duration_ms=round((time.perf_counter() - started) * 1000, 2), correlation_id=security_context.correlation_id, tenant_id=security_context.tenant_id)
     return jsonify(
         investigation_response(
             result

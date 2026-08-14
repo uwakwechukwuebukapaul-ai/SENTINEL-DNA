@@ -202,6 +202,8 @@ app.container = build_container()
 # ---------------------------------------------------------
 
 app.register_blueprint(investigations_api)
+from dashboard.analyst_workspace import analyst_workspace
+app.register_blueprint(analyst_workspace)
 app.register_blueprint(auth_api)
 app.register_blueprint(cases_api)
 
