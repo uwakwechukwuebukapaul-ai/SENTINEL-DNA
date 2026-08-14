@@ -61,6 +61,19 @@ class InvestigationContext:
 
         self.correlation = correlation
 
+        # Compatibility aliases used by reasoning engines.
+        self.evidence = self.artifacts
+        self.iocs = self.indicators
+
+    def add_evidence(self, evidence):
+        self.evidence.append(evidence)
+
+    def add_ioc(self, ioc):
+        self.iocs.append(ioc)
+
+    def add_timeline_event(self, event):
+        self.timeline.append(event)
+
     # --------------------------------------------------------
     # Indicator management
     # --------------------------------------------------------
@@ -136,8 +149,14 @@ class InvestigationContext:
             "artifacts":
                 self.artifacts,
 
+            "evidence":
+                self.evidence,
+
             "indicators":
                 self.indicators,
+
+            "iocs":
+                self.iocs,
 
             "entities":
                 self.entities,
@@ -151,6 +170,9 @@ class InvestigationContext:
             "correlation":
                 correlation,
         }
+
+    def snapshot(self):
+        return self.to_dict()
 
 
 def load_investigation_context(

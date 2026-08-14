@@ -61,7 +61,10 @@ class EvidenceReasoner:
         metadata: dict[str, Any] = {"provider": "deterministic_evidence_reasoner", "synthetic_only": True, "evidence_references": refs}
         if self.ai_runtime is not None:
             response = self.ai_runtime.reason(type("ReasoningPromptContext", (), {"snapshot": lambda _: {**data, "evidence": evidence, "iocs": iocs, "timeline": data.get("timeline", [])}})())
-            metadata.update({"provider": response.metadata.get("provider", "unknown"), "synthetic_only": bool(response.metadata.get("synthetic", response.metadata.get("offline_only", False))), "ai_confidence": response.confidence, "ai_evidence_references": list(response.evidence_references), "prompt": self.build_prompt(context, plan)})
+            ai_refs = list(response.evidence_references)
+            if ai_refs and all(str(ref).isdigit() for ref in ai_refs) and refs:
+                ai_refs = [refs[int(ref)] if int(ref) < len(refs) else ref for ref in ai_refs]
+            metadata.update({"provider": response.metadata.get("provider", "unknown"), "synthetic_only": bool(response.metadata.get("synthetic", response.metadata.get("offline_only", False))), "ai_confidence": response.confidence, "ai_evidence_references": ai_refs, "prompt": self.build_prompt(context, plan)})
         confidence = findings[0].confidence if findings else 0.25
         return ReasoningReport(
             summary="Evidence supports a potential credential harvesting attempt." if findings else "No deterministic evidence-backed finding was identified.",
@@ -69,4 +72,3 @@ class EvidenceReasoner:
             confidence=confidence,
             metadata=metadata,
         )
-
