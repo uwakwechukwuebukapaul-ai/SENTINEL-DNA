@@ -17,7 +17,12 @@ from .correlation_engine import (
 
 from .models import (
     CorrelationResult,
+    CorrelationAnalysisResult,
+    SecuritySignal, CorrelationRule, InvestigationTrigger,
 )
+from .engine import DeterministicCorrelationEngine
+from .service import CorrelationService
+from .repository import CorrelationRepository
 
 
 
@@ -79,5 +84,6 @@ __all__ = [
     "CorrelationResult",
 
     "ThreatCorrelator",
+    "CorrelationAnalysisResult", "SecuritySignal", "CorrelationRule", "InvestigationTrigger", "DeterministicCorrelationEngine", "CorrelationService", "CorrelationRepository",
 
 ]
