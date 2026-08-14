@@ -80,3 +80,8 @@ class SecurityPostureSummary:
 class AttackSurfaceSummary:
     total_assets:int=0; critical_assets:int=0; exposed_assets:int=0; high_risk_assets:int=0; unknown_assets:int=0
     def to_dict(self): return asdict(self)
+
+@dataclass
+class VulnerabilityPostureSummary:
+    total_vulnerabilities:int=0; critical_findings:int=0; high_risk_assets:int=0; exposed_vulnerabilities:int=0; remediation_priority:list[Any]=field(default_factory=list)
+    def to_dict(self): return asdict(self)
