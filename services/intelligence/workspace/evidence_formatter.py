@@ -188,20 +188,9 @@ class EvidenceFormatter:
                 pass
 
 
-        if hasattr(
-            value,
-            "__dict__",
-        ):
-            return {
-                key: item
-                for key, item in vars(value).items()
-                if not key.startswith("_")
-            }
-
-
-        return {
-            "value": value
-        }
+        from services.core.serialization import serialize
+        normalized = serialize(value)
+        return normalized if isinstance(normalized, dict) else {"value": normalized}
 
 
 

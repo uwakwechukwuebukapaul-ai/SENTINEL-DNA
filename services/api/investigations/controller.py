@@ -28,6 +28,7 @@ from typing import Any
 from services.intelligence.orchestration import (
     InvestigationCoordinator,
 )
+from services.core.serialization import serialize
 
 
 class InvestigationController:
@@ -86,17 +87,8 @@ class InvestigationController:
             **kwargs,
         )
 
-        if hasattr(
-            result,
-            "to_dict",
-        ):
-            return result.to_dict()
-
-        if isinstance(
-            result,
-            dict,
-        ):
-            return result
+        if result is not None:
+            return serialize(result)
 
         return {
             "success": False,

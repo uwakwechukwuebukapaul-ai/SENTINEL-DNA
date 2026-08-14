@@ -37,6 +37,7 @@ from .schemas import (
     investigation_request,
     investigation_response,
 )
+from services.core.serialization import serialize
 
 
 # ============================================================
@@ -277,29 +278,7 @@ def legacy_investigate():
 
 
 def _serialize(value):
-
-    if value is None:
-
-        return None
-
-
-    if hasattr(
-        value,
-        "to_dict"
-    ):
-
-        return value.to_dict()
-
-
-    if hasattr(
-        value,
-        "__dict__"
-    ):
-
-        return value.__dict__
-
-
-    return value
+    return serialize(value)
 
 
 

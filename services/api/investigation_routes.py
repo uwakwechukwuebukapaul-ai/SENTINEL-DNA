@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.core.serialization import serialize
+
 from flask import Blueprint
 from flask import jsonify
 from flask import request
@@ -138,12 +140,7 @@ def _serialize(value):
     if hasattr(value, "value"):
         return value.value
 
-    if hasattr(value, "__dict__"):
-        return _serialize(
-            value.__dict__
-        )
-
-    return str(value)
+    return serialize(value)
 
 
 # ============================================================
