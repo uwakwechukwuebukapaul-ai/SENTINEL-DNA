@@ -8,6 +8,7 @@ from .investigation_workspace import AnalystInvestigationWorkspaceService
 from .actionability_service import AnalystActionabilityService
 from .outcome_service import InvestigationOutcomeService
 from .feedback_service import InvestigationFeedbackService
+from .quality_trend_service import AnalystQualityTrendService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -19,6 +20,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     actionability_service=AnalystActionabilityService(investigation_workspace_service)
     outcome_service=InvestigationOutcomeService(investigation_workspace_service)
     feedback_service=InvestigationFeedbackService(investigation_workspace_service, outcome_service)
+    quality_trend_service=AnalystQualityTrendService(feedback_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -80,6 +82,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
         try:
             value=feedback_service.get(tenant(),investigation_id)
             return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/trends")
+    def quality_trends():
+        try: return jsonify(quality_trend_service.trend(tenant()).to_dict())
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):

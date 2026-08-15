@@ -4,6 +4,7 @@ class FeedbackRepository:
     def __init__(self): self.items={}
     def save(self, item): self.items.setdefault((item.tenant_id,item.investigation_id),[]).append(item); return item
     def list(self, tenant_id, investigation_id): return list(self.items.get((tenant_id,str(investigation_id)),[]))
+    def list_tenant(self, tenant_id): return [x for (tenant,_), values in self.items.items() if tenant==tenant_id for x in values]
 
 class InvestigationFeedbackService:
     def __init__(self, workspace_service=None, outcome_service=None, repository=None):
@@ -50,3 +51,4 @@ class InvestigationFeedbackService:
         workspace,outcome=self._context(tenant_id,investigation_id)
         if not workspace: return None
         return {"investigation_id":str(investigation_id),"feedback":[x.to_dict() for x in self.repository.list(tenant_id,investigation_id)],"quality":self.quality(tenant_id,investigation_id).to_dict(),"advisory_only":True,"provenance":workspace.provenance}
+    def list_feedback(self, tenant_id): return self.repository.list_tenant(tenant_id)
