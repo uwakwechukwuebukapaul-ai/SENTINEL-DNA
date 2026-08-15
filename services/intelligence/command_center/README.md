@@ -84,3 +84,9 @@ The drill-down provides evidence traceability and decision support. It does not 
 `GET /api/command-center/quality/maturity` exposes an internal, tenant-scoped maturity assessment composed from existing organizational learning and trend intelligence. Scores are bounded from 0–100 using explainable evidence-backed dimension mappings; confidence and evidence strength are reported separately. Levels are internal Sentinel DNA indicators, not industry certifications, compliance ratings, or external security rankings.
 
 Historical benchmarking compares only against the same tenant's supplied historical evidence. Peer benchmarking is explicitly unavailable. Missing observations, temporal coverage, provenance, or dimensions remain uncertainty rather than being fabricated. The maturity API and dashboard integration are read-only and advisory-only.
+
+## Executive SOC maturity reporting
+
+`GET /api/command-center/quality/maturity/report` provides deterministic historical reporting over the canonical maturity score. It exposes score delta, trajectory, maturity transitions, dimension summaries, strongest and weakest dimensions, evidence strength, confidence, temporal span, uncertainty, provenance, and advisory recommendations. Historical observations are consumed only when explicitly available; no persistence or fabricated time series is introduced.
+
+Trajectory classifications include improving, degrading, stable, sustained improvement/degradation, and insufficient data. Benchmarking is limited to the same tenant's historical baseline; peer benchmarking remains unavailable. Sentinel DNA maturity scores are internal evidence-based indicators, not industry certifications, compliance ratings, or external security rankings.
