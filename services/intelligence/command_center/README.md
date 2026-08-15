@@ -41,3 +41,8 @@ Effectiveness is classified as `improving`, `degrading`, `mixed`, `stable`, or `
 Confidence increases with observation count and temporal persistence. Uncertainty records applicable limitations such as insufficient observations, insufficient temporal span, low feedback coverage, incomplete provenance, and mixed signals. Results include contributing feedback, investigation, learning, and outcome references without fabricating missing outcomes.
 
 The read-only endpoint is `/api/command-center/quality/effectiveness`. Effectiveness indicates an evidence-backed association between learning signals and later investigation-quality outcomes. It does not establish causation.
+## Analyst learning feedback loop
+
+The read-only `/api/command-center/quality/learning-feedback` endpoint closes the evidence-backed intelligence loop from investigation outcomes and quality signals through analyst learning and longitudinal effectiveness. `AnalystLearningFeedbackService` composes the existing learning and effectiveness services; it does not retrain models or make decisions.
+
+Feedback states include `improving`, `degrading`, `stable`, `mixed`, `insufficient_data`, `new_pattern`, `resolved_pattern`, and `persistent_pattern`. IDs, ordering, classifications, uncertainty, and provenance are deterministic and tenant-scoped. Each observation retains upstream source names and contributing references, and is explicitly advisory-only. Future expansion may add persisted evaluation snapshots while preserving the same tenant boundary and read-only safety contract.
