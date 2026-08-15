@@ -56,6 +56,10 @@ from .intervention_governance_trends_service import InterventionGovernanceTrends
 from .intervention_effectiveness_service import InterventionEffectivenessService
 from .response_outcomes_service import ResponseOutcomesService
 from .governance_learning_service import GovernanceLearningService
+from .governance_learning_command_center_service import GovernanceLearningCommandCenterService
+from .response_monitoring_service import ResponseMonitoringService
+from .intervention_strategy_analytics_service import InterventionStrategyAnalyticsService
+from .governance_learning_trends_service import GovernanceLearningTrendsService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -115,6 +119,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     intervention_effectiveness_service=InterventionEffectivenessService(intervention_readiness_service,response_effectiveness_service)
     response_outcomes_service=ResponseOutcomesService(intervention_effectiveness_service)
     governance_learning_service=GovernanceLearningService(intervention_effectiveness_service,response_outcomes_service)
+    governance_learning_command_center_service=GovernanceLearningCommandCenterService(governance_learning_service,intervention_effectiveness_service,response_outcomes_service)
+    response_monitoring_service=ResponseMonitoringService(response_outcomes_service)
+    intervention_strategy_analytics_service=InterventionStrategyAnalyticsService(intervention_effectiveness_service,governance_learning_service)
+    governance_learning_trends_service=GovernanceLearningTrendsService(governance_learning_service,intervention_effectiveness_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -538,6 +546,40 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/<signal_id>")
     def quality_governance_learning_detail(signal_id):
         try: return _phase3546(governance_learning_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    def _phase3547(service,signal_id=None):
+        value=service.detail(tenant(),signal_id) if signal_id is not None else service.derive(tenant()); return (jsonify(value),200) if signal_id is None or value else (jsonify({"error":"not_found"}),404)
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning-command-center")
+    def quality_governance_learning_command_center():
+        try: return _phase3547(governance_learning_command_center_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning-command-center/<signal_id>")
+    def quality_governance_learning_command_center_detail(signal_id):
+        try: return _phase3547(governance_learning_command_center_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/response-monitoring")
+    def quality_response_monitoring():
+        try: return _phase3547(response_monitoring_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/response-monitoring/<signal_id>")
+    def quality_response_monitoring_detail(signal_id):
+        try: return _phase3547(response_monitoring_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-strategy-analytics")
+    def quality_intervention_strategy_analytics():
+        try: return _phase3547(intervention_strategy_analytics_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-strategy-analytics/<signal_id>")
+    def quality_intervention_strategy_analytics_detail(signal_id):
+        try: return _phase3547(intervention_strategy_analytics_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/trends")
+    def quality_governance_learning_trends():
+        try: return _phase3547(governance_learning_trends_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/trends/<signal_id>")
+    def quality_governance_learning_trends_detail(signal_id):
+        try: return _phase3547(governance_learning_trends_service,signal_id)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
