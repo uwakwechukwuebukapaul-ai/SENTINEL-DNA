@@ -873,6 +873,11 @@ def strategic_effectiveness_dashboard():
 def strategic_portfolio_dashboard():
     return render_template("executive_portfolio.html")
 
+@app.get("/workspace/executive-strategy/portfolio-command-center")
+@permission_required("investigations:read")
+def portfolio_command_center_dashboard():
+    return render_template("executive_portfolio_command_center.html")
+
 
 
 @app.get("/workspace/dashboard/data")
