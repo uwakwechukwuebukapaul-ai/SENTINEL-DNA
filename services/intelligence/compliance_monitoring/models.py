@@ -8,13 +8,13 @@ class ComplianceMonitorSnapshot:
     def to_dict(self): return asdict(self)
 @dataclass
 class ComplianceDrift:
-    drift_id:str=field(default_factory=lambda:str(uuid4())); tenant_id:str=""; framework_id:str=""; control_id:str=""; previous_status:str=""; current_status:str=""; severity:str="medium"; explanation:str=""; requires_human_review:bool=True; detected_at:str=field(default_factory=now)
+    drift_id:str=field(default_factory=lambda:str(uuid4())); tenant_id:str=""; framework_id:str=""; control_id:str=""; previous_status:str=""; current_status:str=""; severity:str="medium"; explanation:str=""; requires_human_review:bool=True; detected_at:str=field(default_factory=now); metadata:dict=field(default_factory=dict)
     def to_dict(self): return asdict(self)
 @dataclass
 class EvidenceRecord:
-    evidence_id:str; tenant_id:str; framework_id:str; control_id:str; reference:str; source:str=""; collected_at:str=field(default_factory=now); valid:bool=True
+    evidence_id:str; tenant_id:str; framework_id:str; control_id:str; reference:str; source:str=""; collected_at:str=field(default_factory=now); valid:bool=True; expires_at:str|None=None; available:bool=True; metadata:dict=field(default_factory=dict)
     def to_dict(self): return asdict(self)
 @dataclass
 class AuditReadiness:
-    readiness_id:str; tenant_id:str; framework_id:str; evidence_count:int=0; covered_controls:int=0; readiness_score:float=0.0; gaps:list=field(default_factory=list); created_at:str=field(default_factory=now)
+    readiness_id:str; tenant_id:str; framework_id:str; evidence_count:int=0; covered_controls:int=0; readiness_score:float=0.0; gaps:list=field(default_factory=list); created_at:str=field(default_factory=now); freshness_score:float=0.0; completeness_score:float=0.0; availability_score:float=0.0
     def to_dict(self): return asdict(self)
