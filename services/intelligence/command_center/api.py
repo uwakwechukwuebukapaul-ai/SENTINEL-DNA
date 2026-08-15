@@ -23,6 +23,7 @@ from .maturity_improvement_service import MaturityImprovementService
 from .improvement_program_service import ImprovementProgramAnalyticsService
 from .improvement_outcome_service import ImprovementOutcomeIntelligenceService
 from .progress_tracking_service import ExecutiveProgressTrackingService
+from .executive_strategy_service import ExecutiveStrategyService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -49,6 +50,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     improvement_program_service=ImprovementProgramAnalyticsService(maturity_service, maturity_reporting_service, maturity_improvement_service)
     improvement_outcome_service=ImprovementOutcomeIntelligenceService(improvement_program_service, maturity_service, maturity_reporting_service)
     progress_tracking_service=ExecutiveProgressTrackingService(improvement_outcome_service)
+    executive_strategy_service=ExecutiveStrategyService(maturity_service, maturity_reporting_service, maturity_improvement_service, improvement_program_service, improvement_outcome_service, progress_tracking_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -190,6 +192,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
         try:
             value=progress_tracking_service.drilldown(tenant(),signal_id)
             return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy")
+    def quality_executive_strategy():
+        try: return jsonify(executive_strategy_service.derive(tenant()))
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):

@@ -838,6 +838,11 @@ def maturity_dashboard():
 def improvement_progress_dashboard():
     return render_template("improvement_progress.html")
 
+@app.get("/workspace/executive-strategy")
+@permission_required("investigations:read")
+def executive_strategy_dashboard():
+    return render_template("executive_strategy.html")
+
 
 
 @app.get("/workspace/dashboard/data")

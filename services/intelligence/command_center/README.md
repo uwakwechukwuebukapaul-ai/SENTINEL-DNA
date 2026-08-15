@@ -115,6 +115,12 @@ The progress and progress-history endpoints provide the canonical temporal layer
 
 Maturity answers how mature the SOC is; outcome progress answers how much measurable improvement is occurring; temporal progress answers how that improvement changes over time. Provenance, references, confidence, evidence strength, uncertainty, tenant isolation, and advisory-only boundaries are preserved. This layer is read-only, deterministic, non-persistent, non-causal, and performs no remediation, task execution, peer benchmarking, or background work.
 
+## Executive Strategic Intelligence
+
+`GET /api/command-center/quality/executive-strategy` composes canonical maturity, improvement, outcome, learning, and temporal progress services into a deterministic tenant-scoped executive decision-support surface. It exposes posture, scorecard values only where canonical scores exist, strategic signals, priorities, evidence governance, uncertainty, provenance, and advisory-only status. Signal precedence is explicit in the service. No causal claims, peer benchmarking, persistence, or autonomous actions are introduced.
+
+`/workspace/executive-strategy` is the protected presentation layer and renders backend-derived intelligence with safe DOM APIs. Missing values remain unavailable or insufficient evidence.
+
 ## Executive sustained-improvement dashboard
 
 `/workspace/improvement-progress` is a protected presentation layer over the Phase 35.26 progress and progress-history endpoints. It renders current state, temporal observations, state distribution, sustainability, regression/recovery, dimensions, priorities, provenance, confidence, evidence strength, uncertainty, and advisory-only governance. The browser performs no scoring or classification; it only normalizes display values and preserves unavailable data explicitly. Rendering uses safe DOM APIs and same-origin requests. The dashboard does not interpolate missing periods, infer ownership, expose cross-tenant data, establish causation, execute recommendations, or mutate intelligence.
