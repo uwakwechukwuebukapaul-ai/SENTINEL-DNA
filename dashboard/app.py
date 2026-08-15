@@ -918,6 +918,21 @@ def portfolio_forecast_decision_readiness_dashboard():
 def portfolio_forecast_decision_readiness_analytics_dashboard():
     return render_template("executive_portfolio_forecast_decision_readiness_analytics.html")
 
+@app.get("/workspace/executive-strategy/portfolio-forecast/governance-command-center")
+@permission_required("investigations:read")
+def portfolio_forecast_governance_command_center_dashboard():
+    return render_template("executive_portfolio_forecast_governance_command_center.html")
+
+@app.get("/workspace/executive-strategy/portfolio-forecast/early-warning")
+@permission_required("investigations:read")
+def portfolio_forecast_early_warning_dashboard():
+    return render_template("executive_portfolio_forecast_early_warning.html")
+
+@app.get("/workspace/executive-strategy/portfolio-forecast/governance-history")
+@permission_required("investigations:read")
+def portfolio_forecast_governance_history_dashboard():
+    return render_template("executive_portfolio_forecast_governance_history.html")
+
 
 
 @app.get("/workspace/dashboard/data")

@@ -1,0 +1,2 @@
+from services.intelligence.command_center.governance_signal import GovernanceSignal
+def test_governance_signal_is_immutable(): assert GovernanceSignal.__dataclass_params__.frozen
