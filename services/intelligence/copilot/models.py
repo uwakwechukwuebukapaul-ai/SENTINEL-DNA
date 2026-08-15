@@ -51,6 +51,10 @@ class CopilotResponse:
 
     evidence_refs: list[str] = field(default_factory=list)
     reasoning_refs: list[str] = field(default_factory=list)
+    uncertainty: str = ""
+    provenance: list[Any] = field(default_factory=list)
+    advisory: bool = True
+    requires_human_review: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -68,6 +72,10 @@ class CopilotResponse:
             "metadata": self.metadata,
             "evidence_refs": self.evidence_refs,
             "reasoning_refs": self.reasoning_refs,
+            "uncertainty": self.uncertainty,
+            "provenance": self.provenance,
+            "advisory": self.advisory,
+            "requires_human_review": self.requires_human_review,
         }
 
     def __getitem__(self, key):
