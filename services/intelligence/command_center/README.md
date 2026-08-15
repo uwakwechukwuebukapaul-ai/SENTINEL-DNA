@@ -53,6 +53,14 @@ Feedback states include `improving`, `degrading`, `stable`, `mixed`, `insufficie
 
 The service performs no remediation, enforcement, investigation mutation, quality-history mutation, or model retraining. Future expansion can add historical organizational comparisons and explicit team dimensions without weakening tenant isolation or the advisory boundary.
 
+## Executive organizational learning intelligence
+
+`/api/command-center/quality/executive-learning` composes historical organizational trends into deterministic executive signals and a tenant-scoped summary. Classifications are explicitly prioritized as critical gaps, persistent gaps, degrading, improving, emerging, resolved, mixed, stable, or insufficient data. Signal ordering never depends on lexical ordering.
+
+Relevance is bounded to `0..1` and is explainable: upstream confidence is combined with evidence strength and a bounded classification factor; uncertainty reduces evidence strength rather than being hidden. Organizational scope and team focus are populated only when upstream data provides them; missing dimensions remain unavailable. Provenance and contributing references are preserved, and observed association does not establish causation.
+
+Executive signals are read-only, advisory decision support. They do not mutate investigations, execute actions, retrain models, persist recommendations, or replace analyst judgment. Future dashboard integration can consume the signal and summary contracts directly.
+
 ## Historical organizational trend intelligence
 
 `/api/command-center/quality/organizational-trends` analyzes supplied historical organizational-learning snapshots without creating persistence. It supports `improving`, `degrading`, `stable`, `mixed`, `emerging`, `persistent`, `recurring`, `resolving`, `resolved`, and `insufficient_data`. Rules use deterministic temporal ordering: all-present histories are persistent, intermittent histories are recurring, newly present patterns are emerging, and absent recent patterns are resolving or resolved. Missing temporal coverage is explicitly insufficient data.

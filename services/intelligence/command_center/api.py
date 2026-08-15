@@ -15,6 +15,7 @@ from .effectiveness_service import AnalystLearningEffectivenessService
 from .learning_feedback_service import AnalystLearningFeedbackService
 from .organizational_learning_service import OrganizationalLearningService
 from .organizational_trend_service import OrganizationalTrendService
+from .executive_learning_service import AnalystExecutiveLearningService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -33,6 +34,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     learning_feedback_service=AnalystLearningFeedbackService(learning_service, effectiveness_service)
     organizational_learning_service=OrganizationalLearningService(learning_service, effectiveness_service, learning_feedback_service)
     organizational_trend_service=OrganizationalTrendService(learning_service, effectiveness_service, learning_feedback_service, organizational_learning_service)
+    executive_learning_service=AnalystExecutiveLearningService(organizational_trend_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -122,6 +124,12 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/organizational-trends")
     def quality_organizational_trends():
         try: return jsonify({"tenant_id":tenant(),"trends":[x.to_dict() for x in organizational_trend_service.derive(tenant())],"advisory_only":True})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-learning")
+    def quality_executive_learning():
+        try:
+            tenant_id = tenant(); signals = executive_learning_service.derive(tenant_id)
+            return jsonify({"tenant_id": tenant_id, "signals": [x.to_dict() for x in signals], "summary": executive_learning_service.summary(tenant_id, signals).to_dict(), "advisory_only": True})
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
