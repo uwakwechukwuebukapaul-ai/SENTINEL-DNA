@@ -14,4 +14,6 @@ from .attention_service import AnalystAttentionService
 from .investigation_workspace import AnalystInvestigationWorkspace, AnalystInvestigationWorkspaceService
 from .actionability import AnalystNextStep
 from .actionability_service import AnalystActionabilityService
-__all__ = ["SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository", "AttentionItem", "AttentionRepository", "AnalystAttentionService", "AnalystInvestigationWorkspace", "AnalystInvestigationWorkspaceService", "AnalystNextStep", "AnalystActionabilityService"]
+from .outcome import InvestigationOutcome
+from .outcome_service import InvestigationOutcomeService
+__all__ = ["SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository", "AttentionItem", "AttentionRepository", "AnalystAttentionService", "AnalystInvestigationWorkspace", "AnalystInvestigationWorkspaceService", "AnalystNextStep", "AnalystActionabilityService", "InvestigationOutcome", "InvestigationOutcomeService"]
