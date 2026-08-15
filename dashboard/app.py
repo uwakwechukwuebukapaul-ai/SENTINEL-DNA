@@ -833,6 +833,12 @@ def maturity_dashboard():
     return render_template("maturity.html")
 
 
+@app.get("/workspace/improvement-progress")
+@permission_required("investigations:read")
+def improvement_progress_dashboard():
+    return render_template("improvement_progress.html")
+
+
 
 @app.get("/workspace/dashboard/data")
 def workspace_dashboard_data():
