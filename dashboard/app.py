@@ -843,6 +843,11 @@ def improvement_progress_dashboard():
 def executive_strategy_dashboard():
     return render_template("executive_strategy.html")
 
+@app.get("/workspace/executive-strategy/scenarios")
+@permission_required("investigations:read")
+def executive_scenario_dashboard():
+    return render_template("executive_scenario.html")
+
 
 
 @app.get("/workspace/dashboard/data")

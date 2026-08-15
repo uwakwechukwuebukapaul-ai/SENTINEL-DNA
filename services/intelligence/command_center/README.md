@@ -121,6 +121,10 @@ Maturity answers how mature the SOC is; outcome progress answers how much measur
 
 `/workspace/executive-strategy` is the protected presentation layer and renders backend-derived intelligence with safe DOM APIs. Missing values remain unavailable or insufficient evidence.
 
+## Strategic Scenario Analysis
+
+`GET /api/command-center/quality/executive-strategy/scenarios` returns tenant-supported scenario templates. `POST /api/command-center/quality/executive-strategy/scenarios/evaluate` evaluates an in-memory hypothetical overlay using server-resolved tenant context. Scenario analysis is deterministic decision support: it compares observed baseline values with bounded hypothetical values, preserves confidence, evidence strength, uncertainty, provenance, and references, and never predicts future outcomes or establishes causation. Unsupported dimensions and malformed assumptions are rejected; no scenario is persisted and no production intelligence is mutated. Scenario values are explicitly labeled hypothetical in `/workspace/executive-strategy/scenarios`.
+
 ## Executive sustained-improvement dashboard
 
 `/workspace/improvement-progress` is a protected presentation layer over the Phase 35.26 progress and progress-history endpoints. It renders current state, temporal observations, state distribution, sustainability, regression/recovery, dimensions, priorities, provenance, confidence, evidence strength, uncertainty, and advisory-only governance. The browser performs no scoring or classification; it only normalizes display values and preserves unavailable data explicitly. Rendering uses safe DOM APIs and same-origin requests. The dashboard does not interpolate missing periods, infer ownership, expose cross-tenant data, establish causation, execute recommendations, or mutate intelligence.
