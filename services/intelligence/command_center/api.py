@@ -7,6 +7,7 @@ from .decision_service import AnalystDecisionContextService
 from .investigation_workspace import AnalystInvestigationWorkspaceService
 from .actionability_service import AnalystActionabilityService
 from .outcome_service import InvestigationOutcomeService
+from .feedback_service import InvestigationFeedbackService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -17,6 +18,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     investigation_workspace_service=investigation_workspace_service or AnalystInvestigationWorkspaceService(event_feed, attention_service, decision_service, source_resolver)
     actionability_service=AnalystActionabilityService(investigation_workspace_service)
     outcome_service=InvestigationOutcomeService(investigation_workspace_service)
+    feedback_service=InvestigationFeedbackService(investigation_workspace_service, outcome_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -73,6 +75,21 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
             value=outcome_service.get_outcome(tenant(), investigation_id)
             return (jsonify({"investigation_id":str(investigation_id),"outcome":value.to_dict(),"provenance":value.provenance,"advisory_only":True}),200) if value else (jsonify({"error":"not_found"}),404)
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/investigation/<investigation_id>/feedback")
+    def investigation_feedback(investigation_id):
+        try:
+            value=feedback_service.get(tenant(),investigation_id)
+            return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
+    def submit_investigation_feedback(investigation_id):
+        try:
+            if not request.is_json: return jsonify({"error":"invalid_feedback"}),400
+            value=feedback_service.submit(tenant(),investigation_id,request.get_json(silent=True))
+            result=feedback_service.get(tenant(),investigation_id)
+            return (jsonify(result),201) if value and result else (jsonify({"error":"not_found"}),404)
+        except ValueError as exc: return jsonify({"error":str(exc)}),400
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.get("/api/command-center/attention/<attention_id>")
     def attention_detail(attention_id):
         try:
