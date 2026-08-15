@@ -32,3 +32,12 @@ Phase 35.12 adds read-only `AnalystInvestigationLearning` at `GET /api/command-c
 This layer is advisory only: it does not replace investigation, evidence, risk, compliance, governance, or lifecycle intelligence; approve or execute actions; remediate incidents; modify controls, detections, or workflows; or certify compliance. Authoritative state remains owned by its source systems. Actions are navigation references only. Platform Fabric references, Analyst Workspace navigation, and the existing Copilot provider remain compatible; Copilot cannot mutate decision or authoritative state. TTS remains optional, disabled by default, presentation-only, and independent of decision assembly.
 
 All decision reads require tenant scope, and cross-tenant resources are treated as not found. Historical state is shown only when available; otherwise it is `unavailable`. The context preserves provenance, confidence, uncertainty, advisory status, and the human-review boundary.
+## Phase 35.13 — Longitudinal learning effectiveness
+
+`AnalystLearningEffectivenessService` compares chronological observations produced by the existing learning layer. It is read-only, tenant-scoped, deterministic, advisory, and does not create a feedback store or mutate authoritative state.
+
+Effectiveness is classified as `improving`, `degrading`, `mixed`, `stable`, or `insufficient_data`. The bounded score is the mean of later-minus-earlier normalized quality dimensions; lower-is-better rates are inverted, and the result is clamped to `-1.0..1.0`. Changes below `0.05` are treated as stable. This calculation is explainable from observable inputs.
+
+Confidence increases with observation count and temporal persistence. Uncertainty records applicable limitations such as insufficient observations, insufficient temporal span, low feedback coverage, incomplete provenance, and mixed signals. Results include contributing feedback, investigation, learning, and outcome references without fabricating missing outcomes.
+
+The read-only endpoint is `/api/command-center/quality/effectiveness`. Effectiveness indicates an evidence-backed association between learning signals and later investigation-quality outcomes. It does not establish causation.
