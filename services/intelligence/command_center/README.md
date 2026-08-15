@@ -46,3 +46,9 @@ The read-only endpoint is `/api/command-center/quality/effectiveness`. Effective
 The read-only `/api/command-center/quality/learning-feedback` endpoint closes the evidence-backed intelligence loop from investigation outcomes and quality signals through analyst learning and longitudinal effectiveness. `AnalystLearningFeedbackService` composes the existing learning and effectiveness services; it does not retrain models or make decisions.
 
 Feedback states include `improving`, `degrading`, `stable`, `mixed`, `insufficient_data`, `new_pattern`, `resolved_pattern`, and `persistent_pattern`. IDs, ordering, classifications, uncertainty, and provenance are deterministic and tenant-scoped. Each observation retains upstream source names and contributing references, and is explicitly advisory-only. Future expansion may add persisted evaluation snapshots while preserving the same tenant boundary and read-only safety contract.
+
+## Organizational learning intelligence
+
+`/api/command-center/quality/organizational-learning` provides tenant-scoped, read-only organizational observations composed from investigation learning, effectiveness, and learning feedback. It detects recurring disagreement, evidence gaps, unresolved investigations, human-review dependency, low confidence, uncertainty, quality changes, and persistent, emerging, or resolved patterns. Results include deterministic IDs and ordering, explainable classifications, confidence, uncertainty, provenance, contributing references, team focus, and `advisory_only: true`.
+
+The service performs no remediation, enforcement, investigation mutation, quality-history mutation, or model retraining. Future expansion can add historical organizational comparisons and explicit team dimensions without weakening tenant isolation or the advisory boundary.

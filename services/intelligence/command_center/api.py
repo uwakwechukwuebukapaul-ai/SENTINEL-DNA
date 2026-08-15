@@ -13,6 +13,7 @@ from .quality_intelligence_service import AnalystQualityIntelligenceService
 from .learning_service import AnalystInvestigationLearningService
 from .effectiveness_service import AnalystLearningEffectivenessService
 from .learning_feedback_service import AnalystLearningFeedbackService
+from .organizational_learning_service import OrganizationalLearningService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -29,6 +30,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     learning_service=AnalystInvestigationLearningService(quality_intelligence_service)
     effectiveness_service=AnalystLearningEffectivenessService(learning_service)
     learning_feedback_service=AnalystLearningFeedbackService(learning_service, effectiveness_service)
+    organizational_learning_service=OrganizationalLearningService(learning_service, effectiveness_service, learning_feedback_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -110,6 +112,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/learning-feedback")
     def quality_learning_feedback():
         try: return jsonify({"tenant_id":tenant(),"feedback":[x.to_dict() for x in learning_feedback_service.derive(tenant())],"advisory_only":True})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/organizational-learning")
+    def quality_organizational_learning():
+        try: return jsonify({"tenant_id":tenant(),"organizational_learning":[x.to_dict() for x in organizational_learning_service.derive(tenant())],"advisory_only":True})
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
