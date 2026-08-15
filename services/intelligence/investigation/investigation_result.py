@@ -165,6 +165,8 @@ class InvestigationResult:
 
     investigation_optimization_context: Any = None
 
+    investigation_quality_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -455,6 +457,8 @@ class InvestigationResult:
             "knowledge_memory_context": self.knowledge_memory_context,
 
             "investigation_optimization_context": self.investigation_optimization_context,
+
+            "investigation_quality_context": self.investigation_quality_context,
 
             "intelligence":
                 self.intelligence,
