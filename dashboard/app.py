@@ -883,6 +883,11 @@ def portfolio_command_center_dashboard():
 def portfolio_forecast_dashboard():
     return render_template("executive_portfolio_forecast.html")
 
+@app.get("/workspace/executive-strategy/portfolio-forecast/accuracy")
+@permission_required("investigations:read")
+def portfolio_forecast_accuracy_dashboard():
+    return render_template("executive_portfolio_forecast_accuracy.html")
+
 
 
 @app.get("/workspace/dashboard/data")
