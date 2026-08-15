@@ -969,6 +969,15 @@ def portfolio_forecast_response_effectiveness_dashboard(): return render_templat
 @app.get("/workspace/executive-strategy/portfolio-forecast/intervention-governance/trends")
 @permission_required("investigations:read")
 def portfolio_forecast_intervention_governance_trends_dashboard(): return render_template("executive_portfolio_forecast_intervention_governance_trends.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/intervention-effectiveness")
+@permission_required("investigations:read")
+def portfolio_forecast_intervention_effectiveness_dashboard(): return render_template("executive_portfolio_forecast_intervention_effectiveness.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/response-outcomes")
+@permission_required("investigations:read")
+def portfolio_forecast_response_outcomes_dashboard(): return render_template("executive_portfolio_forecast_response_outcomes.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/governance-learning")
+@permission_required("investigations:read")
+def portfolio_forecast_governance_learning_dashboard(): return render_template("executive_portfolio_forecast_governance_learning.html")
 
 
 

@@ -180,3 +180,7 @@ Phase 35.42 consolidates forecast governance, policy review, decision readiness,
 ## Intervention Intelligence & Strategic Risk Coordination
 
 Phase 35.43 adds intervention consideration, warning escalation analytics, strategic risk coordination, and executive review priority. These are analytical review contexts only: they never execute interventions, send alerts, create tickets, persist decisions, or perform SOAR actions. Escalation means analytical governance concern, not operational escalation. Risk relationships are described as co-occurring or converging rather than causal. Insufficient evidence and history remain explicit, with deterministic tenant-scoped IDs, provenance, uncertainty, and advisory-only boundaries.
+
+## Intervention Effectiveness, Response Outcomes & Governance Learning
+
+Phase 35.46 evaluates intervention-readiness patterns, observed response outcomes, and recurring governance lessons without claiming that intervention caused an outcome. Effectiveness remains temporal association; unknown outcomes and insufficient history are explicit. Governance learning is advisory, evidence-backed, tenant-scoped, deterministic, provenance-preserving, and non-mutating. The protected workspaces are `/workspace/executive-strategy/portfolio-forecast/intervention-effectiveness`, `/workspace/executive-strategy/portfolio-forecast/response-outcomes`, and `/workspace/executive-strategy/portfolio-forecast/governance-learning`.
