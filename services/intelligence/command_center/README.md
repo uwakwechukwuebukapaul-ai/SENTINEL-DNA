@@ -72,3 +72,9 @@ Executive signals are read-only, advisory decision support. They do not mutate i
 `/api/command-center/quality/organizational-trends` analyzes supplied historical organizational-learning snapshots without creating persistence. It supports `improving`, `degrading`, `stable`, `mixed`, `emerging`, `persistent`, `recurring`, `resolving`, `resolved`, and `insufficient_data`. Rules use deterministic temporal ordering: all-present histories are persistent, intermittent histories are recurring, newly present patterns are emerging, and absent recent patterns are resolving or resolved. Missing temporal coverage is explicitly insufficient data.
 
 Trend records preserve tenant scope, upstream provenance, references, observation count, span, confidence, uncertainty, and an unavailable organizational dimension when source data does not provide one. Effectiveness is consumed as an upstream signal; observed association does not establish causation. The endpoint is read-only and advisory-only. Future phases may add persisted snapshots, legitimate team dimensions, visualizations, and executive reporting without changing this contract.
+
+## Executive learning drill-down
+
+`GET /api/command-center/quality/executive-learning/<signal_id>` provides tenant-scoped evidence traceability for one executive signal. It composes matching trend, organizational learning, effectiveness, feedback, safe references, dimensions, confidence, uncertainty, provenance, and advisory interpretation. Missing historical or team data is explicit rather than inferred.
+
+The drill-down provides evidence traceability and decision support. It does not establish causation or authorize remediation, mutate state, expose raw private payloads, or reveal whether a signal belongs to another tenant.
