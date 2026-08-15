@@ -40,3 +40,11 @@ class ExecutiveProgressTrackingService:
         data=self.derive(tenant_id,observations); progress=data["progress"]; periods=tuple(sorted({p for x in progress for p in (x.get("first_observed_period"),x.get("last_observed_period")) if p})); scores=tuple(x.get("current_score") for x in progress if x.get("current_score") is not None); current=scores[-1] if scores else None; previous=scores[-2] if len(scores)>1 else None
         h=ExecutiveProgressHistory(tenant_id,periods,scores,"improving" if current is not None and previous is not None and current>previous else "stable" if current is not None else "insufficient_data",current,previous,None if current is None or previous is None else current-previous,"unavailable",None,None,None,tuple(x["program_id"] for x in progress if x["current_state"]=="improving"),tuple(x["program_id"] for x in progress if x["current_state"]=="sustained_improvement"),tuple(x["program_id"] for x in progress if x["current_state"]=="stalled"),tuple(x["program_id"] for x in progress if "regression" in x["current_state"]),tuple(x["program_id"] for x in progress if x["current_state"]=="recovery"),None,None,next((x["dimension"] for x in progress if "regression" in x["current_state"]),None),None,"insufficient" if not progress else "moderate",(),{"source":"executive_progress_tracking","upstream":["improvement_outcomes"],"tenant_id":tenant_id},("Temporal progress is advisory and does not establish causation.",))
         return h.to_dict()
+
+    def drilldown(self, tenant_id, signal_id, observations=None):
+        data=self.derive(tenant_id, observations)
+        matches=[x for x in data.get("progress",[]) if x.get("stable_id")==signal_id]
+        if not matches: return None
+        item=matches[0]
+        transitions=[x for x in data.get("transitions",[]) if x.get("program_id")==item.get("program_id") and x.get("dimension")==item.get("dimension")]
+        return {"tenant_id":tenant_id,"signal":item,"observations":[x.to_dict() for x in self._observations(tenant_id, observations) if x.program_id==item.get("program_id") and x.dimension==item.get("dimension")],"transitions":transitions,"regression_events":[x for x in transitions if "regression" in x.get("to_state","") or x.get("to_state")=="degrading"],"recovery_events":[x for x in transitions if x.get("to_state")=="recovery"],"advisory_only":True}

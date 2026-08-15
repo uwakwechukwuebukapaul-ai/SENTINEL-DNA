@@ -185,6 +185,12 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
         try:
             tenant_id=tenant(); return jsonify({"tenant_id":tenant_id,"history":progress_tracking_service.history(tenant_id),"advisory_only":True})
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/maturity/improvement/progress/<signal_id>")
+    def quality_improvement_progress_detail(signal_id):
+        try:
+            value=progress_tracking_service.drilldown(tenant(),signal_id)
+            return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
         try:
