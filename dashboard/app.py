@@ -903,6 +903,21 @@ def portfolio_forecast_policy_review_dashboard():
 def portfolio_forecast_decision_oversight_dashboard():
     return render_template("executive_portfolio_forecast_decision_oversight.html")
 
+@app.get("/workspace/executive-strategy/portfolio-forecast/policy-analytics")
+@permission_required("investigations:read")
+def portfolio_forecast_policy_analytics_dashboard():
+    return render_template("executive_portfolio_forecast_policy_analytics.html")
+
+@app.get("/workspace/executive-strategy/portfolio-forecast/decision-readiness")
+@permission_required("investigations:read")
+def portfolio_forecast_decision_readiness_dashboard():
+    return render_template("executive_portfolio_forecast_decision_readiness.html")
+
+@app.get("/workspace/executive-strategy/portfolio-forecast/decision-readiness/analytics")
+@permission_required("investigations:read")
+def portfolio_forecast_decision_readiness_analytics_dashboard():
+    return render_template("executive_portfolio_forecast_decision_readiness_analytics.html")
+
 
 
 @app.get("/workspace/dashboard/data")

@@ -1,0 +1,2 @@
+from services.intelligence.command_center.forecast_governance_trends import ForecastGovernanceTrend
+def test_governance_trend_is_immutable(): assert ForecastGovernanceTrend.__dataclass_params__.frozen
