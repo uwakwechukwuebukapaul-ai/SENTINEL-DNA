@@ -124,4 +124,10 @@ from .intervention_strategy_analytics import InterventionStrategyAnalytics
 from .intervention_strategy_analytics_service import InterventionStrategyAnalyticsService
 from .governance_learning_trends import GovernanceLearningTrends
 from .governance_learning_trends_service import GovernanceLearningTrendsService
+from .governance_learning_trends_analytics import GovernanceLearningTrendsAnalytics
+from .governance_learning_trends_analytics_service import GovernanceLearningTrendsAnalyticsService
+from .response_outcome_correlation import ResponseOutcomeCorrelation
+from .response_outcome_correlation_service import ResponseOutcomeCorrelationService
+from .strategic_improvement_portfolio_analytics import StrategicImprovementPortfolioAnalytics
+from .strategic_improvement_portfolio_analytics_service import StrategicImprovementPortfolioAnalyticsService
 __all__ = ["AnalystLearningFeedback", "AnalystLearningFeedbackService", "stable_learning_feedback_id", "SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository", "AttentionItem", "AttentionRepository", "AnalystAttentionService", "AnalystInvestigationWorkspace", "AnalystInvestigationWorkspaceService", "AnalystNextStep", "AnalystActionabilityService", "InvestigationOutcome", "InvestigationOutcomeService", "AnalystInvestigationFeedback", "InvestigationQualitySignal", "InvestigationFeedbackService", "FeedbackRepository", "AnalystQualityTrend", "AnalystQualityTrendService", "AnalystQualityIntelligence", "QualityAttentionItem", "AnalystQualityIntelligenceService", "AnalystInvestigationLearning", "AnalystInvestigationLearningService", "AnalystLearningEffectiveness", "AnalystLearningEffectivenessService"]

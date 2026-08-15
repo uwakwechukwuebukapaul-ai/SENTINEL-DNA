@@ -1,0 +1,2 @@
+from services.intelligence.command_center.strategic_improvement_portfolio_analytics_service import StrategicImprovementPortfolioAnalyticsService
+def test_portfolio_analytics_is_advisory(): assert StrategicImprovementPortfolioAnalyticsService().derive('a')['advisory_only']

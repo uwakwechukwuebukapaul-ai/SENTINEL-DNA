@@ -1,0 +1,1 @@
+(()=>{const s=document.getElementById('status'),d=document.getElementById('data');fetch('/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/trends/analytics').then(r=>r.json()).then(x=>{d.textContent=JSON.stringify(x,null,2);s.hidden=true}).catch(e=>s.textContent=e.message)})();

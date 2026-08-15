@@ -60,6 +60,9 @@ from .governance_learning_command_center_service import GovernanceLearningComman
 from .response_monitoring_service import ResponseMonitoringService
 from .intervention_strategy_analytics_service import InterventionStrategyAnalyticsService
 from .governance_learning_trends_service import GovernanceLearningTrendsService
+from .governance_learning_trends_analytics_service import GovernanceLearningTrendsAnalyticsService
+from .response_outcome_correlation_service import ResponseOutcomeCorrelationService
+from .strategic_improvement_portfolio_analytics_service import StrategicImprovementPortfolioAnalyticsService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -123,6 +126,9 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     response_monitoring_service=ResponseMonitoringService(response_outcomes_service)
     intervention_strategy_analytics_service=InterventionStrategyAnalyticsService(intervention_effectiveness_service,governance_learning_service)
     governance_learning_trends_service=GovernanceLearningTrendsService(governance_learning_service,intervention_effectiveness_service)
+    governance_learning_trends_analytics_service=GovernanceLearningTrendsAnalyticsService(governance_learning_trends_service,governance_learning_service)
+    response_outcome_correlation_service=ResponseOutcomeCorrelationService(response_correlation_service,governance_learning_service) if 'response_correlation_service' in locals() else ResponseOutcomeCorrelationService(None,governance_learning_service)
+    strategic_improvement_portfolio_analytics_service=StrategicImprovementPortfolioAnalyticsService(None,governance_learning_service,intervention_strategy_analytics_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -580,6 +586,32 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/trends/<signal_id>")
     def quality_governance_learning_trends_detail(signal_id):
         try: return _phase3547(governance_learning_trends_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    def _phase3548(service,signal_id=None):
+        value=service.detail(tenant(),signal_id) if signal_id is not None else service.derive(tenant()); return (jsonify(value),200) if signal_id is None or value else (jsonify({"error":"not_found"}),404)
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/trends/analytics")
+    def quality_governance_learning_trends_analytics():
+        try: return _phase3548(governance_learning_trends_analytics_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-learning/trends/analytics/<signal_id>")
+    def quality_governance_learning_trends_analytics_detail(signal_id):
+        try: return _phase3548(governance_learning_trends_analytics_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/response-outcome-correlation")
+    def quality_response_outcome_correlation():
+        try: return _phase3548(response_outcome_correlation_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/response-outcome-correlation/<signal_id>")
+    def quality_response_outcome_correlation_detail(signal_id):
+        try: return _phase3548(response_outcome_correlation_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-portfolio-analytics")
+    def quality_improvement_portfolio_analytics():
+        try: return _phase3548(strategic_improvement_portfolio_analytics_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-portfolio-analytics/<signal_id>")
+    def quality_improvement_portfolio_analytics_detail(signal_id):
+        try: return _phase3548(strategic_improvement_portfolio_analytics_service,signal_id)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
