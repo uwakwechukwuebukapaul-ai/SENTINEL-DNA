@@ -57,7 +57,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     def decision_payload(value):
         return value.to_dict() if hasattr(value, "to_dict") else value
     @bp.get("/api/command-center/decision")
-    def decisions():
+    def decision_contexts():
         try:
             values=decision_service.derive(tenant()); return jsonify({"tenant_id":tenant(),"decisions":[decision_payload(x) for x in values]})
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400

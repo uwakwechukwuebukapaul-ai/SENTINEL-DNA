@@ -20,3 +20,10 @@ def test_presentation_context_is_advisory_and_tts_independent():
 def test_api_requires_existing_authenticated_tenant_resolver():
     app=Flask(__name__); app.register_blueprint(create_command_center_blueprint(CommandCenterPresentationService(), tenant_resolver=lambda:"a")); response=app.test_client().get("/api/command-center")
     assert response.status_code==200 and response.json["tenant_id"]=="a"
+
+def test_blueprint_can_be_registered_in_isolated_apps():
+    first=Flask("first"); second=Flask("second")
+    first.register_blueprint(create_command_center_blueprint(tenant_resolver=lambda:"a"))
+    second.register_blueprint(create_command_center_blueprint(tenant_resolver=lambda:"b"))
+    assert first.test_client().get("/api/command-center/decision").status_code==200
+    assert second.test_client().get("/api/command-center/decision").status_code==200
