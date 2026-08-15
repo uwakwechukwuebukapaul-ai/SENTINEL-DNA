@@ -8,5 +8,5 @@ from ..timeline import TimelineBuilder
 from .aggregation import SOCWorkspaceAggregator
 from .models import SOCWorkspaceSnapshot, WorkspaceCaseView, WorkspaceTimelineEntry
 from .repository import WorkspaceRepository
-from .service import SOCWorkspaceService
-__all__ = ["AnalystWorkspace", "TimelineBuilder", "SOCWorkspaceAggregator", "SOCWorkspaceSnapshot", "WorkspaceCaseView", "WorkspaceTimelineEntry", "WorkspaceRepository", "SOCWorkspaceService"]
+from .service import SOCWorkspaceService, AnalystWorkspaceService
+__all__ = ["AnalystWorkspace", "TimelineBuilder", "SOCWorkspaceAggregator", "SOCWorkspaceSnapshot", "WorkspaceCaseView", "WorkspaceTimelineEntry", "WorkspaceRepository", "SOCWorkspaceService", "AnalystWorkspaceService"]
