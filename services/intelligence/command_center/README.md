@@ -100,3 +100,7 @@ Insufficient history and API failures are shown explicitly. The dashboard is ten
 ## SOC improvement planning
 
 `GET /api/command-center/quality/maturity/improvement` composes maturity reporting into comparative dimensions, deterministic improvement priorities, and advisory improvement plans. Plans include rationale, evidence references, expected outcomes, and future measurement criteria; they never execute actions. Relative positions are only within the tenant's available dimensions, not peer benchmarks. Weak evidence, missing dimensions, insufficient history, and unavailable impact data remain explicit uncertainty.
+
+## Improvement Program Analytics
+
+`GET /api/command-center/quality/maturity/improvement/program` measures available evidence for advisory improvement programs derived from canonical maturity, reporting, and improvement planning services. Statuses include improving, completed, stalled, degrading, stable, mixed, not-yet-measurable, and insufficient data. Missing baselines, targets, or historical observations are never fabricated; outcome language describes association rather than causation. Programs remain tenant-scoped, deterministic, read-only, advisory-only, and free of peer benchmarking or task execution.
