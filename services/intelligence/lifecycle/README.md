@@ -1,0 +1,3 @@
+# Governed Closed-Loop SOC Lifecycle
+This package records the lifecycle from detection through investigation, human decision, approval, an external action boundary, verification, and advisory learning. It is tenant-isolated, deterministic, auditable, and reference-based.
+It does not replace investigation orchestration, evidence, threat, risk, compliance, governance, SOAR, Copilot, or Analyst Workspace ownership. It does not execute external actions, remediate incidents, mutate controls or rules, modify playbooks, or make autonomous decisions. Approval is never inferred from an AI recommendation. TTS remains optional presentation-only and is not a lifecycle dependency. The repository can be replaced by SQLite/PostgreSQL without changing service contracts.
