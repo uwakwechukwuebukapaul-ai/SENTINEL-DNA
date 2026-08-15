@@ -1,0 +1,7 @@
+from .intervention_readiness import InterventionReadiness
+from .governance_signal import stable_governance_signal_id
+class InterventionReadinessService:
+    def __init__(self,governance=None,lifecycle=None,planning=None): self.governance=governance; self.lifecycle=lifecycle; self.planning=planning
+    def derive(self,t):
+        g=(self.governance.derive(t) if self.governance else {}).get('governance',{}); l=(self.lifecycle.derive(t) if self.lifecycle else {}).get('lifecycle',{}); p=(self.planning.derive(t) if self.planning else {}).get('planning',{}); blockers=tuple(g.get('governance_blockers',())); state='insufficient_history' if not g or not l or g.get('governance_posture')=='insufficient_history' or l.get('lifecycle_state')=='insufficient_history' else 'blocked' if blockers else 'conditionally_ready' if g.get('governance_posture')=='review' else 'ready_for_review'; x=InterventionReadiness(t,stable_governance_signal_id(t,'readiness'),state,g.get('governance_posture','insufficient_history'),l.get('lifecycle_state','insufficient_history'),p.get('response_priority','P4_INFORMATIONAL'),g.get('evidence_sufficiency'),g.get('confidence'),tuple(g.get('uncertainty',())),blockers,tuple(g.get('advisory_recommendations',())),tuple(g.get('provenance',())),True); return {'tenant_id':t,'readiness':x.to_dict(),'advisory_only':True}
+    def detail(self,t,s): x=self.derive(t)['readiness']; return x if x['readiness_id']==s else None

@@ -45,6 +45,10 @@ from .intervention_intelligence_service import InterventionIntelligenceService
 from .warning_escalation_service import WarningEscalationService
 from .strategic_risk_coordination_service import StrategicRiskCoordinationService
 from .intervention_priority_service import InterventionPriorityService
+from .intervention_governance_service import InterventionGovernanceService
+from .escalation_lifecycle_service import EscalationLifecycleService
+from .risk_response_planning_service import RiskResponsePlanningService
+from .intervention_readiness_service import InterventionReadinessService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -93,6 +97,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     escalation_service=WarningEscalationService(early_warning_service)
     coordination_service=StrategicRiskCoordinationService(governance_command_center_service,early_warning_service)
     priority_service=InterventionPriorityService(intervention_service)
+    intervention_governance_service=InterventionGovernanceService(intervention_service,priority_service)
+    escalation_lifecycle_service=EscalationLifecycleService(escalation_service)
+    risk_response_planning_service=RiskResponsePlanningService(coordination_service,priority_service)
+    intervention_readiness_service=InterventionReadinessService(intervention_governance_service,escalation_lifecycle_service,risk_response_planning_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -422,6 +430,40 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-priority/<signal_id>")
     def quality_intervention_priority_detail(signal_id):
         try: return _phase3543(priority_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    def _phase3544(service, signal_id=None):
+        value=service.detail(tenant(),signal_id) if signal_id is not None else service.derive(tenant()); return (jsonify(value),200) if signal_id is None or value else (jsonify({"error":"not_found"}),404)
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-governance")
+    def quality_intervention_governance():
+        try: return _phase3544(intervention_governance_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-governance/<signal_id>")
+    def quality_intervention_governance_detail(signal_id):
+        try: return _phase3544(intervention_governance_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/escalation-lifecycle")
+    def quality_escalation_lifecycle():
+        try: return _phase3544(escalation_lifecycle_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/escalation-lifecycle/<signal_id>")
+    def quality_escalation_lifecycle_detail(signal_id):
+        try: return _phase3544(escalation_lifecycle_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/risk-response-planning")
+    def quality_risk_response_planning():
+        try: return _phase3544(risk_response_planning_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/risk-response-planning/<signal_id>")
+    def quality_risk_response_planning_detail(signal_id):
+        try: return _phase3544(risk_response_planning_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-readiness")
+    def quality_intervention_readiness():
+        try: return _phase3544(intervention_readiness_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/intervention-readiness/<signal_id>")
+    def quality_intervention_readiness_detail(signal_id):
+        try: return _phase3544(intervention_readiness_service,signal_id)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):

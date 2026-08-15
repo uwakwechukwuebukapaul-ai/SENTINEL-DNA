@@ -1,0 +1,2 @@
+from services.intelligence.command_center.intervention_governance import InterventionGovernance
+def test_intervention_governance_is_immutable(): assert InterventionGovernance.__dataclass_params__.frozen

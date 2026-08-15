@@ -945,6 +945,18 @@ def portfolio_forecast_strategic_risk_coordination_dashboard(): return render_te
 @app.get("/workspace/executive-strategy/portfolio-forecast/intervention-priority")
 @permission_required("investigations:read")
 def portfolio_forecast_intervention_priority_dashboard(): return render_template("executive_portfolio_forecast_intervention_priority.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/intervention-governance")
+@permission_required("investigations:read")
+def portfolio_forecast_intervention_governance_dashboard(): return render_template("executive_portfolio_forecast_intervention_governance.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/escalation-lifecycle")
+@permission_required("investigations:read")
+def portfolio_forecast_escalation_lifecycle_dashboard(): return render_template("executive_portfolio_forecast_escalation_lifecycle.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/risk-response-planning")
+@permission_required("investigations:read")
+def portfolio_forecast_risk_response_planning_dashboard(): return render_template("executive_portfolio_forecast_risk_response_planning.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/intervention-readiness")
+@permission_required("investigations:read")
+def portfolio_forecast_intervention_readiness_dashboard(): return render_template("executive_portfolio_forecast_intervention_readiness.html")
 
 
 
