@@ -848,6 +848,11 @@ def executive_strategy_dashboard():
 def executive_scenario_dashboard():
     return render_template("executive_scenario.html")
 
+@app.get("/workspace/executive-strategy/decision-matrix")
+@permission_required("investigations:read")
+def decision_matrix_dashboard():
+    return render_template("decision_matrix.html")
+
 
 
 @app.get("/workspace/dashboard/data")
