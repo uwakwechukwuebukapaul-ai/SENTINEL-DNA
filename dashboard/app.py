@@ -858,6 +858,11 @@ def decision_matrix_dashboard():
 def strategic_planning_dashboard():
     return render_template("executive_planning.html")
 
+@app.get("/workspace/executive-strategy/planning/analytics")
+@permission_required("investigations:read")
+def strategic_planning_analytics_dashboard():
+    return render_template("executive_planning_analytics.html")
+
 
 
 @app.get("/workspace/dashboard/data")
