@@ -11,4 +11,5 @@ from .event_feed import AnalystEventFeed, EventRepository
 from .attention import AttentionItem
 from .attention_repository import AttentionRepository
 from .attention_service import AnalystAttentionService
-__all__ = ["SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository", "AttentionItem", "AttentionRepository", "AnalystAttentionService"]
+from .investigation_workspace import AnalystInvestigationWorkspace, AnalystInvestigationWorkspaceService
+__all__ = ["SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository", "AttentionItem", "AttentionRepository", "AnalystAttentionService", "AnalystInvestigationWorkspace", "AnalystInvestigationWorkspaceService"]
