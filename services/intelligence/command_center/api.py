@@ -33,6 +33,8 @@ from .portfolio_command_center_service import PortfolioCommandCenterService
 from .portfolio_forecast_service import PortfolioForecastService
 from .forecast_accuracy_service import ForecastAccuracyService
 from .forecast_governance_service import ForecastGovernanceService
+from .forecast_policy_review_service import ForecastPolicyReviewService
+from .decision_oversight_service import DecisionOversightService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -69,6 +71,8 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     portfolio_forecast_service=PortfolioForecastService(portfolio_command_center_service)
     forecast_accuracy_service=ForecastAccuracyService(portfolio_forecast_service, portfolio_command_center_service)
     forecast_governance_service=ForecastGovernanceService(forecast_accuracy_service)
+    forecast_policy_review_service=ForecastPolicyReviewService(forecast_governance_service)
+    decision_oversight_service=DecisionOversightService(forecast_policy_review_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -291,6 +295,24 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     def quality_portfolio_forecast_governance_detail(signal_id):
         try:
             value=forecast_governance_service.detail(tenant(),signal_id); return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/policy-review")
+    def quality_portfolio_forecast_policy_review():
+        try: return jsonify(forecast_policy_review_service.derive(tenant()))
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/policy-review/<signal_id>")
+    def quality_portfolio_forecast_policy_review_detail(signal_id):
+        try:
+            value=forecast_policy_review_service.detail(tenant(),signal_id); return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/decision-oversight")
+    def quality_portfolio_forecast_decision_oversight():
+        try: return jsonify(decision_oversight_service.derive(tenant()))
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/decision-oversight/<signal_id>")
+    def quality_portfolio_forecast_decision_oversight_detail(signal_id):
+        try:
+            value=decision_oversight_service.detail(tenant(),signal_id); return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
