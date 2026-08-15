@@ -999,6 +999,15 @@ def portfolio_forecast_response_outcome_correlation_dashboard(): return render_t
 @app.get("/workspace/executive-strategy/portfolio-forecast/improvement-portfolio-analytics")
 @permission_required("investigations:read")
 def portfolio_forecast_improvement_portfolio_analytics_dashboard(): return render_template("executive_portfolio_forecast_improvement_portfolio_analytics.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/improvement-command-center")
+@permission_required("investigations:read")
+def portfolio_forecast_improvement_command_center_dashboard(): return render_template("executive_portfolio_forecast_improvement_command_center.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/governance-learning/correlation")
+@permission_required("investigations:read")
+def portfolio_forecast_governance_learning_correlation_dashboard(): return render_template("executive_portfolio_forecast_governance_learning_correlation.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/response-outcome/trends")
+@permission_required("investigations:read")
+def portfolio_forecast_response_outcome_trends_dashboard(): return render_template("executive_portfolio_forecast_response_outcome_trends.html")
 
 
 
