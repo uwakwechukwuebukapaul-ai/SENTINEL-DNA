@@ -868,6 +868,11 @@ def strategic_planning_analytics_dashboard():
 def strategic_effectiveness_dashboard():
     return render_template("executive_effectiveness.html")
 
+@app.get("/workspace/executive-strategy/portfolio")
+@permission_required("investigations:read")
+def strategic_portfolio_dashboard():
+    return render_template("executive_portfolio.html")
+
 
 
 @app.get("/workspace/dashboard/data")

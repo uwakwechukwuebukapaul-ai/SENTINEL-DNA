@@ -28,6 +28,7 @@ from .strategic_scenario_service import StrategicScenarioService
 from .decision_matrix_service import DecisionMatrixService
 from .strategic_planning_service import StrategicPlanningService
 from .strategic_planning_analytics_service import StrategicPlanningAnalyticsService
+from .strategic_portfolio_service import StrategicPortfolioService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -59,6 +60,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     decision_matrix_service=DecisionMatrixService(strategic_scenario_service)
     strategic_planning_service=StrategicPlanningService(executive_strategy_service, progress_tracking_service, strategic_scenario_service, decision_matrix_service)
     strategic_planning_analytics_service=StrategicPlanningAnalyticsService(strategic_planning_service)
+    strategic_portfolio_service=StrategicPortfolioService(executive_strategy_service, strategic_planning_analytics_service, progress_tracking_service, improvement_outcome_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -236,6 +238,15 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     def quality_executive_planning_analytics_detail(signal_id):
         try:
             value=strategic_planning_analytics_service.detail(tenant(),signal_id); return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio")
+    def quality_executive_portfolio():
+        try: return jsonify(strategic_portfolio_service.derive(tenant()))
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio/<signal_id>")
+    def quality_executive_portfolio_detail(signal_id):
+        try:
+            value=strategic_portfolio_service.detail(tenant(),signal_id); return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
