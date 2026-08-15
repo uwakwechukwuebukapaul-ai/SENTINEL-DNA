@@ -3,12 +3,14 @@ from .service import CommandCenterPresentationService
 from .drilldown import DrillDownService
 from .event_feed import AnalystEventFeed
 from .attention_service import AnalystAttentionService
+from .decision_service import AnalystDecisionContextService
 
-def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None):
+def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
     drilldown=DrillDownService(source_resolver)
     event_feed=event_feed or AnalystEventFeed()
     attention_service=attention_service or AnalystAttentionService(event_feed)
+    decision_service=decision_service or AnalystDecisionContextService(attention_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -51,5 +53,39 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     def attention_detail(attention_id):
         try:
             attention_service.derive(tenant()); value=attention_service.get_attention_context(tenant(),attention_id); return (jsonify(value),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    def decision_payload(value):
+        return value.to_dict() if hasattr(value, "to_dict") else value
+    @bp.get("/api/command-center/decision")
+    def decisions():
+        try:
+            values=decision_service.derive(tenant()); return jsonify({"tenant_id":tenant(),"decisions":[decision_payload(x) for x in values]})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/decision/latest")
+    def latest_decision():
+        try:
+            value=decision_service.latest(tenant()) or (decision_service.derive(tenant()) or [None])[0]
+            return (jsonify(decision_payload(value)),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/decision/history")
+    def decision_history():
+        try: return jsonify({"tenant_id":tenant(),"history":[decision_payload(x) for x in decision_service.history(tenant())]})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/decision/<decision_context_id>")
+    def decision_detail(decision_context_id):
+        try:
+            value=decision_service.get(tenant(),decision_context_id)
+            return (jsonify(decision_payload(value)),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/decision/attention/<attention_id>")
+    def decision_attention(attention_id):
+        try:
+            values=decision_service.by_attention(tenant(),attention_id) or decision_service.derive(tenant(),attention_id)
+            if not isinstance(values,list): values=[values] if values else []
+            return jsonify({"tenant_id":tenant(),"decisions":[decision_payload(x) for x in values]})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/decision/investigation/<investigation_id>")
+    def decision_investigation(investigation_id):
+        try: return jsonify({"tenant_id":tenant(),"decisions":[decision_payload(x) for x in decision_service.by_investigation(tenant(),investigation_id)]})
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     return bp
