@@ -1,9 +1,5 @@
-# AI SOC command center experience layer
+# AI SOC Command Center Foundation
 
-This module is a tenant-aware, read-only aggregation boundary for analyst and
-executive views. It composes existing investigations, cases, evidence, threat
-intelligence, MITRE, detection, vulnerability, attack-path, and agent outputs.
+This package is the analyst-facing presentation/API orchestration layer over the existing Command Surface, Platform Intelligence Fabric, Analyst Workspace, Copilot, Evidence Engine, risk, compliance, governance, operations, lifecycle, outcome, optimization, and SOAR owners. It normalizes context for overview, attention, investigations, evidence, decisions, executive summaries, subsystem availability, provenance, uncertainty, and human review.
 
-Decision queue entries are advisory and always require human approval. The
-module performs no evidence mutation, detection mutation, or SOAR execution.
-Missing inputs produce partial snapshots instead of failing the investigation.
+It does not create another intelligence engine, workspace, Copilot, or authentication system. It does not execute, approve, remediate, mutate controls/detections/playbooks/workflows/policies, certify compliance, store credentials, or make autonomous decisions. TTS is optional, disabled by default, and represented only as a presentation seam. The Flask blueprint is intentionally injectable so the existing authenticated tenant resolver can be supplied; callers must not rely on frontend filtering.
