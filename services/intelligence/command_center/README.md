@@ -96,3 +96,7 @@ Trajectory classifications include improving, degrading, stable, sustained impro
 The protected `/workspace/maturity` page consumes `/api/command-center/quality/maturity/report` as a presentation-only source. It renders current score and level, trajectory, historical metadata, dimensions, strengths, weaknesses, signals, recommendations, evidence strength, confidence, provenance, and uncertainty with safe DOM APIs. JavaScript does not calculate maturity or reorder intelligence.
 
 Insufficient history and API failures are shown explicitly. The dashboard is tenant-scoped, read-only, advisory-only, and makes no peer or external benchmark claims. Historical visualizations display only backend-provided observations; no sample points are fabricated.
+
+## SOC improvement planning
+
+`GET /api/command-center/quality/maturity/improvement` composes maturity reporting into comparative dimensions, deterministic improvement priorities, and advisory improvement plans. Plans include rationale, evidence references, expected outcomes, and future measurement criteria; they never execute actions. Relative positions are only within the tenant's available dimensions, not peer benchmarks. Weak evidence, missing dimensions, insufficient history, and unavailable impact data remain explicit uncertainty.
