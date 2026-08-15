@@ -853,6 +853,11 @@ def executive_scenario_dashboard():
 def decision_matrix_dashboard():
     return render_template("decision_matrix.html")
 
+@app.get("/workspace/executive-strategy/planning")
+@permission_required("investigations:read")
+def strategic_planning_dashboard():
+    return render_template("executive_planning.html")
+
 
 
 @app.get("/workspace/dashboard/data")

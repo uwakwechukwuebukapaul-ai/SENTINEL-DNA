@@ -131,4 +131,8 @@ Maturity answers how mature the SOC is; outcome progress answers how much measur
 
 ## Executive sustained-improvement dashboard
 
+## Strategic Planning Workspace
+
+`GET /api/command-center/quality/executive-strategy/planning` and its signal detail route provide tenant-scoped planning context over existing executive signals. Decision history is not persisted in this architecture, so absent records are reported as `insufficient_history` or `limited_history`; disappearance of a signal is never treated as resolution. Results distinguish observed intelligence, derived classifications, and modeled scenario or decision-matrix references. The protected workspace is `/workspace/executive-strategy/planning`. The layer is deterministic, read-only, advisory-only, provenance-preserving, and makes no causal or peer-benchmark claims.
+
 `/workspace/improvement-progress` is a protected presentation layer over the Phase 35.26 progress and progress-history endpoints. It renders current state, temporal observations, state distribution, sustainability, regression/recovery, dimensions, priorities, provenance, confidence, evidence strength, uncertainty, and advisory-only governance. The browser performs no scoring or classification; it only normalizes display values and preserves unavailable data explicitly. Rendering uses safe DOM APIs and same-origin requests. The dashboard does not interpolate missing periods, infer ownership, expose cross-tenant data, establish causation, execute recommendations, or mutate intelligence.
