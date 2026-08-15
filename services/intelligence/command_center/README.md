@@ -78,3 +78,9 @@ Trend records preserve tenant scope, upstream provenance, references, observatio
 `GET /api/command-center/quality/executive-learning/<signal_id>` provides tenant-scoped evidence traceability for one executive signal. It composes matching trend, organizational learning, effectiveness, feedback, safe references, dimensions, confidence, uncertainty, provenance, and advisory interpretation. Missing historical or team data is explicit rather than inferred.
 
 The drill-down provides evidence traceability and decision support. It does not establish causation or authorize remediation, mutate state, expose raw private payloads, or reveal whether a signal belongs to another tenant.
+
+## Organizational Maturity Intelligence
+
+`GET /api/command-center/quality/maturity` exposes an internal, tenant-scoped maturity assessment composed from existing organizational learning and trend intelligence. Scores are bounded from 0–100 using explainable evidence-backed dimension mappings; confidence and evidence strength are reported separately. Levels are internal Sentinel DNA indicators, not industry certifications, compliance ratings, or external security rankings.
+
+Historical benchmarking compares only against the same tenant's supplied historical evidence. Peer benchmarking is explicitly unavailable. Missing observations, temporal coverage, provenance, or dimensions remain uncertainty rather than being fabricated. The maturity API and dashboard integration are read-only and advisory-only.
