@@ -53,6 +53,12 @@ Feedback states include `improving`, `degrading`, `stable`, `mixed`, `insufficie
 
 The service performs no remediation, enforcement, investigation mutation, quality-history mutation, or model retraining. Future expansion can add historical organizational comparisons and explicit team dimensions without weakening tenant isolation or the advisory boundary.
 
+## Executive Learning Dashboard
+
+The protected `/workspace/executive-learning` page is a read-only presentation layer over `/api/command-center/quality/executive-learning`. It presents posture, KPI counts, signal distribution, organizational dimensions, deterministic priority signals, evidence/confidence governance, provenance availability, and advisory focus recommendations. Values are rendered with safe DOM APIs; tenant identity remains server/API controlled.
+
+Empty, partial, insufficient, unauthorized, and failed API states are surfaced as explicit unavailable or safe error messages. The dashboard does not recalculate intelligence, fabricate historical series, execute recommendations, or mutate platform state. It is intentionally separate from the intelligence services so future drill-down and trend visualization can be added without changing upstream contracts.
+
 ## Executive organizational learning intelligence
 
 `/api/command-center/quality/executive-learning` composes historical organizational trends into deterministic executive signals and a tenant-scoped summary. Classifications are explicitly prioritized as critical gaps, persistent gaps, degrading, improving, emerging, resolved, mixed, stable, or insufficient data. Signal ordering never depends on lexical ordering.
