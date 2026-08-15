@@ -1,0 +1,2 @@
+class OperationsAggregator:
+    def summarize(self,workloads,capacities): return {"workload_snapshots":len(workloads),"capacity_snapshots":len(capacities),"total_workload":sum(sum(getattr(w,x,0) for x in ("investigations","alerts","ingestion_events","correlation_events","hunting_queries","automation_requests","copilot_requests","connector_operations")) for w in workloads),"services":sorted({c.service_name for c in capacities})}
