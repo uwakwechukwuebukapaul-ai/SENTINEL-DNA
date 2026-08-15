@@ -1,10 +1,12 @@
 from flask import Blueprint, jsonify, request
 from .service import CommandCenterPresentationService
 from .drilldown import DrillDownService
+from .event_feed import AnalystEventFeed
 
-def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None):
+def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
     drilldown=DrillDownService(source_resolver)
+    event_feed=event_feed or AnalystEventFeed()
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -26,4 +28,17 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
                 return (jsonify(value), 200) if value else (jsonify({"error":"not_found"}), 404)
             except PermissionError as exc: return jsonify({"error":str(exc)}), 400
         bp.add_url_rule("/api/command-center/"+name+"/<reference>", name+"_detail", detail)
+    @bp.get("/api/command-center/events")
+    def events():
+        try: return jsonify({"tenant_id":tenant(),"events":[x.to_dict() for x in event_feed.events(tenant(),**{k:request.args.get(k) for k in ("category","severity","source_domain","entity_reference","investigation_id","since","acknowledgement") if request.args.get(k)})]})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/events/latest")
+    def latest_events():
+        try: return jsonify({"tenant_id":tenant(),"events":[x.to_dict() for x in event_feed.latest(tenant(),request.args.get("limit",20))]})
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/events/<event_id>")
+    def event_detail(event_id):
+        try:
+            value=event_feed.get(tenant(),event_id); return (jsonify(value.to_dict()),200) if value else (jsonify({"error":"not_found"}),404)
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     return bp
