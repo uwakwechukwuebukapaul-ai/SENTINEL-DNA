@@ -888,6 +888,11 @@ def portfolio_forecast_dashboard():
 def portfolio_forecast_accuracy_dashboard():
     return render_template("executive_portfolio_forecast_accuracy.html")
 
+@app.get("/workspace/executive-strategy/portfolio-forecast/governance")
+@permission_required("investigations:read")
+def portfolio_forecast_governance_dashboard():
+    return render_template("executive_portfolio_forecast_governance.html")
+
 
 
 @app.get("/workspace/dashboard/data")
