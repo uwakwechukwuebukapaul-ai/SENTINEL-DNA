@@ -1,0 +1,3 @@
+# SOC Outcome and Improvement Intelligence
+This package learns from tenant-scoped lifecycle outcomes, verification references, analyst feedback, and evidence references. It evaluates deterministic quality signals, recurring patterns, and advisory improvement candidates.
+It does not modify detection rules, deploy detections, modify or deploy playbooks, execute remediation, modify controls or policies, replace the Evidence Engine, lifecycle engine, or SOAR, or make autonomous security decisions. Candidates are advisory and require human review. Provenance is preserved, missing evidence remains unknown, TTS is not a dependency, and the repository can later be replaced by SQLite/PostgreSQL.
