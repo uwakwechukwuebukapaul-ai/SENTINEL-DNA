@@ -1,0 +1,3 @@
+# SOC Detection and Investigation Optimization Intelligence
+This advisory convergence layer evaluates tenant-scoped historical signals from outcome learning and authoritative SOC systems to identify deterministic detection, investigation, evidence, workflow, and playbook review opportunities.
+It does not modify or deploy detections, playbooks, workflows, controls, or policies; execute remediation; replace Evidence Engine, outcome learning, or SOAR; or make autonomous decisions. Candidates retain provenance, uncertainty, and `requires_human_review=True`. TTS is not a dependency. Repository storage is replaceable by SQLite/PostgreSQL.
