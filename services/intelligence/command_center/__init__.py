@@ -8,4 +8,7 @@ from .navigation import NavigationBuilder, NavigationTarget
 from .drilldown import DrillDownService
 from .events import AnalystEvent
 from .event_feed import AnalystEventFeed, EventRepository
-__all__ = ["SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository"]
+from .attention import AttentionItem
+from .attention_repository import AttentionRepository
+from .attention_service import AnalystAttentionService
+__all__ = ["SOCCommandCenterAggregator", "SOCCommandCenterService", "CommandCenterRepository", "SOCCommandSnapshot", "InvestigationOverview", "ThreatPostureView", "DecisionQueueItem", "ExecutivePostureSummary", "CommandCenterContext", "CommandCenterPresentationService", "NavigationBuilder", "NavigationTarget", "DrillDownService", "AnalystEvent", "AnalystEventFeed", "EventRepository", "AttentionItem", "AttentionRepository", "AnalystAttentionService"]
