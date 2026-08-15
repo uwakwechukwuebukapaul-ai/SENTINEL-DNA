@@ -827,6 +827,12 @@ def executive_learning_dashboard():
     return render_template("executive_learning.html")
 
 
+@app.get("/workspace/maturity")
+@permission_required("investigations:read")
+def maturity_dashboard():
+    return render_template("maturity.html")
+
+
 
 @app.get("/workspace/dashboard/data")
 def workspace_dashboard_data():

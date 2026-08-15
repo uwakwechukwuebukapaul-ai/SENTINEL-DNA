@@ -90,3 +90,9 @@ Historical benchmarking compares only against the same tenant's supplied histori
 `GET /api/command-center/quality/maturity/report` provides deterministic historical reporting over the canonical maturity score. It exposes score delta, trajectory, maturity transitions, dimension summaries, strongest and weakest dimensions, evidence strength, confidence, temporal span, uncertainty, provenance, and advisory recommendations. Historical observations are consumed only when explicitly available; no persistence or fabricated time series is introduced.
 
 Trajectory classifications include improving, degrading, stable, sustained improvement/degradation, and insufficient data. Benchmarking is limited to the same tenant's historical baseline; peer benchmarking remains unavailable. Sentinel DNA maturity scores are internal evidence-based indicators, not industry certifications, compliance ratings, or external security rankings.
+
+## Executive maturity dashboard
+
+The protected `/workspace/maturity` page consumes `/api/command-center/quality/maturity/report` as a presentation-only source. It renders current score and level, trajectory, historical metadata, dimensions, strengths, weaknesses, signals, recommendations, evidence strength, confidence, provenance, and uncertainty with safe DOM APIs. JavaScript does not calculate maturity or reorder intelligence.
+
+Insufficient history and API failures are shown explicitly. The dashboard is tenant-scoped, read-only, advisory-only, and makes no peer or external benchmark claims. Historical visualizations display only backend-provided observations; no sample points are fabricated.
