@@ -108,3 +108,9 @@ Insufficient history and API failures are shown explicitly. The dashboard is ten
 ## Improvement Outcome Intelligence
 
 `GET /api/command-center/quality/maturity/improvement/outcomes` evaluates observed outcomes for improvement programs. It distinguishes measurable improvement, regression, stable, stalled, mixed, not-yet-measurable, and indeterminate outcomes while preserving bounded progress, effectiveness, confidence, evidence strength, uncertainty, provenance, and references. The executive progress indicator is separate from the canonical maturity score and does not establish causation; observed improvement is only associated with a program. No persistence, task execution, remediation, or peer benchmarking is introduced.
+
+## Executive Progress Tracking
+
+The progress and progress-history endpoints provide the canonical temporal layer over Phase 35.25 outcomes. Immutable observations, transitions, tracking records, and history are tenant-scoped and use deterministic stable IDs. States are explicit: new, insufficient_data, not_yet_measurable, improving, sustained_improvement, stable, stalled, degrading, regression, persistent_regression, recovery, mixed, and indeterminate. Sustained improvement requires three period-bearing positive observations; missing periods remain uncertainty. Consecutive negative observations support persistent regression, and later positive movement supports recovery only when evidence is available.
+
+Maturity answers how mature the SOC is; outcome progress answers how much measurable improvement is occurring; temporal progress answers how that improvement changes over time. Provenance, references, confidence, evidence strength, uncertainty, tenant isolation, and advisory-only boundaries are preserved. This layer is read-only, deterministic, non-persistent, non-causal, and performs no remediation, task execution, peer benchmarking, or background work.

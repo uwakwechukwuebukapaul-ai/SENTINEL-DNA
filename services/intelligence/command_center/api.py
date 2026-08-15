@@ -22,6 +22,7 @@ from .maturity_reporting_service import MaturityReportingService
 from .maturity_improvement_service import MaturityImprovementService
 from .improvement_program_service import ImprovementProgramAnalyticsService
 from .improvement_outcome_service import ImprovementOutcomeIntelligenceService
+from .progress_tracking_service import ExecutiveProgressTrackingService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -47,6 +48,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     maturity_improvement_service=MaturityImprovementService(maturity_service, maturity_reporting_service)
     improvement_program_service=ImprovementProgramAnalyticsService(maturity_service, maturity_reporting_service, maturity_improvement_service)
     improvement_outcome_service=ImprovementOutcomeIntelligenceService(improvement_program_service, maturity_service, maturity_reporting_service)
+    progress_tracking_service=ExecutiveProgressTrackingService(improvement_outcome_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -173,6 +175,15 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/maturity/improvement/outcomes")
     def quality_improvement_outcomes():
         try: return jsonify(improvement_outcome_service.derive(tenant()))
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/maturity/improvement/progress")
+    def quality_improvement_progress():
+        try: return jsonify(progress_tracking_service.derive(tenant()))
+        except PermissionError as exc: return jsonify({"error":str(exc)}), 400
+    @bp.get("/api/command-center/quality/maturity/improvement/progress/history")
+    def quality_improvement_progress_history():
+        try:
+            tenant_id=tenant(); return jsonify({"tenant_id":tenant_id,"history":progress_tracking_service.history(tenant_id),"advisory_only":True})
         except PermissionError as exc: return jsonify({"error":str(exc)}), 400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
