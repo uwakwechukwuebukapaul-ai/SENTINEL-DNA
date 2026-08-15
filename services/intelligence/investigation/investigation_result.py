@@ -161,6 +161,8 @@ class InvestigationResult:
 
     copilot_context: Any = None
 
+    knowledge_memory_context: Any = None
+
     intelligence: Any = None
 
     ai_reasoning: Optional[str] = None
@@ -447,6 +449,8 @@ class InvestigationResult:
             "security_analytics_context": self.security_analytics_context,
 
             "copilot_context": self.copilot_context,
+
+            "knowledge_memory_context": self.knowledge_memory_context,
 
             "intelligence":
                 self.intelligence,
