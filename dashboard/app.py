@@ -933,6 +933,19 @@ def portfolio_forecast_early_warning_dashboard():
 def portfolio_forecast_governance_history_dashboard():
     return render_template("executive_portfolio_forecast_governance_history.html")
 
+@app.get("/workspace/executive-strategy/portfolio-forecast/intervention-intelligence")
+@permission_required("investigations:read")
+def portfolio_forecast_intervention_intelligence_dashboard(): return render_template("executive_portfolio_forecast_intervention_intelligence.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/warning-escalation")
+@permission_required("investigations:read")
+def portfolio_forecast_warning_escalation_dashboard(): return render_template("executive_portfolio_forecast_warning_escalation.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/strategic-risk-coordination")
+@permission_required("investigations:read")
+def portfolio_forecast_strategic_risk_coordination_dashboard(): return render_template("executive_portfolio_forecast_strategic_risk_coordination.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/intervention-priority")
+@permission_required("investigations:read")
+def portfolio_forecast_intervention_priority_dashboard(): return render_template("executive_portfolio_forecast_intervention_priority.html")
+
 
 
 @app.get("/workspace/dashboard/data")

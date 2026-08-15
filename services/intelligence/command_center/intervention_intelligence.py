@@ -1,0 +1,6 @@
+"""Immutable intervention consideration context; never an executed action."""
+from dataclasses import asdict,dataclass
+@dataclass(frozen=True)
+class InterventionIntelligence:
+    tenant_id:str; intervention_id:str; intervention_posture:str="insufficient_history"; intervention_priority:str="P4_INFORMATIONAL"; consideration_level:str="informational"; governance_posture:str="insufficient_history"; early_warning_level:str="insufficient_history"; decision_readiness:str="insufficient_history"; policy_readiness:str="insufficient_history"; reliability_status:str|None=None; calibration_status:str|None=None; drift_status:str|None=None; risk_monitoring_status:str|None=None; active_warnings:tuple=(); persistent_warnings:tuple=(); escalating_warnings:tuple=(); governance_blockers:tuple=(); readiness_blockers:tuple=(); strategic_risks:tuple=(); strategic_opportunities:tuple=(); organizational_dimensions:tuple=(); evidence_strength:str|None=None; confidence:str|float|None=None; uncertainty:tuple=(); temporal_coverage:str="unavailable"; history_status:str="insufficient_history"; decision_history_status:str="insufficient_decision_history"; intervention_rationale:tuple=(); intervention_considerations:tuple=(); evidence_gaps:tuple=(); contributing_references:tuple=(); provenance:tuple=(); advisory_only:bool=True
+    def to_dict(self): return asdict(self)
