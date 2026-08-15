@@ -104,3 +104,7 @@ Insufficient history and API failures are shown explicitly. The dashboard is ten
 ## Improvement Program Analytics
 
 `GET /api/command-center/quality/maturity/improvement/program` measures available evidence for advisory improvement programs derived from canonical maturity, reporting, and improvement planning services. Statuses include improving, completed, stalled, degrading, stable, mixed, not-yet-measurable, and insufficient data. Missing baselines, targets, or historical observations are never fabricated; outcome language describes association rather than causation. Programs remain tenant-scoped, deterministic, read-only, advisory-only, and free of peer benchmarking or task execution.
+
+## Improvement Outcome Intelligence
+
+`GET /api/command-center/quality/maturity/improvement/outcomes` evaluates observed outcomes for improvement programs. It distinguishes measurable improvement, regression, stable, stalled, mixed, not-yet-measurable, and indeterminate outcomes while preserving bounded progress, effectiveness, confidence, evidence strength, uncertainty, provenance, and references. The executive progress indicator is separate from the canonical maturity score and does not establish causation; observed improvement is only associated with a program. No persistence, task execution, remediation, or peer benchmarking is introduced.
