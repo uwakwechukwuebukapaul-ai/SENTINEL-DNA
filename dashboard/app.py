@@ -878,6 +878,11 @@ def strategic_portfolio_dashboard():
 def portfolio_command_center_dashboard():
     return render_template("executive_portfolio_command_center.html")
 
+@app.get("/workspace/executive-strategy/portfolio-forecast")
+@permission_required("investigations:read")
+def portfolio_forecast_dashboard():
+    return render_template("executive_portfolio_forecast.html")
+
 
 
 @app.get("/workspace/dashboard/data")
