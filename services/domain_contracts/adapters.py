@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .models import Feedback, FeedbackOutcome, Outcome, OutcomeStatus, QualityAssessment, QualityScope
+from .models import Feedback, FeedbackOutcome, LearningSignal, Outcome, OutcomeStatus, QualityAssessment, QualityScope
 
 
 def outcome_from_record(record: Any) -> Outcome:
@@ -59,4 +59,25 @@ def quality_from_record(record: Any, scope: QualityScope = QualityScope.OUTCOME)
         score=float(score),
         human_review_required=bool(getattr(record, "human_review_required", True)),
         provenance=getattr(record, "provenance", {}) or {},
+    )
+
+
+def learning_signal_from_outcome(record: Any) -> LearningSignal:
+    """Create an advisory signal from an outcome without writing to its repository."""
+    outcome = outcome_from_record(record)
+    confidence = getattr(record, "confidence", None)
+    return LearningSignal(
+        signal_id=f"outcome:{outcome.outcome_id}",
+        tenant_id=outcome.tenant_id,
+        signal_type="investigation_outcome",
+        source_id=outcome.outcome_id,
+        value={
+            "status": outcome.status.value,
+            "verification_status": outcome.verification_status.value,
+            "case_id": outcome.case_id,
+            "investigation_id": outcome.investigation_id,
+            "evidence_references": list(outcome.evidence_references),
+        },
+        confidence=float(confidence) if confidence is not None else None,
+        provenance={**outcome.provenance, "adapter": "outcome_from_record"},
     )

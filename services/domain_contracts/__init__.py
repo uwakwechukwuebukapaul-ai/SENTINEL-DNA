@@ -9,7 +9,7 @@ from .models import (
     Outcome,
     OutcomeStatus,
 )
-from .adapters import feedback_from_store_record, outcome_from_record, quality_from_record
+from .adapters import feedback_from_store_record, learning_signal_from_outcome, outcome_from_record, quality_from_record
 
 __all__ = [
     "Feedback",
@@ -20,6 +20,7 @@ __all__ = [
     "Outcome",
     "OutcomeStatus",
     "feedback_from_store_record",
+    "learning_signal_from_outcome",
     "outcome_from_record",
     "quality_from_record",
 ]
