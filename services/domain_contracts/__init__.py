@@ -10,6 +10,7 @@ from .models import (
     OutcomeStatus,
 )
 from .adapters import feedback_from_store_record, learning_signal_from_outcome, outcome_from_record, quality_from_record
+from .persistence import OutcomePersistenceBoundary
 
 __all__ = [
     "Feedback",
@@ -23,4 +24,5 @@ __all__ = [
     "learning_signal_from_outcome",
     "outcome_from_record",
     "quality_from_record",
+    "OutcomePersistenceBoundary",
 ]
