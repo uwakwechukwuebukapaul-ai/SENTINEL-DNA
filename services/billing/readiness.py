@@ -1,6 +1,12 @@
 """Fail-closed readiness for governed billing route registration."""
 from dataclasses import dataclass
 
+def evaluate_crypto_sandbox(*, validator=None):
+    """Explicit readiness operation; never called by route or container setup."""
+    if validator is None:
+        return {"state": "BLOCKED", "reason": "CRYPTO_CONFIGURATION_INCOMPLETE"}
+    return validator.validate().as_dict()
+
 @dataclass(frozen=True)
 class PaystackOperationalReadiness:
     state: str

@@ -30,6 +30,12 @@ class CryptoPaymentProvider:
     def validate_provider(self):
         if self.transport is None: raise PaymentProviderError("crypto_transport_unavailable")
         return self._request("get", "/health") is not None
+    def validate_sandbox(self):
+        """Explicitly invoked, non-destructive capability validation."""
+        data = self._request("get", "/capabilities")
+        if not isinstance(data.get("provider"), str) or not isinstance(data.get("assets"), list) or not isinstance(data.get("networks"), list):
+            raise PaymentProviderError("crypto_provider_response_invalid")
+        return {"provider": data["provider"], "assets": tuple(data["assets"]), "networks": tuple(data["networks"])}
     def _request(self, method, path, payload=None):
         if self.transport is None: raise PaymentProviderError("crypto_transport_unavailable")
         response = getattr(self.transport, method)(self.base_url + path, headers={"Authorization": "Bearer " + self.secret, "Content-Type": "application/json"}, json=payload, timeout=self.timeout_seconds, allow_redirects=False)
