@@ -1,0 +1,2 @@
+class ExplanationEngine:
+    def explain(self,context): return {'why_alert_matters':'Evidence indicates review is warranted based on available context.','why_risk_exists':'Observed signals suggest the recorded risk assessment merits analyst validation.','why_detection_fired':'Based on available context, the detection signal is presented for human review.','why_hunt_relevant':'Observed signals suggest this hunt context may support investigation review.','advisory_only':True}

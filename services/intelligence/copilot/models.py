@@ -4,8 +4,21 @@ Sentinel DNA AI SOC Copilot Models.
 Stable contracts for analyst-facing AI responses.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Any
+import hashlib
+
+def stable_copilot_id(tenant_id: str, case_id: str, kind: str) -> str:
+    return f"{kind}-{hashlib.sha256(f'{tenant_id}:{case_id}:{kind}'.encode()).hexdigest()[:20]}"
+
+@dataclass(frozen=True)
+class CopilotContext:
+    tenant_id: str; case_id: str; alerts: tuple=(); cases: tuple=(); evidence: tuple=(); iocs: tuple=(); detection_intelligence: tuple=(); hunting_intelligence: tuple=(); investigation_context: tuple=(); command_center_insights: tuple=(); provenance: tuple=(); advisory_only: bool=True
+    def to_dict(self): return asdict(self)
+@dataclass(frozen=True)
+class CopilotReasoning:
+    tenant_id: str; reasoning_id: str; case_id: str; explanation: str; supporting_evidence: tuple=(); confidence: str="insufficient_data"; uncertainty: tuple=(); provenance: tuple=(); advisory_only: bool=True
+    def to_dict(self): return asdict(self)
 
 
 @dataclass

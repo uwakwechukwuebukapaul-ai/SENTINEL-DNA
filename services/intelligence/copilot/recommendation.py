@@ -1,0 +1,2 @@
+class RecommendationEngine:
+    def recommend(self,context): return {'investigation_next_steps':('Review supporting evidence with the case owner.',),'evidence_to_collect':('Validate relevant telemetry and preserve provenance.',),'validation_actions':('Compare observed signals with the investigation context.',),'analyst_questions':('What evidence supports the current assessment?',),'advisory_only':True}
