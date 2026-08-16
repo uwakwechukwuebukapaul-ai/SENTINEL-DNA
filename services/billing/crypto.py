@@ -3,7 +3,11 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 import uuid
+from typing import Protocol
 from .exceptions import BillingConfigurationError, PaymentProviderError
+
+class CryptoSecretProvider(Protocol):
+    def get(self, reference: str) -> str: ...
 
 @dataclass(frozen=True)
 class CryptoPaymentRequest:
@@ -21,6 +25,11 @@ class CryptoPaymentProvider:
         self.provider, self.base_url, self.assets, self.networks = provider, base_url.rstrip("/"), frozenset(assets), frozenset(networks); self.timeout_seconds = timeout_seconds; self.transport = transport
         self.secret = secret_provider.get(secret_reference) if secret_reference else ""
         if not self.secret: raise BillingConfigurationError("crypto_secret_unavailable")
+    def validate_configuration(self):
+        return True
+    def validate_provider(self):
+        if self.transport is None: raise PaymentProviderError("crypto_transport_unavailable")
+        return self._request("get", "/health") is not None
     def _request(self, method, path, payload=None):
         if self.transport is None: raise PaymentProviderError("crypto_transport_unavailable")
         response = getattr(self.transport, method)(self.base_url + path, headers={"Authorization": "Bearer " + self.secret, "Content-Type": "application/json"}, json=payload, timeout=self.timeout_seconds, allow_redirects=False)
@@ -37,8 +46,13 @@ class CryptoPaymentProvider:
         data = self._request("post", "/payments", {"reference": reference, "asset": request.asset, "network": request.network, "amount": format(request.amount, "f"), "expiration_seconds": request.expiration_seconds})
         if not all(isinstance(data.get(key), str) and data[key] for key in ("provider_reference", "payment_address", "expires_at")): raise PaymentProviderError("crypto_provider_response_invalid")
         return CryptoPayment(self.provider, request.asset, request.network, request.amount, reference, data["provider_reference"], data["payment_address"], data["expires_at"], "PENDING")
-    def verify_payment(self, *, payment: CryptoPayment, provider_reference, amount, asset, network, recipient):
+    create_payment_intent = create_payment
+    def get_payment_status(self, provider_reference):
+        return self._request("get", "/payments/" + str(provider_reference))
+    def verify_payment(self, *, payment: CryptoPayment, provider_reference, amount, asset, network, recipient, confirmations=0, required_confirmations=0, expired=False):
         if provider_reference != payment.provider_reference or asset != payment.asset or network != payment.network or recipient != payment.payment_address: raise PaymentProviderError("crypto_payment_verification_failed")
+        if expired: raise PaymentProviderError("crypto_payment_expired")
+        if confirmations < required_confirmations: raise PaymentProviderError("crypto_confirmations_insufficient")
         try: received = Decimal(str(amount))
         except (InvalidOperation, ValueError) as exc: raise PaymentProviderError("crypto_amount_invalid") from exc
         if received != payment.amount: raise PaymentProviderError("crypto_amount_mismatch")

@@ -28,3 +28,8 @@ def test_payment_creation_is_decimal_and_server_referenced():
 def test_provider_event_normalization_rejects_untrusted_shape():
     with pytest.raises(PaymentProviderError): provider().normalize_event({"status":"confirmed"})
     assert provider().normalize_event({"event_id":"e-1","status":"confirmed"})["event_type"] == "CRYPTO_PAYMENT_CONFIRMED"
+
+def test_confirmation_and_expiration_are_verified_server_side():
+    payment = provider().create_payment(CryptoPaymentRequest("PRO", "USDC", "Ethereum", Decimal("1"), 6, 1800))
+    with pytest.raises(PaymentProviderError): provider().verify_payment(payment=payment, provider_reference="p-1", amount="1", asset="USDC", network="Ethereum", recipient="treasury", confirmations=0, required_confirmations=2)
+    with pytest.raises(PaymentProviderError): provider().verify_payment(payment=payment, provider_reference="p-1", amount="1", asset="USDC", network="Ethereum", recipient="treasury", confirmations=2, expired=True)

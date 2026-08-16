@@ -59,7 +59,7 @@ class BillingRouteReadinessEvaluator:
         if not payment_provider: reasons.append("payment_provider_unavailable")
         if not secret_reference: reasons.append("billing_secret_reference_unavailable")
         if crypto_configuration is not None and crypto_configuration.reason_codes() != ("CRYPTO_DISABLED",):
-            if crypto_configuration.reason_codes() != ("CRYPTO_READY",): reasons.append(crypto_configuration.reason_codes()[0].lower())
+            if crypto_configuration.reason_codes() != ("CRYPTO_READY",): reasons.append(crypto_configuration.reason_codes()[0])
             if crypto_provider is None: reasons.append("crypto_provider_unavailable")
         checkout=not reasons
         status=not any(x in reasons for x in ("billing_application_unavailable","billing_service_unavailable","billing_repository_unavailable","canonical_request_context_unavailable","canonical_authorization_unavailable"))

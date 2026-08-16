@@ -38,7 +38,8 @@ class CryptoConfiguration:
     @classmethod
     def from_environment(cls, environ=None):
         e = environ or os.environ
-        return cls(e.get("CRYPTO_ENABLED", "false").lower() == "true", e.get("CRYPTO_PROVIDER", ""), tuple(x.strip().upper() for x in e.get("CRYPTO_ASSETS", "").split(",") if x.strip()), tuple(x.strip() for x in e.get("CRYPTO_NETWORKS", "").split(",") if x.strip()), e.get("CRYPTO_API_BASE_URL", ""), e.get("CRYPTO_API_KEY_REFERENCE", ""), e.get("CRYPTO_WEBHOOK_SECRET_REFERENCE", ""), float(e.get("CRYPTO_TIMEOUT_SECONDS", "10")), int(e.get("CRYPTO_PAYMENT_EXPIRATION_SECONDS", "1800")))
+        assets = e.get("CRYPTO_ASSETS", e.get("CRYPTO_ASSET", ""))
+        return cls(e.get("CRYPTO_ENABLED", "false").lower() == "true", e.get("CRYPTO_PROVIDER", ""), tuple(x.strip().upper() for x in assets.split(",") if x.strip()), tuple(x.strip() for x in e.get("CRYPTO_NETWORKS", e.get("CRYPTO_NETWORK", "")).split(",") if x.strip()), e.get("CRYPTO_API_BASE_URL", ""), e.get("CRYPTO_API_KEY_REFERENCE", ""), e.get("CRYPTO_WEBHOOK_SECRET_REFERENCE", ""), float(e.get("CRYPTO_TIMEOUT_SECONDS", "10")), int(e.get("CRYPTO_PAYMENT_EXPIRATION_SECONDS", "1800")))
     def reason_codes(self):
         if not self.enabled: return ("CRYPTO_DISABLED",)
         parsed = urlparse(self.api_base_url)
