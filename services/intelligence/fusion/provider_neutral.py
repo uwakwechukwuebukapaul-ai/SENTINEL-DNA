@@ -97,7 +97,8 @@ class ProviderNeutralFusionEngine:
         reps = {str(x.reputation).lower() for x in fresh if str(x.reputation).lower() in REPUTATIONS}
         non_unknown = reps - {"unknown"}
         if not fresh or not non_unknown:
-            status = reputation = "NO_INTELLIGENCE" if not fresh else "unknown"
+            status = "NO_INTELLIGENCE" if not fresh else "UNKNOWN"
+            reputation = "unknown"
         elif len(non_unknown) > 1:
             status = "CONFLICTED"; reputation = "suspicious"
         else:

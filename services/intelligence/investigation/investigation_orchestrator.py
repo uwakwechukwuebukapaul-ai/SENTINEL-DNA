@@ -37,7 +37,11 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from services.intelligence.correlation import CorrelationEngine
-from services.intelligence.fusion import FusionEngine
+from services.intelligence.fusion import (
+    FusionEngine,
+    ProviderNeutralFusionEngine,
+)
+from app.intelligence.gateway import IOC, IntelligenceObservation
 
 from .investigation_result import InvestigationResult
 
@@ -119,6 +123,8 @@ class InvestigationOrchestrator:
         case_id: Optional[str] = None,
         investigation_id: Optional[str] = None,
         context: Any = None,
+        ioc: IOC | None = None,
+        intelligence_observations: Optional[list[IntelligenceObservation]] = None,
     ) -> InvestigationResult:
         """
         Execute a complete investigation.
@@ -161,6 +167,8 @@ class InvestigationOrchestrator:
                 artifacts=normalized_artifacts,
                 correlation=correlation,
                 case_id=case_id,
+                ioc=ioc,
+                intelligence_observations=intelligence_observations,
             )
 
             reasoning = self._reason(
@@ -301,6 +309,9 @@ class InvestigationOrchestrator:
         artifacts: list[dict[str, Any]],
         correlation: Any,
         case_id: Optional[str],
+        ioc: IOC | None = None,
+        intelligence_observations: Optional[list[IntelligenceObservation]] = None,
+        context: Any = None,
     ) -> Any:
         """
         Execute threat fusion.
@@ -311,6 +322,13 @@ class InvestigationOrchestrator:
 
         and older two-payload implementations.
         """
+
+        if ioc is not None and intelligence_observations is not None:
+            return ProviderNeutralFusionEngine().fuse(
+                ioc,
+                intelligence_observations,
+                context=context,
+            )
 
         correlation_data = self._as_dict(
             correlation
@@ -372,7 +390,9 @@ class InvestigationOrchestrator:
                         fusion,
                     )
                 ),
-                "metadata": {},
+                "metadata": {
+                    "intelligence_reasoning_input": self._intelligence_reasoning_input(fusion),
+                },
             }
 
         engine = self.reasoning_engine
@@ -414,7 +434,9 @@ class InvestigationOrchestrator:
                 "reasoning_status": "completed",
                 "reasoning_available": True,
                 "output": output,
-                "metadata": {},
+                "metadata": {
+                    "intelligence_reasoning_input": self._intelligence_reasoning_input(fusion),
+                },
             }
 
         except TypeError:
@@ -1211,6 +1233,35 @@ class InvestigationOrchestrator:
                 "processed."
             )
         )
+
+    @staticmethod
+    def _intelligence_reasoning_input(fusion: Any) -> dict[str, Any]:
+        """Expose intelligence as evidence categories, never as decision authority."""
+        data = InvestigationOrchestrator._as_dict(fusion)
+        status = str(data.get("status", "NO_INTELLIGENCE")).upper()
+        if status in {"NO_INTELLIGENCE", "UNKNOWN"}:
+            category = "NO_INTELLIGENCE"
+        elif status == "CONFLICTED":
+            category = "PROVIDER_DISAGREEMENT"
+        else:
+            category = "FUSED_ASSESSMENT"
+        return {
+            "category": category,
+            "status": status,
+            "reputation": data.get("aggregate_reputation", data.get("risk", "unknown")),
+            "confidence": data.get("aggregate_confidence", data.get("confidence")),
+            "freshness": {
+                "stale_providers": data.get("stale_providers", []),
+                "supporting_providers": data.get("supporting_providers", []),
+                "conflicting_providers": data.get("conflicting_providers", []),
+            },
+            "stale_providers": data.get("stale_providers", []),
+            "supporting_providers": data.get("supporting_providers", []),
+            "conflicting_providers": data.get("conflicting_providers", []),
+            "provenance": data.get("provenance", []),
+            "explanation": data.get("explanation", "External intelligence was unavailable or inconclusive."),
+            "policy_version": data.get("policy_version"),
+        }
 
     # =========================================================
     # IDENTIFIERS / TIME
