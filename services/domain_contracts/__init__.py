@@ -14,6 +14,7 @@ from .persistence import OutcomePersistenceBoundary
 from .investigation_feedback import InvestigationFeedback
 from .investigation_feedback_adapter import InvestigationFeedbackAdapter
 from .feedback_boundary import FeedbackReadBoundary
+from .decision_feedback_boundary import DecisionFeedbackWriteBoundary
 
 __all__ = [
     "Feedback",
@@ -31,4 +32,5 @@ __all__ = [
     "InvestigationFeedback",
     "InvestigationFeedbackAdapter",
     "FeedbackReadBoundary",
+    "DecisionFeedbackWriteBoundary",
 ]
