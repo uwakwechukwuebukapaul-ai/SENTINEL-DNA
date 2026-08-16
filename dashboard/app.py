@@ -1065,6 +1065,21 @@ def intelligence_adoption_dashboard(): return render_template("executive_portfol
 @app.get("/workspace/executive-strategy/executive-governance-summary")
 @permission_required("investigations:read")
 def executive_governance_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="executive-governance-summary", title="Executive governance summary", payload_key="summary")
+@app.get("/workspace/executive-strategy/intelligence-governance-platform")
+@permission_required("investigations:read")
+def intelligence_governance_platform_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-governance-platform", title="Executive intelligence governance platform", payload_key="platform")
+@app.get("/workspace/executive-strategy/decision-lifecycle")
+@permission_required("investigations:read")
+def decision_lifecycle_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="decision-lifecycle", title="Strategic decision lifecycle", payload_key="lifecycle")
+@app.get("/workspace/executive-strategy/organizational-intelligence-evolution")
+@permission_required("investigations:read")
+def organizational_intelligence_evolution_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="organizational-intelligence-evolution", title="Organizational intelligence evolution", payload_key="evolution")
+@app.get("/workspace/executive-strategy/intelligence-feedback-loop")
+@permission_required("investigations:read")
+def intelligence_feedback_loop_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-feedback-loop", title="Intelligence feedback loop", payload_key="feedback")
+@app.get("/workspace/executive-strategy/intelligence-evolution-summary")
+@permission_required("investigations:read")
+def intelligence_evolution_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-evolution-summary", title="Executive intelligence evolution summary", payload_key="summary")
 
 
 

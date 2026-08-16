@@ -86,6 +86,11 @@ from .strategic_portfolio_governance_service import StrategicPortfolioGovernance
 from .organizational_ai_maturity_service import OrganizationalAIMaturityService
 from .intelligence_adoption_analytics_service import IntelligenceAdoptionAnalyticsService
 from .executive_governance_summary_service import ExecutiveGovernanceSummaryService
+from .executive_intelligence_governance_platform_service import ExecutiveIntelligenceGovernancePlatformService
+from .strategic_decision_lifecycle_service import StrategicDecisionLifecycleService
+from .organizational_intelligence_evolution_service import OrganizationalIntelligenceEvolutionService
+from .intelligence_feedback_loop_service import IntelligenceFeedbackLoopService
+from .executive_intelligence_evolution_summary_service import ExecutiveIntelligenceEvolutionSummaryService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -175,6 +180,11 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     organizational_ai_maturity_service=OrganizationalAIMaturityService(improvement_maturity_analytics_service,executive_intelligence_operating_model_service,strategic_portfolio_governance_service, None)
     intelligence_adoption_analytics_service=IntelligenceAdoptionAnalyticsService(strategic_intelligence_health_service,organizational_decision_intelligence_service,organizational_ai_maturity_service,executive_intelligence_summary_service)
     executive_governance_summary_service=ExecutiveGovernanceSummaryService(executive_intelligence_operating_model_service,strategic_portfolio_governance_service,organizational_ai_maturity_service,intelligence_adoption_analytics_service)
+    executive_intelligence_governance_platform_service=ExecutiveIntelligenceGovernancePlatformService(executive_intelligence_operating_model_service,executive_governance_summary_service,organizational_ai_maturity_service)
+    strategic_decision_lifecycle_service=StrategicDecisionLifecycleService(organizational_decision_intelligence_service,strategic_intelligence_health_service,executive_governance_summary_service)
+    organizational_intelligence_evolution_service=OrganizationalIntelligenceEvolutionService(organizational_ai_maturity_service,strategic_evolution_service,improvement_maturity_analytics_service,strategic_intelligence_health_service)
+    intelligence_feedback_loop_service=IntelligenceFeedbackLoopService(intelligence_adoption_analytics_service,executive_intelligence_summary_service,continuous_improvement_service,organizational_ai_maturity_service)
+    executive_intelligence_evolution_summary_service=ExecutiveIntelligenceEvolutionSummaryService(executive_intelligence_governance_platform_service,strategic_decision_lifecycle_service,organizational_intelligence_evolution_service,intelligence_feedback_loop_service)
     improvement_command_center_service=ImprovementCommandCenterService(strategic_improvement_portfolio_analytics_service,governance_learning_service,governance_learning_trends_analytics_service,improvement_governance_service,outcome_learning_service,continuous_improvement_service,improvement_trends_service,strategic_evolution_service,improvement_maturity_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
@@ -803,6 +813,26 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/executive-governance-summary")
     def quality_executive_governance_summary():
         try: return _phase3548(executive_governance_summary_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/intelligence-governance-platform")
+    def quality_intelligence_governance_platform():
+        try: return _phase3548(executive_intelligence_governance_platform_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/decision-lifecycle")
+    def quality_decision_lifecycle():
+        try: return _phase3548(strategic_decision_lifecycle_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/organizational-intelligence-evolution")
+    def quality_organizational_intelligence_evolution():
+        try: return _phase3548(organizational_intelligence_evolution_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/intelligence-feedback-loop")
+    def quality_intelligence_feedback_loop():
+        try: return _phase3548(intelligence_feedback_loop_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/intelligence-evolution-summary")
+    def quality_intelligence_evolution_summary():
+        try: return _phase3548(executive_intelligence_evolution_summary_service)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
