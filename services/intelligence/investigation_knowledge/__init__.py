@@ -1,0 +1,1 @@
+from .knowledge_service import InvestigationKnowledgeService

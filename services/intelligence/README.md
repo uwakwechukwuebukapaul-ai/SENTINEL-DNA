@@ -7,3 +7,7 @@ The `investigation_decision` package is a tenant-scoped, read-only advisory laye
 It does not load evidence independently, replace `InvestigationContext`, execute decisions, modify investigations, or trigger response actions. The AI SOC Copilot can present its advisory output, while lifecycle intelligence supplies complementary progress visibility; neither relationship changes ownership of investigation orchestration.
 
 Outputs distinguish available evidence from derived interpretation, retain provenance, and use explicit insufficient-evidence states. No causal or certainty claims are made.
+
+## Investigation Learning, Knowledge, and Workflow
+
+Phase 37.3 composes lifecycle, decision, Copilot, and existing evidence provenance into read-only institutional learning. Learning identifies observed patterns, knowledge intelligence interprets associated trends, and workflow intelligence describes stage and complexity signals. These layers do not load evidence independently, evaluate analysts, rank users, measure productivity, or execute investigations.

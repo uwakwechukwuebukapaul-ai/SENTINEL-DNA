@@ -1,0 +1,1 @@
+(()=>{const s=document.getElementById("status"),c=document.getElementById("content");fetch("/api/intelligence/investigation-learning").then(r=>r.json()).then(d=>{s.textContent="Advisory learning intelligence loaded";c.textContent=JSON.stringify(d,null,2)}).catch(()=>{s.textContent="Unavailable; human review required."})})();

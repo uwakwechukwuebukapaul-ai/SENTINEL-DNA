@@ -218,3 +218,6 @@ Phase 35.57 composes the Phase 35.56 operating-system, governance-foundation, de
 ## Phase 36 — Security Data Fabric Foundation
 
 Phase 36 adds a tenant-scoped Data Fabric compatibility layer over the existing intelligence fabric, data lake, Evidence Engine, and InvestigationContext systems. Source registry, ingestion normalization, data quality, and integration adapters are deterministic, read-only, advisory-only, provenance preserving, and explicit about insufficient data. No parallel event pipeline, duplicate storage model, autonomous action, or replacement of existing foundations is introduced. Protected dashboards are `/workspace/data-fabric`, `/workspace/data-fabric/sources`, and `/workspace/data-fabric/quality`.
+## Investigation learning integration
+
+Investigation learning, knowledge evolution, and workflow intelligence are advisory consumers of existing investigation and command-center signals. They preserve provenance, tenant isolation, uncertainty, and insufficient-history states; they do not replace orchestration or make causal claims.
