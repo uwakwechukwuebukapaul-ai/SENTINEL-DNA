@@ -26,8 +26,8 @@ class CryptoPaymentIntent:
     payment_intent_id: str; tenant_id: str; transaction_reference: str; quote_id: str; plan_id: str; asset: str; network: str; provider: str; provider_reference: str|None; destination: str; status: str; idempotency_key: str; payment_expires_at: datetime
 
 class BillingApplicationService:
-    def __init__(self, billing_service, repository, webhook_processor=None, entitlement_service=None, crypto_provider=None, quote_service=None):
-        self.billing=billing_service; self.repository=repository; self.webhooks=webhook_processor; self.entitlements=entitlement_service or billing_service.entitlements; self.crypto_provider=crypto_provider; self.quote_service=quote_service
+    def __init__(self, billing_service, repository, webhook_processor=None, entitlement_service=None, crypto_provider=None, quote_service=None, crypto_verifier=None, crypto_reconciler=None):
+        self.billing=billing_service; self.repository=repository; self.webhooks=webhook_processor; self.entitlements=entitlement_service or billing_service.entitlements; self.crypto_provider=crypto_provider; self.quote_service=quote_service; self.crypto_verifier=crypto_verifier; self.crypto_reconciler=crypto_reconciler
     @staticmethod
     def _tenant(context):
         tenant_id=getattr(context,"tenant_id",None)
@@ -59,6 +59,12 @@ class BillingApplicationService:
         if not callable(canonical_tenant_id) and (not isinstance(canonical_tenant_id,str) or not canonical_tenant_id): raise BillingError("canonical_tenant_context_required")
         return self.webhooks.process(signature,body,canonical_tenant_id)
     def get_entitlements(self, context): return self.get_billing_status(context).entitlement_capabilities
+    def verify_crypto_payment_intent(self, context, payment_intent_id):
+        if not self.crypto_verifier: raise BillingError("crypto_verification_unavailable")
+        return self.crypto_verifier.verify(context, payment_intent_id)
+    def reconcile_crypto_payment_intents(self, context, *, payment_intent_ids=None, limit=100):
+        if not self.crypto_reconciler: raise BillingError("crypto_reconciliation_unavailable")
+        return self.crypto_reconciler.reconcile(context, payment_intent_ids=payment_intent_ids, limit=limit)
     def create_crypto_payment_intent(self, context, *, plan_id, idempotency_key, asset, network, fiat_amount_minor, fiat_currency, crypto_decimals, expiration_seconds):
         tenant_id=self._tenant(context)
         if not self.crypto_provider or not self.quote_service or not idempotency_key: raise BillingError("crypto_payment_unavailable")
@@ -69,4 +75,4 @@ class BillingApplicationService:
             quote=self.quote_service.create(tenant_id=tenant_id,plan_id=plan_id,fiat_amount_minor=fiat_amount_minor,fiat_currency=fiat_currency,asset=asset,network=network,crypto_decimals=crypto_decimals,expiration_seconds=expiration_seconds)
             payment=self.crypto_provider.create_payment_intent(__import__('services.billing.crypto',fromlist=['CryptoPaymentRequest']).CryptoPaymentRequest(plan_id,asset,network,quote.crypto_amount,crypto_decimals,expiration_seconds))
             intent=CryptoPaymentIntent(str(uuid.uuid4()),tenant_id,payment.reference,quote.quote_id,plan_id,asset,network,payment.provider,payment.provider_reference,payment.payment_address,"AWAITING_PAYMENT",idempotency_key,datetime.now(timezone.utc)+timedelta(seconds=expiration_seconds))
-            self.repository.save_crypto_quote(connection,quote); self.repository.save_crypto_intent(connection,intent); return intent
+            self.repository.save_crypto_quote(connection,quote); self.repository.create_transaction(connection,tenant_id,payment.reference,payment.provider,plan_id,quote.fiat_amount_minor,quote.fiat_currency); self.repository.save_crypto_intent(connection,intent); return intent
