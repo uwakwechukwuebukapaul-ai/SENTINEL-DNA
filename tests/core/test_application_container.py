@@ -5,6 +5,7 @@ Sentinel DNA Application Container Tests.
 from services.core.application_container import (
     build_container,
 )
+from services.intelligence.investigation_optimizer import FeedbackRecommendationService
 
 
 
@@ -56,3 +57,14 @@ def test_dashboard_service_registered():
 
 
     assert service is not None
+
+
+def test_container_exposes_tenant_scoped_feedback_recommendation_factory():
+    container = build_container()
+    factory = container.get("feedback_recommendation_service_factory")
+
+    service = factory("tenant-a")
+
+    assert isinstance(service, FeedbackRecommendationService)
+    assert service.optimizer.tenant_id == "tenant-a"
+    assert service.optimizer.repository.list("tenant-a") == []

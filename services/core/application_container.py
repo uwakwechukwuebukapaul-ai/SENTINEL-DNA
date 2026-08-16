@@ -51,6 +51,7 @@ from services.intelligence.dashboard.dashboard_service import (
 from services.auth.auth_service import AuthService
 from services.cases.case_service import CaseService
 from services.audit.service import AuditService
+from services.intelligence.investigation_optimizer import FeedbackRecommendationService, InvestigationOptimizationService
 from services.tenancy.service import TenancyService
 from services.connectors.registry import ConnectorRegistry
 from services.governance.service import GovernanceService
@@ -148,6 +149,11 @@ class SecurityValidationService:
         x=ValidationScenario(org,data.get("name","Scenario"),data.get("description","Synthetic validation"),data.get("attack_type","credential_theft"),data.get("mitre_techniques",SCENARIOS.get(data.get("attack_type","credential_theft"),[]))); self.repo.scenarios.append(x); return x
     def run(self,org,scenario_id):
         s=next(x for x in self.repo.scenarios if x.id==scenario_id and x.organization_id==org); e=ValidationExecution(org,s.id,"COMPLETED"); self.repo.executions.append(e); events=SimulationEngine().generate(s); score=ScoringEngine().calculate(100,80,60,70,80); r=ValidationResult(org,e.id,100,80,60,70,80,score,["Prevention validation requires approved action"],["Review prevention policy and approval coverage"]); self.repo.results.append(r); e.score=score; return r.public()
+
+
+def build_feedback_recommendation_service(tenant_id: str) -> FeedbackRecommendationService:
+    """Build the tenant-scoped canonical feedback recommendation seam."""
+    return FeedbackRecommendationService(InvestigationOptimizationService(tenant_id))
 
 
 def build_container() -> ServiceRegistry:
@@ -289,6 +295,7 @@ def build_container() -> ServiceRegistry:
         dashboard_service,
     )
     registry.register("audit_service", audit_service)
+    registry.register("feedback_recommendation_service_factory", build_feedback_recommendation_service)
     registry.register("auth_service", auth_service)
     registry.register("case_service", case_service)
     registry.register("tenancy_service", tenancy_service)
