@@ -38,6 +38,14 @@ class RecordingStore(FeedbackStore):
         return super().record(*args, **kwargs)
 
 
+class Audit:
+    def __init__(self):
+        self.events = []
+
+    def record(self, event_type, **kwargs):
+        self.events.append((event_type, kwargs))
+
+
 def boundary(mapping=lambda tenant: "org-1", role="analyst"):
     decisions = DecisionContextRepository()
     decision = DecisionContext("decision-1", "tenant-1")
@@ -62,6 +70,41 @@ def test_authorized_submission_preserves_identity_and_uses_legacy_organization()
     assert result.provenance["actor_id"] == "user-1"
     assert store.calls[0][0][:4] == ("org-1", "user-1", "decision-1", "approved")
     assert decision.tenant_id == "tenant-1"
+
+
+def test_authorized_submission_emits_existing_audit_event_with_provenance():
+    decisions = DecisionContextRepository()
+    decisions.save(DecisionContext("decision-1", "tenant-1"))
+    store = RecordingStore()
+    audit = Audit()
+    boundary_instance = DecisionFeedbackWriteBoundary(
+        decisions, store, lambda tenant: "org-1", TenantAuthorizationService(), audit
+    )
+
+    boundary_instance.submit(context(), feedback())
+
+    event, payload = audit.events[0]
+    assert event == "DECISION_FEEDBACK_RECORDED"
+    assert payload["user_id"] == "user-1"
+    assert payload["details"]["tenant_id"] == "tenant-1"
+    assert payload["details"]["decision_id"] == "decision-1"
+
+
+def test_rejected_submissions_emit_no_audit_event():
+    decisions = DecisionContextRepository()
+    decisions.save(DecisionContext("decision-1", "tenant-1"))
+    store = RecordingStore()
+    audit = Audit()
+    boundary_instance = DecisionFeedbackWriteBoundary(
+        decisions, store, lambda tenant: "org-1", TenantAuthorizationService(), audit
+    )
+
+    with pytest.raises(ValueError, match="decision_not_found"):
+        boundary_instance.submit(context(), feedback(decision="missing"))
+    with pytest.raises(PermissionError, match="tenant_access_denied"):
+        boundary_instance.submit(context(role="unknown"), feedback())
+
+    assert audit.events == []
 
 
 @pytest.mark.parametrize(

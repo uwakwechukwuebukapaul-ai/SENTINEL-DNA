@@ -17,6 +17,7 @@ class DecisionFeedbackWriteBoundary:
         feedback_store: Any,
         tenant_to_organization: Callable[[str], Any],
         authorization: Any,
+        audit: Any = None,
     ) -> None:
         if decision_source is None or not hasattr(decision_source, "get"):
             raise ValueError("decision_source_required")
@@ -30,6 +31,7 @@ class DecisionFeedbackWriteBoundary:
         self.feedback_store = feedback_store
         self.tenant_to_organization = tenant_to_organization
         self.authorization = authorization
+        self.audit = audit
 
     def submit(self, context: Any, feedback: Feedback) -> Feedback:
         tenant_id = str(getattr(context, "tenant_id", "") or "").strip()
@@ -71,6 +73,18 @@ class DecisionFeedbackWriteBoundary:
         normalized["user_id"] = actor_id
         normalized["decision_id"] = feedback.decision_id
         result = feedback_from_store_record(normalized)
+        if self.audit is not None and hasattr(self.audit, "record"):
+            self.audit.record(
+                "DECISION_FEEDBACK_RECORDED",
+                user_id=actor_id,
+                details={
+                    "tenant_id": tenant_id,
+                    "organization_id": organization_id,
+                    "decision_id": feedback.decision_id,
+                    "feedback_id": result.feedback_id,
+                    "outcome": result.outcome.value,
+                },
+            )
         return Feedback(
             feedback_id=result.feedback_id,
             tenant_id=tenant_id,
