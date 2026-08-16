@@ -34,12 +34,12 @@ class EnvironmentSecretProvider:
 
 @dataclass(frozen=True)
 class CryptoConfiguration:
-    enabled: bool = False; provider: str = ""; assets: tuple[str, ...] = (); networks: tuple[str, ...] = (); api_base_url: str = ""; api_key_reference: str = ""; webhook_secret_reference: str = ""; timeout_seconds: float = 10.0; payment_expiration_seconds: int = 1800
+    enabled: bool = False; provider: str = ""; assets: tuple[str, ...] = (); networks: tuple[str, ...] = (); api_base_url: str = ""; api_key_reference: str = ""; webhook_secret_reference: str = ""; timeout_seconds: float = 10.0; payment_expiration_seconds: int = 1800; environment: str = ""
     @classmethod
     def from_environment(cls, environ=None):
         e = environ or os.environ
         assets = e.get("CRYPTO_ASSETS", e.get("CRYPTO_ASSET", ""))
-        return cls(e.get("CRYPTO_ENABLED", "false").lower() == "true", e.get("CRYPTO_PROVIDER", ""), tuple(x.strip().upper() for x in assets.split(",") if x.strip()), tuple(x.strip() for x in e.get("CRYPTO_NETWORKS", e.get("CRYPTO_NETWORK", "")).split(",") if x.strip()), e.get("CRYPTO_API_BASE_URL", ""), e.get("CRYPTO_API_KEY_REFERENCE", ""), e.get("CRYPTO_WEBHOOK_SECRET_REFERENCE", ""), float(e.get("CRYPTO_TIMEOUT_SECONDS", "10")), int(e.get("CRYPTO_PAYMENT_EXPIRATION_SECONDS", "1800")))
+        return cls(e.get("CRYPTO_ENABLED", "false").lower() == "true", e.get("CRYPTO_PROVIDER", ""), tuple(x.strip().upper() for x in assets.split(",") if x.strip()), tuple(x.strip() for x in e.get("CRYPTO_NETWORKS", e.get("CRYPTO_NETWORK", "")).split(",") if x.strip()), e.get("CRYPTO_API_BASE_URL", ""), e.get("CRYPTO_API_KEY_REFERENCE", ""), e.get("CRYPTO_WEBHOOK_SECRET_REFERENCE", ""), float(e.get("CRYPTO_TIMEOUT_SECONDS", "10")), int(e.get("CRYPTO_PAYMENT_EXPIRATION_SECONDS", "1800")), e.get("CRYPTO_ENVIRONMENT", "").strip().lower())
     def reason_codes(self):
         if not self.enabled: return ("CRYPTO_DISABLED",)
         parsed = urlparse(self.api_base_url)
@@ -48,3 +48,13 @@ class CryptoConfiguration:
         if self.timeout_seconds <= 0 or self.timeout_seconds > 30 or self.payment_expiration_seconds <= 0: return ("CRYPTO_CONFIGURATION_INCOMPLETE",)
         if not set(self.assets).issubset({"USDT", "USDC"}): return ("CRYPTO_CONFIGURATION_INVALID",)
         return ("CRYPTO_READY",)
+    def sandbox_reason_codes(self, secret_provider=None):
+        if not self.enabled: return ("CRYPTO_DISABLED",)
+        if self.environment != "sandbox": return ("CRYPTO_CONFIGURATION_INCOMPLETE",)
+        if self.reason_codes() != ("CRYPTO_READY",): return self.reason_codes()
+        for value in (self.provider, self.api_base_url, self.api_key_reference, self.webhook_secret_reference):
+            if not isinstance(value, str) or not value.strip() or any(ord(ch) < 33 or ord(ch) == 127 for ch in value): return ("CRYPTO_CONFIGURATION_INCOMPLETE",)
+        if not all(ref.replace("_", "").replace("-", "").isalnum() for ref in (self.api_key_reference, self.webhook_secret_reference)):
+            return ("CRYPTO_CONFIGURATION_INCOMPLETE",)
+        if secret_provider is not None and not secret_provider.get(self.api_key_reference): return ("CRYPTO_SECRET_UNAVAILABLE",)
+        return ("CRYPTO_SANDBOX_CONFIGURATION_READY",)

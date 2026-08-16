@@ -22,7 +22,7 @@ class CryptoPaymentProvider:
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment: raise BillingConfigurationError("crypto_https_or_endpoint_invalid")
         if timeout_seconds <= 0 or timeout_seconds > 30 or not assets or not networks: raise BillingConfigurationError("crypto_configuration_invalid")
-        self.provider, self.base_url, self.assets, self.networks = provider, base_url.rstrip("/"), frozenset(assets), frozenset(networks); self.timeout_seconds = timeout_seconds; self.transport = transport
+        self.provider, self.base_url, self.assets, self.networks = provider, base_url.rstrip("/"), frozenset(assets), frozenset(networks); self.timeout_seconds = timeout_seconds; self.transport = transport; self.secret_provider = secret_provider
         self.secret = secret_provider.get(secret_reference) if secret_reference else ""
         if not self.secret: raise BillingConfigurationError("crypto_secret_unavailable")
     def validate_configuration(self):

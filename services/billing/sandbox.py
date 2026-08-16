@@ -19,9 +19,11 @@ class CryptoSandboxValidator:
         self.configuration, self.provider = configuration, provider
 
     def validate(self):
-        reasons = self.configuration.reason_codes()
+        secret_provider = getattr(self.provider, "secret_provider", None)
+        reasons = self.configuration.sandbox_reason_codes(secret_provider)
         if reasons == ("CRYPTO_DISABLED",): return CryptoSandboxValidation("BLOCKED", "CRYPTO_PROVIDER_DISABLED")
-        if reasons != ("CRYPTO_READY",): return CryptoSandboxValidation("BLOCKED", "CRYPTO_CONFIGURATION_INCOMPLETE", self.configuration.provider)
+        if reasons == ("CRYPTO_SECRET_UNAVAILABLE",): return CryptoSandboxValidation("BLOCKED", "CRYPTO_SECRET_UNAVAILABLE", self.configuration.provider)
+        if reasons != ("CRYPTO_SANDBOX_CONFIGURATION_READY",): return CryptoSandboxValidation("BLOCKED", "CRYPTO_CONFIGURATION_INCOMPLETE", self.configuration.provider)
         if not self.provider: return CryptoSandboxValidation("BLOCKED", "CRYPTO_SECRET_UNAVAILABLE", self.configuration.provider)
         try:
             data = self.provider.validate_sandbox()
