@@ -142,6 +142,10 @@ from services.identity_security.service import IdentitySecurityService
 from services.identity.canonical_authority import CanonicalAuthorityService
 from services.identity.request_context import CanonicalRequestContextService
 from services.tenant.authorization import CanonicalTenantAuthorizationService
+from database.connection import database
+from services.billing.repository import BillingRepository
+from services.billing.application import BillingApplicationService
+from services.billing.readiness import BillingRouteReadinessEvaluator
 from services.data_security.service import DataSecurityService
 from services.decision_intelligence.service import DecisionIntelligenceService
 from services.security_copilot.service import SecurityCopilotService
@@ -225,6 +229,9 @@ def build_container() -> ServiceRegistry:
     governance_service = GovernanceService(); forensics_service = ForensicsService(); marketplace_service = MarketplaceService()
     incident_service = IncidentService(); api_management_service = APIManagementService()
     billing_service = BillingService()
+    billing_repository = BillingRepository(database)
+    billing_application = BillingApplicationService(billing_service, billing_repository)
+    billing_readiness = BillingRouteReadinessEvaluator()
     mssp_service = MSSPService(); compliance_service = ComplianceService(); mlops_service = MLOpsService()
     monitoring_service = MonitoringService()
     customer_success_service = CustomerSuccessService()
@@ -312,6 +319,9 @@ def build_container() -> ServiceRegistry:
     registry.register("incident_service", incident_service)
     registry.register("api_management_service", api_management_service)
     registry.register("billing_service", billing_service)
+    registry.register("billing_repository", billing_repository)
+    registry.register("billing_application", billing_application)
+    registry.register("billing_readiness", billing_readiness)
     registry.register("mssp_service", mssp_service)
     registry.register("compliance_service", compliance_service)
     registry.register("mlops_service", mlops_service)
