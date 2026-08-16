@@ -30,3 +30,20 @@ class EnvironmentSecretProvider:
         reference=str(reference or "").strip()
         if not reference or reference not in self.environ: return ""
         return self.environ.get(reference, "")
+
+
+@dataclass(frozen=True)
+class CryptoConfiguration:
+    enabled: bool = False; provider: str = ""; assets: tuple[str, ...] = (); networks: tuple[str, ...] = (); api_base_url: str = ""; api_key_reference: str = ""; webhook_secret_reference: str = ""; timeout_seconds: float = 10.0; payment_expiration_seconds: int = 1800
+    @classmethod
+    def from_environment(cls, environ=None):
+        e = environ or os.environ
+        return cls(e.get("CRYPTO_ENABLED", "false").lower() == "true", e.get("CRYPTO_PROVIDER", ""), tuple(x.strip().upper() for x in e.get("CRYPTO_ASSETS", "").split(",") if x.strip()), tuple(x.strip() for x in e.get("CRYPTO_NETWORKS", "").split(",") if x.strip()), e.get("CRYPTO_API_BASE_URL", ""), e.get("CRYPTO_API_KEY_REFERENCE", ""), e.get("CRYPTO_WEBHOOK_SECRET_REFERENCE", ""), float(e.get("CRYPTO_TIMEOUT_SECONDS", "10")), int(e.get("CRYPTO_PAYMENT_EXPIRATION_SECONDS", "1800")))
+    def reason_codes(self):
+        if not self.enabled: return ("CRYPTO_DISABLED",)
+        parsed = urlparse(self.api_base_url)
+        if not self.provider or not self.assets or not self.networks or parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment: return ("CRYPTO_CONFIGURATION_INVALID",)
+        if not self.api_key_reference or not self.webhook_secret_reference: return ("CRYPTO_SECRET_REFERENCE_MISSING",)
+        if self.timeout_seconds <= 0 or self.timeout_seconds > 30 or self.payment_expiration_seconds <= 0: return ("CRYPTO_CONFIGURATION_INCOMPLETE",)
+        if not set(self.assets).issubset({"USDT", "USDC"}): return ("CRYPTO_CONFIGURATION_INVALID",)
+        return ("CRYPTO_READY",)
