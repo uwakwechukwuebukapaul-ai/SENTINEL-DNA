@@ -10,6 +10,9 @@ class ImprovementCommandCenter:
     portfolio_improvement_posture: str = "insufficient_history"
     trend_interpretation: str = "Insufficient history for trend interpretation."
     executive_context: tuple = ()
+    governance_status: str = "insufficient_evidence"
+    outcome_learning_status: str = "insufficient_outcomes"
+    recommendations: tuple = ()
     evidence_strength: str = "insufficient_evidence"
     confidence: str | float | None = None
     uncertainty: tuple = ()

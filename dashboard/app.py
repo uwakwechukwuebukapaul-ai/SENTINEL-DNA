@@ -1008,6 +1008,18 @@ def portfolio_forecast_governance_learning_correlation_dashboard(): return rende
 @app.get("/workspace/executive-strategy/portfolio-forecast/response-outcome/trends")
 @permission_required("investigations:read")
 def portfolio_forecast_response_outcome_trends_dashboard(): return render_template("executive_portfolio_forecast_response_outcome_trends.html")
+@app.get("/workspace/executive-strategy/portfolio-forecast/improvement-governance")
+@permission_required("investigations:read")
+def portfolio_forecast_improvement_governance_dashboard(): return render_template("executive_portfolio_forecast_phase3550.html", endpoint="improvement-governance", title="Improvement portfolio governance", payload_key="governance")
+@app.get("/workspace/executive-strategy/portfolio-forecast/outcome-learning")
+@permission_required("investigations:read")
+def portfolio_forecast_outcome_learning_dashboard(): return render_template("executive_portfolio_forecast_phase3550.html", endpoint="outcome-learning", title="Outcome learning intelligence", payload_key="outcome_learning")
+@app.get("/workspace/executive-strategy/portfolio-forecast/continuous-improvement")
+@permission_required("investigations:read")
+def portfolio_forecast_continuous_improvement_dashboard(): return render_template("executive_portfolio_forecast_phase3550.html", endpoint="continuous-improvement", title="Continuous improvement", payload_key="continuous_improvement")
+@app.get("/workspace/executive-strategy/portfolio-forecast/improvement-trends")
+@permission_required("investigations:read")
+def portfolio_forecast_improvement_trends_dashboard(): return render_template("executive_portfolio_forecast_phase3550.html", endpoint="improvement-trends", title="Longitudinal improvement trends", payload_key="trends")
 
 
 

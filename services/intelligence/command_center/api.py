@@ -66,6 +66,10 @@ from .strategic_improvement_portfolio_analytics_service import StrategicImprovem
 from .improvement_command_center_service import ImprovementCommandCenterService
 from .governance_learning_correlation_service import GovernanceLearningCorrelationService
 from .response_outcome_trend_analytics_service import ResponseOutcomeTrendAnalyticsService
+from .improvement_governance_service import ImprovementGovernanceService
+from .outcome_learning_service import OutcomeLearningService
+from .continuous_improvement_service import ContinuousImprovementService
+from .improvement_trends_service import ImprovementTrendsService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -135,6 +139,11 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     improvement_command_center_service=ImprovementCommandCenterService(strategic_improvement_portfolio_analytics_service,governance_learning_service,governance_learning_trends_analytics_service)
     governance_learning_correlation_service=GovernanceLearningCorrelationService(governance_learning_service,response_outcome_correlation_service)
     response_outcome_trend_analytics_service=ResponseOutcomeTrendAnalyticsService(response_outcomes_service,response_outcome_correlation_service)
+    improvement_governance_service=ImprovementGovernanceService(strategic_improvement_portfolio_analytics_service,governance_learning_trends_analytics_service)
+    outcome_learning_service=OutcomeLearningService(response_outcomes_service,governance_learning_service,response_outcome_correlation_service)
+    continuous_improvement_service=ContinuousImprovementService(strategic_improvement_portfolio_analytics_service,intervention_strategy_analytics_service,governance_learning_service)
+    improvement_trends_service=ImprovementTrendsService(strategic_improvement_portfolio_analytics_service,governance_learning_trends_analytics_service,response_outcome_trend_analytics_service)
+    improvement_command_center_service=ImprovementCommandCenterService(strategic_improvement_portfolio_analytics_service,governance_learning_service,governance_learning_trends_analytics_service,improvement_governance_service,outcome_learning_service,continuous_improvement_service,improvement_trends_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
@@ -642,6 +651,38 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/response-outcome/trends/<signal_id>")
     def quality_response_outcome_trends_detail(signal_id):
         try: return _phase3548(response_outcome_trend_analytics_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-governance")
+    def quality_improvement_governance():
+        try: return _phase3548(improvement_governance_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-governance/<signal_id>")
+    def quality_improvement_governance_detail(signal_id):
+        try: return _phase3548(improvement_governance_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/outcome-learning")
+    def quality_outcome_learning():
+        try: return _phase3548(outcome_learning_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/outcome-learning/<signal_id>")
+    def quality_outcome_learning_detail(signal_id):
+        try: return _phase3548(outcome_learning_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/continuous-improvement")
+    def quality_continuous_improvement():
+        try: return _phase3548(continuous_improvement_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/continuous-improvement/<signal_id>")
+    def quality_continuous_improvement_detail(signal_id):
+        try: return _phase3548(continuous_improvement_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-trends")
+    def quality_improvement_trends():
+        try: return _phase3548(improvement_trends_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-trends/<signal_id>")
+    def quality_improvement_trends_detail(signal_id):
+        try: return _phase3548(improvement_trends_service,signal_id)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
