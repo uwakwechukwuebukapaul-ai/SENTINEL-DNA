@@ -16,3 +16,8 @@ def test_readiness_reports_missing_secret_without_exposing_secret(monkeypatch):
     monkeypatch.setenv("OIDC_SIGNING_ALGORITHMS", "RS256")
     result = OidcRouteConfiguration.readiness(dict(os.environ))
     assert result["ready"] is False and "secret" in result["reason"]
+
+def test_deployment_readiness_requires_governed_trust(monkeypatch):
+    env = {"OIDC_PROVIDER":"p", "OIDC_ISSUER":"https://issuer", "OIDC_AUTHORIZATION_ENDPOINT":"https://issuer/auth", "OIDC_TOKEN_ENDPOINT":"https://issuer/token", "OIDC_JWKS_URI":"https://issuer/jwks", "OIDC_CLIENT_ID":"client", "OIDC_AUDIENCE":"aud", "OIDC_REDIRECT_URI":"https://app/callback", "OIDC_CLIENT_SECRET_REFERENCE":"SECRET", "OIDC_PROVIDER_TENANT_CLAIM":"tid", "OIDC_SIGNING_ALGORITHMS":"RS256", "OIDC_EXTERNAL_TENANT_ID":"ext", "SECRET":"not-logged"}
+    config = __import__("services.identity.oidc_config", fromlist=["OidcRuntimeConfiguration"]).OidcRuntimeConfiguration.from_environment(env)
+    assert config.deployment_readiness(__import__("services.identity.oidc_config", fromlist=["OidcSecretProvider"]).OidcSecretProvider(env)).status == "TRUST_NOT_ESTABLISHED"
