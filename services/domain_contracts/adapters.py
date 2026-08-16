@@ -81,3 +81,28 @@ def learning_signal_from_outcome(record: Any) -> LearningSignal:
         confidence=float(confidence) if confidence is not None else None,
         provenance={**outcome.provenance, "adapter": "outcome_from_record"},
     )
+
+
+def learning_signal_from_feedback(feedback: Feedback) -> LearningSignal:
+    """Create an advisory signal from canonical feedback without persistence."""
+    if not isinstance(feedback, Feedback):
+        raise TypeError("feedback_required")
+    return LearningSignal(
+        signal_id=f"feedback:{feedback.feedback_id}",
+        tenant_id=feedback.tenant_id,
+        signal_type="decision_feedback",
+        source_id=feedback.feedback_id,
+        value={
+            "decision_id": feedback.decision_id,
+            "user_id": feedback.user_id,
+            "outcome": feedback.outcome.value,
+            "correction": feedback.correction,
+            "outcome_id": feedback.outcome_id,
+        },
+        confidence=feedback.confidence,
+        provenance={
+            **feedback.provenance,
+            "adapter": "feedback_to_learning_signal",
+            "feedback_id": feedback.feedback_id,
+        },
+    )
