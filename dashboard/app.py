@@ -1038,6 +1038,18 @@ def portfolio_forecast_improvement_maturity_analytics_dashboard(): return render
 @app.get("/workspace/executive-strategy/portfolio-forecast/strategic-evolution-trends")
 @permission_required("investigations:read")
 def portfolio_forecast_strategic_evolution_trends_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="strategic-evolution-trends", title="Strategic evolution trends", payload_key="trends")
+@app.get("/workspace/executive-strategy/intelligence-command-center")
+@permission_required("investigations:read")
+def executive_intelligence_command_center_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-command-center", title="Executive strategic intelligence command center", payload_key="command_center")
+@app.get("/workspace/executive-strategy/organizational-decision-intelligence")
+@permission_required("investigations:read")
+def organizational_decision_intelligence_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="organizational-decision-intelligence", title="Organizational decision intelligence", payload_key="profile")
+@app.get("/workspace/executive-strategy/strategic-intelligence-health")
+@permission_required("investigations:read")
+def strategic_intelligence_health_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="strategic-intelligence-health", title="Strategic intelligence health", payload_key="health")
+@app.get("/workspace/executive-strategy/executive-intelligence-summary")
+@permission_required("investigations:read")
+def executive_intelligence_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="executive-intelligence-summary", title="Executive intelligence summary", payload_key="summary")
 
 
 
