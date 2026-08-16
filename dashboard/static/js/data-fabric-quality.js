@@ -1,0 +1,1 @@
+(()=>{const s=document.getElementById('status'),c=document.getElementById('content');fetch('/api/data-fabric/quality').then(r=>r.json()).then(d=>{s.textContent='Event quality available';c.textContent=JSON.stringify(d,null,2)}).catch(()=>s.textContent='Event quality unavailable; review required.')})();
