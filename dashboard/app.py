@@ -1020,6 +1020,12 @@ def portfolio_forecast_continuous_improvement_dashboard(): return render_templat
 @app.get("/workspace/executive-strategy/portfolio-forecast/improvement-trends")
 @permission_required("investigations:read")
 def portfolio_forecast_improvement_trends_dashboard(): return render_template("executive_portfolio_forecast_phase3550.html", endpoint="improvement-trends", title="Longitudinal improvement trends", payload_key="trends")
+@app.get("/workspace/executive-strategy/portfolio-forecast/strategic-evolution")
+@permission_required("investigations:read")
+def portfolio_forecast_strategic_evolution_dashboard(): return render_template("executive_portfolio_forecast_phase3551.html", endpoint="strategic-evolution", title="Strategic evolution intelligence", payload_key="evolution")
+@app.get("/workspace/executive-strategy/portfolio-forecast/improvement-maturity")
+@permission_required("investigations:read")
+def portfolio_forecast_improvement_maturity_dashboard(): return render_template("executive_portfolio_forecast_phase3551.html", endpoint="improvement-maturity", title="Improvement maturity posture", payload_key="maturity")
 
 
 

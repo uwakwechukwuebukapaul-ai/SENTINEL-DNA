@@ -3,9 +3,10 @@ from .improvement_command_center import ImprovementCommandCenter
 
 
 class ImprovementCommandCenterService:
-    def __init__(self, portfolio, learning, trends, governance=None, outcome_learning=None, continuous=None, improvement_trends=None):
+    def __init__(self, portfolio, learning, trends, governance=None, outcome_learning=None, continuous=None, improvement_trends=None, evolution=None, maturity=None):
         self.portfolio, self.learning, self.trends = portfolio, learning, trends
         self.governance, self.outcome_learning, self.continuous, self.improvement_trends = governance, outcome_learning, continuous, improvement_trends
+        self.evolution, self.maturity = evolution, maturity
 
     def derive(self, tenant_id):
         portfolio = (self.portfolio.derive(tenant_id) if self.portfolio else {}).get("portfolio", {})
@@ -14,6 +15,8 @@ class ImprovementCommandCenterService:
         governance = (self.governance.derive(tenant_id) if self.governance else {}).get("governance", {})
         outcome_learning = (self.outcome_learning.derive(tenant_id) if self.outcome_learning else {}).get("outcome_learning", {})
         continuous = (self.continuous.derive(tenant_id) if self.continuous else {}).get("continuous_improvement", {})
+        evolution = (self.evolution.derive(tenant_id) if self.evolution else {}).get("evolution", {})
+        maturity = (self.maturity.derive(tenant_id) if self.maturity else {}).get("maturity", {})
         themes = tuple(portfolio.get("strategic_focus_areas", ()))
         posture = portfolio.get("posture", "insufficient_history")
         uncertainty = tuple(sorted(set(portfolio.get("uncertainty", ())) | set(trends.get("uncertainty", ()))))
@@ -27,6 +30,9 @@ class ImprovementCommandCenterService:
             governance.get("governance_status", "insufficient_evidence"),
             outcome_learning.get("outcome_status", "insufficient_outcomes"),
             tuple(continuous.get("next_step_considerations", ())),
+            evolution.get("convergence", "insufficient_history"),
+            maturity.get("posture", "insufficient_history"),
+            tuple(evolution.get("capability_signals", ())),
             portfolio.get("evidence_strength") or trends.get("evidence_strength", "insufficient_evidence"),
             portfolio.get("confidence") or trends.get("confidence"), uncertainty, provenance, True,
         )
