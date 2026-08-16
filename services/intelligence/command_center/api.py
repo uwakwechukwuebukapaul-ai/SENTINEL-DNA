@@ -91,6 +91,10 @@ from .strategic_decision_lifecycle_service import StrategicDecisionLifecycleServ
 from .organizational_intelligence_evolution_service import OrganizationalIntelligenceEvolutionService
 from .intelligence_feedback_loop_service import IntelligenceFeedbackLoopService
 from .executive_intelligence_evolution_summary_service import ExecutiveIntelligenceEvolutionSummaryService
+from .executive_intelligence_operating_system_service import ExecutiveIntelligenceOperatingSystemService
+from .governance_intelligence_foundation_service import GovernanceIntelligenceFoundationService
+from .decision_intelligence_foundation_service import DecisionIntelligenceFoundationService
+from .intelligence_operating_model_service import IntelligenceOperatingModelService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -185,6 +189,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     organizational_intelligence_evolution_service=OrganizationalIntelligenceEvolutionService(organizational_ai_maturity_service,strategic_evolution_service,improvement_maturity_analytics_service,strategic_intelligence_health_service)
     intelligence_feedback_loop_service=IntelligenceFeedbackLoopService(intelligence_adoption_analytics_service,executive_intelligence_summary_service,continuous_improvement_service,organizational_ai_maturity_service)
     executive_intelligence_evolution_summary_service=ExecutiveIntelligenceEvolutionSummaryService(executive_intelligence_governance_platform_service,strategic_decision_lifecycle_service,organizational_intelligence_evolution_service,intelligence_feedback_loop_service)
+    executive_intelligence_operating_system_service=ExecutiveIntelligenceOperatingSystemService(executive_intelligence_governance_platform_service,executive_intelligence_evolution_summary_service,strategic_intelligence_health_service,organizational_ai_maturity_service)
+    governance_intelligence_foundation_service=GovernanceIntelligenceFoundationService(executive_intelligence_governance_platform_service,strategic_portfolio_governance_service,executive_governance_summary_service,intelligence_adoption_analytics_service)
+    decision_intelligence_foundation_service=DecisionIntelligenceFoundationService(strategic_decision_lifecycle_service,organizational_decision_intelligence_service,strategic_intelligence_health_service,executive_intelligence_evolution_summary_service)
+    intelligence_operating_model_service=IntelligenceOperatingModelService(organizational_ai_maturity_service,intelligence_adoption_analytics_service,intelligence_feedback_loop_service,executive_intelligence_governance_platform_service)
     improvement_command_center_service=ImprovementCommandCenterService(strategic_improvement_portfolio_analytics_service,governance_learning_service,governance_learning_trends_analytics_service,improvement_governance_service,outcome_learning_service,continuous_improvement_service,improvement_trends_service,strategic_evolution_service,improvement_maturity_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
@@ -796,7 +804,7 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.get("/api/command-center/quality/executive-strategy/intelligence-operating-model")
     def quality_intelligence_operating_model():
-        try: return _phase3548(executive_intelligence_operating_model_service)
+        try: return _phase3548(intelligence_operating_model_service)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.get("/api/command-center/quality/executive-strategy/strategic-portfolio-governance")
     def quality_strategic_portfolio_governance():
@@ -833,6 +841,34 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/intelligence-evolution-summary")
     def quality_intelligence_evolution_summary():
         try: return _phase3548(executive_intelligence_evolution_summary_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/intelligence-operating-system")
+    def quality_intelligence_operating_system():
+        try: return _phase3548(executive_intelligence_operating_system_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/intelligence-operating-system/<signal_id>")
+    def quality_intelligence_operating_system_detail(signal_id):
+        try: return _phase3548(executive_intelligence_operating_system_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/governance-intelligence-foundation")
+    def quality_governance_intelligence_foundation():
+        try: return _phase3548(governance_intelligence_foundation_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/governance-intelligence-foundation/<signal_id>")
+    def quality_governance_intelligence_foundation_detail(signal_id):
+        try: return _phase3548(governance_intelligence_foundation_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/decision-intelligence-foundation")
+    def quality_decision_intelligence_foundation():
+        try: return _phase3548(decision_intelligence_foundation_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/decision-intelligence-foundation/<signal_id>")
+    def quality_decision_intelligence_foundation_detail(signal_id):
+        try: return _phase3548(decision_intelligence_foundation_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/intelligence-operating-model/<signal_id>")
+    def quality_intelligence_operating_model_detail(signal_id):
+        try: return _phase3548(intelligence_operating_model_service,signal_id)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):

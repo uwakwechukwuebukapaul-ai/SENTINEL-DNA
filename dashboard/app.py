@@ -1052,7 +1052,7 @@ def strategic_intelligence_health_dashboard(): return render_template("executive
 def executive_intelligence_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="executive-intelligence-summary", title="Executive intelligence summary", payload_key="summary")
 @app.get("/workspace/executive-strategy/intelligence-operating-model")
 @permission_required("investigations:read")
-def intelligence_operating_model_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-operating-model", title="Executive intelligence operating model", payload_key="operating_model")
+def intelligence_operating_model_dashboard(): return render_template("intelligence_operating_model.html")
 @app.get("/workspace/executive-strategy/strategic-portfolio-governance")
 @permission_required("investigations:read")
 def strategic_portfolio_governance_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="strategic-portfolio-governance", title="Strategic portfolio governance", payload_key="governance")
@@ -1080,6 +1080,15 @@ def intelligence_feedback_loop_dashboard(): return render_template("executive_po
 @app.get("/workspace/executive-strategy/intelligence-evolution-summary")
 @permission_required("investigations:read")
 def intelligence_evolution_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-evolution-summary", title="Executive intelligence evolution summary", payload_key="summary")
+@app.get("/workspace/executive-strategy/intelligence-operating-system")
+@permission_required("investigations:read")
+def intelligence_operating_system_dashboard(): return render_template("executive_intelligence_operating_system.html")
+@app.get("/workspace/executive-strategy/governance-intelligence-foundation")
+@permission_required("investigations:read")
+def governance_intelligence_foundation_dashboard(): return render_template("governance_intelligence_foundation.html")
+@app.get("/workspace/executive-strategy/decision-intelligence-foundation")
+@permission_required("investigations:read")
+def decision_intelligence_foundation_dashboard(): return render_template("decision_intelligence_foundation.html")
 
 
 
