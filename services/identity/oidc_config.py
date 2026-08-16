@@ -23,9 +23,14 @@ class OidcRuntimeConfiguration:
         if production and any(urlparse(x).scheme != "https" or urlparse(x).hostname in {"localhost", "127.0.0.1"} for x in endpoints): raise OidcConfigurationError("oidc_https_required")
         if "*" in self.redirect_uri: raise OidcConfigurationError("oidc_redirect_uri_invalid")
         return True
+    def readiness(self, secret_provider, production=True):
+        try:
+            self.validate(production)
+            if not secret_provider.get(self.client_secret_reference): return {"ready": False, "reason": "oidc_client_secret_unavailable"}
+            return {"ready": True, "reason": "ready"}
+        except OidcConfigurationError as exc: return {"ready": False, "reason": str(exc)}
     def is_ready(self, secret_provider, production=True):
-        try: self.validate(production); return bool(secret_provider.get(self.client_secret_reference))
-        except Exception: return False
+        return self.readiness(secret_provider, production)["ready"]
 
 class OidcSecretProvider:
     def __init__(self, environ=None): self.environ = environ or os.environ

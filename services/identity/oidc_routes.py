@@ -11,6 +11,11 @@ class OidcRouteConfiguration:
         configuration = OidcRuntimeConfiguration.from_environment()
         return configuration if configuration.is_ready(OidcSecretProvider(), production=os.getenv("SENTINEL_DNA_ENV", "development") == "production") else None
 
+    @classmethod
+    def readiness(cls, environ=None):
+        configuration = OidcRuntimeConfiguration.from_environment(environ)
+        return configuration.readiness(OidcSecretProvider(environ), production=(environ or os.environ).get("SENTINEL_DNA_ENV", "development") == "production")
+
 def create_oidc_blueprint(flow: OidcAuthorizationCodeFlow | None):
     if flow is None: return None
     bp = Blueprint("oidc_auth", __name__, url_prefix="/auth/oidc")

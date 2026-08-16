@@ -10,3 +10,9 @@ def test_oidc_configuration_requires_all_values(monkeypatch):
     for key in ("OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_JWKS_URI", "OIDC_CLIENT_ID", "OIDC_AUDIENCE", "OIDC_REDIRECT_URI", "OIDC_CLIENT_SECRET_REFERENCE", "OIDC_PROVIDER_TENANT_CLAIM"): monkeypatch.setenv(key, "configured")
     monkeypatch.setenv("OIDC_SIGNING_ALGORITHMS", "RS256"); monkeypatch.setenv("configured", "secret")
     assert OidcRouteConfiguration.from_environment().client_id == "configured"
+
+def test_readiness_reports_missing_secret_without_exposing_secret(monkeypatch):
+    for key in ("OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_JWKS_URI", "OIDC_CLIENT_ID", "OIDC_AUDIENCE", "OIDC_REDIRECT_URI", "OIDC_CLIENT_SECRET_REFERENCE", "OIDC_PROVIDER_TENANT_CLAIM"): monkeypatch.setenv(key, "configured")
+    monkeypatch.setenv("OIDC_SIGNING_ALGORITHMS", "RS256")
+    result = OidcRouteConfiguration.readiness(dict(os.environ))
+    assert result["ready"] is False and "secret" in result["reason"]
