@@ -15,7 +15,7 @@ def test_outcome_adapter_produces_advisory_learning_signal():
 
 def test_optimizer_consumes_learning_signal_read_only():
     service = InvestigationOptimizationService(tenant_id="tenant-a")
-    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": ["assess_risk", "collect_evidence"]})
+    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": ["assess_risk", "collect_evidence"]}, provenance={"source": "test"})
     recommendations = service.recommend_from_learning_signal(signal)
     assert [item.step for item in recommendations] == ["collect_evidence", "assess_risk"]
     assert service.repository.list("tenant-a") == []
@@ -24,14 +24,14 @@ def test_optimizer_consumes_learning_signal_read_only():
 def test_optimizer_rejects_malformed_signal_safely():
     service = InvestigationOptimizationService(tenant_id="tenant-a")
     with pytest.raises(ValueError, match="learning_signal_steps_invalid"):
-        service.recommend_from_learning_signal(LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": "bad"}))
+        service.recommend_from_learning_signal(LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": "bad"}, provenance={"source": "test"}))
     with pytest.raises(TypeError, match="learning_signal_required"):
         service.recommend_from_learning_signal({"steps": []})
 
 
 def test_optimizer_rejects_cross_tenant_learning_signal():
     service = InvestigationOptimizationService(tenant_id="tenant-a")
-    signal = LearningSignal("s1", "tenant-b", "plan_hint", "out-1", {"steps": []})
+    signal = LearningSignal("s1", "tenant-b", "plan_hint", "out-1", {"steps": []}, provenance={"source": "test"})
     with pytest.raises(ValueError, match="learning_signal_tenant_mismatch"):
         service.recommend_from_learning_signal(signal)
 
@@ -45,8 +45,15 @@ def test_optimizer_rejects_unscoped_learning_signal_consumer():
 
 def test_optimizer_rejects_non_advisory_learning_signal():
     service = InvestigationOptimizationService(tenant_id="tenant-a")
-    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": []}, advisory_only=False)
+    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": []}, advisory_only=False, provenance={"source": "test"})
     with pytest.raises(ValueError, match="learning_signal_not_advisory"):
+        service.recommend_from_learning_signal(signal)
+
+
+def test_optimizer_rejects_unprovenanced_learning_signal():
+    service = InvestigationOptimizationService(tenant_id="tenant-a")
+    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": []})
+    with pytest.raises(ValueError, match="learning_signal_provenance_required"):
         service.recommend_from_learning_signal(signal)
 
 

@@ -15,6 +15,7 @@ class InvestigationOptimizationService:
         if not self.tenant_id: raise ValueError("learning_signal_tenant_scope_required")
         if signal.tenant_id != self.tenant_id: raise ValueError("learning_signal_tenant_mismatch")
         if not signal.advisory_only: raise ValueError("learning_signal_not_advisory")
+        if not signal.provenance: raise ValueError("learning_signal_provenance_required")
         steps = signal.value.get("steps", ())
         if not isinstance(steps, (list, tuple)): raise ValueError("learning_signal_steps_invalid")
         return self.recommend_steps(steps)
