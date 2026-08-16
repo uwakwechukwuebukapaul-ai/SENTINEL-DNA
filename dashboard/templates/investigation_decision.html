@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Investigation Decision Intelligence</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/investigation-decision.css') }}">
+</head>
+<body>
+  <main>
+    <h1>Investigation Decision Intelligence</h1>
+    <p id="status">Loading advisory analysis…</p>
+    <pre id="content" aria-live="polite"></pre>
+  </main>
+  <script src="{{ url_for('static', filename='js/investigation-decision.js') }}"></script>
+</body>
+</html>

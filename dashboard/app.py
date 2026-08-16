@@ -44,6 +44,7 @@ from services.dashboard.dashboard_service import (
 from services.intelligence.copilot import InvestigationCopilot
 from services.intelligence.reasoning import reasoning_api
 from services.intelligence.chat import chat_api
+from services.intelligence.investigation_decision import create_investigation_decision_blueprint
 
 # Security services
 from services.observability import ObservabilityService
@@ -202,6 +203,7 @@ app.container = build_container()
 # ---------------------------------------------------------
 
 app.register_blueprint(investigations_api)
+app.register_blueprint(create_investigation_decision_blueprint())
 from dashboard.analyst_workspace import analyst_workspace
 app.register_blueprint(analyst_workspace)
 app.register_blueprint(auth_api)
@@ -1134,6 +1136,9 @@ def investigation_intelligence_dashboard(): return render_template("investigatio
 @app.get("/workspace/investigation-lifecycle")
 @permission_required("investigations:read")
 def investigation_lifecycle_dashboard(): return render_template("investigation_lifecycle.html")
+@app.get("/workspace/investigation-decision")
+@permission_required("investigations:read")
+def investigation_decision_dashboard(): return render_template("investigation_decision.html")
 @app.get("/workspace/executive-strategy/governance-intelligence-foundation")
 @permission_required("investigations:read")
 def governance_intelligence_foundation_dashboard(): return render_template("governance_intelligence_foundation.html")
