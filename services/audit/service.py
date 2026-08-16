@@ -15,10 +15,16 @@ class AuditService:
                 case_id TEXT, user_id INTEGER, details_json TEXT NOT NULL,
                 created_at TEXT NOT NULL)""")
 
-    def record(self, event_type: str, case_id: str | None = None, user_id: int | None = None, details: dict[str, Any] | None = None) -> None:
+    def record(self, event_type: str, case_id: str | None = None, user_id: int | None = None, details: dict[str, Any] | None = None, connection: Any | None = None) -> None:
         import json
-        with self.db.session() as connection:
+        if connection is not None:
             connection.execute(
+                "INSERT INTO audit_events(event_type,case_id,user_id,details_json,created_at) VALUES(?,?,?,?,?)",
+                (event_type, case_id, user_id, json.dumps(details or {}), datetime.now(timezone.utc).isoformat()),
+            )
+            return
+        with self.db.session() as session:
+            session.execute(
                 "INSERT INTO audit_events(event_type,case_id,user_id,details_json,created_at) VALUES(?,?,?,?,?)",
                 (event_type, case_id, user_id, json.dumps(details or {}), datetime.now(timezone.utc).isoformat()),
             )
