@@ -6,7 +6,11 @@ from .exceptions import BillingError, BillingConfigurationError
 def create_governed_billing_blueprint(application: BillingApplicationService, context_provider=None, authorization_provider=None, webhook_tenant_provider=None):
     if not isinstance(application,BillingApplicationService) or not callable(context_provider) or not callable(getattr(authorization_provider,"require",None)): return None
     api=Blueprint("governed_billing",__name__,url_prefix="/api/billing/v2")
-    def context(): return context_provider()
+    def context():
+        value = context_provider()
+        if value is None or not getattr(value, "tenant_id", None):
+            raise BillingError("canonical_request_context_required")
+        return value
     def error(exc):
         code="BILLING_NOT_CONFIGURED" if isinstance(exc,BillingConfigurationError) else "AUTHORIZATION_DENIED" if "tenant" in str(exc) or "context" in str(exc) else "INVALID_REQUEST"
         return jsonify({"error":code}),503 if code=="BILLING_NOT_CONFIGURED" else 403 if code=="AUTHORIZATION_DENIED" else 400

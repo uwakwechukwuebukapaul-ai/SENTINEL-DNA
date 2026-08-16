@@ -16,6 +16,26 @@ def canonical_request_context():
     return getattr(g, _CONTEXT_KEY, None)
 
 
+class FlaskCanonicalRequestContextProvider:
+    """Request-scoped billing capability backed by the canonical boundary.
+
+    The provider deliberately reads only the context installed by the trusted
+    authentication decorator. It never parses sessions, headers, or request
+    parameters and therefore cannot be used to substitute a tenant or actor.
+    """
+
+    def __call__(self):
+        context = canonical_request_context()
+        if context is None:
+            raise CanonicalAuthenticationError("canonical_request_context_required")
+        return context
+
+
+def canonical_request_context_provider():
+    """Build the explicit request-scoped provider for an HTTP adapter."""
+    return FlaskCanonicalRequestContextProvider()
+
+
 def require_canonical_authentication(provider_adapter: TrustedProviderAdapter):
     """Protect a route with trusted canonical authentication only.
 
@@ -39,4 +59,3 @@ def require_canonical_authentication(provider_adapter: TrustedProviderAdapter):
 
         return wrapped
     return decorator
-

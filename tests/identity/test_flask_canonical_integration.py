@@ -5,7 +5,7 @@ import pytest
 from database.connection import DatabaseConnection
 from services.identity.authentication import AuthenticatedProviderPrincipal, CanonicalAuthenticationBoundary, TrustedProviderAdapter
 from services.identity.canonical_authority import CanonicalAuthorityService
-from services.identity.flask_integration import canonical_request_context, require_canonical_authentication
+from services.identity.flask_integration import canonical_request_context, require_canonical_authentication, FlaskCanonicalRequestContextProvider
 from services.identity.request_context import CanonicalRequestContextService
 
 
@@ -54,3 +54,20 @@ def test_context_is_request_scoped(tmp_path):
     def capture(): seen.append(g.canonical_request_context.request_id); return "ok"
     client = flask_app.test_client(); assert client.get("/capture").status_code == 200; assert client.get("/capture").status_code == 200
     assert len(seen) == 2 and seen[0] != seen[1]
+
+
+def test_billing_provider_reads_only_installed_canonical_context(tmp_path):
+    flask_app = app(tmp_path, principal())
+    provider = FlaskCanonicalRequestContextProvider()
+    with flask_app.test_request_context('/'):
+        with pytest.raises(Exception):
+            provider()
+    with flask_app.test_client() as client:
+        @flask_app.get('/billing-context')
+        @require_canonical_authentication(flask_app.canonical_adapter)
+        def billing_context():
+            context = provider()
+            return {'tenant_id': context.tenant_id, 'actor_id': context.actor_id}
+        response = client.get('/billing-context', query_string={'tenant_id': 'attacker'})
+        assert response.status_code == 200
+        assert response.json == {'tenant_id': 'tenant-a', 'actor_id': 'actor-a'}

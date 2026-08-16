@@ -49,6 +49,6 @@ class BillingApplicationService:
         return BillingStatus(tenant_id,subscription["status"] if subscription else None,subscription["plan_id"] if subscription else None,entitlement.capabilities,transaction["transaction_reference"] if transaction else None,transaction["status"] if transaction else None)
     def process_verified_webhook(self, signature, body, canonical_tenant_id):
         if not self.webhooks: raise BillingError("webhook_boundary_unavailable")
-        if not isinstance(canonical_tenant_id,str) or not canonical_tenant_id: raise BillingError("canonical_tenant_context_required")
+        if not callable(canonical_tenant_id) and (not isinstance(canonical_tenant_id,str) or not canonical_tenant_id): raise BillingError("canonical_tenant_context_required")
         return self.webhooks.process(signature,body,canonical_tenant_id)
     def get_entitlements(self, context): return self.get_billing_status(context).entitlement_capabilities
