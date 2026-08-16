@@ -2,14 +2,14 @@
 from __future__ import annotations
 import os
 from flask import Blueprint, current_app, redirect, request, session, jsonify
+from .oidc_config import OidcRuntimeConfiguration, OidcSecretProvider
 from .oidc_browser import OidcAuthorizationCodeFlow, OidcBrowserConfiguration, OidcBrowserError
 
 class OidcRouteConfiguration:
-    REQUIRED = ("OIDC_AUTHORIZATION_ENDPOINT", "OIDC_REDIRECT_URI", "OIDC_CLIENT_ID")
     @classmethod
     def from_environment(cls):
-        values = {name: os.getenv(name, "").strip() for name in cls.REQUIRED}
-        return values if all(values.values()) else None
+        configuration = OidcRuntimeConfiguration.from_environment()
+        return configuration if configuration.is_ready(OidcSecretProvider(), production=os.getenv("SENTINEL_DNA_ENV", "development") == "production") else None
 
 def create_oidc_blueprint(flow: OidcAuthorizationCodeFlow | None):
     if flow is None: return None
@@ -30,4 +30,3 @@ def create_oidc_blueprint(flow: OidcAuthorizationCodeFlow | None):
         flow.logout(session)
         return jsonify({"status": "logged_out"})
     return bp
-
