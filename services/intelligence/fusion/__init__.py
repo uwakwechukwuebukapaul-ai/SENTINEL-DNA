@@ -22,6 +22,12 @@ from services.intelligence.fusion.intelligence_pipeline import (
     IntelligencePipeline,
 )
 
+from services.intelligence.fusion.provider_neutral import (
+    FreshnessPolicy,
+    FusionResult as ProviderNeutralFusionResult,
+    ProviderNeutralFusionEngine,
+)
+
 
 __all__ = [
 
@@ -32,5 +38,11 @@ __all__ = [
     "FusionResult",
 
     "IntelligencePipeline",
+
+    "FreshnessPolicy",
+
+    "ProviderNeutralFusionResult",
+
+    "ProviderNeutralFusionEngine",
 
 ]
