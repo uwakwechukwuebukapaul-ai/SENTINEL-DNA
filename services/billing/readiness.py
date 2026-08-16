@@ -1,0 +1,40 @@
+"""Fail-closed readiness for governed billing route registration."""
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class BillingRouteReadiness:
+    state: str
+    ready: bool
+    reasons: tuple[str,...]
+    checkout_ready: bool
+    status_ready: bool
+    webhook_ready: bool
+
+class BillingRouteReadinessEvaluator:
+    def evaluate(self, *, billing_application=None, billing_service=None, repository=None, context_provider=None, authorization_provider=None, csrf_validator=None, webhook_verifier=None, webhook_tenant_resolver=None, payment_provider=None, secret_reference=None, billing_configuration=None):
+        reasons=[]
+        if billing_application is None: reasons.append("billing_application_unavailable")
+        if billing_service is None: reasons.append("billing_service_unavailable")
+        if repository is None: reasons.append("billing_repository_unavailable")
+        if not callable(context_provider): reasons.append("canonical_request_context_unavailable")
+        if not callable(authorization_provider): reasons.append("canonical_authorization_unavailable")
+        if not callable(csrf_validator): reasons.append("csrf_protection_unavailable")
+        if not callable(webhook_verifier): reasons.append("webhook_verifier_unavailable")
+        if not callable(webhook_tenant_resolver): reasons.append("webhook_tenant_resolver_unavailable")
+        config_ready=False
+        if billing_configuration is not None:
+            try:
+                config_ready=bool(billing_configuration.validate())
+                if not config_ready: reasons.append("billing_configuration_incomplete")
+            except Exception: reasons.append("billing_configuration_invalid")
+        if not payment_provider: reasons.append("payment_provider_unavailable")
+        if not secret_reference: reasons.append("billing_secret_reference_unavailable")
+        checkout=not reasons
+        status=not any(x in reasons for x in ("billing_application_unavailable","billing_service_unavailable","billing_repository_unavailable","canonical_request_context_unavailable","canonical_authorization_unavailable"))
+        webhook=not any(x in reasons for x in ("billing_application_unavailable","repository_unavailable","billing_repository_unavailable","webhook_verifier_unavailable","webhook_tenant_resolver_unavailable"))
+        if not config_ready: checkout=False
+        return BillingRouteReadiness("READY_FOR_CONTROLLED_ROUTE_REGISTRATION" if checkout and status and webhook else "ROUTE_REGISTRATION_BLOCKED", checkout and status and webhook, tuple(dict.fromkeys(reasons)), checkout, status, webhook)
+
+def register_if_ready(app, blueprint, readiness: BillingRouteReadiness):
+    if readiness.ready and blueprint is not None: app.register_blueprint(blueprint); return True
+    return False
