@@ -1050,6 +1050,21 @@ def strategic_intelligence_health_dashboard(): return render_template("executive
 @app.get("/workspace/executive-strategy/executive-intelligence-summary")
 @permission_required("investigations:read")
 def executive_intelligence_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="executive-intelligence-summary", title="Executive intelligence summary", payload_key="summary")
+@app.get("/workspace/executive-strategy/intelligence-operating-model")
+@permission_required("investigations:read")
+def intelligence_operating_model_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-operating-model", title="Executive intelligence operating model", payload_key="operating_model")
+@app.get("/workspace/executive-strategy/strategic-portfolio-governance")
+@permission_required("investigations:read")
+def strategic_portfolio_governance_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="strategic-portfolio-governance", title="Strategic portfolio governance", payload_key="governance")
+@app.get("/workspace/executive-strategy/organizational-ai-maturity")
+@permission_required("investigations:read")
+def organizational_ai_maturity_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="organizational-ai-maturity", title="Organizational AI maturity", payload_key="maturity")
+@app.get("/workspace/executive-strategy/intelligence-adoption")
+@permission_required("investigations:read")
+def intelligence_adoption_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="intelligence-adoption", title="Intelligence adoption analytics", payload_key="adoption")
+@app.get("/workspace/executive-strategy/executive-governance-summary")
+@permission_required("investigations:read")
+def executive_governance_summary_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="executive-governance-summary", title="Executive governance summary", payload_key="summary")
 
 
 
