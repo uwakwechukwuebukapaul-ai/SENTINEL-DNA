@@ -17,7 +17,10 @@ class OidcDeploymentReadinessValidator:
     def validate(self, configuration: OidcRuntimeConfiguration | None = None, metadata_validator=None):
         config = configuration or OidcRuntimeConfiguration.from_environment()
         try: config.validate(self.production)
-        except Exception as exc: return OidcDeploymentReadiness("CONFIGURATION_INVALID" if config.provider else "CONFIGURATION_INCOMPLETE", str(exc))
+        except Exception as exc:
+            reason = str(exc)
+            incomplete = not config.provider or reason in {"oidc_configuration_incomplete", "oidc_secret_reference_missing"}
+            return OidcDeploymentReadiness("CONFIGURATION_INCOMPLETE" if incomplete else "CONFIGURATION_INVALID", reason)
         if not self.secret_provider.get(config.client_secret_reference): return OidcDeploymentReadiness("CONFIGURATION_INCOMPLETE", "client_secret_unavailable")
         for endpoint in (config.issuer, config.authorization_endpoint, config.token_endpoint, config.jwks_uri, config.redirect_uri):
             if not self._safe_endpoint(endpoint): return OidcDeploymentReadiness("CONFIGURATION_INVALID", "oidc_endpoint_untrusted")
