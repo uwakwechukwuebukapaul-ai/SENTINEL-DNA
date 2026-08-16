@@ -146,6 +146,7 @@ from database.connection import database
 from services.billing.repository import BillingRepository
 from services.billing.application import BillingApplicationService
 from services.billing.readiness import BillingRouteReadinessEvaluator
+from services.billing.capabilities import CanonicalAuthorizationAdapter
 from services.data_security.service import DataSecurityService
 from services.decision_intelligence.service import DecisionIntelligenceService
 from services.security_copilot.service import SecurityCopilotService
@@ -269,6 +270,7 @@ def build_container() -> ServiceRegistry:
     canonical_authority = CanonicalAuthorityService()
     canonical_request_context = CanonicalRequestContextService(canonical_authority)
     canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
+    billing_authorization = CanonicalAuthorizationAdapter(canonical_authorization)
     for component in ("database","redis","workers","audit","tenant_isolation","ai_governance"): operations_hardening.check(component)
 
     # ==================================
@@ -322,6 +324,8 @@ def build_container() -> ServiceRegistry:
     registry.register("billing_repository", billing_repository)
     registry.register("billing_application", billing_application)
     registry.register("billing_readiness", billing_readiness)
+    registry.register("billing_authorization", billing_authorization)
+    registry.register("billing_context_provider", None)
     registry.register("mssp_service", mssp_service)
     registry.register("compliance_service", compliance_service)
     registry.register("mlops_service", mlops_service)
