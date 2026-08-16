@@ -9,3 +9,5 @@ def test_container_constructs_provider_neutral_billing_dependencies_without_netw
     assert isinstance(registry.require("billing_application"),BillingApplicationService)
     assert isinstance(registry.require("billing_readiness"),BillingRouteReadinessEvaluator)
     assert registry.require("billing_application").billing.provider is None
+    assert registry.require("billing_configuration") is not None
+    assert registry.get("paystack_provider") is None

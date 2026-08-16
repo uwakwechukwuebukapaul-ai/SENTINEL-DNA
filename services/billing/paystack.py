@@ -4,13 +4,13 @@ import requests
 from .exceptions import BillingConfigurationError, PaymentProviderError
 from .models import PaymentInitialization, PaymentStatus, PaymentVerificationResult
 class PaystackPaymentProvider:
-    def __init__(self, *, base_url, secret_provider, secret_reference, callback_url, transport=None):
+    def __init__(self, *, base_url, secret_provider, secret_reference, callback_url, transport=None, timeout_seconds=10):
         parsed=urlparse(base_url)
-        if parsed.scheme != "https" or not parsed.netloc or not callback_url.startswith("https://"): raise BillingConfigurationError("paystack_https_required")
-        self.base_url=base_url.rstrip("/"); self.secret=secret_provider.get(secret_reference) if secret_reference else ""; self.callback_url=callback_url; self.transport=transport or requests
+        if parsed.scheme != "https" or parsed.netloc not in {"api.paystack.co", "api.paystack.test"} or not callback_url.startswith("https://") or timeout_seconds <= 0 or timeout_seconds > 30: raise BillingConfigurationError("paystack_https_required")
+        self.base_url=base_url.rstrip("/"); self.secret=secret_provider.get(secret_reference) if secret_reference else ""; self.callback_url=callback_url; self.transport=transport or requests; self.timeout_seconds=timeout_seconds
         if not self.secret: raise BillingConfigurationError("paystack_secret_unavailable")
     def _request(self, method, path, **kwargs):
-        response=getattr(self.transport, method)(self.base_url+path, headers={"Authorization":"Bearer "+self.secret,"Content-Type":"application/json"}, timeout=10, allow_redirects=False, **kwargs)
+        response=getattr(self.transport, method)(self.base_url+path, headers={"Authorization":"Bearer "+self.secret,"Content-Type":"application/json"}, timeout=self.timeout_seconds, allow_redirects=False, **kwargs)
         if response.status_code != 200: raise PaymentProviderError("paystack_request_failed")
         try: data=response.json()
         except Exception as exc: raise PaymentProviderError("paystack_response_invalid") from exc
