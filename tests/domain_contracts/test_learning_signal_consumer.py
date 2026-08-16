@@ -29,6 +29,20 @@ def test_optimizer_rejects_malformed_signal_safely():
         service.recommend_from_learning_signal({"steps": []})
 
 
+def test_optimizer_rejects_cross_tenant_learning_signal():
+    service = InvestigationOptimizationService(tenant_id="tenant-a")
+    signal = LearningSignal("s1", "tenant-b", "plan_hint", "out-1", {"steps": []})
+    with pytest.raises(ValueError, match="learning_signal_tenant_mismatch"):
+        service.recommend_from_learning_signal(signal)
+
+
+def test_optimizer_rejects_non_advisory_learning_signal():
+    service = InvestigationOptimizationService(tenant_id="tenant-a")
+    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": []}, advisory_only=False)
+    with pytest.raises(ValueError, match="learning_signal_not_advisory"):
+        service.recommend_from_learning_signal(signal)
+
+
 def test_feedback_adapter_produces_advisory_signal_without_mutation():
     feedback = Feedback(
         "fb-1", "tenant-a", "analyst-1", "decision-1", FeedbackOutcome.CORRECTED,
