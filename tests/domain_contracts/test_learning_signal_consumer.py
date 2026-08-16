@@ -36,6 +36,13 @@ def test_optimizer_rejects_cross_tenant_learning_signal():
         service.recommend_from_learning_signal(signal)
 
 
+def test_optimizer_rejects_unscoped_learning_signal_consumer():
+    service = InvestigationOptimizationService()
+    signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": []})
+    with pytest.raises(ValueError, match="learning_signal_tenant_scope_required"):
+        service.recommend_from_learning_signal(signal)
+
+
 def test_optimizer_rejects_non_advisory_learning_signal():
     service = InvestigationOptimizationService(tenant_id="tenant-a")
     signal = LearningSignal("s1", "tenant-a", "plan_hint", "out-1", {"steps": []}, advisory_only=False)

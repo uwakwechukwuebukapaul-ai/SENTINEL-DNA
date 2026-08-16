@@ -12,7 +12,8 @@ class InvestigationOptimizationService:
     def recommend_from_learning_signal(self, signal: LearningSignal):
         """Read an advisory signal and return step recommendations without persistence."""
         if not isinstance(signal, LearningSignal): raise TypeError("learning_signal_required")
-        if self.tenant_id and signal.tenant_id != self.tenant_id: raise ValueError("learning_signal_tenant_mismatch")
+        if not self.tenant_id: raise ValueError("learning_signal_tenant_scope_required")
+        if signal.tenant_id != self.tenant_id: raise ValueError("learning_signal_tenant_mismatch")
         if not signal.advisory_only: raise ValueError("learning_signal_not_advisory")
         steps = signal.value.get("steps", ())
         if not isinstance(steps, (list, tuple)): raise ValueError("learning_signal_steps_invalid")
