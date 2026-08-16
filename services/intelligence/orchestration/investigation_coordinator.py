@@ -102,6 +102,17 @@ class InvestigationContext:
 
     timeline: list[dict[str, Any]] = field(default_factory=list)
 
+    tenant_id: str | None = None
+    actor_id: str | None = None
+    intelligence_evidence: list[dict[str, Any]] = field(default_factory=list)
+    _queried_intelligence: list[tuple[str, str, str]] = field(default_factory=list, repr=False)
+
+    def add_evidence(self, evidence: dict[str, Any], tenant_id: str) -> None:
+        if tenant_id != self.tenant_id:
+            raise PermissionError("evidence tenant does not match investigation tenant")
+        self.intelligence_evidence.append(dict(evidence))
+        self.evidence.append(dict(evidence))
+
 
 # ============================================================
 # Investigation Coordinator
@@ -137,6 +148,7 @@ class InvestigationCoordinator:
         registry: Any = None,
         runtime: Any = None,
         orchestrator: Any = None,
+        threat_intelligence_gateway: Any = None,
     ) -> None:
 
         self.registry = registry
@@ -163,6 +175,7 @@ class InvestigationCoordinator:
         self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
         self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
         self.threat_intelligence = ThreatCorrelationEngine()
+        self.threat_intelligence_gateway = threat_intelligence_gateway
 
 
     # ========================================================
@@ -561,6 +574,27 @@ class InvestigationCoordinator:
             iocs=iocs,
             timeline=timeline,
         )
+
+        tenant_id = kwargs.get("tenant_id")
+        actor_id = kwargs.get("actor_id")
+        context.tenant_id = tenant_id
+        context.actor_id = actor_id
+        if self.threat_intelligence_gateway is not None and iocs:
+            if not tenant_id or not actor_id:
+                raise PermissionError("tenant and actor context are required for intelligence lookup")
+            for item in iocs:
+                if not isinstance(item, dict) or not item.get("value"):
+                    continue
+                from app.intelligence.gateway import IOC, IOCType, LookupRequest
+                ioc_type = IOCType(str(item.get("type", "unknown")).lower())
+                key = (ioc_type.value, str(item["value"]).strip().lower(), "default")
+                if key in context._queried_intelligence:
+                    continue
+                context._queried_intelligence.append(key)
+                request = LookupRequest(tenant_id, actor_id, IOC(key[1], ioc_type))
+                result = self.threat_intelligence_gateway.lookup(request)
+                payload = {"ioc": item, "observations": [ob.__dict__ for ob in result.observations], "audit": result.audit.__dict__}
+                context.add_evidence(payload, tenant_id)
 
         orchestrator_kwargs = dict(kwargs)
         orchestrator_kwargs["context"] = context
