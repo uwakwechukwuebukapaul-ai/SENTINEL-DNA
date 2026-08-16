@@ -1026,6 +1026,18 @@ def portfolio_forecast_strategic_evolution_dashboard(): return render_template("
 @app.get("/workspace/executive-strategy/portfolio-forecast/improvement-maturity")
 @permission_required("investigations:read")
 def portfolio_forecast_improvement_maturity_dashboard(): return render_template("executive_portfolio_forecast_phase3551.html", endpoint="improvement-maturity", title="Improvement maturity posture", payload_key="maturity")
+@app.get("/workspace/executive-strategy/portfolio-forecast/strategic-evolution-command-center")
+@permission_required("investigations:read")
+def portfolio_forecast_strategic_evolution_command_center_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="strategic-evolution-command-center", title="Strategic evolution command center", payload_key="command_center")
+@app.get("/workspace/executive-strategy/portfolio-forecast/governance-optimization-analytics")
+@permission_required("investigations:read")
+def portfolio_forecast_governance_optimization_analytics_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="governance-optimization-analytics", title="Governance optimization analytics", payload_key="analytics")
+@app.get("/workspace/executive-strategy/portfolio-forecast/improvement-maturity-analytics")
+@permission_required("investigations:read")
+def portfolio_forecast_improvement_maturity_analytics_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="improvement-maturity-analytics", title="Improvement maturity analytics", payload_key="analytics")
+@app.get("/workspace/executive-strategy/portfolio-forecast/strategic-evolution-trends")
+@permission_required("investigations:read")
+def portfolio_forecast_strategic_evolution_trends_dashboard(): return render_template("executive_portfolio_forecast_phase3552.html", endpoint="strategic-evolution-trends", title="Strategic evolution trends", payload_key="trends")
 
 
 

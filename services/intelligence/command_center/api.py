@@ -73,6 +73,10 @@ from .improvement_trends_service import ImprovementTrendsService
 from .governance_learning_optimization_service import GovernanceLearningOptimizationService
 from .strategic_evolution_service import StrategicEvolutionService
 from .improvement_maturity_service import ImprovementMaturityService
+from .strategic_evolution_command_center_service import StrategicEvolutionCommandCenterService
+from .governance_optimization_analytics_service import GovernanceOptimizationAnalyticsService
+from .improvement_maturity_analytics_service import ImprovementMaturityAnalyticsService
+from .strategic_evolution_trends_service import StrategicEvolutionTrendsService
 
 def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
@@ -149,6 +153,10 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     governance_learning_optimization_service=GovernanceLearningOptimizationService(continuous_improvement_service,outcome_learning_service,improvement_trends_service)
     strategic_evolution_service=StrategicEvolutionService(improvement_trends_service,governance_learning_optimization_service,improvement_governance_service)
     improvement_maturity_service=ImprovementMaturityService(improvement_governance_service,strategic_evolution_service,continuous_improvement_service)
+    governance_optimization_analytics_service=GovernanceOptimizationAnalyticsService(governance_learning_optimization_service,improvement_governance_service,continuous_improvement_service)
+    improvement_maturity_analytics_service=ImprovementMaturityAnalyticsService(improvement_maturity_service,strategic_evolution_service,improvement_trends_service)
+    strategic_evolution_trends_service=StrategicEvolutionTrendsService(strategic_evolution_service,improvement_trends_service,strategic_improvement_portfolio_analytics_service)
+    strategic_evolution_command_center_service=StrategicEvolutionCommandCenterService(strategic_evolution_service,governance_optimization_analytics_service,improvement_maturity_analytics_service,continuous_improvement_service)
     improvement_command_center_service=ImprovementCommandCenterService(strategic_improvement_portfolio_analytics_service,governance_learning_service,governance_learning_trends_analytics_service,improvement_governance_service,outcome_learning_service,continuous_improvement_service,improvement_trends_service,strategic_evolution_service,improvement_maturity_service)
     def tenant():
         value=tenant_resolver() if tenant_resolver else None
@@ -705,6 +713,38 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
     @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-maturity/<signal_id>")
     def quality_improvement_maturity_detail(signal_id):
         try: return _phase3548(improvement_maturity_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/strategic-evolution-command-center")
+    def quality_strategic_evolution_command_center():
+        try: return _phase3548(strategic_evolution_command_center_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/strategic-evolution-command-center/<signal_id>")
+    def quality_strategic_evolution_command_center_detail(signal_id):
+        try: return _phase3548(strategic_evolution_command_center_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-optimization-analytics")
+    def quality_governance_optimization_analytics():
+        try: return _phase3548(governance_optimization_analytics_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/governance-optimization-analytics/<signal_id>")
+    def quality_governance_optimization_analytics_detail(signal_id):
+        try: return _phase3548(governance_optimization_analytics_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-maturity-analytics")
+    def quality_improvement_maturity_analytics():
+        try: return _phase3548(improvement_maturity_analytics_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/improvement-maturity-analytics/<signal_id>")
+    def quality_improvement_maturity_analytics_detail(signal_id):
+        try: return _phase3548(improvement_maturity_analytics_service,signal_id)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/strategic-evolution-trends")
+    def quality_strategic_evolution_trends():
+        try: return _phase3548(strategic_evolution_trends_service)
+        except PermissionError as exc: return jsonify({"error":str(exc)}),400
+    @bp.get("/api/command-center/quality/executive-strategy/portfolio-forecast/strategic-evolution-trends/<signal_id>")
+    def quality_strategic_evolution_trends_detail(signal_id):
+        try: return _phase3548(strategic_evolution_trends_service,signal_id)
         except PermissionError as exc: return jsonify({"error":str(exc)}),400
     @bp.post("/api/command-center/investigation/<investigation_id>/feedback")
     def submit_investigation_feedback(investigation_id):
