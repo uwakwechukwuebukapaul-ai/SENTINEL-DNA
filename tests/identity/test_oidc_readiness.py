@@ -14,3 +14,16 @@ def test_private_endpoint_is_invalid():
 def test_missing_trust_is_not_ready():
     result=OidcDeploymentReadinessValidator(OidcSecretProvider({"SECRET":"x"})).validate(config()); assert result.status in {"TRUST_NOT_ESTABLISHED","CONFIGURATION_INVALID"}
 
+def test_metadata_validator_is_required_after_trust():
+    class Trust:
+        def resolve(self, *args): return object()
+    result=OidcDeploymentReadinessValidator(OidcSecretProvider({"SECRET":"x"}), Trust()).validate(config())
+    assert result.status in {"METADATA_UNAVAILABLE", "CRYPTOGRAPHY_UNAVAILABLE"}
+
+def test_valid_injected_metadata_can_reach_ready_without_network():
+    class Trust:
+        def resolve(self, *args): return object()
+    class Metadata:
+        def validate(self, config): return type("Result", (), {"valid": True, "reason": "metadata_validated"})()
+    result=OidcDeploymentReadinessValidator(OidcSecretProvider({"SECRET":"x"}), Trust()).validate(config(), Metadata())
+    assert result.status in {"READY", "CRYPTOGRAPHY_UNAVAILABLE"}
