@@ -99,8 +99,10 @@ from .executive_intelligence_command_center_service import ExecutiveIntelligence
 from .governance_intelligence_monitoring_service import GovernanceIntelligenceMonitoringService
 from .decision_intelligence_analytics_service import DecisionIntelligenceAnalyticsService
 from .operating_model_analytics_service import OperatingModelAnalyticsService
+from services.domain_contracts import Feedback, FeedbackOutcome
+from services.identity.compatibility import CanonicalIdentityContext
 
-def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None):
+def create_command_center_blueprint(service=None, tenant_resolver=None, source_resolver=None, event_feed=None, attention_service=None, decision_service=None, investigation_workspace_service=None, decision_feedback_boundary=None, identity_context_resolver=None):
     bp=Blueprint("command_center", __name__); service=service or CommandCenterPresentationService()
     drilldown=DrillDownService(source_resolver)
     event_feed=event_feed or AnalystEventFeed()
@@ -206,6 +208,34 @@ def create_command_center_blueprint(service=None, tenant_resolver=None, source_r
         value=tenant_resolver() if tenant_resolver else None
         if not value: raise PermissionError("organization_context_required")
         return value
+    @bp.post("/api/command-center/decision/<decision_id>/feedback")
+    def submit_decision_feedback(decision_id):
+        try:
+            if decision_feedback_boundary is None or identity_context_resolver is None:
+                return jsonify({"error": "decision_feedback_unavailable"}), 503
+            if not request.is_json:
+                return jsonify({"error": "invalid_feedback"}), 400
+            payload = request.get_json(silent=True) or {}
+            context_value = identity_context_resolver(tenant(), payload)
+            if not isinstance(context_value, CanonicalIdentityContext):
+                return jsonify({"error": "canonical_identity_required"}), 403
+            feedback_value = Feedback(
+                feedback_id=str(payload.get("feedback_id") or "pending"),
+                tenant_id=context_value.tenant_id,
+                user_id=context_value.actor_id,
+                decision_id=decision_id,
+                outcome=FeedbackOutcome(str(payload.get("outcome") or "")),
+                correction=payload.get("correction"),
+                confidence=payload.get("confidence"),
+                outcome_id=payload.get("outcome_id"),
+                provenance={"source": "command_center_api"},
+            )
+            result = decision_feedback_boundary.submit(context_value, feedback_value)
+            return jsonify(result.to_dict()), 201
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+        except PermissionError as exc:
+            return jsonify({"error": str(exc)}), 403
     @bp.get("/api/command-center")
     def context():
         try:
