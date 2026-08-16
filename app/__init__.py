@@ -23,7 +23,7 @@ def create_app():
     )
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
-    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies)
+    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
     database.database_path = runtime_config.database_path
 
 
@@ -32,6 +32,9 @@ def create_app():
     # ==================================
 
     app.container = build_container()
+    # OIDC routes remain disabled until a concrete verifier, token client,
+    # provider-tenant trust, and identity-binding wiring are supplied.
+    app.config["OIDC_ROUTES_ENABLED"] = False
     from services.automation import automation_api
     from services.integrations import integrations_api
     from services.detection import detection_api
