@@ -25,6 +25,36 @@ class IOCType(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ProviderCapability(str, Enum):
+    """Declarative intelligence features; these never grant tenant authority."""
+    IPV4_LOOKUP = "ipv4_lookup"
+    IPV6_LOOKUP = "ipv6_lookup"
+    DOMAIN_LOOKUP = "domain_lookup"
+    URL_LOOKUP = "url_lookup"
+    MD5_LOOKUP = "md5_lookup"
+    SHA1_LOOKUP = "sha1_lookup"
+    SHA256_LOOKUP = "sha256_lookup"
+    REPUTATION = "reputation"
+    MALWARE_METADATA = "malware_metadata"
+    THREAT_ACTOR_METADATA = "threat_actor_metadata"
+    CAMPAIGN_METADATA = "campaign_metadata"
+    ATTACK_METADATA = "attack_metadata"
+    HISTORICAL_OBSERVATIONS = "historical_observations"
+    TAGS = "tags"
+    PASSIVE_DNS = "passive_dns"
+    RELATED_INFRASTRUCTURE = "related_infrastructure"
+
+
+@dataclass(frozen=True)
+class ProviderCapabilities:
+    """Provider-declared lookup coverage and enrichment features."""
+    ioc_types: frozenset[IOCType]
+    features: frozenset[ProviderCapability] = frozenset()
+
+    def supports(self, ioc_type: IOCType) -> bool:
+        return ioc_type in self.ioc_types
+
+
 @dataclass(frozen=True)
 class IOC:
     value: str
@@ -113,6 +143,7 @@ class ThreatIntelligenceProvider(Protocol):
     @property
     def identity(self) -> ProviderIdentity: ...
     def capabilities(self) -> frozenset[IOCType]: ...
+    def provider_capabilities(self) -> ProviderCapabilities: ...
     def lookup(self, request: LookupRequest) -> ProviderResult: ...
 
 
