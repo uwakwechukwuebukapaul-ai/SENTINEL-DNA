@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
-import uuid
 
 from .events import NormalizedBillingEvent
 from .exceptions import BillingError, PaymentProviderError
@@ -62,7 +61,8 @@ class CryptoPaymentVerificationService:
             if not quote: raise BillingError("crypto_quote_unavailable")
             expires = datetime.fromisoformat(intent["payment_expires_at"])
             now = self.clock()
-            if now >= expires:
+            quote_expires = datetime.fromisoformat(quote["expires_at"])
+            if now >= expires or now >= quote_expires:
                 result = self._result(intent, quote, None, now, "EXPIRED", True)
                 self.repository.update_crypto_intent(connection, payment_intent_id, "CANCELLED", result)
                 self.repository.update_transaction(connection, intent["transaction_reference"], "CANCELLED")
@@ -92,19 +92,28 @@ class CryptoPaymentVerificationService:
 
     def _compare(self, intent, quote, data):
         if data.get("status") in {"not_found", "missing"}: return "PAYMENT_NOT_FOUND", "AWAITING_PAYMENT"
+        if not all(isinstance(data.get(key), str) and data.get(key) for key in ("provider_payment_reference", "asset", "network", "destination")):
+            return "INVALID_PROVIDER_RESPONSE", "FAILED"
         try: amount = Decimal(str(data.get("amount")))
         except (InvalidOperation, TypeError, ValueError): return "INVALID_PROVIDER_RESPONSE", "FAILED"
+        if not amount.is_finite() or amount < 0: return "INVALID_PROVIDER_RESPONSE", "FAILED"
         if amount != Decimal(str(quote["crypto_amount"])): return "AMOUNT_MISMATCH", "FAILED"
         for key, reason in (("asset", "ASSET_MISMATCH"), ("network", "NETWORK_MISMATCH"), ("destination", "DESTINATION_MISMATCH")):
             if data.get(key) != intent[key]: return reason, "FAILED"
-        if data.get("provider_payment_reference") not in {intent["provider_reference"], intent["transaction_reference"]}: return "REFERENCE_MISMATCH", "FAILED"
-        confirmations = int(data.get("confirmations", 0)); required = int(data.get("required_confirmations", 0))
+        if data.get("provider_payment_reference") != intent["provider_reference"]: return "REFERENCE_MISMATCH", "FAILED"
+        confirmations = data.get("confirmations"); required = data.get("required_confirmations")
+        if isinstance(confirmations, bool) or isinstance(required, bool): return "INVALID_PROVIDER_RESPONSE", "FAILED"
+        try: confirmations, required = int(confirmations), int(required)
+        except (TypeError, ValueError): return "INVALID_PROVIDER_RESPONSE", "FAILED"
+        if confirmations < 0 or required < 0: return "INVALID_PROVIDER_RESPONSE", "FAILED"
         if confirmations < required: return ("INSUFFICIENT_CONFIRMATIONS", "PAYMENT_DETECTED" if confirmations == 0 else "CONFIRMING")
         return "VERIFIED", "VERIFIED"
 
     def _result(self, intent, quote, data, now, reason, expired):
         data = data or {}; amount = data.get("amount")
-        return CryptoVerificationResult(intent["payment_intent_id"], intent["provider"], data.get("provider_payment_reference"), intent["asset"], intent["network"], intent["destination"], None if amount is None else Decimal(str(amount)), Decimal(str(quote["crypto_amount"])), int(data.get("confirmations", 0)), int(data.get("required_confirmations", 0)), "VERIFIED" if reason == "VERIFIED" else ("CONFIRMING" if reason == "INSUFFICIENT_CONFIRMATIONS" else "FAILED"), None, now, expired, reason)
+        try: confirmations, required = int(data.get("confirmations", 0)), int(data.get("required_confirmations", 0))
+        except (TypeError, ValueError): confirmations, required = 0, 0
+        return CryptoVerificationResult(intent["payment_intent_id"], intent["provider"], data.get("provider_payment_reference"), intent["asset"], intent["network"], intent["destination"], None if amount is None else Decimal(str(amount)), Decimal(str(quote["crypto_amount"])), confirmations, required, "VERIFIED" if reason == "VERIFIED" else ("CONFIRMING" if reason == "INSUFFICIENT_CONFIRMATIONS" else "FAILED"), None, now, expired, reason)
 
 class CryptoPaymentReconciliationService:
     def __init__(self, verifier, repository): self.verifier, self.repository = verifier, repository
