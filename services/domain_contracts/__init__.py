@@ -11,6 +11,8 @@ from .models import (
 )
 from .adapters import feedback_from_store_record, learning_signal_from_outcome, outcome_from_record, quality_from_record
 from .persistence import OutcomePersistenceBoundary
+from .investigation_feedback import InvestigationFeedback
+from .investigation_feedback_adapter import InvestigationFeedbackAdapter
 
 __all__ = [
     "Feedback",
@@ -25,4 +27,6 @@ __all__ = [
     "outcome_from_record",
     "quality_from_record",
     "OutcomePersistenceBoundary",
+    "InvestigationFeedback",
+    "InvestigationFeedbackAdapter",
 ]
