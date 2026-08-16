@@ -148,7 +148,7 @@ from services.billing.application import BillingApplicationService
 from services.billing.readiness import BillingRouteReadinessEvaluator
 from services.billing.capabilities import CanonicalAuthorizationAdapter
 from services.billing.config import BillingConfiguration, EnvironmentSecretProvider
-from services.billing.paystack import PaystackPaymentProvider
+from services.billing.paystack import PaystackPaymentProvider, PaystackProviderValidator
 from services.data_security.service import DataSecurityService
 from services.decision_intelligence.service import DecisionIntelligenceService
 from services.security_copilot.service import SecurityCopilotService
@@ -238,6 +238,7 @@ def build_container() -> ServiceRegistry:
     billing_configuration = BillingConfiguration.from_environment()
     billing_secret_provider = EnvironmentSecretProvider()
     paystack_provider = None
+    paystack_validator = None
     if billing_configuration.reason_codes() == ("PAYSTACK_READY",):
         try:
             paystack_provider = PaystackPaymentProvider(
@@ -247,6 +248,7 @@ def build_container() -> ServiceRegistry:
                 callback_url=billing_configuration.callback_url,
                 timeout_seconds=billing_configuration.timeout_seconds,
             )
+            paystack_validator = PaystackProviderValidator(paystack_provider)
         except Exception:
             paystack_provider = None
     mssp_service = MSSPService(); compliance_service = ComplianceService(); mlops_service = MLOpsService()
@@ -343,6 +345,7 @@ def build_container() -> ServiceRegistry:
     registry.register("billing_configuration", billing_configuration)
     registry.register("billing_secret_provider", billing_secret_provider)
     registry.register("paystack_provider", paystack_provider)
+    registry.register("paystack_provider_validator", paystack_validator)
     registry.register("billing_authorization", billing_authorization)
     registry.register("billing_context_provider", None)
     registry.register("mssp_service", mssp_service)

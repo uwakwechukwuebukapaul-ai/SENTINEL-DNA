@@ -2,6 +2,35 @@
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
+class PaystackOperationalReadiness:
+    state: str
+    ready: bool
+    production_approved: bool
+    reason: str
+    checks: tuple[tuple[str, str], ...]
+
+    def as_dict(self):
+        return {"state": self.state, "ready": self.ready, "production_approved": self.production_approved, "reason": self.reason, "checks": dict(self.checks)}
+
+def evaluate_paystack_operations(*, configuration, secret_available, provider_validation=None, webhook_trust=False, authorization=False, production_approval=False):
+    checks = {
+        "configuration": "PASS" if configuration and configuration.reason_codes() == ("PAYSTACK_READY",) else "BLOCKED",
+        "secret": "PASS" if secret_available else "BLOCKED",
+        "provider_api": "PASS" if provider_validation and provider_validation.state == "PROVIDER_VALIDATED" else "BLOCKED",
+        "webhook": "PASS" if webhook_trust else "BLOCKED",
+        "authorization": "PASS" if authorization else "BLOCKED",
+        "route_registration": "PASS" if production_approval else "BLOCKED",
+        "production_approval": "PASS" if production_approval else "BLOCKED",
+    }
+    if not configuration or configuration.reason_codes() == ("PAYSTACK_DISABLED",):
+        return PaystackOperationalReadiness("DISABLED", False, False, "paystack_disabled", tuple(checks.items()))
+    if not all(value == "PASS" for key, value in checks.items() if key not in {"route_registration", "production_approval"}):
+        return PaystackOperationalReadiness("ROUTE_REGISTRATION_BLOCKED", False, False, "production_prerequisites_incomplete", tuple(checks.items()))
+    if not production_approval:
+        return PaystackOperationalReadiness("PROVIDER_VALIDATED", True, False, "production_not_approved", tuple(checks.items()))
+    return PaystackOperationalReadiness("PRODUCTION_READY", True, True, "production_approved", tuple(checks.items()))
+
+@dataclass(frozen=True)
 class BillingRouteReadiness:
     state: str
     ready: bool

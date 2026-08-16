@@ -1,8 +1,45 @@
 import hashlib, hmac, json
+from dataclasses import dataclass
 from urllib.parse import urlparse
 import requests
 from .exceptions import BillingConfigurationError, PaymentProviderError
 from .models import PaymentInitialization, PaymentStatus, PaymentVerificationResult
+
+
+@dataclass(frozen=True)
+class ProviderValidationResult:
+    state: str
+    reason: str
+
+
+class PaystackProviderValidator:
+    """Explicit, non-destructive Paystack connectivity validation."""
+    def __init__(self, provider):
+        if provider is None or not getattr(provider, "base_url", None):
+            raise ValueError("paystack_provider_required")
+        self.provider = provider
+
+    def validate(self):
+        try:
+            response = self.provider.transport.get(
+                self.provider.base_url + "/bank",
+                headers={"Authorization": "Bearer " + self.provider.secret, "Content-Type": "application/json"},
+                timeout=self.provider.timeout_seconds,
+                allow_redirects=False,
+            )
+            if int(getattr(response, "status_code", 0)) != 200:
+                return ProviderValidationResult("PROVIDER_VALIDATION_FAILED", "provider_http_error")
+            content = getattr(response, "content", b"")
+            if content and len(content) > 256 * 1024:
+                return ProviderValidationResult("PROVIDER_VALIDATION_FAILED", "provider_response_too_large")
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("status") is not True:
+                return ProviderValidationResult("PROVIDER_VALIDATION_FAILED", "provider_response_invalid")
+            return ProviderValidationResult("PROVIDER_VALIDATED", "provider_authenticated")
+        except (TimeoutError, requests.exceptions.Timeout):
+            return ProviderValidationResult("PROVIDER_VALIDATION_FAILED", "provider_timeout")
+        except Exception:
+            return ProviderValidationResult("PROVIDER_VALIDATION_FAILED", "provider_unreachable")
 class PaystackPaymentProvider:
     def __init__(self, *, base_url, secret_provider, secret_reference, callback_url, transport=None, timeout_seconds=10):
         parsed=urlparse(base_url)
