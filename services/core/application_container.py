@@ -139,6 +139,9 @@ from services.operations_hardening.service import OperationsHardeningService
 from services.pilot_simulation.service import PilotSimulationService
 from services.compliance.governance import GovernanceService
 from services.identity_security.service import IdentitySecurityService
+from services.identity.canonical_authority import CanonicalAuthorityService
+from services.identity.request_context import CanonicalRequestContextService
+from services.tenant.authorization import CanonicalTenantAuthorizationService
 from services.data_security.service import DataSecurityService
 from services.decision_intelligence.service import DecisionIntelligenceService
 from services.security_copilot.service import SecurityCopilotService
@@ -256,6 +259,9 @@ def build_container() -> ServiceRegistry:
     decision_intelligence = DecisionIntelligenceService()
     security_copilot = SecurityCopilotService()
     platform_experience = PlatformExperienceService()
+    canonical_authority = CanonicalAuthorityService()
+    canonical_request_context = CanonicalRequestContextService(canonical_authority)
+    canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
     for component in ("database","redis","workers","audit","tenant_isolation","ai_governance"): operations_hardening.check(component)
 
     # ==================================
@@ -344,6 +350,9 @@ def build_container() -> ServiceRegistry:
     registry.register("decision_intelligence", decision_intelligence)
     registry.register("security_copilot", security_copilot)
     registry.register("platform_experience", platform_experience)
+    registry.register("canonical_authority", canonical_authority)
+    registry.register("canonical_request_context", canonical_request_context)
+    registry.register("canonical_authorization", canonical_authorization)
 
     registry.validate_required((
         "investigation_coordinator",

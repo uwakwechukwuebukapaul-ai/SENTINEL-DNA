@@ -66,6 +66,41 @@ def ensure_canonical_schema(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_canonical_memberships_actor
             ON canonical_memberships(actor_id);
 
+        CREATE TABLE IF NOT EXISTS canonical_identity_bindings (
+            binding_id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            external_subject TEXT NOT NULL,
+            actor_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'disabled', 'revoked')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            revoked_at TEXT,
+            UNIQUE (provider, external_subject),
+            FOREIGN KEY (actor_id) REFERENCES canonical_identities(actor_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_canonical_identity_bindings_actor
+            ON canonical_identity_bindings(actor_id);
+
+        CREATE TABLE IF NOT EXISTS canonical_provider_tenant_trusts (
+            trust_id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            issuer TEXT NOT NULL,
+            external_tenant_id TEXT NOT NULL,
+            canonical_tenant_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'disabled', 'revoked')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            revoked_at TEXT,
+            UNIQUE (provider, issuer, external_tenant_id),
+            FOREIGN KEY (canonical_tenant_id) REFERENCES canonical_tenants(tenant_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_tenant_trust_canonical
+            ON canonical_provider_tenant_trusts(canonical_tenant_id);
+
         CREATE TABLE IF NOT EXISTS canonical_schema_metadata (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -161,3 +196,50 @@ class CanonicalMembershipRepository:
         return self.connection.execute(
             "SELECT * FROM canonical_memberships WHERE tenant_id=? AND actor_id=?", (tenant_id, actor_id)
         ).fetchone()
+
+    def list_for_actor(self, actor_id: str):
+        return self.connection.execute("SELECT * FROM canonical_memberships WHERE actor_id=?", (actor_id,)).fetchall()
+
+
+class CanonicalIdentityBindingRepository:
+    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+
+    def create(self, provider: str, external_subject: str, actor_id: str, created_by: str, binding_id: str | None = None):
+        binding_id = binding_id or str(uuid4()); now = _now()
+        self.connection.execute(
+            "INSERT INTO canonical_identity_bindings VALUES (?, ?, ?, ?, 'active', ?, ?, ?, NULL)",
+            (binding_id, provider, external_subject, actor_id, now, now, created_by),
+        )
+        return self.get(provider, external_subject)
+
+    def get(self, provider: str, external_subject: str):
+        return self.connection.execute(
+            "SELECT * FROM canonical_identity_bindings WHERE provider=? AND external_subject=?",
+            (provider, external_subject),
+        ).fetchone()
+
+    def get_by_id(self, binding_id: str):
+        return self.connection.execute("SELECT * FROM canonical_identity_bindings WHERE binding_id=?", (binding_id,)).fetchone()
+
+    def set_status(self, binding_id: str, status: str):
+        revoked_at = _now() if status == "revoked" else None
+        self.connection.execute(
+            "UPDATE canonical_identity_bindings SET status=?, updated_at=?, revoked_at=? WHERE binding_id=?",
+            (status, _now(), revoked_at, binding_id),
+        )
+        return self.connection.execute("SELECT * FROM canonical_identity_bindings WHERE binding_id=?", (binding_id,)).fetchone()
+
+
+class ProviderTenantTrustRepository:
+    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+    def create(self, provider, issuer, external_tenant_id, canonical_tenant_id, created_by, trust_id=None):
+        trust_id = trust_id or str(uuid4()); now = _now()
+        self.connection.execute("INSERT INTO canonical_provider_tenant_trusts VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)", (trust_id, provider, issuer, external_tenant_id, canonical_tenant_id, now, now, created_by))
+        return self.get(provider, issuer, external_tenant_id)
+    def get(self, provider, issuer, external_tenant_id):
+        return self.connection.execute("SELECT * FROM canonical_provider_tenant_trusts WHERE provider=? AND issuer=? AND external_tenant_id=?", (provider, issuer, external_tenant_id)).fetchone()
+    def get_by_id(self, trust_id): return self.connection.execute("SELECT * FROM canonical_provider_tenant_trusts WHERE trust_id=?", (trust_id,)).fetchone()
+    def set_status(self, trust_id, status):
+        revoked_at = _now() if status == 'revoked' else None
+        self.connection.execute("UPDATE canonical_provider_tenant_trusts SET status=?, updated_at=?, revoked_at=? WHERE trust_id=?", (status, _now(), revoked_at, trust_id))
+        return self.get_by_id(trust_id)
