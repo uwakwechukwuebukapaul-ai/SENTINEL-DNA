@@ -626,6 +626,13 @@ class InvestigationCoordinator:
         intelligence_metadata: dict[str, Any] = {}
         if self.threat_intelligence_gateway is not None and iocs:
             if not tenant_id or not actor_id:
+                observer.event(
+                    "THREAT_INTELLIGENCE_AUTHORIZATION_DENIED",
+                    case_id=case_id,
+                    tenant_id=tenant_id,
+                    actor_id=actor_id,
+                    reason="tenant and actor context are required for intelligence lookup",
+                )
                 raise PermissionError("tenant and actor context are required for intelligence lookup")
             for item in iocs:
                 if not isinstance(item, dict) or not item.get("value"):
@@ -637,7 +644,18 @@ class InvestigationCoordinator:
                     continue
                 context._queried_intelligence.append(key)
                 request = LookupRequest(tenant_id, actor_id, IOC(key[1], ioc_type))
-                result = self.threat_intelligence_gateway.lookup(request)
+                try:
+                    result = self.threat_intelligence_gateway.lookup(request)
+                except PermissionError:
+                    observer.event(
+                        "THREAT_INTELLIGENCE_AUTHORIZATION_DENIED",
+                        case_id=case_id,
+                        tenant_id=tenant_id,
+                        actor_id=actor_id,
+                        ioc_type=ioc_type.value,
+                        reason="gateway authorization denied",
+                    )
+                    raise
                 intelligence_metadata = self._normalize_intelligence_gateway_result(result)
                 payload = {"ioc": item, **intelligence_metadata}
                 context.add_evidence(payload, tenant_id)

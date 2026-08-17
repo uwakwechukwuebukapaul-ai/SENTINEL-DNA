@@ -7,6 +7,8 @@ from app.intelligence.gateway import (
     ThreatIntelligenceGateway,
 )
 from services.intelligence.orchestration.investigation_coordinator import InvestigationCoordinator
+import services.intelligence.orchestration.investigation_coordinator as coordinator_module
+import services.observability.service as observability_service
 
 
 class DeterministicProvider:
@@ -44,5 +46,55 @@ def test_authorization_failure_is_not_downgraded():
     with pytest.raises(PermissionError):
         InvestigationCoordinator(threat_intelligence_gateway=gateway).investigate(
             "case-2", {}, iocs=[{"type": "domain", "value": "example.test"}],
+            tenant_id="tenant-a", actor_id="actor-a",
+        )
+
+
+def test_authorization_failure_preserves_exact_message_and_emits_safe_diagnostic(monkeypatch):
+    events = []
+
+    class Observer:
+        def event(self, name, **fields):
+            events.append((name, fields))
+
+    monkeypatch.setattr(coordinator_module, "ObservabilityService", Observer)
+    gateway = ThreatIntelligenceGateway([DeterministicProvider()], lambda *_: False)
+    with pytest.raises(PermissionError, match="^actor is not authorized for threat intelligence lookup$"):
+        InvestigationCoordinator(threat_intelligence_gateway=gateway).investigate(
+            "case-3", {}, iocs=[{"type": "domain", "value": "example.test"}],
+            tenant_id="tenant-a", actor_id="actor-a",
+        )
+    assert events[-1] == ("THREAT_INTELLIGENCE_AUTHORIZATION_DENIED", {
+        "case_id": "case-3", "tenant_id": "tenant-a", "actor_id": "actor-a",
+        "ioc_type": "domain", "reason": "gateway authorization denied",
+    })
+    assert "example.test" not in str(events)
+
+
+def test_authorization_denial_does_not_return_result_or_call_provider():
+    provider = DeterministicProvider()
+    gateway = ThreatIntelligenceGateway([provider], lambda *_: False)
+    with pytest.raises(PermissionError):
+        InvestigationCoordinator(threat_intelligence_gateway=gateway).investigate(
+            "case-4", {}, iocs=[{"type": "domain", "value": "example.test"}],
+            tenant_id="tenant-a", actor_id="actor-a",
+        )
+    assert provider.calls == 0
+
+
+def test_observability_failure_cannot_mask_permission_error(monkeypatch):
+    class FailingLogger:
+        def info(self, *args, **kwargs):
+            raise RuntimeError("telemetry failed")
+
+    monkeypatch.setattr(
+        coordinator_module,
+        "ObservabilityService",
+        lambda: observability_service.ObservabilityService(FailingLogger()),
+    )
+    gateway = ThreatIntelligenceGateway([DeterministicProvider()], lambda *_: False)
+    with pytest.raises(PermissionError, match="^actor is not authorized for threat intelligence lookup$"):
+        InvestigationCoordinator(threat_intelligence_gateway=gateway).investigate(
+            "case-5", {}, iocs=[{"type": "domain", "value": "example.test"}],
             tenant_id="tenant-a", actor_id="actor-a",
         )
