@@ -77,6 +77,7 @@ from services.intelligence.decision.engine import DecisionEngine
 from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
 from services.intelligence.threat_intelligence import ThreatCorrelationEngine
+from services.intelligence.fusion import ProviderNeutralFusionEngine
 import time
 
 
@@ -105,6 +106,7 @@ class InvestigationContext:
 
     tenant_id: str | None = None
     actor_id: str | None = None
+    correlation_id: str | None = None
     intelligence_provenance: dict[str, Any] = field(default_factory=dict)
     intelligence_evidence: list[dict[str, Any]] = field(default_factory=list)
     _queried_intelligence: list[tuple[str, str, str]] = field(default_factory=list, repr=False)
@@ -151,6 +153,7 @@ class InvestigationCoordinator:
         runtime: Any = None,
         orchestrator: Any = None,
         threat_intelligence_gateway: Any = None,
+        provider_neutral_fusion_engine: Any = None,
     ) -> None:
 
         self.registry = registry
@@ -178,6 +181,11 @@ class InvestigationCoordinator:
         self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
         self.threat_intelligence = ThreatCorrelationEngine()
         self.threat_intelligence_gateway = threat_intelligence_gateway
+        self.provider_neutral_fusion_engine = (
+            provider_neutral_fusion_engine
+            if provider_neutral_fusion_engine is not None
+            else ProviderNeutralFusionEngine()
+        )
 
 
     # ========================================================
@@ -194,6 +202,7 @@ class InvestigationCoordinator:
         timeline: Optional[list[dict[str, Any]]] = None,
         tenant_id: str | None = None,
         intelligence_provenance: Optional[dict[str, Any]] = None,
+        correlation_id: str | None = None,
     ) -> InvestigationContext:
 
         return InvestigationContext(
@@ -203,6 +212,7 @@ class InvestigationCoordinator:
             iocs=list(iocs or []),
             timeline=list(timeline or []),
             tenant_id=tenant_id,
+            correlation_id=correlation_id,
             intelligence_provenance=dict(intelligence_provenance or {}),
         )
 
@@ -382,6 +392,96 @@ class InvestigationCoordinator:
             },
         }
 
+    def _fuse_intelligence_gateway_result(
+        self,
+        result: Any,
+        ioc: Any,
+        context: InvestigationContext,
+    ) -> dict[str, Any]:
+        """Fuse trusted gateway observations without changing their provenance."""
+        fusion = self.provider_neutral_fusion_engine.fuse(
+            ioc,
+            tuple(getattr(result, "observations", ()) or ()),
+            context={
+                "tenant_id": context.tenant_id,
+                "investigation_id": context.investigation_id,
+            },
+        )
+        payload = fusion.to_dict()
+        errors: list[dict[str, Any]] = []
+        unavailable: set[str] = set(payload.get("unavailable_providers", ()) or ())
+        for provider_result in getattr(result, "provider_results", ()) or ():
+            error = getattr(provider_result, "error", None)
+            if error is None:
+                continue
+            provider = getattr(getattr(provider_result, "provider", None), "name", None)
+            if not provider:
+                continue
+            unavailable.add(str(provider))
+            errors.append({
+                "provider": str(provider),
+                "error": asdict(error) if is_dataclass(error) else dict(getattr(error, "__dict__", {})),
+            })
+        if errors:
+            payload["provider_errors"] = errors
+            payload["unavailable_providers"] = sorted(unavailable)
+        if context.correlation_id:
+            payload["correlation_id"] = context.correlation_id
+        return payload
+
+    @staticmethod
+    def _merge_intelligence_metadata(
+        current: dict[str, Any],
+        incoming: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Merge per-IOC metadata deterministically while retaining legacy keys."""
+        if not current:
+            merged = dict(incoming)
+            if incoming.get("fusion") is not None:
+                merged["fusion_results"] = [incoming["fusion"]]
+            return merged
+        merged = dict(current)
+        for key in ("provider_results", "observations"):
+            merged[key] = list(current.get(key, ()) or ()) + list(incoming.get(key, ()) or ())
+        audits = list(current.get("audits", ()) or ())
+        if current.get("audit") is not None and not audits:
+            audits.append(current["audit"])
+        if incoming.get("audit") is not None:
+            audits.append(incoming["audit"])
+        if audits:
+            merged["audits"] = audits
+        fusion_results = list(current.get("fusion_results", ()) or ())
+        if not fusion_results and current.get("fusion") is not None:
+            fusion_results.append(current["fusion"])
+        if incoming.get("fusion") is not None:
+            fusion_results.append(incoming["fusion"])
+        if fusion_results:
+            merged["fusion_results"] = fusion_results
+        statuses = sorted(set(current.get("statuses", ()) or ()) | set(incoming.get("statuses", ()) or ()))
+        merged["statuses"] = statuses
+        current_provenance = current.get("intelligence_provenance", {}) or {}
+        incoming_provenance = incoming.get("intelligence_provenance", {}) or {}
+        providers = sorted(set(current_provenance.get("providers", ()) or ()) | set(incoming_provenance.get("providers", ()) or ()))
+        dispositions = {
+            value for value in (
+                current_provenance.get("disposition"),
+                incoming_provenance.get("disposition"),
+            ) if value and value != "unavailable"
+        }
+        if len(dispositions) > 1:
+            disposition = "mixed"
+        elif dispositions:
+            disposition = next(iter(dispositions))
+        else:
+            disposition = "unavailable"
+        merged["disposition"] = disposition
+        merged["intelligence_provenance"] = {
+            "providers": providers,
+            "status": statuses,
+            "disposition": disposition,
+        }
+        return merged
+
     def _build_success_result(
         self,
         case_id: str,
@@ -393,6 +493,7 @@ class InvestigationCoordinator:
         tenant_context: dict[str, Any] | None = None,
         intelligence_metadata: dict[str, Any] | None = None,
         correlation_id: str | None = None,
+        owned_evidence: Optional[list[dict[str, Any]]] = None,
     ) -> InvestigationResult:
         intelligence: dict[str, dict[str, Any]] = {}
         findings: list[Any] = []
@@ -472,20 +573,36 @@ class InvestigationCoordinator:
             iocs=engine_analysis.get("iocs", []),
             evidence_summary={"count": len(normalized_artifacts)},
             timeline=[],
-            metadata={"case_id": case_id},
+            metadata={
+                "case_id": case_id,
+                **(
+                    {"tenant_id": (tenant_context or {}).get("tenant_id")}
+                    if (tenant_context or {}).get("tenant_id")
+                    else {}
+                ),
+                **({"correlation_id": correlation_id} if correlation_id else {}),
+            },
         )
         normalized_intelligence.metadata["intelligence_status"] = dict(intelligence_metadata or {})
         normalized_intelligence.timeline = self.timeline_engine.generate(
             normalized_intelligence.to_dict(), alert
         )
-        self.intelligence_repository.save(case_id, normalized_intelligence)
+        scoped_tenant_id = (tenant_context or {}).get("tenant_id")
+        if scoped_tenant_id:
+            self.intelligence_repository.save_for_tenant(case_id, scoped_tenant_id, normalized_intelligence)
+        else:
+            self.intelligence_repository.save(case_id, normalized_intelligence)
         report = self.report_generator.generate(
             case_id,
             normalized_intelligence,
             alert,
             normalized_intelligence.timeline,
         )
-        self.report_repository.save(report)
+        report.tenant_context = dict(tenant_context or {}) if scoped_tenant_id else None
+        if scoped_tenant_id:
+            self.report_repository.save_for_tenant(scoped_tenant_id, report)
+        else:
+            self.report_repository.save(report)
         aggregate = self.finding_aggregator.aggregate(
             {"case_id": case_id, "artifacts": normalized_artifacts},
             intelligence,
@@ -493,15 +610,21 @@ class InvestigationCoordinator:
             confidence_data,
         )
         findings.extend(aggregate.get("findings", []))
+        evidence_for_reasoning = (
+            list(owned_evidence or [])
+            if scoped_tenant_id
+            else list(normalized_artifacts) + list(engine_analysis.get("evidence", []) or [])
+        )
         reasoning_report = self.evidence_reasoner.reason(
             self.create_context(
                 investigation_id=case_id,
                 artifacts=normalized_artifacts,
-                evidence=[item for item in normalized_artifacts if isinstance(item, dict)] + list(engine_analysis.get("evidence", []) or []),
+                evidence=evidence_for_reasoning,
                 iocs=list(engine_analysis.get("iocs", []) or []),
                 timeline=list(normalized_intelligence.timeline or []),
                 tenant_id=(tenant_context or {}).get("tenant_id"),
                 intelligence_provenance=intelligence_metadata.get("intelligence_provenance", {}),
+                correlation_id=correlation_id,
             ),
             plan,
         )
@@ -512,10 +635,11 @@ class InvestigationCoordinator:
         threat_report = None
         try:
             threat_report = self.threat_intelligence.correlate_case(
-                self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
+                self.create_context(case_id, normalized_artifacts, evidence=evidence_for_reasoning,
                                     iocs=list(engine_analysis.get("iocs", []) or []),
-                                    timeline=list(normalized_intelligence.timeline or [])),
-                normalized_artifacts, list(engine_analysis.get("iocs", []) or []), None)
+                                    timeline=list(normalized_intelligence.timeline or []),
+                                    tenant_id=scoped_tenant_id),
+                evidence_for_reasoning, list(engine_analysis.get("iocs", []) or []), None)
         except Exception:
             pass
         result = InvestigationResult(
@@ -583,11 +707,16 @@ class InvestigationCoordinator:
         except Exception:
             result.metadata["narrative_error"] = True
         analyst_report = self.report_generator.generate_from_result(result)
-        self.report_repository.save(analyst_report)
+        if scoped_tenant_id:
+            self.report_repository.save_for_tenant(scoped_tenant_id, analyst_report)
+        else:
+            self.report_repository.save(analyst_report)
         result.intelligence["report"] = analyst_report.to_dict()
         return result
 
-    def get_report_by_case_id(self, case_id: str) -> dict[str, Any] | None:
+    def get_report_by_case_id(self, case_id: str, tenant_id: str | None = None) -> dict[str, Any] | None:
+        if tenant_id:
+            return self.report_repository.get_by_case_id_for_tenant(case_id, tenant_id)
         return self.report_repository.get_by_case_id(case_id)
 
 
@@ -652,19 +781,28 @@ class InvestigationCoordinator:
         )
 
 
+        tenant_id = kwargs.get("tenant_id")
+        actor_id = kwargs.get("actor_id")
+        owned_evidence: list[dict[str, Any]] = []
+        if tenant_id:
+            for item in evidence or []:
+                if not isinstance(item, dict) or item.get("tenant_id") != tenant_id:
+                    raise PermissionError("evidence tenant does not match investigation tenant")
+                if not any(item.get(key) for key in ("evidence_id", "artifact_id", "id", "reference")):
+                    raise PermissionError("evidence reference is required")
+                owned_evidence.append(dict(item))
         context = self.create_context(
             investigation_id=alert_data.get(
                 "investigation_id",
                 case_id,
             ),
             artifacts=normalized_artifacts,
-            evidence=evidence,
+            evidence=owned_evidence if tenant_id else evidence,
             iocs=iocs,
             timeline=timeline,
+            correlation_id=correlation_id,
         )
 
-        tenant_id = kwargs.get("tenant_id")
-        actor_id = kwargs.get("actor_id")
         context.tenant_id = tenant_id
         context.actor_id = actor_id
         intelligence_metadata: dict[str, Any] = {}
@@ -683,12 +821,21 @@ class InvestigationCoordinator:
                 if not isinstance(item, dict) or not item.get("value"):
                     continue
                 from app.intelligence.gateway import IOC, IOCType, LookupRequest
-                ioc_type = IOCType(str(item.get("type", "unknown")).lower())
+                try:
+                    ioc_type = IOCType(str(item.get("type", "unknown")).lower())
+                except ValueError:
+                    ioc_type = IOCType.UNKNOWN
                 key = (ioc_type.value, str(item["value"]).strip().lower(), "default")
                 if key in context._queried_intelligence:
                     continue
                 context._queried_intelligence.append(key)
-                request = LookupRequest(tenant_id, actor_id, IOC(key[1], ioc_type))
+                ioc = IOC(key[1], ioc_type)
+                request = LookupRequest(
+                    tenant_id,
+                    actor_id,
+                    ioc,
+                    correlation_id=correlation_id,
+                )
                 try:
                     result = self.threat_intelligence_gateway.lookup(request)
                 except PermissionError:
@@ -702,8 +849,18 @@ class InvestigationCoordinator:
                         **({"correlation_id": correlation_id} if correlation_id else {}),
                     )
                     raise
-                intelligence_metadata = self._normalize_intelligence_gateway_result(result)
-                payload = {"ioc": item, **intelligence_metadata}
+                normalized_lookup = self._normalize_intelligence_gateway_result(result)
+                normalized_lookup["ioc"] = {"value": ioc.value, "type": ioc.type.value}
+                normalized_lookup["fusion"] = self._fuse_intelligence_gateway_result(
+                    result,
+                    ioc,
+                    context,
+                )
+                intelligence_metadata = self._merge_intelligence_metadata(
+                    intelligence_metadata,
+                    normalized_lookup,
+                )
+                payload = {"ioc": item, "tenant_id": tenant_id, **normalized_lookup}
                 context.add_evidence(payload, tenant_id)
 
         orchestrator_kwargs = dict(kwargs)
@@ -877,6 +1034,7 @@ class InvestigationCoordinator:
                 tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
                 intelligence_metadata=intelligence_metadata,
                 correlation_id=correlation_id,
+                owned_evidence=owned_evidence,
             )
             observer.event(
                 "INTELLIGENCE_GENERATED",

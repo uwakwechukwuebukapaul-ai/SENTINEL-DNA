@@ -131,6 +131,7 @@ class LookupRequest:
     actor_id: str
     ioc: IOC
     timeout_seconds: float = 5.0
+    correlation_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.tenant_id or not self.actor_id:
@@ -155,6 +156,7 @@ class LookupAudit:
     contacted_providers: tuple[str, ...]
     started_at: datetime
     completed_at: datetime
+    correlation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -191,7 +193,19 @@ class ThreatIntelligenceGateway:
             except Exception as exc:  # provider isolation boundary
                 results.append(ProviderResult(provider.identity, error=ProviderError(ProviderErrorCode.UNAVAILABLE, str(exc)[:200], True)))
         completed = _utc_now()
-        return GatewayResult(tuple(r.observation for r in results if r.observation), tuple(results), LookupAudit(request.tenant_id, request.actor_id, request.ioc, tuple(r.provider.name for r in results), started, completed))
+        return GatewayResult(
+            tuple(r.observation for r in results if r.observation),
+            tuple(results),
+            LookupAudit(
+                request.tenant_id,
+                request.actor_id,
+                request.ioc,
+                tuple(r.provider.name for r in results),
+                started,
+                completed,
+                request.correlation_id,
+            ),
+        )
 
     def add_to_case_evidence(self, case: dict[str, Any], request: LookupRequest, context: Any | None = None) -> GatewayResult:
         from cases.evidence import add_evidence

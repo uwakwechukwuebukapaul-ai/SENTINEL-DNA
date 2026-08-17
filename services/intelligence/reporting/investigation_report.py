@@ -318,6 +318,57 @@ class InvestigationReportGenerator:
             "report_type": "analyst_investigation_report",
             "recommendation_sources": list(data.get("recommendation_sources", []) or []),
         }
+        provenance = status_metadata.get("intelligence_provenance") if isinstance(status_metadata, dict) else None
+        if isinstance(provenance, dict):
+            report_metadata["intelligence_provenance"] = {
+                "providers": list(provenance.get("providers", []) or []),
+                "status": list(provenance.get("status", []) or []),
+                "disposition": provenance.get("disposition", "unavailable"),
+            }
+        fusion = status_metadata.get("fusion") if isinstance(status_metadata, dict) else None
+        if isinstance(fusion, dict):
+            report_metadata["intelligence_fusion"] = {
+                key: fusion.get(key)
+                for key in (
+                    "status",
+                    "aggregate_reputation",
+                    "aggregate_confidence",
+                    "supporting_providers",
+                    "conflicting_providers",
+                    "stale_providers",
+                    "unavailable_providers",
+                )
+                if key in fusion
+            }
+        elif isinstance(status_metadata.get("fusion_results") if isinstance(status_metadata, dict) else None, list):
+            report_metadata["intelligence_fusion"] = [
+                {
+                    key: item.get(key)
+                    for key in (
+                        "status",
+                        "aggregate_reputation",
+                        "aggregate_confidence",
+                        "supporting_providers",
+                        "conflicting_providers",
+                        "stale_providers",
+                        "unavailable_providers",
+                    )
+                    if isinstance(item, dict) and key in item
+                }
+                for item in status_metadata["fusion_results"]
+                if isinstance(item, dict)
+            ]
+        provider_errors = status_metadata.get("provider_results") if isinstance(status_metadata, dict) else None
+        if isinstance(provider_errors, list):
+            report_metadata["intelligence_provider_errors"] = [
+                {
+                    "provider": item.get("provider"),
+                    "code": getattr((item.get("error") or {}).get("code"), "value", (item.get("error") or {}).get("code")),
+                    "retryable": (item.get("error") or {}).get("retryable"),
+                }
+                for item in provider_errors
+                if isinstance(item, dict) and isinstance(item.get("error"), dict)
+            ]
         correlation_id = (data.get("metadata") or {}).get("correlation_id") if isinstance(data.get("metadata"), dict) else None
         if correlation_id:
             report_metadata["correlation_id"] = correlation_id

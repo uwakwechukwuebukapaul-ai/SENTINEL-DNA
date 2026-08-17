@@ -12,6 +12,8 @@ runtime instances.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from services.core.service_registry import (
     ServiceRegistry,
 )
@@ -154,6 +156,8 @@ from services.data_security.service import DataSecurityService
 from services.decision_intelligence.service import DecisionIntelligenceService
 from services.security_copilot.service import SecurityCopilotService
 from services.platform_experience.service import PlatformExperienceService
+from app.intelligence.gateway import ThreatIntelligenceGateway
+from services.intelligence.fusion import ProviderNeutralFusionEngine
 class SecurityValidationService:
     def __init__(self,repo): self.repo=repo
     def scenario(self,org,data):
@@ -200,6 +204,26 @@ def build_container() -> ServiceRegistry:
 
     case_manager = CaseManager()
 
+    # The canonical authority is the sole tenant/actor authorization source
+    # for provider lookups.  No providers are enabled by default, preserving
+    # the offline, zero-network runtime until an explicit provider adapter is
+    # approved and injected here.
+    canonical_authority = CanonicalAuthorityService()
+    canonical_request_context = CanonicalRequestContextService(canonical_authority)
+    canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
+
+    def authorize_threat_intelligence(tenant_id: str, actor_id: str) -> bool:
+        return canonical_authorization.can_access_tenant(
+            SimpleNamespace(tenant_id=tenant_id, actor_id=actor_id),
+            tenant_id,
+        )
+
+    threat_intelligence_gateway = ThreatIntelligenceGateway(
+        providers=(),
+        authorize=authorize_threat_intelligence,
+    )
+    provider_neutral_fusion_engine = ProviderNeutralFusionEngine()
+
     agent_registry = AgentRegistry()
 
     runtime_executor = RuntimeTaskExecutor()
@@ -222,6 +246,8 @@ def build_container() -> ServiceRegistry:
         registry=agent_registry,
         runtime=runtime_executor,
         orchestrator=orchestrator,
+        threat_intelligence_gateway=threat_intelligence_gateway,
+        provider_neutral_fusion_engine=provider_neutral_fusion_engine,
     )
 
     dashboard_service = DashboardService()
@@ -287,9 +313,6 @@ def build_container() -> ServiceRegistry:
     decision_intelligence = DecisionIntelligenceService()
     security_copilot = SecurityCopilotService()
     platform_experience = PlatformExperienceService()
-    canonical_authority = CanonicalAuthorityService()
-    canonical_request_context = CanonicalRequestContextService(canonical_authority)
-    canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
     billing_authorization = CanonicalAuthorizationAdapter(canonical_authorization)
     for component in ("database","redis","workers","audit","tenant_isolation","ai_governance"): operations_hardening.check(component)
 
@@ -316,6 +339,9 @@ def build_container() -> ServiceRegistry:
         "investigation_coordinator",
         coordinator,
     )
+
+    registry.register("threat_intelligence_gateway", threat_intelligence_gateway)
+    registry.register("provider_neutral_fusion_engine", provider_neutral_fusion_engine)
 
     # Legacy container key retained for dashboard integrations.
     registry.register("coordinator", coordinator)
