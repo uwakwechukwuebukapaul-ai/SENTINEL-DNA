@@ -27,6 +27,10 @@ from services.intelligence.fusion.provider_neutral import (
     FusionResult as ProviderNeutralFusionResult,
     ProviderNeutralFusionEngine,
 )
+from services.intelligence.fusion.decision_governance import (
+    IntelligenceDecisionGovernance,
+    IntelligenceGovernanceResult,
+)
 
 
 __all__ = [
@@ -44,5 +48,9 @@ __all__ = [
     "ProviderNeutralFusionResult",
 
     "ProviderNeutralFusionEngine",
+
+    "IntelligenceDecisionGovernance",
+
+    "IntelligenceGovernanceResult",
 
 ]

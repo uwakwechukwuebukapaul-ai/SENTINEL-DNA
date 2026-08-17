@@ -39,6 +39,7 @@ from typing import Any, Callable, Optional
 from services.intelligence.correlation import CorrelationEngine
 from services.intelligence.fusion import (
     FusionEngine,
+    IntelligenceDecisionGovernance,
     ProviderNeutralFusionEngine,
 )
 from app.intelligence.gateway import IOC, IntelligenceObservation
@@ -391,7 +392,7 @@ class InvestigationOrchestrator:
                     )
                 ),
                 "metadata": {
-                    "intelligence_reasoning_input": self._intelligence_reasoning_input(fusion),
+                    "intelligence_reasoning_input": self._intelligence_reasoning_input(fusion, context),
                 },
             }
 
@@ -435,7 +436,7 @@ class InvestigationOrchestrator:
                 "reasoning_available": True,
                 "output": output,
                 "metadata": {
-                    "intelligence_reasoning_input": self._intelligence_reasoning_input(fusion),
+                    "intelligence_reasoning_input": self._intelligence_reasoning_input(fusion, context),
                 },
             }
 
@@ -1235,9 +1236,10 @@ class InvestigationOrchestrator:
         )
 
     @staticmethod
-    def _intelligence_reasoning_input(fusion: Any) -> dict[str, Any]:
+    def _intelligence_reasoning_input(fusion: Any, context: Any = None) -> dict[str, Any]:
         """Expose intelligence as evidence categories, never as decision authority."""
         data = InvestigationOrchestrator._as_dict(fusion)
+        governance = IntelligenceDecisionGovernance().evaluate(fusion, context=context)
         status = str(data.get("status", "NO_INTELLIGENCE")).upper()
         if status in {"NO_INTELLIGENCE", "UNKNOWN"}:
             category = "NO_INTELLIGENCE"
@@ -1261,6 +1263,7 @@ class InvestigationOrchestrator:
             "provenance": data.get("provenance", []),
             "explanation": data.get("explanation", "External intelligence was unavailable or inconclusive."),
             "policy_version": data.get("policy_version"),
+            "governance": governance.to_dict(),
         }
 
     # =========================================================
