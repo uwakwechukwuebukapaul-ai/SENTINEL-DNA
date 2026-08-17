@@ -41,7 +41,7 @@ RuntimeTaskExecutor owns task execution.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any, Optional
 
 
@@ -318,6 +318,45 @@ class InvestigationCoordinator:
             "status": getattr(getattr(result, "status", None), "value", getattr(result, "status", None)),
         }
 
+    @staticmethod
+    def _normalize_intelligence_gateway_result(result: Any) -> dict[str, Any]:
+        """Preserve provider outcomes without turning them into findings."""
+        provider_results = []
+        observations = []
+        statuses = set()
+        dispositions = set()
+        for provider_result in getattr(result, "provider_results", ()):
+            provider = getattr(getattr(provider_result, "provider", None), "name", None)
+            observation = getattr(provider_result, "observation", None)
+            error = getattr(provider_result, "error", None)
+            item = {"provider": provider, "observation": observation, "error": error}
+            if is_dataclass(observation):
+                item["observation"] = asdict(observation)
+            if is_dataclass(error):
+                item["error"] = asdict(error)
+            provider_results.append(item)
+            if error is not None:
+                code = getattr(getattr(error, "code", None), "value", getattr(error, "code", "unavailable"))
+                statuses.add("invalid" if code == "normalization_error" else "unavailable")
+            if observation is not None:
+                observations.append(asdict(observation) if is_dataclass(observation) else dict(getattr(observation, "__dict__", {})))
+                if getattr(observation, "stale", False):
+                    statuses.add("stale")
+                reputation = str(getattr(observation, "reputation", "") or "").lower()
+                if reputation in {"malicious", "high_risk", "suspicious"}:
+                    dispositions.add("supporting")
+                elif reputation in {"benign", "clean", "low_risk"}:
+                    dispositions.add("contradicting")
+        if len(dispositions) > 1:
+            disposition = "mixed"
+        elif dispositions:
+            disposition = next(iter(dispositions))
+        elif statuses and not observations:
+            disposition = "unavailable"
+        else:
+            disposition = "neutral" if observations else "unavailable"
+        return {"provider_results": provider_results, "observations": observations, "statuses": sorted(statuses), "disposition": disposition, "audit": asdict(result.audit) if is_dataclass(getattr(result, "audit", None)) else getattr(result, "audit", None)}
+
     def _build_success_result(
         self,
         case_id: str,
@@ -326,6 +365,8 @@ class InvestigationCoordinator:
         normalized_artifacts: list[dict[str, Any]],
         execution: dict[str, Any],
         workflow: Any,
+        tenant_context: dict[str, Any] | None = None,
+        intelligence_metadata: dict[str, Any] | None = None,
     ) -> InvestigationResult:
         intelligence: dict[str, dict[str, Any]] = {}
         findings: list[Any] = []
@@ -407,6 +448,7 @@ class InvestigationCoordinator:
             timeline=[],
             metadata={"case_id": case_id},
         )
+        normalized_intelligence.metadata["intelligence_status"] = dict(intelligence_metadata or {})
         normalized_intelligence.timeline = self.timeline_engine.generate(
             normalized_intelligence.to_dict(), alert
         )
@@ -469,6 +511,8 @@ class InvestigationCoordinator:
             },
             reasoning_report=reasoning_report,
             threat_intelligence_report=threat_report,
+            tenant_context=tenant_context,
+            metadata={"actor_id": (tenant_context or {}).get("actor_id")},
             errors=list(execution["errors"]),
         )
         try:
@@ -579,6 +623,7 @@ class InvestigationCoordinator:
         actor_id = kwargs.get("actor_id")
         context.tenant_id = tenant_id
         context.actor_id = actor_id
+        intelligence_metadata: dict[str, Any] = {}
         if self.threat_intelligence_gateway is not None and iocs:
             if not tenant_id or not actor_id:
                 raise PermissionError("tenant and actor context are required for intelligence lookup")
@@ -593,7 +638,8 @@ class InvestigationCoordinator:
                 context._queried_intelligence.append(key)
                 request = LookupRequest(tenant_id, actor_id, IOC(key[1], ioc_type))
                 result = self.threat_intelligence_gateway.lookup(request)
-                payload = {"ioc": item, "observations": [ob.__dict__ for ob in result.observations], "audit": result.audit.__dict__}
+                intelligence_metadata = self._normalize_intelligence_gateway_result(result)
+                payload = {"ioc": item, **intelligence_metadata}
                 context.add_evidence(payload, tenant_id)
 
         orchestrator_kwargs = dict(kwargs)
@@ -619,6 +665,7 @@ class InvestigationCoordinator:
             "errors": [],
             "tasks": [],
             "workflow": workflow,
+            "intelligence": intelligence_metadata,
         }
 
 
@@ -643,7 +690,10 @@ class InvestigationCoordinator:
                 findings=[],
                 intelligence={
                     "workflow": workflow,
+                    "status": intelligence_metadata,
                 },
+                tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
+                metadata={"actor_id": actor_id},
                 errors=[
                     "Runtime task executor is not configured."
                 ],
@@ -676,7 +726,10 @@ class InvestigationCoordinator:
                 findings=[],
                 intelligence={
                     "workflow": workflow,
+                    "status": intelligence_metadata,
                 },
+                tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
+                metadata={"actor_id": actor_id},
                 errors=[
                     error_message
                 ],
@@ -751,6 +804,8 @@ class InvestigationCoordinator:
                 normalized_artifacts,
                 execution,
                 workflow,
+                tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
+                intelligence_metadata=intelligence_metadata,
             )
             observer.event("INTELLIGENCE_GENERATED", case_id=case_id, status=result.status, duration_ms=round((time.perf_counter()-started_at)*1000, 2), agent_metrics={"tasks": len(execution.get("tasks", [])), "errors": len(execution.get("errors", []))})
             return result
@@ -769,6 +824,8 @@ class InvestigationCoordinator:
             artifacts=normalized_artifacts,
             findings=[],
             intelligence={"workflow": workflow},
+            tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
+            metadata={"actor_id": actor_id},
         )
         observer.event("INVESTIGATION_STARTED", case_id=case_id, status="failed", duration_ms=round((time.perf_counter()-started_at)*1000, 2), errors=result.errors)
         return result

@@ -16,6 +16,13 @@ class InvestigationDecision:
     evidence_summary: dict[str, Any] = field(default_factory=dict)
     mitre_summary: list[str] = field(default_factory=list)
     synthetic_only: bool = True
+    metadata: dict[str, Any] = field(default_factory=lambda: {
+        "governance": {
+            "mode": "ADVISORY_ONLY",
+            "analyst_authority_required": True,
+            "autonomous_action": False,
+        }
+    })
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
