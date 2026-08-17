@@ -133,8 +133,11 @@ def _execute_investigation():
             alert=alert,
             artifacts=artifacts,
             correlation_id=security_context.correlation_id,
+<<<<<<< HEAD
             tenant_id=security_context.tenant_id,
             actor_id=getattr(security_context, "actor_id", None) or getattr(security_context, "user_id", None),
+=======
+>>>>>>> 71a3dc4 (ops: harden production runtime for investigator v2)
         )
     except PermissionError:
         raise

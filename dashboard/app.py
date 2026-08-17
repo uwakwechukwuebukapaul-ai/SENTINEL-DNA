@@ -144,7 +144,10 @@ from services.platform_experience.routes import experience_api
 # ---------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = resolve_database_path()
+RUNTIME_CONFIG = RuntimeConfig.from_environment()
+RUNTIME_CONFIG.validate()
+DB_PATH = Path(RUNTIME_CONFIG.database_path).expanduser().resolve()
+shared_database.database_path = RUNTIME_CONFIG.database_path
 
 RUNTIME_CONFIG = RuntimeConfig.from_environment()
 RUNTIME_CONFIG.validate()

@@ -7,7 +7,10 @@ and API layers.
 
 import logging
 from pathlib import Path
+<<<<<<< HEAD
 from uuid import uuid4
+=======
+>>>>>>> 71a3dc4 (ops: harden production runtime for investigator v2)
 
 from flask import Flask, jsonify, g, request, send_from_directory
 from jinja2 import ChoiceLoader, FileSystemLoader
@@ -195,8 +198,14 @@ def create_app():
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Cache-Control", "no-store")
         context = getattr(g, "security_context", None)
+<<<<<<< HEAD
         correlation_id = getattr(context, "correlation_id", None) or request.headers.get("X-Correlation-ID") or str(uuid4())
         response.headers.setdefault("X-Correlation-ID", correlation_id)
+=======
+        correlation_id = getattr(context, "correlation_id", None) or request.headers.get("X-Correlation-ID")
+        if correlation_id:
+            response.headers.setdefault("X-Correlation-ID", correlation_id)
+>>>>>>> 71a3dc4 (ops: harden production runtime for investigator v2)
         return response
 
 
