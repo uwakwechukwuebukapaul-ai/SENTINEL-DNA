@@ -2,12 +2,18 @@ services:
   app:
     build:
       context: ..
-      dockerfile: deployment/Dockerfile
+      dockerfile: Dockerfile
     env_file: ../.env
+    environment:
+      SENTINEL_DNA_ENV: production
+      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY}
+      SENTINEL_DNA_SECURE_COOKIES: "1"
+      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
     ports: ["5000:5000"]
+    volumes: [sentinel-data:/var/lib/sentinel]
   postgres:
     image: postgres:16-alpine
     environment:
@@ -26,5 +32,6 @@ services:
     ports: ["80:80"]
     volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
 volumes:
+  sentinel-data:
   sentinel-postgres:
   sentinel-redis:

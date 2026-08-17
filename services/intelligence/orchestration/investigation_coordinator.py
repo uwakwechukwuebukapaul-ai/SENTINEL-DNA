@@ -392,6 +392,7 @@ class InvestigationCoordinator:
         workflow: Any,
         tenant_context: dict[str, Any] | None = None,
         intelligence_metadata: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
     ) -> InvestigationResult:
         intelligence: dict[str, dict[str, Any]] = {}
         findings: list[Any] = []
@@ -543,7 +544,10 @@ class InvestigationCoordinator:
             reasoning_report=reasoning_report,
             threat_intelligence_report=threat_report,
             tenant_context=tenant_context,
-            metadata={"actor_id": (tenant_context or {}).get("actor_id")},
+            metadata={
+                "actor_id": (tenant_context or {}).get("actor_id"),
+                **({"correlation_id": correlation_id} if correlation_id else {}),
+            },
             errors=list(execution["errors"]),
         )
         try:
@@ -599,7 +603,13 @@ class InvestigationCoordinator:
     ) -> InvestigationResult:
         started_at = time.perf_counter()
         observer = ObservabilityService()
-        observer.event("INVESTIGATION_STARTED", case_id=case_id, status="started")
+        correlation_id = kwargs.get("correlation_id")
+        observer.event(
+            "INVESTIGATION_STARTED",
+            case_id=case_id,
+            status="started",
+            **({"correlation_id": correlation_id} if correlation_id else {}),
+        )
         alert_data = dict(
             alert or {}
         )
@@ -666,6 +676,7 @@ class InvestigationCoordinator:
                     tenant_id=tenant_id,
                     actor_id=actor_id,
                     reason="tenant and actor context are required for intelligence lookup",
+                    **({"correlation_id": correlation_id} if correlation_id else {}),
                 )
                 raise PermissionError("tenant and actor context are required for intelligence lookup")
             for item in iocs:
@@ -688,6 +699,7 @@ class InvestigationCoordinator:
                         actor_id=actor_id,
                         ioc_type=ioc_type.value,
                         reason="gateway authorization denied",
+                        **({"correlation_id": correlation_id} if correlation_id else {}),
                     )
                     raise
                 intelligence_metadata = self._normalize_intelligence_gateway_result(result)
@@ -745,7 +757,10 @@ class InvestigationCoordinator:
                     "status": intelligence_metadata,
                 },
                 tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
-                metadata={"actor_id": actor_id},
+                metadata={
+                    "actor_id": actor_id,
+                    **({"correlation_id": kwargs.get("correlation_id")} if kwargs.get("correlation_id") else {}),
+                },
                 errors=[
                     "Runtime task executor is not configured."
                 ],
@@ -781,7 +796,10 @@ class InvestigationCoordinator:
                     "status": intelligence_metadata,
                 },
                 tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
-                metadata={"actor_id": actor_id},
+                metadata={
+                    "actor_id": actor_id,
+                    **({"correlation_id": kwargs.get("correlation_id")} if kwargs.get("correlation_id") else {}),
+                },
                 errors=[
                     error_message
                 ],
@@ -858,8 +876,16 @@ class InvestigationCoordinator:
                 workflow,
                 tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
                 intelligence_metadata=intelligence_metadata,
+                correlation_id=correlation_id,
             )
-            observer.event("INTELLIGENCE_GENERATED", case_id=case_id, status=result.status, duration_ms=round((time.perf_counter()-started_at)*1000, 2), agent_metrics={"tasks": len(execution.get("tasks", [])), "errors": len(execution.get("errors", []))})
+            observer.event(
+                "INTELLIGENCE_GENERATED",
+                case_id=case_id,
+                status=result.status,
+                duration_ms=round((time.perf_counter()-started_at)*1000, 2),
+                agent_metrics={"tasks": len(execution.get("tasks", [])), "errors": len(execution.get("errors", []))},
+                **({"correlation_id": correlation_id} if correlation_id else {}),
+            )
             return result
 
         result = InvestigationResult(
@@ -877,7 +903,17 @@ class InvestigationCoordinator:
             findings=[],
             intelligence={"workflow": workflow},
             tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
-            metadata={"actor_id": actor_id},
+            metadata={
+                "actor_id": actor_id,
+                **({"correlation_id": kwargs.get("correlation_id")} if kwargs.get("correlation_id") else {}),
+            },
         )
-        observer.event("INVESTIGATION_STARTED", case_id=case_id, status="failed", duration_ms=round((time.perf_counter()-started_at)*1000, 2), errors=result.errors)
+        observer.event(
+            "INVESTIGATION_STARTED",
+            case_id=case_id,
+            status="failed",
+            duration_ms=round((time.perf_counter()-started_at)*1000, 2),
+            errors=result.errors,
+            **({"correlation_id": correlation_id} if correlation_id else {}),
+        )
         return result

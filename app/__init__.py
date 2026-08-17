@@ -5,7 +5,11 @@ Bootstraps enterprise services
 and API layers.
 """
 
-from flask import Flask, jsonify, request
+import logging
+from pathlib import Path
+
+from flask import Flask, jsonify, g, request, send_from_directory
+from jinja2 import ChoiceLoader, FileSystemLoader
 
 
 from services.core.application_container import (
@@ -24,7 +28,21 @@ def create_app():
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
     app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+    if runtime_config.environment == "production":
+        app.config.update(PROPAGATE_EXCEPTIONS=False, TRAP_HTTP_EXCEPTIONS=False)
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     database.database_path = runtime_config.database_path
+
+    # Reuse the existing Analyst Workspace blueprint without importing the
+    # separate dashboard application or duplicating workspace logic.
+    from dashboard.analyst_workspace import analyst_workspace
+
+    app.jinja_loader = ChoiceLoader(
+        [
+            app.jinja_loader,
+            FileSystemLoader(str(Path(__file__).resolve().parent.parent / "dashboard" / "templates")),
+        ]
+    )
 
 
     # ==================================
@@ -125,6 +143,14 @@ def create_app():
     app.register_blueprint(
         dashboard_bp
     )
+    app.register_blueprint(analyst_workspace)
+
+    @app.get("/workspace/dashboard/static/<path:filename>")
+    def dashboard_static(filename: str):
+        return send_from_directory(
+            Path(__file__).resolve().parent.parent / "dashboard" / "static",
+            filename,
+        )
 
 
     # ==================================
@@ -162,6 +188,18 @@ def create_app():
             return {"status": "ready", "database": "ok", "services": "registered"}
         except Exception:
             return {"status": "not_ready"}, 503
+
+    @app.after_request
+    def add_runtime_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Cache-Control", "no-store")
+        context = getattr(g, "security_context", None)
+        correlation_id = getattr(context, "correlation_id", None) or request.headers.get("X-Correlation-ID")
+        if correlation_id:
+            response.headers.setdefault("X-Correlation-ID", correlation_id)
+        return response
 
 
     return app

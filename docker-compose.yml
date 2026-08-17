@@ -6,7 +6,9 @@ services:
     env_file:
       - .env
     environment:
-      SENTINEL_DNA_ENV: ${SENTINEL_DNA_ENV:-development}
+      SENTINEL_DNA_ENV: production
+      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?SENTINEL_DNA_SECRET_KEY must be set}
+      SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: ${SENTINEL_DNA_DB_PATH:-/var/lib/sentinel/soc.db}
     volumes:
       - sentinel_data:/var/lib/sentinel

@@ -314,6 +314,13 @@ class InvestigationReportGenerator:
         if hasattr(reasoning, "to_dict"):
             reasoning = reasoning.to_dict()
         uncertainty = data.get("metadata", {}).get("uncertainty", "unknown")
+        report_metadata = {
+            "report_type": "analyst_investigation_report",
+            "recommendation_sources": list(data.get("recommendation_sources", []) or []),
+        }
+        correlation_id = (data.get("metadata") or {}).get("correlation_id") if isinstance(data.get("metadata"), dict) else None
+        if correlation_id:
+            report_metadata["correlation_id"] = correlation_id
         report = InvestigationReport(
             case_id=str(data.get("case_id") or "unknown"),
             title="AI Investigation Report",
@@ -337,10 +344,7 @@ class InvestigationReportGenerator:
             uncertainty=uncertainty,
             tenant_context=data.get("tenant_context") or "unavailable",
             attack_story=data.get("attack_story") or "unavailable",
-            metadata={
-                "report_type": "analyst_investigation_report",
-                "recommendation_sources": list(data.get("recommendation_sources", []) or []),
-            },
+            metadata=report_metadata,
         )
         self.history_store.append(report)
         return report

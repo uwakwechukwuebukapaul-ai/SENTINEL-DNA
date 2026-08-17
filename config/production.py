@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .runtime import RuntimeConfig
+
 @dataclass(frozen=True)
 class ProductionConfig:
     secret_key: str
@@ -15,14 +17,18 @@ class ProductionConfig:
 
     @classmethod
     def from_env(cls) -> "ProductionConfig":
-        secret = os.getenv("SENTINEL_DNA_SECRET_KEY", "")
-        if os.getenv("SENTINEL_DNA_ENV", "development").lower() == "production" and len(secret) < 32:
-            raise RuntimeError("SENTINEL_DNA_SECRET_KEY must be at least 32 characters in production")
+        runtime = RuntimeConfig.from_environment()
+        runtime.validate()
         database_url = os.getenv("DATABASE_URL", "")
         redis_url = os.getenv("REDIS_URL", "")
-        if os.getenv("SENTINEL_DNA_ENV", "development").lower() == "production" and not database_url:
-            raise RuntimeError("DATABASE_URL is required in production")
-        return cls(secret or "development-only-change-me", Path(os.getenv("SENTINEL_DNA_DB_PATH", "soc.db")).resolve(), os.getenv("SENTINEL_DNA_SECURE_COOKIES", "1") == "1", False, database_url, redis_url)
+        return cls(
+            runtime.secret_key,
+            Path(runtime.database_path).expanduser().resolve(),
+            runtime.secure_cookies,
+            runtime.debug,
+            database_url,
+            redis_url,
+        )
 
 def validate_startup() -> ProductionConfig:
     return ProductionConfig.from_env()

@@ -125,11 +125,13 @@ def _execute_investigation():
         ), 400
 
 
+    security_context = request_context()
     try:
         result = _coordinator().investigate(
             case_id=case_id,
             alert=alert,
             artifacts=artifacts,
+            correlation_id=security_context.correlation_id,
         )
     except PermissionError:
         raise
@@ -137,7 +139,6 @@ def _execute_investigation():
         return _investigation_execution_failure(observer, case_id, exc)
 
 
-    security_context = request_context()
     observer.event("investigation_api_completed", case_id=case_id, operation="investigate", component="api", status="completed", duration_ms=round((time.perf_counter() - started) * 1000, 2), correlation_id=security_context.correlation_id, tenant_id=security_context.tenant_id)
     return jsonify(
         investigation_response(

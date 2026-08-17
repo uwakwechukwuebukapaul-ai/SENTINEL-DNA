@@ -18,6 +18,8 @@ from flask import (
 )
 
 from jinja2 import ChoiceLoader, FileSystemLoader
+from config.runtime import RuntimeConfig
+from database.connection import database as shared_database
 
 
 # Core platform services
@@ -136,12 +138,10 @@ from services.platform_experience.routes import experience_api
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DB_PATH = Path(
-    os.getenv(
-        "SENTINEL_DNA_DB_PATH",
-        BASE_DIR / "soc.db"
-    )
-).resolve()
+RUNTIME_CONFIG = RuntimeConfig.from_environment()
+RUNTIME_CONFIG.validate()
+DB_PATH = Path(RUNTIME_CONFIG.database_path).expanduser().resolve()
+shared_database.database_path = RUNTIME_CONFIG.database_path
 
 
 app = Flask(
@@ -165,21 +165,15 @@ app.jinja_loader = ChoiceLoader(
 )
 
 
-app.secret_key = os.getenv(
-    "SENTINEL_DNA_SECRET_KEY",
-    "development-only-change-me"
-)
+app.secret_key = RUNTIME_CONFIG.secret_key
 
 
 app.config.update(
+    ENVIRONMENT=RUNTIME_CONFIG.environment,
+    DEBUG=RUNTIME_CONFIG.debug,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=(
-        os.getenv(
-            "SENTINEL_DNA_SECURE_COOKIES",
-            "0"
-        ) == "1"
-    )
+    SESSION_COOKIE_SECURE=RUNTIME_CONFIG.secure_cookies,
 )
 
 
@@ -388,8 +382,6 @@ DIAGNOSTIC_VERSION = "dashboard-production-v2"
 @app.after_request
 def add_security_headers(response):
 
-    response.headers["X-Sentinel-App-File"] = __file__
-    response.headers["X-Sentinel-App-PID"] = str(os.getpid())
     response.headers["X-Sentinel-App-Diagnostic"] = DIAGNOSTIC_VERSION
 
     response.headers["X-Frame-Options"] = "DENY"
@@ -773,9 +765,9 @@ def workspace_iocs():
 @app.errorhandler(sqlite3.Error)
 def database_error(error):
 
-    logger.exception(
-        "dashboard_database_error",
-        exc_info=error
+    logger.error(
+        "dashboard_database_error error_type=%s",
+        type(error).__name__,
     )
 
     return render_template(
@@ -1338,11 +1330,12 @@ def case_api(case_id: str):
 
 
 
-    except Exception:
+    except Exception as error:
 
-        logger.exception(
-            "CASE API FAILURE case_id=%s",
-            case_id
+        logger.error(
+            "CASE API FAILURE case_id=%s error_type=%s",
+            case_id,
+            type(error).__name__,
         )
 
 

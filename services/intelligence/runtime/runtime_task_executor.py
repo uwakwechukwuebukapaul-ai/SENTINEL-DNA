@@ -145,7 +145,10 @@ class RuntimeTaskExecutor:
 
         observer = ObservabilityService()
         started = time.perf_counter()
-        observer.event("AGENT_STARTED", case_id=task.payload.get("case_id"), agent=task.capability)
+        context = task.payload.get("context")
+        correlation_id = task.payload.get("correlation_id") or getattr(context, "correlation_id", None)
+        event_context = {"correlation_id": correlation_id} if correlation_id else {}
+        observer.event("AGENT_STARTED", case_id=task.payload.get("case_id"), agent=task.capability, **event_context)
         handler = self.handlers.get(
             task.capability
         )
@@ -156,7 +159,7 @@ class RuntimeTaskExecutor:
             )
 
             self.failed += 1
-            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[f"No handler registered for {task.capability}"])
+            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[f"No handler registered for {task.capability}"], **event_context)
 
             return None
 
@@ -172,7 +175,7 @@ class RuntimeTaskExecutor:
             )
 
             self.executed += 1
-            observer.event("AGENT_COMPLETED", case_id=task.payload.get("case_id"), agent=task.capability, status="completed", duration_ms=round((time.perf_counter()-started)*1000, 2))
+            observer.event("AGENT_COMPLETED", case_id=task.payload.get("case_id"), agent=task.capability, status="completed", duration_ms=round((time.perf_counter()-started)*1000, 2), **event_context)
 
             return result
 
@@ -182,7 +185,7 @@ class RuntimeTaskExecutor:
             )
 
             self.failed += 1
-            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[type(exc).__name__])
+            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[type(exc).__name__], **event_context)
 
             return None
 

@@ -263,6 +263,7 @@ class InvestigationOrchestrator:
         normalized_case_id = str(
             case_id or "UNKNOWN"
         )
+        correlation_id = kwargs.get("correlation_id")
 
         normalized_artifacts = self._normalize_artifacts(
             artifacts
@@ -457,7 +458,13 @@ class InvestigationOrchestrator:
                 investigation_id
             ] = result
 
-            observer.event("AGENT_COMPLETED", case_id=normalized_case_id, status="completed", duration_ms=round((time.perf_counter()-started_at)*1000, 2))
+            observer.event(
+                "AGENT_COMPLETED",
+                case_id=normalized_case_id,
+                status="completed",
+                duration_ms=round((time.perf_counter()-started_at)*1000, 2),
+                **({"correlation_id": correlation_id} if correlation_id else {}),
+            )
             return result
 
         except Exception as exc:
@@ -515,7 +522,14 @@ class InvestigationOrchestrator:
                 investigation_id
             ] = result
 
-            observer.event("AGENT_FAILED", case_id=normalized_case_id, status="failed", duration_ms=round((time.perf_counter()-started_at)*1000, 2), errors=[str(exc)])
+            observer.event(
+                "AGENT_FAILED",
+                case_id=normalized_case_id,
+                status="failed",
+                duration_ms=round((time.perf_counter()-started_at)*1000, 2),
+                errors=[str(exc)],
+                **({"correlation_id": correlation_id} if correlation_id else {}),
+            )
             return result
 
     # ========================================================================
