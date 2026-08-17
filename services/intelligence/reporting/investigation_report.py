@@ -47,6 +47,26 @@ class InvestigationReport:
         default_factory=list
     )
 
+    status: str = "unknown"
+
+    evidence: list[Any] = field(default_factory=list)
+
+    threat_intelligence: Any = None
+
+    intelligence_disposition: dict[str, Any] = field(default_factory=dict)
+
+    timeline: list[Any] = field(default_factory=list)
+
+    reasoning: Any = None
+
+    governance: dict[str, Any] = field(default_factory=dict)
+
+    confidence: Any = None
+
+    uncertainty: Any = None
+
+    tenant_context: Any = None
+
     agent_results: Any = field(
         default_factory=list
     )
@@ -106,6 +126,26 @@ class InvestigationReport:
 
             "recommendations":
                 self.recommendations,
+
+            "status": self.status,
+
+            "evidence": self.evidence,
+
+            "threat_intelligence": self.threat_intelligence,
+
+            "intelligence_disposition": self.intelligence_disposition,
+
+            "timeline": self.timeline,
+
+            "reasoning": self.reasoning,
+
+            "governance": self.governance,
+
+            "confidence": self.confidence,
+
+            "uncertainty": self.uncertainty,
+
+            "tenant_context": self.tenant_context,
 
 
             "agent_results":
@@ -253,6 +293,56 @@ class InvestigationReportGenerator:
         )
 
 
+        return report
+
+    def generate_from_result(self, result: Any) -> InvestigationReport:
+        """Build the analyst report from the canonical final result envelope."""
+        data = result.to_dict() if hasattr(result, "to_dict") else dict(result or {})
+        decision = data.get("decision_report") or {}
+        if hasattr(decision, "to_dict"):
+            decision = decision.to_dict()
+        normalized = (data.get("intelligence") or {}).get("normalized", {})
+        status_metadata = normalized.get("metadata", {}).get("intelligence_status", {}) if isinstance(normalized, dict) else {}
+        governance = decision.get("metadata", {}).get("governance", {}) if isinstance(decision, dict) else {}
+        if not governance:
+            governance = {
+                "mode": "ADVISORY_ONLY",
+                "analyst_authority_required": True,
+                "autonomous_action": False,
+            }
+        reasoning = data.get("reasoning_report")
+        if hasattr(reasoning, "to_dict"):
+            reasoning = reasoning.to_dict()
+        uncertainty = data.get("metadata", {}).get("uncertainty", "unknown")
+        report = InvestigationReport(
+            case_id=str(data.get("case_id") or "unknown"),
+            title="AI Investigation Report",
+            summary=(reasoning or {}).get("summary", "No investigation conclusion was recorded.") if isinstance(reasoning, dict) else "No investigation conclusion was recorded.",
+            status=str(data.get("status") or "unknown"),
+            risk=data.get("risk") if isinstance(data.get("risk"), dict) else {"value": data.get("risk", "unknown")},
+            risk_score=float((data.get("risk") or {}).get("score", 0) if isinstance(data.get("risk"), dict) else 0),
+            findings=list(data.get("findings", []) or []),
+            evidence=list(data.get("artifacts", []) or []),
+            threat_intelligence=data.get("threat_intelligence_report") or "unavailable",
+            intelligence_disposition={
+                "status": status_metadata.get("statuses", []),
+                "disposition": status_metadata.get("disposition", "unavailable"),
+            },
+            mitre=list(data.get("mitre", []) or []),
+            timeline=list(data.get("timeline", []) or []),
+            reasoning=reasoning or "unavailable",
+            recommendations=list(data.get("recommendations", []) or []),
+            governance=governance,
+            confidence=data.get("confidence"),
+            uncertainty=uncertainty,
+            tenant_context=data.get("tenant_context") or "unavailable",
+            attack_story=data.get("attack_story") or "unavailable",
+            metadata={
+                "report_type": "analyst_investigation_report",
+                "recommendation_sources": list(data.get("recommendation_sources", []) or []),
+            },
+        )
+        self.history_store.append(report)
         return report
 
 

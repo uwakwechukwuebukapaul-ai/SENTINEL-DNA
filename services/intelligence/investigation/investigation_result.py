@@ -215,6 +215,10 @@ class InvestigationResult:
         default_factory=list
     )
 
+    recommendation_sources: list[dict[str, Any]] = field(
+        default_factory=list
+    )
+
     decisions: list[Any] = field(
         default_factory=list
     )
@@ -492,6 +496,9 @@ class InvestigationResult:
 
             "recommendations":
                 self.recommendations,
+
+            "recommendation_sources":
+                self.recommendation_sources,
 
             "decisions":
                 self.decisions,

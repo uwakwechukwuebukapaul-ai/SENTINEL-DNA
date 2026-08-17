@@ -23,10 +23,35 @@ class EvidenceReasoner:
         return dict(vars(context))
 
     @staticmethod
-    def _ref(item: Any, index: int) -> str:
+    def _ref(item: Any) -> str | None:
         if isinstance(item, dict):
-            return str(item.get("evidence_id") or item.get("id") or item.get("reference") or f"evidence-{index}")
-        return f"evidence-{index}"
+            reference = item.get("evidence_id") or item.get("artifact_id") or item.get("id") or item.get("reference")
+            return str(reference) if reference is not None and str(reference).strip() else None
+        return None
+
+    @staticmethod
+    def _tenant_safe(item: Any, tenant_id: str | None) -> bool:
+        if not isinstance(item, dict) or not tenant_id:
+            return True
+        evidence_tenant = item.get("tenant_id")
+        return evidence_tenant is None or evidence_tenant == tenant_id
+
+    @staticmethod
+    def _provenance(context: Any, tenant_id: str | None) -> dict[str, Any]:
+        value = getattr(context, "intelligence_provenance", None)
+        if not isinstance(value, dict):
+            value = {}
+        audit = value.get("audit")
+        if isinstance(audit, dict) and tenant_id and audit.get("tenant_id") not in (None, tenant_id):
+            return {}
+        providers = sorted({str(provider) for provider in value.get("providers", []) if provider})
+        if not providers and not value.get("status") and not value.get("disposition"):
+            return {}
+        return {
+            "providers": providers,
+            "status": list(value.get("status", []) or []),
+            "disposition": value.get("disposition", "unavailable"),
+        }
 
     def build_prompt(self, context: Any, plan: Any = None) -> str:
         data = self._data(context)
@@ -45,7 +70,14 @@ class EvidenceReasoner:
         evidence = list(data.get("evidence", []) or [])
         iocs = list(data.get("iocs", []) or [])
         haystack = json.dumps({"evidence": evidence, "iocs": iocs}, default=str).lower()
-        refs = [self._ref(item, index) for index, item in enumerate(evidence)]
+        tenant_id = data.get("tenant_id") or getattr(context, "tenant_id", None)
+        intelligence_provenance = self._provenance(context, tenant_id)
+        refs = [
+            reference
+            for item in evidence
+            if self._tenant_safe(item, tenant_id)
+            and (reference := self._ref(item)) is not None
+        ]
         findings: list[ReasoningFinding] = []
         if any(term in haystack for term in ("phishing", "credential", "malicious url", "credential harvesting")):
             confidence = 0.88
@@ -57,6 +89,8 @@ class EvidenceReasoner:
                 confidence=confidence,
                 evidence_refs=refs,
                 mitre_techniques=["T1566", "T1566.002"],
+                evidence_status="attached" if refs else "not_attached",
+                intelligence_provenance=intelligence_provenance,
             ))
         metadata: dict[str, Any] = {"provider": "deterministic_evidence_reasoner", "synthetic_only": True, "evidence_references": refs}
         if self.ai_runtime is not None:

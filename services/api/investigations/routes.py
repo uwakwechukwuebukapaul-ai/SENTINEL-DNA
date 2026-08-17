@@ -74,6 +74,25 @@ def _coordinator():
     )
 
 
+def _investigation_execution_failure(observer: ObservabilityService, case_id: str, exc: Exception):
+    """Return a safe API error while keeping failure details internal."""
+    try:
+        context = request_context()
+        observer.event(
+            "investigation_api_failed",
+            case_id=case_id,
+            operation="investigate",
+            component="api",
+            status="failed",
+            error_type=type(exc).__name__,
+            correlation_id=context.correlation_id,
+            tenant_id=context.tenant_id,
+        )
+    except Exception:
+        pass
+    return jsonify({"error": {"code": "INVESTIGATION_EXECUTION_FAILED", "message": "Investigation execution failed"}}), 500
+
+
 # ============================================================
 # REQUEST HANDLER
 # ============================================================
@@ -106,11 +125,16 @@ def _execute_investigation():
         ), 400
 
 
-    result = _coordinator().investigate(
-        case_id=case_id,
-        alert=alert,
-        artifacts=artifacts,
-    )
+    try:
+        result = _coordinator().investigate(
+            case_id=case_id,
+            alert=alert,
+            artifacts=artifacts,
+        )
+    except PermissionError:
+        raise
+    except Exception as exc:
+        return _investigation_execution_failure(observer, case_id, exc)
 
 
     security_context = request_context()

@@ -69,6 +69,7 @@ from services.intelligence.repository.intelligence_repository import Intelligenc
 from services.intelligence.timeline.timeline_engine import InvestigationTimelineEngine
 from services.intelligence.reporting.investigation_report import InvestigationReportGenerator
 from services.intelligence.repository.report_repository import InvestigationReportRepository
+from database.connection import database
 from services.observability import ObservabilityService
 from services.intelligence.reasoning import EvidenceReasoner
 from services.intelligence.memory import MemoryService
@@ -104,6 +105,7 @@ class InvestigationContext:
 
     tenant_id: str | None = None
     actor_id: str | None = None
+    intelligence_provenance: dict[str, Any] = field(default_factory=dict)
     intelligence_evidence: list[dict[str, Any]] = field(default_factory=list)
     _queried_intelligence: list[tuple[str, str, str]] = field(default_factory=list, repr=False)
 
@@ -166,7 +168,7 @@ class InvestigationCoordinator:
         self.intelligence_repository = IntelligenceRepository()
         self.timeline_engine = InvestigationTimelineEngine()
         self.report_generator = InvestigationReportGenerator()
-        self.report_repository = InvestigationReportRepository()
+        self.report_repository = InvestigationReportRepository(database)
         self.evidence_reasoner = EvidenceReasoner(
             getattr(runtime, "ai_runtime", None) or getattr(self.orchestrator, "ai_runtime", None)
         )
@@ -190,6 +192,8 @@ class InvestigationCoordinator:
         evidence: Optional[list[dict[str, Any]]] = None,
         iocs: Optional[list[dict[str, Any]]] = None,
         timeline: Optional[list[dict[str, Any]]] = None,
+        tenant_id: str | None = None,
+        intelligence_provenance: Optional[dict[str, Any]] = None,
     ) -> InvestigationContext:
 
         return InvestigationContext(
@@ -198,6 +202,8 @@ class InvestigationCoordinator:
             evidence=list(evidence or []),
             iocs=list(iocs or []),
             timeline=list(timeline or []),
+            tenant_id=tenant_id,
+            intelligence_provenance=dict(intelligence_provenance or {}),
         )
 
 
@@ -355,7 +361,26 @@ class InvestigationCoordinator:
             disposition = "unavailable"
         else:
             disposition = "neutral" if observations else "unavailable"
-        return {"provider_results": provider_results, "observations": observations, "statuses": sorted(statuses), "disposition": disposition, "audit": asdict(result.audit) if is_dataclass(getattr(result, "audit", None)) else getattr(result, "audit", None)}
+        providers = sorted({
+            provider
+            for provider in (
+                item.get("provider")
+                for item in provider_results
+            )
+            if provider
+        })
+        return {
+            "provider_results": provider_results,
+            "observations": observations,
+            "statuses": sorted(statuses),
+            "disposition": disposition,
+            "audit": asdict(result.audit) if is_dataclass(getattr(result, "audit", None)) else getattr(result, "audit", None),
+            "intelligence_provenance": {
+                "providers": providers,
+                "status": sorted(statuses),
+                "disposition": disposition,
+            },
+        }
 
     def _build_success_result(
         self,
@@ -474,9 +499,15 @@ class InvestigationCoordinator:
                 evidence=[item for item in normalized_artifacts if isinstance(item, dict)] + list(engine_analysis.get("evidence", []) or []),
                 iocs=list(engine_analysis.get("iocs", []) or []),
                 timeline=list(normalized_intelligence.timeline or []),
+                tenant_id=(tenant_context or {}).get("tenant_id"),
+                intelligence_provenance=intelligence_metadata.get("intelligence_provenance", {}),
             ),
             plan,
         )
+        for finding in reasoning_report.findings:
+            normalized_finding = finding.to_dict() if hasattr(finding, "to_dict") else dict(finding)
+            if normalized_finding not in findings:
+                findings.append(normalized_finding)
         threat_report = None
         try:
             threat_report = self.threat_intelligence.correlate_case(
@@ -547,6 +578,9 @@ class InvestigationCoordinator:
                 result, reasoning_report, result.decision_report, result.copilot_summary, result.memory_reference)
         except Exception:
             result.metadata["narrative_error"] = True
+        analyst_report = self.report_generator.generate_from_result(result)
+        self.report_repository.save(analyst_report)
+        result.intelligence["report"] = analyst_report.to_dict()
         return result
 
     def get_report_by_case_id(self, case_id: str) -> dict[str, Any] | None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
 from typing import Any
 from .errors import RepositoryError
 
@@ -32,9 +33,25 @@ class InvestigationReportRepository:
     """
 
 
-    def __init__(self):
+    def __init__(self, db=None):
+        if db is None:
+            from database.connection import database as default_db
+            db = default_db
+        self.db = db
+        self._ensure_schema()
 
-        self.reports: list[dict[str, Any]] = []
+    def _ensure_schema(self) -> None:
+        with self.db.session() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS investigation_reports (
+                    case_id TEXT PRIMARY KEY,
+                    report_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
 
 
 
@@ -132,8 +149,23 @@ class InvestigationReportRepository:
             encoded
         )
 
+        case_id = stored.get("case_id") if isinstance(stored, dict) else None
+        if not case_id:
+            raise RepositoryError("Investigation report case_id is required")
+
         try:
-            self.reports.append(stored)
+            now = datetime.now(timezone.utc).isoformat()
+            with self.db.session() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO investigation_reports(case_id, report_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(case_id) DO UPDATE SET
+                        report_json=excluded.report_json,
+                        updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (str(case_id), json.dumps(stored), now, now),
+                )
         except Exception as exc:
             raise RepositoryError("Unable to persist investigation report") from exc
 
@@ -143,9 +175,11 @@ class InvestigationReportRepository:
 
     def get_all(self):
 
-        return list(
-            self.reports
-        )
+        with self.db.session() as connection:
+            rows = connection.execute(
+                "SELECT report_json FROM investigation_reports ORDER BY updated_at, case_id"
+            ).fetchall()
+        return [json.loads(row["report_json"]) for row in rows]
 
 
 
@@ -155,16 +189,19 @@ class InvestigationReportRepository:
 
     def get_by_case_id(self, case_id: str):
         """Return the most recently saved report for a case."""
-        for report in reversed(self.reports):
-            if isinstance(report, dict) and report.get("case_id") == case_id:
-                return report
-        return None
+        with self.db.session() as connection:
+            row = connection.execute(
+                "SELECT report_json FROM investigation_reports WHERE case_id=?",
+                (case_id,),
+            ).fetchone()
+        return json.loads(row["report_json"]) if row else None
 
 
 
     def clear(self):
 
-        self.reports.clear()
+        with self.db.session() as connection:
+            connection.execute("DELETE FROM investigation_reports")
 
 
 

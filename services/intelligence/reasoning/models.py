@@ -16,6 +16,8 @@ class ReasoningFinding:
     evidence_refs: list[str] = field(default_factory=list)
     mitre_techniques: list[str] = field(default_factory=list)
     reasoning_type: str = "deterministic_evidence_correlation"
+    evidence_status: str = "not_attached"
+    intelligence_provenance: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
