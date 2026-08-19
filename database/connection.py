@@ -25,6 +25,7 @@ def resolve_database_path(database_path=None) -> Path:
 
 
 DATABASE_PATH = resolve_database_path()
+DEFAULT_BUSY_TIMEOUT_MS = 5_000
 
 
 class DatabaseConnection:
@@ -32,21 +33,28 @@ class DatabaseConnection:
     Production-ready SQLite connection manager.
     """
 
-    def __init__(self, database_path=None):
+    def __init__(self, database_path=None, *, busy_timeout_ms=DEFAULT_BUSY_TIMEOUT_MS):
         self.database_path = str(resolve_database_path(database_path))
+        self.busy_timeout_ms = max(0, int(busy_timeout_ms))
 
     def connect(self):
         """
         Create SQLite connection.
         """
 
-        connection = sqlite3.connect(self.database_path)
+        connection = sqlite3.connect(
+            self.database_path,
+            timeout=self.busy_timeout_ms / 1_000,
+        )
 
         connection.row_factory = sqlite3.Row
 
         connection.execute(
             "PRAGMA foreign_keys = ON;"
         )
+        # Let SQLite wait a bounded period for a competing writer instead of
+        # leaking transient SQLITE_BUSY errors from BEGIN IMMEDIATE callers.
+        connection.execute(f"PRAGMA busy_timeout = {self.busy_timeout_ms};")
 
         return connection
 

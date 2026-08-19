@@ -67,6 +67,8 @@ CANONICAL_COLUMNS = [
     "created",
 ]
 
+DUPLICATE_REGISTRY_TABLE = "ioc_duplicate_keys"
+
 
 # =====================================
 # LOGGING
@@ -445,6 +447,40 @@ def replace_legacy_table(
     log("Legacy IOC table replaced with canonical table.")
 
 
+def ensure_duplicate_registry(
+    connection: sqlite3.Connection,
+) -> None:
+    """Install the conditional uniqueness registry for canonical IOCs."""
+    connection.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {DUPLICATE_REGISTRY_TABLE} (
+            case_id TEXT NOT NULL,
+            ioc_type TEXT NOT NULL,
+            value TEXT NOT NULL,
+            ioc_id TEXT NOT NULL UNIQUE,
+            PRIMARY KEY (case_id, ioc_type, value),
+            FOREIGN KEY (ioc_id) REFERENCES iocs(ioc_id)
+                ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        f"""
+        INSERT OR REPLACE INTO {DUPLICATE_REGISTRY_TABLE}
+            (case_id, ioc_type, value, ioc_id)
+        SELECT i.case_id, i.ioc_type, i.value, i.ioc_id
+        FROM iocs AS i
+        WHERE i.id = (
+            SELECT MAX(latest.id)
+            FROM iocs AS latest
+            WHERE latest.case_id = i.case_id
+              AND latest.ioc_type = i.ioc_type
+              AND latest.value = i.value
+        )
+        """
+    )
+
+
 # =====================================
 # FINAL VALIDATION
 # =====================================
@@ -512,6 +548,31 @@ def final_validation(
             "SQLite foreign-key enforcement is disabled."
         )
 
+    registry_columns = get_columns(
+        connection,
+        DUPLICATE_REGISTRY_TABLE,
+    )
+    if registry_columns != [
+        "case_id", "ioc_type", "value", "ioc_id"
+    ]:
+        raise RuntimeError("IOC duplicate registry validation failed.")
+
+    registry_count = connection.execute(
+        f"SELECT COUNT(*) FROM {DUPLICATE_REGISTRY_TABLE}"
+    ).fetchone()[0]
+    distinct_identity_count = connection.execute(
+        """
+        SELECT COUNT(*)
+        FROM (
+            SELECT case_id, ioc_type, value
+            FROM iocs
+            GROUP BY case_id, ioc_type, value
+        )
+        """
+    ).fetchone()[0]
+    if registry_count != distinct_identity_count:
+        raise RuntimeError("IOC duplicate registry row count mismatch.")
+
     log("Final IOC contract validation passed.")
 
 
@@ -539,10 +600,10 @@ def migrate() -> None:
                 "SELECT COUNT(*) FROM iocs"
             ).fetchone()[0]
 
-            final_validation(
-                connection,
-                canonical_count,
-            )
+            connection.execute("BEGIN")
+            ensure_duplicate_registry(connection)
+            final_validation(connection, canonical_count)
+            connection.commit()
 
             log("IOC migration already complete; no changes made.")
             return
@@ -579,6 +640,8 @@ def migrate() -> None:
         )
 
         replace_legacy_table(connection)
+
+        ensure_duplicate_registry(connection)
 
         final_validation(
             connection,

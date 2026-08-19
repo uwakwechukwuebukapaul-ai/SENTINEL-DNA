@@ -67,6 +67,68 @@ class IOCRepository:
             raise IOCValidationError(f"{name}_too_long")
         return value
 
+    @staticmethod
+    def _ensure_duplicate_registry(conn) -> None:
+        """Create and seed the DB-backed identity registry when needed."""
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ioc_duplicate_keys (
+                case_id TEXT NOT NULL,
+                ioc_type TEXT NOT NULL,
+                value TEXT NOT NULL,
+                ioc_id TEXT NOT NULL UNIQUE,
+                PRIMARY KEY (case_id, ioc_type, value),
+                FOREIGN KEY (ioc_id) REFERENCES iocs(ioc_id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO ioc_duplicate_keys
+                (case_id, ioc_type, value, ioc_id)
+            SELECT i.case_id, i.ioc_type, i.value, i.ioc_id
+            FROM iocs AS i
+            WHERE i.id = (
+                SELECT MAX(latest.id)
+                FROM iocs AS latest
+                WHERE latest.case_id = i.case_id
+                  AND latest.ioc_type = i.ioc_type
+                  AND latest.value = i.value
+            )
+            """
+        )
+
+    @staticmethod
+    def _row_for_identity(conn, fields: tuple[str, str, str]):
+        registry_row = conn.execute(
+            """
+            SELECT ioc_id
+            FROM ioc_duplicate_keys
+            WHERE case_id=? AND ioc_type=? AND value=?
+            """,
+            fields,
+        ).fetchone()
+        if registry_row:
+            return conn.execute(
+                """
+                SELECT id, ioc_id, case_id, ioc_type, value, confidence,
+                       reputation, source, created
+                FROM iocs WHERE ioc_id=?
+                """,
+                (registry_row[0],),
+            ).fetchone()
+        return conn.execute(
+            """
+            SELECT id, ioc_id, case_id, ioc_type, value, confidence,
+                   reputation, source, created
+            FROM iocs
+            WHERE case_id=? AND ioc_type=? AND value=?
+            ORDER BY id DESC LIMIT 1
+            """,
+            fields,
+        ).fetchone()
+
     def create(
         self,
         case_id,
@@ -89,15 +151,26 @@ class IOCRepository:
         if duplicate_policy not in {"allow", "return_existing", "reject"}:
             raise IOCValidationError("invalid_duplicate_policy")
 
-        existing = self.find_exact(*fields[:3])
-        if existing and duplicate_policy == "return_existing":
-            return existing
-        if existing and duplicate_policy == "reject":
-            raise IOCDuplicateError("ioc_already_exists")
-
         ioc_id = generate_ioc_id()
         created = datetime.now().isoformat()
         with self.connection.session() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._ensure_duplicate_registry(conn)
+
+            existing = self._row_for_identity(conn, fields[:3])
+            if existing and duplicate_policy == "return_existing":
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO ioc_duplicate_keys
+                        (case_id, ioc_type, value, ioc_id)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (*fields[:3], existing[1]),
+                )
+                return dict(existing)
+            if existing and duplicate_policy == "reject":
+                raise IOCDuplicateError("ioc_already_exists")
+
             cursor = conn.execute(
                 """
                 INSERT INTO iocs
@@ -114,6 +187,14 @@ class IOCRepository:
                 """,
                 (cursor.lastrowid,),
             ).fetchone()
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO ioc_duplicate_keys
+                    (case_id, ioc_type, value, ioc_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                (*fields[:3], ioc_id),
+            )
         return dict(row)
 
     def find_exact(self, case_id, ioc_type, value) -> dict | None:
