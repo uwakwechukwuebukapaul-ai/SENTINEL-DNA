@@ -111,6 +111,7 @@ def test_correlation_id_is_preserved_in_http_response(monkeypatch, tmp_path):
     monkeypatch.delenv("SENTINEL_DNA_ENV", raising=False)
     monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
     monkeypatch.delenv("SENTINEL_DNA_DB_PATH", raising=False)
+    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "runtime-hardening.db"))
     app = create_app()
     response = app.test_client().get("/health", headers={"X-Correlation-ID": "corr-http"})
     assert response.status_code == 200
@@ -118,6 +119,9 @@ def test_correlation_id_is_preserved_in_http_response(monkeypatch, tmp_path):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Referrer-Policy"] == "no-referrer"
+    generated = app.test_client().get("/health")
+    assert generated.headers["X-Correlation-ID"]
+    assert generated.headers["X-Correlation-ID"] != "corr-http"
 
 
 def test_correlation_id_reaches_runtime_task_events(caplog):
