@@ -3,12 +3,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
-<<<<<<< HEAD
 import logging
 import re
 from pathlib import Path
-=======
->>>>>>> fed5678 (database: unify configured database path)
 
 from flask import (
     Flask,
@@ -20,16 +17,13 @@ from flask import (
     session,
 )
 
-<<<<<<< HEAD
 from jinja2 import ChoiceLoader, FileSystemLoader
 from config.runtime import RuntimeConfig
 from database.connection import database as shared_database
 
 
 # Core platform services
-=======
 from database.connection import resolve_database_path
->>>>>>> fed5678 (database: unify configured database path)
 from services.core.application_container import build_container
 from services.api.investigations.controller import InvestigationController
 
@@ -143,11 +137,8 @@ from services.platform_experience.routes import experience_api
 # BASE CONFIGURATION
 # ---------------------------------------------------------
 
-<<<<<<< HEAD
 BASE_DIR = Path(__file__).resolve().parent.parent
-=======
 DB_PATH = resolve_database_path()
->>>>>>> fed5678 (database: unify configured database path)
 
 RUNTIME_CONFIG = RuntimeConfig.from_environment()
 RUNTIME_CONFIG.validate()
@@ -591,7 +582,7 @@ def dashboard_payload() -> dict:
         SELECT
 
             case_id,
-            type,
+            ioc_type,
             value,
             created
 
@@ -758,7 +749,7 @@ def workspace_iocs():
             SELECT
 
                 case_id,
-                type,
+                ioc_type AS type,
                 value,
                 created
 
@@ -1258,8 +1249,12 @@ def case_api(case_id: str):
             SELECT
 
                 id,
-                type,
+                ioc_id,
+                ioc_type,
                 value,
+                confidence,
+                reputation,
+                source,
                 created
 
             FROM iocs
@@ -1459,7 +1454,7 @@ def run_investigation():
         SELECT
 
             id,
-            type,
+            ioc_type AS type,
             value,
             created
 
