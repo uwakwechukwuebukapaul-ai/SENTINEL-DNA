@@ -83,6 +83,7 @@ class IOCRepository:
             )
             """
         )
+        conn.execute("DELETE FROM ioc_duplicate_keys")
         conn.execute(
             """
             INSERT OR REPLACE INTO ioc_duplicate_keys

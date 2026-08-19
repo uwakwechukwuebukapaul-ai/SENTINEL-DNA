@@ -1,5 +1,6 @@
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+import multiprocessing
 from pathlib import Path
 import re
 from threading import Barrier, Event
@@ -22,6 +23,18 @@ from services.intelligence.ioc.persistence_service import (
     IOCAccessDenied,
     IOCDataAccessService,
 )
+
+
+def _process_return_existing(path, barrier, results):
+    try:
+        barrier.wait(timeout=10)
+        row = IOCRepository(DatabaseConnection(path)).create(
+            "INC-001", "DOMAIN", "process-race.example",
+            duplicate_policy="return_existing",
+        )
+        results.put(("ok", row["ioc_id"]))
+    except Exception as error:
+        results.put(("error", type(error).__name__, str(error)))
 
 
 def test_add_ioc_writes_canonical_contract(tmp_path):
@@ -170,6 +183,35 @@ def test_concurrent_return_existing_converges_on_one_record(tmp_path):
         results = list(pool.map(lambda _: create(), range(2)))
 
     assert results[0]["ioc_id"] == results[1]["ioc_id"]
+    assert IOCRepository(DatabaseConnection(path)).count() == 1
+
+
+def test_process_concurrent_return_existing_converges(tmp_path):
+    path = tmp_path / "process-concurrent-return-existing.db"
+    _repository_database(path)
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(2)
+    results = context.Queue()
+    processes = [
+        context.Process(target=_process_return_existing, args=(str(path), barrier, results))
+        for _ in range(2)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=15)
+    try:
+        assert all(not process.is_alive() for process in processes)
+        assert all(process.exitcode == 0 for process in processes)
+        outcomes = [results.get(timeout=2) for _ in processes]
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+
+    assert all(outcome[0] == "ok" for outcome in outcomes)
+    assert outcomes[0][1] == outcomes[1][1]
     assert IOCRepository(DatabaseConnection(path)).count() == 1
 
 
