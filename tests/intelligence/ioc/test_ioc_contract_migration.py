@@ -58,6 +58,10 @@ def test_migrates_legacy_iocs_using_configured_database(tmp_path, monkeypatch):
         row = connection.execute(
             "SELECT * FROM iocs"
         ).fetchone()
+        registry = connection.execute(
+            "SELECT case_id, ioc_type, value, ioc_id "
+            "FROM ioc_duplicate_keys"
+        ).fetchone()
 
     assert columns == migration.CANONICAL_COLUMNS
     assert row == (
@@ -71,6 +75,7 @@ def test_migrates_legacy_iocs_using_configured_database(tmp_path, monkeypatch):
         "LEGACY_MIGRATION",
         "2026-08-19T00:00:00",
     )
+    assert registry == ("INC-001", "DOMAIN", "evil.example", row[1])
 
 
 def test_invalid_legacy_data_rolls_back_without_replacing_table(tmp_path, monkeypatch):
@@ -126,11 +131,16 @@ def test_canonical_schema_rerun_is_successful_and_unchanged(tmp_path, monkeypatc
 
     with sqlite3.connect(database_path) as connection:
         snapshot = connection.execute("SELECT * FROM iocs").fetchall()
+        registry = connection.execute(
+            "SELECT case_id, ioc_type, value, ioc_id "
+            "FROM ioc_duplicate_keys"
+        ).fetchall()
 
     assert snapshot == [
         (7, "IOC-EXISTING", "INC-001", "DOMAIN", "evil.example",
          "HIGH", "MALICIOUS", "TEST", "2026-08-19T00:00:00")
     ]
+    assert registry == [("INC-001", "DOMAIN", "evil.example", "IOC-EXISTING")]
 
 
 def test_missing_ioc_table_fails_without_creating_legacy_schema(tmp_path, monkeypatch):
