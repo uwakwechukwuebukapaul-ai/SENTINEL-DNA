@@ -313,83 +313,30 @@ def add_ioc(
         reputation="UNKNOWN",
         source="LOCAL"
 ):
+    # Compatibility entry point: canonical IOC persistence lives in the
+    # dedicated repository to prevent SQL contract drift.
+    from database.ioc_repository import repository as ioc_repository
 
-    # Keep this legacy repository entry point compatible while writing the
-    # canonical IOC contract used by the dedicated IOC repository.
-    from database.ioc_repository import generate_ioc_id
-
-    ioc_id = generate_ioc_id()
-
-    with database.session() as conn:
-
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO iocs
-            (
-                ioc_id,
-                case_id,
-                ioc_type,
-                value,
-                confidence,
-                reputation,
-                source,
-                created
-            )
-
-            VALUES (?,?,?,?,?,?,?,?)
-            """,
-            (
-                ioc_id,
-                case_id,
-                ioc_type,
-                value,
-                confidence,
-                reputation,
-                source,
-                datetime.now().isoformat()
-            )
-        )
-
-        conn.commit()
-
+    ioc_repository.create(
+        case_id,
+        ioc_type,
+        value,
+        confidence,
+        reputation,
+        source,
+    )
     return True
 
 
 
 def get_iocs(case_id=None):
+    from database.ioc_repository import repository as ioc_repository
 
-    with database.session() as conn:
-
-        cursor = conn.cursor()
-
-        if case_id:
-
-            cursor.execute(
-                """
-                SELECT *
-                FROM iocs
-                WHERE case_id=?
-                ORDER BY id DESC
-                """,
-                (case_id,)
-            )
-
-        else:
-
-            cursor.execute(
-                """
-                SELECT *
-                FROM iocs
-                ORDER BY id DESC
-                """
-            )
-
-        return [
-            dict(row)
-            for row in cursor.fetchall()
-        ]
+    return (
+        ioc_repository.list_for_case(case_id)
+        if case_id
+        else ioc_repository.list_all()
+    )
 
 
 
