@@ -1,2 +1,5 @@
 from .store import FeedbackStore
-__all__ = ["FeedbackStore"]
+from .analytics import FeedbackAnalytics, FeedbackAnalyticsService
+from services.intelligence.investigation.analyst_feedback import AnalystDecision, AnalystFeedback
+
+__all__ = ["FeedbackStore", "AnalystDecision", "AnalystFeedback", "FeedbackAnalytics", "FeedbackAnalyticsService"]

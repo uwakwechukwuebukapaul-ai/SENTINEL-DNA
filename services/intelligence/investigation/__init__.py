@@ -33,6 +33,12 @@ def __getattr__(name: str):
             __name__,
         ).InvestigationStateManager
 
+    if name == "AnalystDecision":
+        return import_module(".analyst_feedback", __name__).AnalystDecision
+
+    if name == "AnalystFeedback":
+        return import_module(".analyst_feedback", __name__).AnalystFeedback
+
 
     raise AttributeError(
         name
@@ -47,5 +53,9 @@ __all__ = [
     "InvestigationMemory",
 
     "InvestigationStateManager",
+
+    "AnalystDecision",
+
+    "AnalystFeedback",
 
 ]

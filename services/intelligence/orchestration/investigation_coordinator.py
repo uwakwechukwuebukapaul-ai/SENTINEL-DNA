@@ -73,6 +73,9 @@ from database.connection import database
 from services.observability import ObservabilityService
 from services.intelligence.reasoning import EvidenceReasoner
 from services.intelligence.memory import MemoryService
+from services.intelligence.investigation.analyst_feedback import AnalystFeedback
+from services.intelligence.repository.feedback_repository import InvestigationFeedbackRepository
+from services.intelligence.feedback.analytics import FeedbackAnalyticsService
 from services.intelligence.decision.engine import DecisionEngine
 from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
@@ -186,6 +189,8 @@ class InvestigationCoordinator:
             if provider_neutral_fusion_engine is not None
             else ProviderNeutralFusionEngine()
         )
+        self.feedback_repository = InvestigationFeedbackRepository(database)
+        self.feedback_analytics = FeedbackAnalyticsService(self.feedback_repository)
 
 
     # ========================================================
@@ -589,7 +594,11 @@ class InvestigationCoordinator:
         )
         scoped_tenant_id = (tenant_context or {}).get("tenant_id")
         if scoped_tenant_id:
-            self.intelligence_repository.save_for_tenant(case_id, scoped_tenant_id, normalized_intelligence)
+            save_intelligence_for_tenant = getattr(self.intelligence_repository, "save_for_tenant", None)
+            if callable(save_intelligence_for_tenant):
+                save_intelligence_for_tenant(case_id, scoped_tenant_id, normalized_intelligence)
+            else:
+                self.intelligence_repository.save(case_id, normalized_intelligence)
         else:
             self.intelligence_repository.save(case_id, normalized_intelligence)
         report = self.report_generator.generate(
@@ -600,7 +609,11 @@ class InvestigationCoordinator:
         )
         report.tenant_context = dict(tenant_context or {}) if scoped_tenant_id else None
         if scoped_tenant_id:
-            self.report_repository.save_for_tenant(scoped_tenant_id, report)
+            save_report_for_tenant = getattr(self.report_repository, "save_for_tenant", None)
+            if callable(save_report_for_tenant):
+                save_report_for_tenant(scoped_tenant_id, report)
+            else:
+                self.report_repository.save(report)
         else:
             self.report_repository.save(report)
         aggregate = self.finding_aggregator.aggregate(
@@ -708,7 +721,11 @@ class InvestigationCoordinator:
             result.metadata["narrative_error"] = True
         analyst_report = self.report_generator.generate_from_result(result)
         if scoped_tenant_id:
-            self.report_repository.save_for_tenant(scoped_tenant_id, analyst_report)
+            save_for_tenant = getattr(self.report_repository, "save_for_tenant", None)
+            if callable(save_for_tenant):
+                save_for_tenant(scoped_tenant_id, analyst_report)
+            else:
+                self.report_repository.save(analyst_report)
         else:
             self.report_repository.save(analyst_report)
         result.intelligence["report"] = analyst_report.to_dict()
@@ -716,8 +733,51 @@ class InvestigationCoordinator:
 
     def get_report_by_case_id(self, case_id: str, tenant_id: str | None = None) -> dict[str, Any] | None:
         if tenant_id:
-            return self.report_repository.get_by_case_id_for_tenant(case_id, tenant_id)
+            scoped = getattr(self.report_repository, "get_by_case_id_for_tenant", None)
+            if callable(scoped):
+                return scoped(case_id, tenant_id)
+            report = self.report_repository.get_by_case_id(case_id)
+            context = report.get("tenant_context") if isinstance(report, dict) else {}
+            metadata = report.get("metadata") if isinstance(report, dict) else {}
+            report_tenant = context.get("tenant_id") if isinstance(context, dict) else None
+            report_tenant = report_tenant or (metadata.get("tenant_id") if isinstance(metadata, dict) else None)
+            return report if report_tenant == tenant_id else None
         return self.report_repository.get_by_case_id(case_id)
+
+    def submit_feedback(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, analyst_id: str) -> AnalystFeedback:
+        report = self.get_report_by_case_id(case_id, tenant_id)
+        if report is None:
+            raise LookupError("investigation_not_found")
+        if not isinstance(payload, dict):
+            raise ValueError("malformed_payload")
+        allowed = {"decision", "reason", "finding_id", "recommendation_id"}
+        if set(payload) - allowed:
+            raise ValueError("invalid_feedback_fields")
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        finding_id = payload.get("finding_id")
+        if finding_id:
+            finding_ids = {str(item.get("finding_id")) for item in report.get("findings", []) or [] if isinstance(item, dict) and item.get("finding_id")}
+            if str(finding_id) not in finding_ids:
+                raise ValueError("finding_not_found")
+        recommendation_id = payload.get("recommendation_id")
+        return self.feedback_repository.save(AnalystFeedback(
+            investigation_id=investigation_id, case_id=str(case_id), decision=payload.get("decision", ""),
+            analyst_id=analyst_id, finding_id=str(finding_id) if finding_id else None,
+            recommendation_id=str(recommendation_id) if recommendation_id else None,
+            reason=payload.get("reason", ""), tenant_id=tenant_id,
+        ))
+
+    def get_feedback(self, case_id: str, tenant_id: str) -> list[dict[str, Any]]:
+        report = self.get_report_by_case_id(case_id, tenant_id)
+        if report is None:
+            raise LookupError("investigation_not_found")
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        return [item.to_dict() for item in self.feedback_repository.list_for_investigation(tenant_id, investigation_id)]
+
+    def get_feedback_analytics(self, tenant_id: str, **filters: Any) -> dict[str, Any]:
+        return self.feedback_analytics.summarize(tenant_id, **filters).to_dict()
 
 
     def investigate(
@@ -864,6 +924,8 @@ class InvestigationCoordinator:
                 context.add_evidence(payload, tenant_id)
 
         orchestrator_kwargs = dict(kwargs)
+        orchestrator_kwargs.pop("tenant_id", None)
+        orchestrator_kwargs.pop("actor_id", None)
         orchestrator_kwargs["context"] = context
         workflow = self.orchestrator.investigate(
             case_id=case_id,

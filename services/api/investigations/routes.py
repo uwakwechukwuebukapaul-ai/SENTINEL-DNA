@@ -30,6 +30,7 @@ from flask import (
     current_app,
     jsonify,
     request,
+    session,
 )
 
 
@@ -132,6 +133,8 @@ def _execute_investigation():
             alert=alert,
             artifacts=artifacts,
             correlation_id=security_context.correlation_id,
+            tenant_id=security_context.tenant_id,
+            actor_id=getattr(security_context, "actor_id", None) or getattr(security_context, "user_id", None),
         )
     except PermissionError:
         raise
@@ -304,6 +307,65 @@ def get_investigation_timeline(
                 ),
         }
     )
+
+
+@investigations_api.post("/<case_id>/feedback")
+def submit_investigation_feedback(case_id: str):
+    context = request_context()
+    analyst_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not analyst_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    try:
+        feedback = _coordinator().submit_feedback(
+            case_id, request.get_json(silent=True) or {},
+            tenant_id=str(context.tenant_id), analyst_id=str(analyst_id),
+        )
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"success": True, "feedback": feedback.to_dict()}), 201
+
+
+@investigations_api.get("/<case_id>/feedback")
+def get_investigation_feedback(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        feedback = _coordinator().get_feedback(case_id, str(context.tenant_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"case_id": case_id, "feedback": feedback})
+
+
+@investigations_api.get("/feedback/analytics")
+def get_feedback_analytics():
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    allowed_filters = {"start", "end", "case_id", "investigation_id", "granularity"}
+    if set(request.args) - allowed_filters:
+        return jsonify({"error": "invalid_feedback_analytics_filter"}), 400
+    try:
+        payload = _coordinator().get_feedback_analytics(
+            str(context.tenant_id), start=request.args.get("start"), end=request.args.get("end"),
+            case_id=request.args.get("case_id"), investigation_id=request.args.get("investigation_id"),
+            granularity=request.args.get("granularity", "daily"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    payload.pop("tenant_id", None)
+    return jsonify(payload)
 
 
 
