@@ -10,18 +10,12 @@ Updates:
 """
 
 
-import os
 import sqlite3
-from pathlib import Path
+from database.connection import resolve_database_path
 
 
 
-DATABASE = Path(
-    os.getenv(
-        "SENTINEL_DNA_DB_PATH",
-        Path(__file__).resolve().parent / "soc.db",
-    )
-).expanduser().resolve()
+DATABASE = resolve_database_path()
 
 
 

@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import os
 import sqlite3
+<<<<<<< HEAD
 import logging
 import re
 from pathlib import Path
+=======
+>>>>>>> fed5678 (database: unify configured database path)
 
 from flask import (
     Flask,
@@ -17,10 +20,14 @@ from flask import (
     session,
 )
 
+<<<<<<< HEAD
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 
 # Core platform services
+=======
+from database.connection import resolve_database_path
+>>>>>>> fed5678 (database: unify configured database path)
 from services.core.application_container import build_container
 from services.api.investigations.controller import InvestigationController
 
@@ -134,7 +141,11 @@ from services.platform_experience.routes import experience_api
 # BASE CONFIGURATION
 # ---------------------------------------------------------
 
+<<<<<<< HEAD
 BASE_DIR = Path(__file__).resolve().parent.parent
+=======
+DB_PATH = resolve_database_path()
+>>>>>>> fed5678 (database: unify configured database path)
 
 DB_PATH = Path(
     os.getenv(
