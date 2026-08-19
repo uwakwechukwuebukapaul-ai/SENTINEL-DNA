@@ -11,6 +11,8 @@ from services.intelligence.investigation.analyst_feedback import AnalystDecision
 
 
 DECISIONS = tuple(item.value for item in AnalystDecision)
+MIN_FEEDBACK_VOLUME = 2
+MAX_QUALITY_ITEMS = 100
 
 
 def _parse_timestamp(value: str | None, field_name: str) -> datetime | None:
@@ -128,3 +130,88 @@ class FeedbackAnalyticsService:
             {"period_start": key, "total_feedback_events": sum(counter.values()), "counts": {decision: int(counter.get(decision, 0)) for decision in DECISIONS}}
             for key, counter in sorted(grouped.items())
         ]
+
+    def evidence_linked_quality(
+        self,
+        tenant_id: str,
+        report: dict[str, Any],
+        records: list[AnalystFeedback],
+        *,
+        decision: str | None = None,
+        evidence_type: str | None = None,
+        finding_type: str | None = None,
+        recommendation_type: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Project descriptive outcome associations from one authorized report."""
+        tenant_id = str(tenant_id or "").strip()
+        if not tenant_id:
+            raise ValueError("tenant_id_required")
+        if decision and decision not in DECISIONS:
+            raise ValueError("invalid_decision")
+        if not 1 <= int(limit) <= MAX_QUALITY_ITEMS:
+            raise ValueError("invalid_limit")
+        selected = [item for item in records if not decision or item.decision == decision]
+        report = dict(report or {})
+        case_id = str(report.get("case_id") or "")
+        investigation_id = str(report.get("investigation_id") or (report.get("metadata") or {}).get("investigation_id") or case_id)
+
+        def mapping(value: Any) -> dict[str, Any]:
+            if isinstance(value, dict):
+                return value
+            if hasattr(value, "to_dict"):
+                result = value.to_dict()
+                return result if isinstance(result, dict) else {}
+            return {}
+
+        def entity(value: Any, *, default_type: str, id_keys: tuple[str, ...], type_keys: tuple[str, ...]) -> dict[str, Any]:
+            data = mapping(value)
+            raw_id = next((data.get(key) for key in id_keys if data.get(key) is not None), None)
+            raw_type = next((data.get(key) for key in type_keys if data.get(key) is not None), None)
+            if raw_id is None:
+                raw_id = value if isinstance(value, str) else "unknown"
+            return {"id": str(raw_id), "type": str(raw_type or default_type)}
+
+        def aggregate(items: list[Any], *, kind: str, type_filter: str | None, id_keys: tuple[str, ...], type_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+            values: list[dict[str, Any]] = []
+            for item in items:
+                descriptor = entity(item, default_type=kind, id_keys=id_keys, type_keys=type_keys)
+                if type_filter and descriptor["type"] != type_filter:
+                    continue
+                item_id = descriptor["id"]
+                relevant = selected
+                if kind in {"finding", "recommendation"}:
+                    target_key = "finding_id" if kind == "finding" else "recommendation_id"
+                    relevant = [record for record in selected if not record.to_dict().get(target_key) or str(record.to_dict().get(target_key)) == item_id]
+                counts = Counter(record.decision for record in relevant)
+                latest = max((record.created_at for record in relevant), default=None)
+                total = len(relevant)
+                values.append({
+                    f"{kind}_id": item_id,
+                    f"{kind}_type": descriptor["type"],
+                    "feedback_count": total,
+                    "accepted_count": int(counts.get("accepted", 0)),
+                    "rejected_count": int(counts.get("rejected", 0)),
+                    "modified_count": int(counts.get("modified", 0)),
+                    "false_positive_count": int(counts.get("false_positive", 0)),
+                    "escalated_count": int(counts.get("escalated", 0)),
+                    "acceptance_rate": round(counts.get("accepted", 0) / total, 6) if total else 0.0,
+                    "modification_rate": round(counts.get("modified", 0) / total, 6) if total else 0.0,
+                    "rejection_rate": round(counts.get("rejected", 0) / total, 6) if total else 0.0,
+                    "latest_feedback_at": latest,
+                    "insufficient_feedback_volume": total < MIN_FEEDBACK_VOLUME,
+                    "association_basis": "case_feedback" if kind == "evidence" else "targeted_or_investigation_feedback",
+                })
+            return sorted(values, key=lambda item: (-item["feedback_count"], item[f"{kind}_type"], item[f"{kind}_id"]))[: int(limit)]
+
+        return {
+            "case_id": case_id,
+            "investigation_id": investigation_id,
+            "feedback_count": len(selected),
+            "evidence": aggregate(list(report.get("evidence") or report.get("artifacts") or []), kind="evidence", type_filter=evidence_type, id_keys=("evidence_id", "id", "reference"), type_keys=("evidence_type", "type", "kind")),
+            "findings": aggregate(list(report.get("findings") or []), kind="finding", type_filter=finding_type, id_keys=("finding_id", "id"), type_keys=("finding_type", "type", "kind")),
+            "recommendations": aggregate(list(report.get("recommendations") or []), kind="recommendation", type_filter=recommendation_type, id_keys=("recommendation_id", "id"), type_keys=("recommendation_type", "type", "category")),
+            "minimum_feedback_volume": MIN_FEEDBACK_VOLUME,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "advisory": True,
+        }

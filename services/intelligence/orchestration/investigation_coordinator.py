@@ -779,6 +779,15 @@ class InvestigationCoordinator:
     def get_feedback_analytics(self, tenant_id: str, **filters: Any) -> dict[str, Any]:
         return self.feedback_analytics.summarize(tenant_id, **filters).to_dict()
 
+    def get_evidence_linked_quality(self, case_id: str, tenant_id: str, **filters: Any) -> dict[str, Any]:
+        report = self.get_report_by_case_id(case_id, tenant_id)
+        if report is None:
+            raise LookupError("investigation_not_found")
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        records = self.feedback_repository.list_for_investigation(tenant_id, investigation_id)
+        return self.feedback_analytics.evidence_linked_quality(tenant_id, report, records, **filters)
+
 
     def investigate(
         self,

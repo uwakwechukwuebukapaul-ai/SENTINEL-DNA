@@ -368,6 +368,36 @@ def get_feedback_analytics():
     return jsonify(payload)
 
 
+@investigations_api.get("/<case_id>/quality/evidence")
+def get_evidence_linked_quality(case_id: str):
+    """Return authorized, descriptive evidence-linked analyst outcome associations."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    allowed_filters = {"decision", "evidence_type", "finding_type", "recommendation_type", "limit"}
+    if set(request.args) - allowed_filters:
+        return jsonify({"error": "invalid_quality_filter"}), 400
+    try:
+        limit = int(request.args.get("limit", "50"))
+        payload = _coordinator().get_evidence_linked_quality(
+            case_id,
+            str(context.tenant_id),
+            decision=request.args.get("decision"),
+            evidence_type=request.args.get("evidence_type"),
+            finding_type=request.args.get("finding_type"),
+            recommendation_type=request.args.get("recommendation_type"),
+            limit=limit,
+        )
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid_quality_filter"}), 400
+    return jsonify(payload)
+
+
 
 # ============================================================
 # LEGACY COMPATIBILITY

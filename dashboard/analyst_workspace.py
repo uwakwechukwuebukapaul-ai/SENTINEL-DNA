@@ -33,11 +33,12 @@ def investigation_workspace(case_id: str):
     from flask import g
     security_context = getattr(g, "security_context", None)
     tenant_id = getattr(security_context, "tenant_id", None) or (report.get("tenant_context") or {}).get("tenant_id")
-    feedback_history, quality_analytics = [], {}
+    feedback_history, quality_analytics, evidence_quality = [], {}, {}
     if tenant_id:
         try:
             feedback_history = coordinator.get_feedback(case_id, str(tenant_id))
             quality_analytics = {"daily": coordinator.get_feedback_analytics(str(tenant_id), case_id=case_id, granularity="daily"), "weekly": coordinator.get_feedback_analytics(str(tenant_id), case_id=case_id, granularity="weekly")}
+            evidence_quality = coordinator.get_evidence_linked_quality(case_id, str(tenant_id))
         except (LookupError, AttributeError, ValueError):
             pass
     metadata = dict(report.get("metadata") or {})
@@ -50,6 +51,7 @@ def investigation_workspace(case_id: str):
         metadata=metadata,
         feedback_history=feedback_history,
         quality_analytics=quality_analytics,
+        evidence_quality=evidence_quality,
         correlation_id=(intelligence.get("metadata") or {}).get("correlation_id", "Unavailable"),
         tenant_id=(intelligence.get("metadata") or {}).get("tenant_id", "Unavailable"),
     )
