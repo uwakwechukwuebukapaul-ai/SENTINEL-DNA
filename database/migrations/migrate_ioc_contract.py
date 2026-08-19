@@ -30,23 +30,22 @@ Existing IOC records are preserved.
 from __future__ import annotations
 
 import sqlite3
-import os
+import sys
 from pathlib import Path
 from uuid import uuid5, NAMESPACE_URL
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from database.connection import resolve_database_path
 
 
 # =====================================
 # CONFIGURATION
 # =====================================
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-DATABASE_PATH = Path(
-    os.getenv(
-        "SENTINEL_DNA_DB_PATH",
-        PROJECT_ROOT / "soc.db",
-    )
-).expanduser().resolve()
+DATABASE_PATH = resolve_database_path()
 
 EXPECTED_LEGACY_COLUMNS = [
     "id",
