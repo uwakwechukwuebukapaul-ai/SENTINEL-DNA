@@ -308,8 +308,17 @@ def get_evidence(case_id=None):
 def add_ioc(
         case_id,
         ioc_type,
-        value
+        value,
+        confidence="MEDIUM",
+        reputation="UNKNOWN",
+        source="LOCAL"
 ):
+
+    # Keep this legacy repository entry point compatible while writing the
+    # canonical IOC contract used by the dedicated IOC repository.
+    from database.ioc_repository import generate_ioc_id
+
+    ioc_id = generate_ioc_id()
 
     with database.session() as conn:
 
@@ -319,18 +328,26 @@ def add_ioc(
             """
             INSERT INTO iocs
             (
-                case_id,
-                type,
-                value,
-                created
-            )
-
-            VALUES (?,?,?,?)
-            """,
-            (
+                ioc_id,
                 case_id,
                 ioc_type,
                 value,
+                confidence,
+                reputation,
+                source,
+                created
+            )
+
+            VALUES (?,?,?,?,?,?,?,?)
+            """,
+            (
+                ioc_id,
+                case_id,
+                ioc_type,
+                value,
+                confidence,
+                reputation,
+                source,
                 datetime.now().isoformat()
             )
         )
