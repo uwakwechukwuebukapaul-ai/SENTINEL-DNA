@@ -1,5 +1,7 @@
 """Focused tests for the production dashboard routes."""
 
+import sqlite3
+
 import dashboard.app as dashboard_app
 
 
@@ -102,3 +104,119 @@ def test_missing_case_id_returns_400():
     response = make_client().post("/api/investigations/run", json={})
 
     assert response.status_code == 400
+
+
+def test_canonical_ioc_consumers_use_migrated_schema(tmp_path, monkeypatch):
+    database_path = tmp_path / "canonical-dashboard.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE cases (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT UNIQUE NOT NULL,
+                title TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL,
+                analyst TEXT,
+                created TEXT NOT NULL
+            );
+            CREATE TABLE evidence (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                type TEXT NOT NULL,
+                data TEXT NOT NULL,
+                sha256 TEXT,
+                created TEXT NOT NULL
+            );
+            CREATE TABLE timeline (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                created TEXT NOT NULL
+            );
+            CREATE TABLE analyst_actions (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                analyst TEXT NOT NULL,
+                created TEXT NOT NULL
+            );
+            CREATE TABLE case_notes (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                analyst TEXT NOT NULL,
+                note TEXT NOT NULL,
+                created TEXT NOT NULL
+            );
+            CREATE TABLE iocs (
+                id INTEGER PRIMARY KEY,
+                ioc_id TEXT UNIQUE NOT NULL,
+                case_id TEXT NOT NULL,
+                ioc_type TEXT NOT NULL,
+                value TEXT NOT NULL,
+                confidence TEXT NOT NULL,
+                reputation TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created TEXT NOT NULL
+            );
+            INSERT INTO cases VALUES
+                (1, 'CASE-CANONICAL-001', 'Canonical IOC', 'HIGH',
+                 'Test case', 'OPEN', 'analyst', 'now');
+            INSERT INTO iocs VALUES
+                (1, 'IOC-CANONICAL-001', 'CASE-CANONICAL-001', 'DOMAIN',
+                 'evil.example', 'HIGH', 'MALICIOUS', 'TEST', 'now');
+            """
+        )
+
+    monkeypatch.setattr(dashboard_app, "DB_PATH", database_path)
+    client = make_client()
+
+    dashboard_result = dashboard_app.dashboard_payload()
+    assert dashboard_result["iocs"][0]["ioc_type"] == "DOMAIN"
+
+    workspace_response = client.get("/workspace/iocs")
+    assert workspace_response.status_code == 200
+    assert b"DOMAIN" in workspace_response.data
+
+    case_response = client.get("/api/cases/CASE-CANONICAL-001")
+    assert case_response.status_code == 200
+    assert case_response.get_json()["iocs"] == [
+        {
+            "id": 1,
+            "ioc_id": "IOC-CANONICAL-001",
+            "ioc_type": "DOMAIN",
+            "value": "evil.example",
+            "confidence": "HIGH",
+            "reputation": "MALICIOUS",
+            "source": "TEST",
+            "created": "now",
+        }
+    ]
+
+    captured = {}
+
+    class FakeController:
+        def __init__(self, coordinator):
+            self.coordinator = coordinator
+
+        def run(self, artifacts, case_id, alert, **context):
+            captured["iocs"] = context["iocs"]
+            return {"success": True}
+
+    monkeypatch.setattr(dashboard_app, "InvestigationController", FakeController)
+    investigation_response = client.post(
+        "/api/investigations/run",
+        json={"case_id": "CASE-CANONICAL-001"},
+    )
+    assert investigation_response.status_code == 200
+    assert captured["iocs"] == [
+        {
+            "id": 1,
+            "type": "DOMAIN",
+            "value": "evil.example",
+            "created": "now",
+        }
+    ]
