@@ -13,9 +13,6 @@ from flask import Flask, jsonify, g, request, send_from_directory
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 
-from services.core.application_container import (
-    build_container,
-)
 from config.runtime import RuntimeConfig
 from database.connection import database
 
@@ -50,6 +47,7 @@ def create_app():
     # SERVICE CONTAINER
     # ==================================
 
+    from services.core.application_container import build_container
     app.container = build_container()
     # OIDC routes remain disabled until a concrete verifier, token client,
     # provider-tenant trust, and identity-binding wiring are supplied.
