@@ -21,14 +21,15 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 
 
 # Core platform services
-from database.connection import resolve_database_path
+from database.connection import DatabaseConnection, resolve_database_path
+from database.ioc_repository import IOCRepository
 from services.core.application_container import build_container
 from services.api.investigations.controller import InvestigationController
 
 # Authentication / authorization
 from services.auth import auth_api
 from services.auth.security import csrf_token
-from services.auth.permissions import permission_required
+from services.auth.permissions import current_role, permission_required
 
 # Case management
 from services.cases import cases_api
@@ -51,6 +52,11 @@ from services.intelligence.investigation_learning.routes import create_investiga
 # Security services
 from services.observability import ObservabilityService
 from services.tenancy.context import tenant_required
+from services.intelligence.ioc.persistence_service import (
+    IOCAccessContext,
+    IOCAccessDenied,
+    IOCDataAccessService,
+)
 
 # Feature modules
 from services.hunting import hunting_api, HuntRepository
@@ -496,6 +502,22 @@ def fetch_one(
     return rows[0] if rows else {}
 
 
+def ioc_data_access() -> IOCDataAccessService:
+    """Build the canonical IOC boundary for the currently configured database."""
+    return IOCDataAccessService(IOCRepository(DatabaseConnection(DB_PATH)))
+
+
+def authorized_ioc_context(case_id: str) -> IOCAccessContext:
+    """Resolve case access through the authenticated application context."""
+    user = app.container.get("auth_service").get_by_id(session.get("user_id"))
+    access = app.container.get("case_service").authorize(
+        case_id,
+        user.id if user else None,
+        current_role(),
+    )
+    return IOCAccessContext.from_authorized_case(access)
+
+
 
 # ---------------------------------------------------------
 # MAIN DASHBOARD PAYLOAD
@@ -524,13 +546,6 @@ def dashboard_payload() -> dict:
             FROM timeline
         ) AS timeline,
 
-
-        (
-            SELECT COUNT(*)
-            FROM iocs
-        ) AS iocs,
-
-
         (
             SELECT COUNT(*)
             FROM cases
@@ -553,6 +568,8 @@ def dashboard_payload() -> dict:
 
         """
     )
+
+    stats["iocs"] = ioc_data_access().count()
 
 
 
@@ -577,23 +594,7 @@ def dashboard_payload() -> dict:
 
 
 
-    # FIXED IOC QUERY
-    iocs = fetch_all(
-        """
-        SELECT
-
-            case_id,
-            ioc_type,
-            value,
-            created
-
-        FROM iocs
-
-        ORDER BY id DESC
-
-        LIMIT 12
-        """
-    )
+    iocs = ioc_data_access().list_recent(limit=12)
 
 
 
@@ -699,6 +700,7 @@ def dashboard_payload() -> dict:
 # ---------------------------------------------------------
 
 @app.get("/")
+@permission_required("investigations:read")
 def dashboard():
 
     return render_template(
@@ -709,6 +711,7 @@ def dashboard():
 
 
 @app.get("/api/dashboard")
+@permission_required("investigations:read")
 def dashboard_api():
 
     return jsonify(
@@ -718,6 +721,7 @@ def dashboard_api():
 
 
 @app.get("/workspace")
+@permission_required("investigations:read")
 def workspace_home():
 
     return render_template(
@@ -741,24 +745,20 @@ def workspace_static(filename):
 
 
 @app.get("/workspace/iocs")
+@permission_required("investigations:read")
 def workspace_iocs():
 
     return render_template(
         "iocs.html",
-        iocs=fetch_all(
-            """
-            SELECT
-
-                case_id,
-                ioc_type AS type,
-                value,
-                created
-
-            FROM iocs
-
-            ORDER BY id DESC
-            """
-        )
+        iocs=[
+            {
+                "case_id": record["case_id"],
+                "type": record["ioc_type"],
+                "value": record["value"],
+                "created": record["created"],
+            }
+            for record in ioc_data_access().list_recent()
+        ],
     )
 
 # ---------------------------------------------------------
@@ -1195,7 +1195,13 @@ def dashboard_static(filename):
 # ---------------------------------------------------------
 
 @app.get("/api/cases/<case_id>")
+@permission_required("investigations:read")
 def case_api(case_id: str):
+
+    try:
+        ioc_context = authorized_ioc_context(case_id)
+    except IOCAccessDenied:
+        return jsonify({"error": "case_access_denied"}), 403
 
     try:
 
@@ -1244,28 +1250,9 @@ def case_api(case_id: str):
 
 
 
-        # FIXED IOC COLUMN
-        case["iocs"] = fetch_all(
-            """
-            SELECT
-
-                id,
-                ioc_id,
-                ioc_type,
-                value,
-                confidence,
-                reputation,
-                source,
-                created
-
-            FROM iocs
-
-            WHERE case_id=?
-
-            ORDER BY id DESC
-
-            """,
-            (case_id,)
+        case["iocs"] = ioc_data_access().case_records(
+            case_id,
+            context=ioc_context,
         )
 
 
@@ -1357,6 +1344,7 @@ def case_api(case_id: str):
 # ---------------------------------------------------------
 
 @app.post("/api/investigations/run")
+@permission_required("investigations:run")
 def run_investigation():
 
     payload = request.get_json(
@@ -1380,6 +1368,11 @@ def run_investigation():
                 "case_id_required"
             }
         ),400
+
+    try:
+        ioc_context = authorized_ioc_context(case_id)
+    except IOCAccessDenied:
+        return jsonify({"error": "case_access_denied"}), 403
 
 
 
@@ -1449,24 +1442,18 @@ def run_investigation():
 
 
 
-    iocs = fetch_all(
-        """
-        SELECT
-
-            id,
-            ioc_type AS type,
-            value,
-            created
-
-        FROM iocs
-
-        WHERE case_id=?
-
-        ORDER BY id
-
-        """,
-        (case_id,)
-    )
+    iocs = [
+        {
+            "id": record["id"],
+            "type": record["ioc_type"],
+            "value": record["value"],
+            "created": record["created"],
+        }
+        for record in ioc_data_access().list_for_case(
+            case_id,
+            context=ioc_context,
+        )
+    ]
 
 
 

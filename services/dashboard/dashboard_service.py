@@ -7,6 +7,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from database.connection import DatabaseConnection, resolve_database_path
+from database.ioc_repository import IOCRepository
+from services.intelligence.ioc.persistence_service import IOCDataAccessService
+
 from .dashboard_models import DashboardSnapshot
 
 
@@ -19,9 +23,11 @@ class DashboardService:
 
     def __init__(
         self,
-        db_path: str | Path = "soc.db",
+        db_path: str | Path | None = None,
     ) -> None:
-        self.db_path = str(db_path)
+        self.db = DatabaseConnection(resolve_database_path(db_path))
+        self.db_path = str(self.db.database_path)
+        self.iocs = IOCDataAccessService(IOCRepository(self.db))
 
 
     def _rows(
@@ -113,7 +119,7 @@ class DashboardService:
         )
 
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self.db.session() as conn:
 
             cases = self._rows(
                 conn,
@@ -189,68 +195,7 @@ class DashboardService:
 
 
 
-            #
-            # IOC compatibility layer
-            #
-
-            intel = []
-
-            ioc_columns = self._columns(
-                conn,
-                "iocs"
-            )
-
-
-            if "iocs" in ioc_columns or self._table_exists(conn,"iocs"):
-
-                if "ioc_type" in ioc_columns:
-
-                    sql = """
-                    SELECT
-                        case_id,
-                        ioc_type AS type,
-                        value,
-                        confidence AS risk_level,
-                        created
-                    FROM iocs
-                    ORDER BY id DESC
-                    LIMIT ?
-                    """
-
-                elif "type" in ioc_columns:
-
-                    sql = """
-                    SELECT
-                        case_id,
-                        type,
-                        value,
-                        NULL AS risk_level,
-                        created
-                    FROM iocs
-                    ORDER BY id DESC
-                    LIMIT ?
-                    """
-
-                else:
-
-                    sql = """
-                    SELECT
-                        case_id,
-                        'UNKNOWN' AS type,
-                        value,
-                        NULL AS risk_level,
-                        created
-                    FROM iocs
-                    ORDER BY id DESC
-                    LIMIT ?
-                    """
-
-
-                intel = self._rows(
-                    conn,
-                    sql,
-                    (limit,)
-                )
+            intel = self.iocs.dashboard_records(limit)
 
 
 
