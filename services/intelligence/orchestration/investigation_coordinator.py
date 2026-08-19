@@ -74,8 +74,12 @@ from services.observability import ObservabilityService
 from services.intelligence.reasoning import EvidenceReasoner
 from services.intelligence.memory import MemoryService
 from services.intelligence.investigation.analyst_feedback import AnalystFeedback
+from services.intelligence.investigation.analyst_feedback_service import AnalystFeedbackService
+from services.intelligence.investigation.read_model import InvestigationReadModelBuilder
 from services.intelligence.repository.feedback_repository import InvestigationFeedbackRepository
 from services.intelligence.feedback.analytics import FeedbackAnalyticsService
+from services.intelligence.investigation_quality import InvestigationQualityRepository, InvestigationQualityService
+from services.audit.service import AuditService
 from services.intelligence.decision.engine import DecisionEngine
 from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
@@ -190,7 +194,15 @@ class InvestigationCoordinator:
             else ProviderNeutralFusionEngine()
         )
         self.feedback_repository = InvestigationFeedbackRepository(database)
+        self.feedback_service = AnalystFeedbackService(self.feedback_repository, AuditService(database))
         self.feedback_analytics = FeedbackAnalyticsService(self.feedback_repository)
+        self.investigation_quality_repository = InvestigationQualityRepository(database)
+        self.investigation_read_model_builder = InvestigationReadModelBuilder(
+            self.report_repository,
+            self.intelligence_repository,
+            self.investigation_quality_repository,
+            self.feedback_repository,
+        )
 
 
     # ========================================================
@@ -705,6 +717,16 @@ class InvestigationCoordinator:
         result.decision_report = self.decision_engine.decide(
             result, reasoning_report, result.memory_reference
         )
+        quality_assessment = None
+        try:
+            quality_assessment = InvestigationQualityService(tenant_id=scoped_tenant_id, repository=self.investigation_quality_repository).assess_investigation(str(result.investigation_id or case_id), result)
+            result.metadata["quality_assessment_id"] = quality_assessment.quality_id
+            result.metadata["quality_status"] = quality_assessment.quality_status
+            quality_data = quality_assessment.to_dict()
+            result.metadata["quality_assessment"] = quality_data
+            result.intelligence["quality_assessment"] = quality_data
+        except Exception as exc:
+            result.metadata["quality_assessment_error"] = type(exc).__name__
         try:
             result.copilot_summary = self.copilot.summarize_investigation(
                 self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
@@ -731,8 +753,72 @@ class InvestigationCoordinator:
                 self.report_repository.save(analyst_report)
         else:
             self.report_repository.save(analyst_report)
+        try:
+            if quality_assessment is None:
+                quality_assessment = InvestigationQualityService(tenant_id=scoped_tenant_id, repository=self.investigation_quality_repository).assess_investigation(str(result.investigation_id or case_id), result)
+            quality_data = quality_assessment.to_dict()
+            result.metadata["quality_assessment_id"] = quality_assessment.quality_id
+            result.metadata["quality_status"] = quality_assessment.quality_status
+            result.intelligence["quality_assessment"] = quality_data
+            analyst_report.quality_assessment = quality_data
+            if scoped_tenant_id and callable(getattr(self.report_repository, "save_for_tenant", None)):
+                self.report_repository.save_for_tenant(scoped_tenant_id, analyst_report)
+            else:
+                self.report_repository.save(analyst_report)
+        except Exception as exc:
+            result.metadata["quality_assessment_error"] = type(exc).__name__
+            try:
+                ObservabilityService().event("investigation_quality_assessment_failed", investigation_id=str(result.investigation_id or case_id), case_id=case_id, tenant_id=scoped_tenant_id, error_type=type(exc).__name__, status="failed")
+            except Exception:
+                pass
         result.intelligence["report"] = analyst_report.to_dict()
         return result
+
+    def get_quality_assessment(self, investigation_id: str, security_context: Any):
+        tenant_id = getattr(security_context, "tenant_id", None)
+        if not tenant_id: raise PermissionError("investigation tenant authorization is required")
+        report = self.get_report_by_case_id(str(investigation_id), str(tenant_id))
+        if report is None: return None
+        report_investigation_id = str((report.get("metadata") or {}).get("investigation_id") if isinstance(report.get("metadata"), dict) else "").strip() or str(report.get("investigation_id") or investigation_id)
+        assessment = self.investigation_quality_repository.get_assessment(str(tenant_id), report_investigation_id)
+        return assessment.to_dict() if assessment else None
+
+    def get_investigation_view(self, case_id: str, security_context: Any) -> dict[str, Any] | None:
+        tenant_id = getattr(security_context, "tenant_id", None)
+        if not tenant_id:
+            raise PermissionError("investigation tenant authorization is required")
+        view = self.investigation_read_model_builder.build(str(case_id), str(tenant_id))
+        payload = view.to_dict() if view else None
+        if payload:
+            quality = payload.get("quality") or {}
+            ObservabilityService().event(
+                "investigation_view_retrieved",
+                investigation_id=payload.get("investigation", {}).get("id"),
+                case_id=str(case_id),
+                tenant_id=str(tenant_id),
+                status=payload.get("investigation", {}).get("status"),
+                quality_score=quality.get("overall_score"),
+            )
+        return payload
+
+    def get_investigation_metrics(self, case_id: str, security_context: Any) -> dict[str, Any] | None:
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            return None
+        tenant_id = str(getattr(security_context, "tenant_id", ""))
+        investigation_id = str(view["investigation"]["id"])
+        analytics = self.feedback_analytics.summarize(tenant_id, investigation_id=investigation_id)
+        rates = analytics.rates
+        return {
+            "case_id": str(case_id),
+            "investigation_id": investigation_id,
+            "acceptance_rate": rates.get("accepted_rate", 0.0),
+            "false_positive_rate": rates.get("false_positive_rate", 0.0),
+            "modification_rate": rates.get("modified_rate", 0.0),
+            "escalation_rate": rates.get("escalated_rate", 0.0),
+            "feedback_count": analytics.total_feedback_events,
+            "advisory_only": True,
+        }
 
     def get_report_by_case_id(self, case_id: str, tenant_id: str | None = None) -> dict[str, Any] | None:
         if tenant_id:
@@ -751,25 +837,24 @@ class InvestigationCoordinator:
         report = self.get_report_by_case_id(case_id, tenant_id)
         if report is None:
             raise LookupError("investigation_not_found")
-        if not isinstance(payload, dict):
-            raise ValueError("malformed_payload")
-        allowed = {"decision", "reason", "finding_id", "recommendation_id"}
-        if set(payload) - allowed:
-            raise ValueError("invalid_feedback_fields")
         metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
         investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
-        finding_id = payload.get("finding_id")
-        if finding_id:
-            finding_ids = {str(item.get("finding_id")) for item in report.get("findings", []) or [] if isinstance(item, dict) and item.get("finding_id")}
-            if str(finding_id) not in finding_ids:
-                raise ValueError("finding_not_found")
-        recommendation_id = payload.get("recommendation_id")
-        return self.feedback_repository.save(AnalystFeedback(
-            investigation_id=investigation_id, case_id=str(case_id), decision=payload.get("decision", ""),
-            analyst_id=analyst_id, finding_id=str(finding_id) if finding_id else None,
-            recommendation_id=str(recommendation_id) if recommendation_id else None,
-            reason=payload.get("reason", ""), tenant_id=tenant_id,
-        ))
+        feedback = self.feedback_service.record(
+            investigation_id=investigation_id,
+            case_id=str(case_id),
+            tenant_id=str(tenant_id),
+            analyst_id=str(analyst_id),
+            payload=payload,
+            report=report,
+        )
+        ObservabilityService().event(
+            "investigation_feedback_recorded",
+            investigation_id=investigation_id,
+            case_id=str(case_id),
+            tenant_id=str(tenant_id),
+            feedback_decision=feedback.decision,
+        )
+        return feedback
 
     def get_feedback(self, case_id: str, tenant_id: str) -> list[dict[str, Any]]:
         report = self.get_report_by_case_id(case_id, tenant_id)

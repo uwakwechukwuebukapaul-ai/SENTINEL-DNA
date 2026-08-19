@@ -596,7 +596,23 @@ def dashboard_payload() -> dict:
 
 
 
-    iocs = ioc_data_access().list_recent(limit=12)
+    # FIXED IOC QUERY
+    iocs = fetch_all(
+        """
+        SELECT
+
+            case_id,
+            ioc_type AS type,
+            value,
+            created
+
+        FROM iocs
+
+        ORDER BY id DESC
+
+        LIMIT 12
+        """
+    )
 
 
 
@@ -1129,6 +1145,9 @@ def hunting_intelligence_gaps_dashboard(): return render_template("hunting_intel
 @app.get("/workspace/copilot")
 @permission_required("copilot:view")
 def governed_copilot_dashboard(): return render_template("copilot_foundation.html")
+@app.get("/workspace/customer-pilot")
+@permission_required("pilot:read")
+def customer_pilot_dashboard(): return render_template("customer_success.html")
 @app.get("/workspace/investigation-intelligence")
 @permission_required("investigations:read")
 def investigation_intelligence_dashboard(): return render_template("investigation_intelligence.html")

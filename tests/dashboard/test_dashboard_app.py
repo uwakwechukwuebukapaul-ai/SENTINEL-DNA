@@ -26,6 +26,92 @@ def authorize_dashboard_case(monkeypatch, case_id):
     )
 
 
+def _create_canonical_dashboard_database(path):
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            """
+            CREATE TABLE cases (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT,
+                title TEXT,
+                severity TEXT,
+                status TEXT,
+                analyst TEXT,
+                created TEXT
+            );
+            CREATE TABLE evidence (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT,
+                type TEXT,
+                data TEXT,
+                created TEXT
+            );
+            CREATE TABLE timeline (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT,
+                event_type TEXT,
+                description TEXT,
+                actor TEXT,
+                created TEXT
+            );
+            CREATE TABLE iocs (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT,
+                ioc_type TEXT,
+                value TEXT,
+                created TEXT
+            );
+            CREATE TABLE analyst_actions (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT,
+                action TEXT,
+                analyst TEXT,
+                created TEXT
+            );
+            CREATE TABLE case_notes (
+                id INTEGER PRIMARY KEY,
+                case_id TEXT,
+                note TEXT,
+                analyst TEXT,
+                created TEXT
+            );
+            INSERT INTO cases VALUES
+                (1, 'CASE-CANONICAL', 'Canonical IOC', 'HIGH', 'OPEN', 'A01', 'now');
+            INSERT INTO iocs VALUES
+                (1, 'CASE-CANONICAL', 'DOMAIN', 'evil.example', 'now');
+            """
+        )
+
+
+def test_dashboard_payload_supports_canonical_ioc_schema(tmp_path, monkeypatch):
+    database_path = tmp_path / "dashboard.db"
+    _create_canonical_dashboard_database(database_path)
+    monkeypatch.setattr(dashboard_app, "DB_PATH", database_path)
+
+    payload = dashboard_app.dashboard_payload()
+
+    assert payload["stats"]["cases"] == 1
+    assert payload["stats"]["iocs"] == 1
+    assert payload["iocs"] == [
+        {
+            "case_id": "CASE-CANONICAL",
+            "type": "DOMAIN",
+            "value": "evil.example",
+            "created": "now",
+        }
+    ]
+
+
+def test_dashboard_root_renders_with_canonical_ioc_schema(tmp_path, monkeypatch):
+    database_path = tmp_path / "dashboard.db"
+    _create_canonical_dashboard_database(database_path)
+    monkeypatch.setattr(dashboard_app, "DB_PATH", database_path)
+
+    response = make_client().get("/")
+
+    assert response.status_code == 200
+
+
 def test_healthz_and_readyz_return_200(monkeypatch):
     monkeypatch.setattr(dashboard_app, "fetch_one", lambda *args: {"ok": 1})
     client = make_client()

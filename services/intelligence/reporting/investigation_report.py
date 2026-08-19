@@ -79,6 +79,8 @@ class InvestigationReport:
         default_factory=dict
     )
 
+    quality_assessment: Any = None
+
     created_at: str = field(
         default_factory=lambda:
         datetime.now(
@@ -158,6 +160,9 @@ class InvestigationReport:
 
             "metadata":
                 self.metadata,
+
+            "quality_assessment":
+                self.quality_assessment,
 
 
             "created_at":
@@ -399,6 +404,31 @@ class InvestigationReportGenerator:
             tenant_context=data.get("tenant_context") or "unavailable",
             attack_story=data.get("attack_story") or "unavailable",
             metadata=report_metadata,
+        )
+        self.history_store.append(report)
+        return report
+
+    def generate_from_read_model(self, read_model: Any) -> InvestigationReport:
+        """Create a compatibility report from the canonical analyst projection."""
+        data = read_model.to_dict() if hasattr(read_model, "to_dict") else dict(read_model or {})
+        investigation = data.get("investigation", {})
+        summary = data.get("summary", {})
+        report = InvestigationReport(
+            case_id=str(investigation.get("case_id", "unknown")),
+            title=str(summary.get("title", "AI Investigation Report")),
+            summary=str(summary.get("decision") or "No investigation conclusion was recorded."),
+            status=str(investigation.get("status", "unknown")),
+            risk={"score": summary.get("risk", 0)},
+            risk_score=float(summary.get("risk", 0) or 0),
+            findings=list(data.get("findings", []) or []),
+            evidence=list(data.get("evidence", []) or []),
+            recommendations=list(data.get("recommendations", []) or []),
+            mitre=list(data.get("mitre", []) or []),
+            timeline=list(data.get("timeline", []) or []),
+            confidence=summary.get("confidence"),
+            quality_assessment=data.get("quality") or {},
+            metadata={"source": "investigation_read_model", "feedback_count": len(data.get("feedback", []) or [])},
+            tenant_context={"tenant_id": investigation.get("tenant_id")} if investigation.get("tenant_id") else None,
         )
         self.history_store.append(report)
         return report

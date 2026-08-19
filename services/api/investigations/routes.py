@@ -312,6 +312,44 @@ def get_investigation_timeline(
     )
 
 
+@investigations_api.get("/<case_id>/view")
+def get_investigation_view(case_id: str):
+    """Return the canonical, tenant-scoped analyst investigation view."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        view = _coordinator().get_investigation_view(case_id, context)
+    except PermissionError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    if view is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify(view)
+
+
+@investigations_api.get("/<case_id>/metrics")
+def get_investigation_metrics(case_id: str):
+    """Return read-only investigation-quality outcome metrics."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        metrics = _coordinator().get_investigation_metrics(case_id, context)
+    except PermissionError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError:
+        return jsonify({"error": "investigation_metrics_unavailable"}), 503
+    if metrics is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify(metrics)
+
+
 @investigations_api.post("/<case_id>/feedback")
 def submit_investigation_feedback(case_id: str):
     context = request_context()
@@ -405,6 +443,29 @@ def get_evidence_linked_quality(case_id: str):
 # ============================================================
 # LEGACY COMPATIBILITY
 # ============================================================
+
+
+@investigations_api.get("/<investigation_id>/quality")
+def get_investigation_quality(investigation_id: str):
+    """Return the authorized durable quality assessment for an investigation."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    getter = getattr(_coordinator(), "get_quality_assessment", None)
+    if not callable(getter):
+        return jsonify({"error": "investigation_quality_unavailable"}), 503
+    try:
+        quality = getter(investigation_id, context)
+    except PermissionError:
+        return jsonify({"error": "forbidden"}), 403
+    except Exception:
+        return jsonify({"error": "investigation_quality_unavailable"}), 500
+    if quality is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"quality_assessment": quality})
 
 
 @legacy_investigation_api.post(

@@ -32,13 +32,21 @@ def investigation_workspace(case_id: str):
     report = serialize(report) or {}
     from flask import g
     security_context = getattr(g, "security_context", None)
+    read_model = None
+    if security_context is not None and callable(getattr(coordinator, "get_investigation_view", None)):
+        try:
+            read_model = coordinator.get_investigation_view(case_id, security_context) or {}
+        except (LookupError, PermissionError, AttributeError, ValueError):
+            read_model = None
     tenant_id = getattr(security_context, "tenant_id", None) or (report.get("tenant_context") or {}).get("tenant_id")
-    feedback_history, quality_analytics, evidence_quality = [], {}, {}
+    feedback_history, quality_analytics, evidence_quality, quality_assessment = [], {}, {}, {}
     if tenant_id:
         try:
-            feedback_history = coordinator.get_feedback(case_id, str(tenant_id))
+            feedback_history = (read_model or {}).get("feedback") or coordinator.get_feedback(case_id, str(tenant_id))
             quality_analytics = {"daily": coordinator.get_feedback_analytics(str(tenant_id), case_id=case_id, granularity="daily"), "weekly": coordinator.get_feedback_analytics(str(tenant_id), case_id=case_id, granularity="weekly")}
             evidence_quality = coordinator.get_evidence_linked_quality(case_id, str(tenant_id))
+            if security_context is not None and callable(getattr(coordinator, "get_quality_assessment", None)):
+                quality_assessment = (read_model or {}).get("quality") or coordinator.get_quality_assessment(case_id, security_context) or {}
         except (LookupError, AttributeError, ValueError):
             pass
     metadata = dict(report.get("metadata") or {})
@@ -52,6 +60,8 @@ def investigation_workspace(case_id: str):
         feedback_history=feedback_history,
         quality_analytics=quality_analytics,
         evidence_quality=evidence_quality,
+        quality_assessment=quality_assessment,
+        read_model=read_model or {},
         correlation_id=(intelligence.get("metadata") or {}).get("correlation_id", "Unavailable"),
         tenant_id=(intelligence.get("metadata") or {}).get("tenant_id", "Unavailable"),
     )

@@ -30,25 +30,35 @@ class InvestigationFeedbackRepository:
                     analyst_id TEXT NOT NULL,
                     tenant_id TEXT NOT NULL,
                     created_at TEXT NOT NULL,
-                    metadata_json TEXT NOT NULL DEFAULT '{}'
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+                    artifact_refs_json TEXT NOT NULL DEFAULT '[]'
                 )
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(investigation_feedback)").fetchall()}
+            if "evidence_refs_json" not in columns:
+                connection.execute("ALTER TABLE investigation_feedback ADD COLUMN evidence_refs_json TEXT NOT NULL DEFAULT '[]'")
+            if "artifact_refs_json" not in columns:
+                connection.execute("ALTER TABLE investigation_feedback ADD COLUMN artifact_refs_json TEXT NOT NULL DEFAULT '[]'")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_feedback_investigation ON investigation_feedback(tenant_id, investigation_id, created_at)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_feedback_case ON investigation_feedback(tenant_id, case_id, created_at)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_feedback_decision ON investigation_feedback(tenant_id, decision, created_at)")
 
     def save(self, feedback: AnalystFeedback) -> AnalystFeedback:
-        payload = json.dumps(feedback.metadata, sort_keys=True)
+        metadata = json.dumps(feedback.metadata, sort_keys=True)
+        evidence_refs = json.dumps(feedback.evidence_refs, sort_keys=True)
+        artifact_refs = json.dumps(feedback.artifact_refs, sort_keys=True)
         with self.db.session() as connection:
             connection.execute(
                 """
                 INSERT INTO investigation_feedback
-                (feedback_id, investigation_id, case_id, finding_id, recommendation_id, decision, reason, analyst_id, tenant_id, created_at, metadata_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (feedback_id, investigation_id, case_id, finding_id, recommendation_id, decision, reason, analyst_id, tenant_id, created_at, metadata_json, evidence_refs_json, artifact_refs_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (feedback.feedback_id, feedback.investigation_id, feedback.case_id, feedback.finding_id,
                  feedback.recommendation_id, feedback.decision, feedback.reason, feedback.analyst_id,
-                 feedback.tenant_id, feedback.created_at, payload),
+                 feedback.tenant_id, feedback.created_at, metadata, evidence_refs, artifact_refs),
             )
         return feedback
 
@@ -59,12 +69,14 @@ class InvestigationFeedbackRepository:
             finding_id=row["finding_id"], recommendation_id=row["recommendation_id"], decision=row["decision"],
             reason=row["reason"], analyst_id=row["analyst_id"], tenant_id=row["tenant_id"],
             created_at=row["created_at"], metadata=json.loads(row["metadata_json"] or "{}"),
+            evidence_refs=json.loads(row["evidence_refs_json"] or "[]"),
+            artifact_refs=json.loads(row["artifact_refs_json"] or "[]"),
         )
 
     def list_for_investigation(self, tenant_id: str, investigation_id: str) -> list[AnalystFeedback]:
         with self.db.session() as connection:
             rows = connection.execute(
-                "SELECT * FROM investigation_feedback WHERE tenant_id=? AND investigation_id=? ORDER BY rowid",
+                "SELECT * FROM investigation_feedback WHERE tenant_id=? AND investigation_id=? ORDER BY created_at, feedback_id",
                 (tenant_id, investigation_id),
             ).fetchall()
         return [self._from_row(row) for row in rows]
@@ -94,7 +106,7 @@ class InvestigationFeedbackRepository:
             parameters.append(str(investigation_id))
         with self.db.session() as connection:
             rows = connection.execute(
-                f"SELECT * FROM investigation_feedback WHERE {' AND '.join(clauses)} ORDER BY rowid",
+                f"SELECT * FROM investigation_feedback WHERE {' AND '.join(clauses)} ORDER BY created_at, feedback_id",
                 parameters,
             ).fetchall()
         return [self._from_row(row) for row in rows]

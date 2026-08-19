@@ -45,6 +45,8 @@ class AnalystFeedback:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     tenant_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    artifact_refs: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         for name in ("feedback_id", "investigation_id", "case_id", "analyst_id", "tenant_id"):
@@ -62,6 +64,8 @@ class AnalystFeedback:
             if value is not None:
                 object.__setattr__(self, name, _required(value, name))
         object.__setattr__(self, "metadata", dict(self.metadata or {}))
+        object.__setattr__(self, "evidence_refs", sorted({str(item) for item in self.evidence_refs if item}))
+        object.__setattr__(self, "artifact_refs", sorted({str(item) for item in self.artifact_refs if item}))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
