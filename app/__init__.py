@@ -7,14 +7,12 @@ and API layers.
 
 import logging
 from pathlib import Path
+from uuid import uuid4
 
 from flask import Flask, jsonify, g, request, send_from_directory
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 
-from services.core.application_container import (
-    build_container,
-)
 from config.runtime import RuntimeConfig
 from database.connection import database
 
@@ -49,6 +47,7 @@ def create_app():
     # SERVICE CONTAINER
     # ==================================
 
+    from services.core.application_container import build_container
     app.container = build_container()
     # OIDC routes remain disabled until a concrete verifier, token client,
     # provider-tenant trust, and identity-binding wiring are supplied.
@@ -196,9 +195,8 @@ def create_app():
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Cache-Control", "no-store")
         context = getattr(g, "security_context", None)
-        correlation_id = getattr(context, "correlation_id", None) or request.headers.get("X-Correlation-ID")
-        if correlation_id:
-            response.headers.setdefault("X-Correlation-ID", correlation_id)
+        correlation_id = getattr(context, "correlation_id", None) or request.headers.get("X-Correlation-ID") or str(uuid4())
+        response.headers.setdefault("X-Correlation-ID", correlation_id)
         return response
 
 

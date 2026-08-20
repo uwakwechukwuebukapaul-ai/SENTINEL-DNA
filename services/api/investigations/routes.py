@@ -30,6 +30,7 @@ from flask import (
     current_app,
     jsonify,
     request,
+    session,
 )
 
 
@@ -132,6 +133,8 @@ def _execute_investigation():
             alert=alert,
             artifacts=artifacts,
             correlation_id=security_context.correlation_id,
+            tenant_id=security_context.tenant_id,
+            actor_id=getattr(security_context, "actor_id", None) or getattr(security_context, "user_id", None),
         )
     except PermissionError:
         raise
@@ -306,10 +309,160 @@ def get_investigation_timeline(
     )
 
 
+@investigations_api.get("/<case_id>/view")
+def get_investigation_view(case_id: str):
+    """Return the canonical, tenant-scoped analyst investigation view."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        view = _coordinator().get_investigation_view(case_id, context)
+    except PermissionError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    if view is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify(view)
+
+
+@investigations_api.get("/<case_id>/metrics")
+def get_investigation_metrics(case_id: str):
+    """Return read-only investigation-quality outcome metrics."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        metrics = _coordinator().get_investigation_metrics(case_id, context)
+    except PermissionError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError:
+        return jsonify({"error": "investigation_metrics_unavailable"}), 503
+    if metrics is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify(metrics)
+
+
+@investigations_api.post("/<case_id>/feedback")
+def submit_investigation_feedback(case_id: str):
+    context = request_context()
+    analyst_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not analyst_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    try:
+        feedback = _coordinator().submit_feedback(
+            case_id, request.get_json(silent=True) or {},
+            tenant_id=str(context.tenant_id), analyst_id=str(analyst_id),
+        )
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"success": True, "feedback": feedback.to_dict()}), 201
+
+
+@investigations_api.get("/<case_id>/feedback")
+def get_investigation_feedback(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        feedback = _coordinator().get_feedback(case_id, str(context.tenant_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"case_id": case_id, "feedback": feedback})
+
+
+@investigations_api.get("/feedback/analytics")
+def get_feedback_analytics():
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    allowed_filters = {"start", "end", "case_id", "investigation_id", "granularity"}
+    if set(request.args) - allowed_filters:
+        return jsonify({"error": "invalid_feedback_analytics_filter"}), 400
+    try:
+        payload = _coordinator().get_feedback_analytics(
+            str(context.tenant_id), start=request.args.get("start"), end=request.args.get("end"),
+            case_id=request.args.get("case_id"), investigation_id=request.args.get("investigation_id"),
+            granularity=request.args.get("granularity", "daily"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    payload.pop("tenant_id", None)
+    return jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/quality/evidence")
+def get_evidence_linked_quality(case_id: str):
+    """Return authorized, descriptive evidence-linked analyst outcome associations."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    allowed_filters = {"decision", "evidence_type", "finding_type", "recommendation_type", "limit"}
+    if set(request.args) - allowed_filters:
+        return jsonify({"error": "invalid_quality_filter"}), 400
+    try:
+        limit = int(request.args.get("limit", "50"))
+        payload = _coordinator().get_evidence_linked_quality(
+            case_id,
+            str(context.tenant_id),
+            decision=request.args.get("decision"),
+            evidence_type=request.args.get("evidence_type"),
+            finding_type=request.args.get("finding_type"),
+            recommendation_type=request.args.get("recommendation_type"),
+            limit=limit,
+        )
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid_quality_filter"}), 400
+    return jsonify(payload)
+
+
 
 # ============================================================
 # LEGACY COMPATIBILITY
 # ============================================================
+
+
+@investigations_api.get("/<investigation_id>/quality")
+def get_investigation_quality(investigation_id: str):
+    """Return the authorized durable quality assessment for an investigation."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    getter = getattr(_coordinator(), "get_quality_assessment", None)
+    if not callable(getter):
+        return jsonify({"error": "investigation_quality_unavailable"}), 503
+    try:
+        quality = getter(investigation_id, context)
+    except PermissionError:
+        return jsonify({"error": "forbidden"}), 403
+    except Exception:
+        return jsonify({"error": "investigation_quality_unavailable"}), 500
+    if quality is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"quality_assessment": quality})
 
 
 @legacy_investigation_api.post(
