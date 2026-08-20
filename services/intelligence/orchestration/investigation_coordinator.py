@@ -510,10 +510,7 @@ class InvestigationCoordinator:
         tenant_context: dict[str, Any] | None = None,
         intelligence_metadata: dict[str, Any] | None = None,
         correlation_id: str | None = None,
-<<<<<<< HEAD
         owned_evidence: Optional[list[dict[str, Any]]] = None,
-=======
->>>>>>> 71a3dc4 (ops: harden production runtime for investigator v2)
     ) -> InvestigationResult:
         intelligence: dict[str, dict[str, Any]] = {}
         findings: list[Any] = []
@@ -1193,10 +1190,7 @@ class InvestigationCoordinator:
                 tenant_context={"tenant_id": tenant_id, "actor_id": actor_id},
                 intelligence_metadata=intelligence_metadata,
                 correlation_id=correlation_id,
-<<<<<<< HEAD
                 owned_evidence=owned_evidence,
-=======
->>>>>>> 71a3dc4 (ops: harden production runtime for investigator v2)
             )
             observer.event(
                 "INTELLIGENCE_GENERATED",
