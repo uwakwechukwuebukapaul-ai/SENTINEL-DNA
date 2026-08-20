@@ -162,17 +162,19 @@ Analyst Decision
 
 Status:
 
-🟢 Development Complete  
-🟢 Validation Passed  
-🟡 Product Demonstration Phase
+🟢 Core Foundation Complete
+🟢 Validation Passed
+🟡 AI Investigator Demonstration Phase
 
 
 Validation:
 
 ```
-2,870+ tests passing
-compileall: PASS
-Security validation: PASS
+Validation:
+
+✅ Automated test suite passing
+✅ Python compilation checks passing
+✅ Runtime validation completed
 ```
 
 
@@ -273,15 +275,22 @@ Enterprise Expansion
 
 # 👨‍💻 Founder Note
 
-Sentinel DNA is being built with one goal:
-
-> Make cybersecurity investigations faster, explainable, and accessible through AI.
-
-Built as an engineering-first security platform.
+Sentinel DNA focuses on reducing investigation time while keeping analysts in control of security decisions.
 
 
 ---
 
+# Why Sentinel DNA?
+
+Traditional security tools generate alerts.
+
+Sentinel DNA focuses on the investigation process:
+
+Alert → Evidence → Context → Reasoning → Decision
+
+The goal is to help analysts move from detection to understanding faster.
+
+___
 # 🤝 Collaboration
 
 Interested in:
