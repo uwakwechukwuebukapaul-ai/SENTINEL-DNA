@@ -47,5 +47,14 @@ def canonical_authenticated_client(isolated_shared_database):
     return client
 
 @pytest.fixture
-def authenticated_session():
-    return {"user_id": 1, "role": "analyst"}
+def authenticated_session(isolated_shared_database):
+    from database.connection import database
+    from services.auth.auth_service import AuthService
+
+    user = AuthService(database).register(
+        "dashboard-test-user",
+        "dashboard-test-user@example.com",
+        "dashboard-test-password-123",
+        "analyst",
+    )
+    return {"user_id": user.id, "role": user.role}

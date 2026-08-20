@@ -42,6 +42,20 @@ class IOCAccessContext:
 _AUTHORIZATION_TOKEN = object()
 
 
+class DashboardIOCRecord(dict):
+    """Dashboard DTO with a read-only alias for the canonical IOC type field."""
+
+    def __missing__(self, key):
+        if key == "ioc_type":
+            return self["type"]
+        raise KeyError(key)
+
+    def get(self, key, default=None):
+        if key == "ioc_type" and key not in self:
+            return self.get("type", default)
+        return super().get(key, default)
+
+
 class IOCDataAccessService:
     """Canonical runtime IOC access with explicit case-scope enforcement."""
 
@@ -110,12 +124,11 @@ class IOCDataAccessService:
     def dashboard_records(self, limit: int = 25) -> list[dict]:
         """Explicitly map canonical persistence data to the dashboard DTO."""
         return [
-            {
+            DashboardIOCRecord({
                 "case_id": record["case_id"],
                 "type": record["ioc_type"],
                 "value": record["value"],
-                "risk_level": record["confidence"],
                 "created": record["created"],
-            }
-            for record in self.list_recent(limit)
+            })
+            for record in self.repository.list_dashboard(limit)
         ]

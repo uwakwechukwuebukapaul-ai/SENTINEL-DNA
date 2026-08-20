@@ -9,9 +9,13 @@ from services.intelligence.ioc.persistence_service import IOCAccessContext
 from services.intelligence.ioc.persistence_service import IOCAccessDenied
 
 
-def make_client():
+def make_client(session=None):
     dashboard_app.app.config["TESTING"] = True
-    return dashboard_app.app.test_client()
+    client = dashboard_app.app.test_client()
+    if session:
+        with client.session_transaction() as state:
+            state.update(session)
+    return client
 
 
 def authorize_dashboard_case(monkeypatch, case_id):
@@ -102,12 +106,12 @@ def test_dashboard_payload_supports_canonical_ioc_schema(tmp_path, monkeypatch):
     ]
 
 
-def test_dashboard_root_renders_with_canonical_ioc_schema(tmp_path, monkeypatch):
+def test_dashboard_root_renders_with_canonical_ioc_schema(tmp_path, monkeypatch, authenticated_session):
     database_path = tmp_path / "dashboard.db"
     _create_canonical_dashboard_database(database_path)
     monkeypatch.setattr(dashboard_app, "DB_PATH", database_path)
 
-    response = make_client().get("/")
+    response = make_client(authenticated_session).get("/")
 
     assert response.status_code == 200
 

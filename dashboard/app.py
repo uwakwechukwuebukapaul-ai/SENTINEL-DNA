@@ -596,23 +596,7 @@ def dashboard_payload() -> dict:
 
 
 
-    # FIXED IOC QUERY
-    iocs = fetch_all(
-        """
-        SELECT
-
-            case_id,
-            ioc_type AS type,
-            value,
-            created
-
-        FROM iocs
-
-        ORDER BY id DESC
-
-        LIMIT 12
-        """
-    )
+    iocs = ioc_data_access().dashboard_records(limit=12)
 
 
 
@@ -768,15 +752,7 @@ def workspace_iocs():
 
     return render_template(
         "iocs.html",
-        iocs=[
-            {
-                "case_id": record["case_id"],
-                "type": record["ioc_type"],
-                "value": record["value"],
-                "created": record["created"],
-            }
-            for record in ioc_data_access().list_recent()
-        ],
+        iocs=ioc_data_access().dashboard_records(),
     )
 
 # ---------------------------------------------------------

@@ -225,6 +225,31 @@ class IOCRepository:
         with self.connection.session() as conn:
             return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
+    def list_dashboard(self, limit: int = 25) -> list[dict]:
+        """Return the fields required by trusted dashboard projections."""
+        with self.connection.session() as conn:
+            rows = conn.execute(
+                """
+                SELECT case_id, ioc_type, value, created
+                FROM iocs ORDER BY id DESC LIMIT ?
+                """,
+                (max(1, min(int(limit), 1000)),),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def has_canonical_schema(self) -> bool:
+        """Report whether the IOC table has the complete migrated contract."""
+        required = {
+            "id", "ioc_id", "case_id", "ioc_type", "value",
+            "confidence", "reputation", "source", "created",
+        }
+        with self.connection.session() as conn:
+            columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(iocs)").fetchall()
+            }
+        return required.issubset(columns)
+
     def list_for_case(self, case_id) -> list[dict]:
         self._required_text("case_id", case_id, 255)
         with self.connection.session() as conn:
