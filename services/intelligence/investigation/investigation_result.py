@@ -100,6 +100,8 @@ class InvestigationResult:
 
     decision_intelligence: Any = None
 
+    attack_sequence: Any = None
+
     copilot_summary: Any = None
 
     narrative_report: Any = None
@@ -400,6 +402,8 @@ class InvestigationResult:
             "decision_report": self.decision_report.to_dict() if hasattr(self.decision_report, "to_dict") else self.decision_report,
 
             "decision_intelligence": self.decision_intelligence.to_dict() if hasattr(self.decision_intelligence, "to_dict") else self.decision_intelligence,
+
+            "attack_sequence": self.attack_sequence.to_dict() if hasattr(self.attack_sequence, "to_dict") else self.attack_sequence,
 
             "copilot_summary": self.copilot_summary.to_dict() if hasattr(self.copilot_summary, "to_dict") else self.copilot_summary,
 

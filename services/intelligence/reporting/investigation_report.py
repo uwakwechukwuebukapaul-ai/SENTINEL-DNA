@@ -66,6 +66,8 @@ class InvestigationReport:
 
     decision_intelligence: Any = None
 
+    attack_sequence: Any = None
+
     governance: dict[str, Any] = field(default_factory=dict)
 
     confidence: Any = None
@@ -153,6 +155,8 @@ class InvestigationReport:
             "intelligence": self.intelligence,
 
             "decision_intelligence": self.decision_intelligence.to_dict() if hasattr(self.decision_intelligence, "to_dict") else self.decision_intelligence,
+
+            "attack_sequence": self.attack_sequence.to_dict() if hasattr(self.attack_sequence, "to_dict") else self.attack_sequence,
 
             "governance": self.governance,
 
@@ -413,6 +417,7 @@ class InvestigationReportGenerator:
             # is attached to the result intelligence envelope.
             intelligence=serialize(data.get("intelligence")),
             decision_intelligence=data.get("decision_intelligence"),
+            attack_sequence=data.get("attack_sequence"),
             recommendations=list(data.get("recommendations", []) or []),
             governance=governance,
             confidence=data.get("confidence"),

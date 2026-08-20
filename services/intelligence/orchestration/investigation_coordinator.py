@@ -86,6 +86,7 @@ from services.intelligence.reporting.narrative_engine import InvestigationNarrat
 from services.intelligence.threat_intelligence import ThreatCorrelationEngine
 from services.intelligence.fusion import ProviderNeutralFusionEngine
 from services.intelligence.investigation.decision import DecisionIntelligenceEngine
+from services.intelligence.investigation.attack_sequence import AttackSequenceAnalyzer
 import time
 
 
@@ -186,6 +187,7 @@ class InvestigationCoordinator:
         self.memory_service = MemoryService()
         self.decision_engine = DecisionEngine()
         self.decision_intelligence_engine = DecisionIntelligenceEngine()
+        self.attack_sequence_analyzer = AttackSequenceAnalyzer()
         self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
         self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
         self.threat_intelligence = ThreatCorrelationEngine()
@@ -513,6 +515,7 @@ class InvestigationCoordinator:
         intelligence_metadata: dict[str, Any] | None = None,
         correlation_id: str | None = None,
         owned_evidence: Optional[list[dict[str, Any]]] = None,
+        source_timeline: Optional[list[dict[str, Any]]] = None,
     ) -> InvestigationResult:
         intelligence: dict[str, dict[str, Any]] = {}
         findings: list[Any] = []
@@ -720,6 +723,17 @@ class InvestigationCoordinator:
             result.metadata["memory_storage_error"] = True
         result.decision_report = self.decision_engine.decide(
             result, reasoning_report, result.memory_reference
+        )
+        # Phase 18.2 additive contract: only source-backed timeline data is
+        # eligible for reconstruction.  The legacy presentation timeline is
+        # intentionally not passed as evidence.
+        result.attack_sequence = self.attack_sequence_analyzer.analyze(
+            result,
+            tenant_id=scoped_tenant_id,
+            timeline=source_timeline,
+            evidence=evidence_for_reasoning,
+            iocs=list(engine_analysis.get("iocs", []) or []),
+            fusion=list((intelligence_metadata or {}).get("fusion_results", []) or []),
         )
         quality_assessment = None
         try:
@@ -1198,6 +1212,7 @@ class InvestigationCoordinator:
                 intelligence_metadata=intelligence_metadata,
                 correlation_id=correlation_id,
                 owned_evidence=owned_evidence,
+                source_timeline=context.timeline,
             )
             observer.event(
                 "INTELLIGENCE_GENERATED",
