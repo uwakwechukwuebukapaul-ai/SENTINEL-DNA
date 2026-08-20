@@ -59,6 +59,12 @@ class InvestigationReport:
 
     reasoning: Any = None
 
+    reasoning_report: Any = None
+
+    intelligence: Any = None
+
+    decision_intelligence: Any = None
+
     governance: dict[str, Any] = field(default_factory=dict)
 
     confidence: Any = None
@@ -140,6 +146,12 @@ class InvestigationReport:
             "timeline": self.timeline,
 
             "reasoning": self.reasoning,
+
+            "reasoning_report": self.reasoning_report,
+
+            "intelligence": self.intelligence,
+
+            "decision_intelligence": self.decision_intelligence.to_dict() if hasattr(self.decision_intelligence, "to_dict") else self.decision_intelligence,
 
             "governance": self.governance,
 
@@ -394,6 +406,9 @@ class InvestigationReportGenerator:
             mitre=list(data.get("mitre", []) or []),
             timeline=list(data.get("timeline", []) or []),
             reasoning=reasoning or "unavailable",
+            reasoning_report=reasoning,
+            intelligence=data.get("intelligence"),
+            decision_intelligence=data.get("decision_intelligence"),
             recommendations=list(data.get("recommendations", []) or []),
             governance=governance,
             confidence=data.get("confidence"),

@@ -85,6 +85,7 @@ from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
 from services.intelligence.threat_intelligence import ThreatCorrelationEngine
 from services.intelligence.fusion import ProviderNeutralFusionEngine
+from services.intelligence.investigation.decision import DecisionIntelligenceEngine
 import time
 
 
@@ -184,6 +185,7 @@ class InvestigationCoordinator:
         )
         self.memory_service = MemoryService()
         self.decision_engine = DecisionEngine()
+        self.decision_intelligence_engine = DecisionIntelligenceEngine()
         self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
         self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
         self.threat_intelligence = ThreatCorrelationEngine()
@@ -698,6 +700,11 @@ class InvestigationCoordinator:
                 **({"correlation_id": correlation_id} if correlation_id else {}),
             },
             errors=list(execution["errors"]),
+        )
+        # Phase 18.1 additive contract: preserve the legacy decision report and
+        # attach a deterministic, evidence-backed decision result as well.
+        result.decision_intelligence = self.decision_intelligence_engine.evaluate(
+            result, tenant_id=scoped_tenant_id
         )
         try:
             memory = self.memory_service.store_investigation_memory(
