@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from services.core.serialization import serialize
 
 
 
@@ -100,7 +101,7 @@ class InvestigationReport:
         self,
     ) -> dict[str, Any]:
 
-        return {
+        return serialize({
 
             "case_id":
                 self.case_id,
@@ -180,7 +181,7 @@ class InvestigationReport:
             "created_at":
                 self.created_at,
 
-        }
+        })
 
 
 
@@ -407,7 +408,10 @@ class InvestigationReportGenerator:
             timeline=list(data.get("timeline", []) or []),
             reasoning=reasoning or "unavailable",
             reasoning_report=reasoning,
-            intelligence=data.get("intelligence"),
+            # Keep a plain snapshot.  Retaining result.intelligence here would
+            # create result -> report -> intelligence -> result once the report
+            # is attached to the result intelligence envelope.
+            intelligence=serialize(data.get("intelligence")),
             decision_intelligence=data.get("decision_intelligence"),
             recommendations=list(data.get("recommendations", []) or []),
             governance=governance,

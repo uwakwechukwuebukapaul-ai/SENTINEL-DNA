@@ -11,6 +11,7 @@ Validates:
 """
 
 import sys
+import json
 from pathlib import Path
 
 import pytest
@@ -106,6 +107,9 @@ def test_investigation_success_response(client):
             "status"
             in data
         )
+        # Flask has already serialized this payload once; assert the decoded
+        # API contract remains a standalone JSON document as well.
+        json.dumps(data)
 
 
 

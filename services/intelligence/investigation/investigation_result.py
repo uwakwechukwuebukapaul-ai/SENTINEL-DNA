@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from services.core.serialization import serialize
 
 
 @dataclass
@@ -353,7 +354,7 @@ class InvestigationResult:
         self,
     ) -> dict[str, Any]:
 
-        return {
+        return serialize({
 
             "success": self.success,
             "status": self.status,
@@ -527,7 +528,7 @@ class InvestigationResult:
 
             "metadata":
                 self.metadata,
-        }
+        })
 
 
 
