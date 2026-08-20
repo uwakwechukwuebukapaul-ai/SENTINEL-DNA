@@ -323,7 +323,6 @@ class InvestigationReportGenerator:
             "report_type": "analyst_investigation_report",
             "recommendation_sources": list(data.get("recommendation_sources", []) or []),
         }
-<<<<<<< HEAD
         provenance = status_metadata.get("intelligence_provenance") if isinstance(status_metadata, dict) else None
         if isinstance(provenance, dict):
             report_metadata["intelligence_provenance"] = {
@@ -375,8 +374,6 @@ class InvestigationReportGenerator:
                 for item in provider_errors
                 if isinstance(item, dict) and isinstance(item.get("error"), dict)
             ]
-=======
->>>>>>> 71a3dc4 (ops: harden production runtime for investigator v2)
         correlation_id = (data.get("metadata") or {}).get("correlation_id") if isinstance(data.get("metadata"), dict) else None
         if correlation_id:
             report_metadata["correlation_id"] = correlation_id
