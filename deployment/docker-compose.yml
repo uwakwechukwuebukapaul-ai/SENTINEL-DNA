@@ -12,7 +12,6 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
-    ports: ["5000:5000"]
     volumes: [sentinel-data:/var/lib/sentinel]
   postgres:
     image: postgres:16-alpine
