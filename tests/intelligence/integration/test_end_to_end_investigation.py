@@ -26,7 +26,10 @@ def create_client():
 
     app.testing = True
 
-    return app.test_client()
+    client = app.test_client()
+    client.post("/api/auth/register", json={"username": "e2e-investigator", "email": "e2e-investigator@example.test", "password": "CorrectHorseBattery1!"})
+    client.post("/api/auth/login", json={"username": "e2e-investigator", "password": "CorrectHorseBattery1!"})
+    return client
 
 
 

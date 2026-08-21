@@ -37,10 +37,12 @@
       event.preventDefault();
       const status = document.getElementById('status');
       status.textContent = '';
+      const csrfResponse = await fetch('/api/auth/csrf', {credentials: 'same-origin'});
+      const csrf = (await csrfResponse.json()).csrf_token;
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
         body: JSON.stringify({
           username: document.getElementById('username').value,
           password: document.getElementById('password').value

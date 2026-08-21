@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Analyst Profile | Sentinel DNA{% endblock %}
+{% block content %}
+<header>
+  <p class="label">Analyst profile</p>
+  <h1>{{ analyst.name }}</h1>
+  <p class="muted">Identity and tenant context are derived from the authenticated server session.</p>
+</header>
+<article class="card profile-card">
+  <dl>
+    <dt>Name</dt><dd>{{ analyst.name }}</dd>
+    <dt>Email</dt><dd>{{ analyst.email }}</dd>
+    <dt>Role</dt><dd>{{ analyst.role|replace('_', ' ')|title }}</dd>
+    <dt>Tenant / organization</dt><dd>{{ analyst.tenant_id }}</dd>
+  </dl>
+  <p><a class="button" href="/">Back to Command Center</a></p>
+</article>
+{% endblock %}

@@ -2,6 +2,7 @@ import pytest
 
 import dashboard.app as dashboard_app
 from database.connection import DatabaseConnection
+from database.connection import database
 from services.auth.auth_service import AuthService
 
 
@@ -15,7 +16,10 @@ def auth_client(tmp_path, monkeypatch):
     registry = dashboard_app.app.container
     original_auth = registry.get("auth_service")
     original_audit = registry.get("audit_service")
-    registry.register("auth_service", AuthService(DatabaseConnection(tmp_path / "auth.db")))
+    auth_path = tmp_path / "auth.db"
+    original_database_path = database.database_path
+    database.database_path = str(auth_path)
+    registry.register("auth_service", AuthService(DatabaseConnection(auth_path)))
     registry.register("audit_service", AuditStub())
     monkeypatch.setattr(dashboard_app, "dashboard_payload", lambda: {
         "stats": {}, "cases": [], "evidence": [], "timeline": [], "iocs": [], "actions": [], "notes": []
@@ -27,6 +31,7 @@ def auth_client(tmp_path, monkeypatch):
     finally:
         registry.register("auth_service", original_auth)
         registry.register("audit_service", original_audit)
+        database.database_path = original_database_path
 
 
 def register_user(client):
@@ -109,6 +114,47 @@ def test_successful_login_persists_session_and_redirects_authenticated_user(auth
     assert auth_client.get("/").status_code == 200
     assert auth_client.get("/login").status_code == 302
     assert auth_client.get("/login").headers["Location"].endswith("/")
+
+
+def test_authenticated_dashboard_renders_analyst_onboarding_and_navigation(auth_client):
+    login_user(auth_client)
+    with auth_client.session_transaction() as session:
+        tenant_id = session["organization_id"]
+
+    response = auth_client.get("/")
+
+    assert response.status_code == 200
+    assert b"Welcome to Sentinel DNA SOC Command Center" in response.data
+    assert b"First-run analyst guide" in response.data
+    assert b"Investigations" in response.data
+    assert b"Threat Intelligence" in response.data
+    assert b"Evidence Analysis" in response.data
+    assert b"AI Investigator" in response.data
+    assert b"Command Center" in response.data
+    assert b"Analyst Profile" in response.data
+    assert b"Logout" in response.data
+    assert b"analyst-browser" in response.data
+    assert b"analyst-browser@example.test" in response.data
+    assert b"Analyst" in response.data
+    assert tenant_id.encode() in response.data
+
+
+def test_analyst_profile_is_authenticated_and_uses_server_identity(auth_client):
+    login_user(auth_client)
+    with auth_client.session_transaction() as session:
+        tenant_id = session["organization_id"]
+
+    response = auth_client.get("/profile")
+
+    assert response.status_code == 200
+    assert b"Analyst profile" in response.data
+    assert b"analyst-browser@example.test" in response.data
+    assert tenant_id.encode() in response.data
+
+
+def test_dashboard_and_profile_remain_protected_without_login(auth_client):
+    assert auth_client.get("/").status_code == 401
+    assert auth_client.get("/profile").status_code == 401
 
 
 def test_failed_login_does_not_create_authenticated_session(auth_client):

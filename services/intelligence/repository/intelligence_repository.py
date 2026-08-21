@@ -386,3 +386,10 @@ class IntelligenceRepository:
                 payload[key] = default
         payload["attack_story"] = payload.get("attack_story") or ""
         return payload
+
+    def get_by_case_id_for_tenant(self, case_id: str, tenant_id: str) -> dict[str, Any] | None:
+        payload = self.get_by_case_id(case_id)
+        if not payload:
+            return None
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        return payload if str(metadata.get("tenant_id") or "") == str(tenant_id) else None

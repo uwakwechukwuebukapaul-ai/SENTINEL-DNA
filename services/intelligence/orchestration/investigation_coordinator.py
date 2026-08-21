@@ -830,6 +830,28 @@ class InvestigationCoordinator:
             return report if report_tenant == tenant_id else None
         return self.report_repository.get_by_case_id(case_id)
 
+    def get_workspace_snapshot(self, tenant_id: str) -> dict[str, Any]:
+        """Return a tenant-scoped projection of persisted investigations."""
+        investigations = []
+        for report in self.report_repository.get_all():
+            if not isinstance(report, dict):
+                continue
+            owner = (report.get("tenant_context") or {}).get("tenant_id") or (report.get("metadata") or {}).get("tenant_id")
+            if str(owner or "") != str(tenant_id):
+                continue
+            case_id = str(report.get("case_id") or report.get("investigation_id") or "")
+            intelligence = self.intelligence_repository.get_by_case_id(case_id) or {}
+            investigations.append({
+                "case_id": case_id, "status": report.get("status", "unknown"),
+                "severity": report.get("severity") or intelligence.get("risk_severity", "unknown"),
+                "risk_score": report.get("risk_score", intelligence.get("risk_score", 0)),
+                "confidence": report.get("confidence", intelligence.get("confidence", 0)),
+                "evidence_count": len(report.get("evidence") or intelligence.get("evidence") or []),
+                "ioc_count": len(report.get("iocs") or intelligence.get("iocs") or []),
+            })
+        active = [item for item in investigations if str(item["status"]).lower() in {"active", "investigating", "in_progress", "open"}]
+        return {"investigations": investigations, "active_investigations": active, "recent_alerts": investigations[:10]}
+
     def submit_feedback(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, analyst_id: str) -> AnalystFeedback:
         report = self.get_report_by_case_id(case_id, tenant_id)
         if report is None:

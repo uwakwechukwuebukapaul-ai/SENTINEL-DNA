@@ -6,7 +6,7 @@ import pytest
 
 flask = pytest.importorskip("flask")
 
-from dashboard.app import app  # noqa: E402
+from app import create_app  # noqa: E402
 
 
 CASE_ID = "E2E-FAILED-AUTH-001"
@@ -28,9 +28,24 @@ ARTIFACTS = [
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
+    from database.connection import database
+    from services.auth.auth_service import AuthService
+
+    original_path = database.database_path
+    database.database_path = str(tmp_path / "contract.sqlite")
+    app = create_app()
     app.config["TESTING"] = True
-    return app.test_client()
+    auth = app.container.get("auth_service")
+    app.container.register("auth_service", AuthService(database))
+    client = app.test_client()
+    assert client.post("/api/auth/register", json={"username": "contract-user", "email": "contract@example.test", "password": "CorrectHorseBattery1!"}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": "contract-user", "password": "CorrectHorseBattery1!"}).status_code == 200
+    try:
+        yield client
+    finally:
+        app.container.register("auth_service", auth)
+        database.database_path = original_path
 
 
 def test_end_to_end_investigation_contract(client):

@@ -84,6 +84,14 @@ class CanonicalIdentityService:
     def get(self, actor_id: str) -> CanonicalIdentity | None:
         with CanonicalUnitOfWork(self.db) as unit: return _identity(CanonicalIdentityRepository(unit.conn).get(actor_id))
 
+    def get_by_email(self, email: str) -> CanonicalIdentity | None:
+        value = str(email or "").strip().lower()
+        if not value:
+            return None
+        with CanonicalUnitOfWork(self.db) as unit:
+            row = unit.conn.execute("SELECT * FROM canonical_identities WHERE email=?", (value,)).fetchone()
+            return _identity(row)
+
 
 class CanonicalMembershipService:
     def __init__(self, db: DatabaseConnection = database): self.db = db
@@ -96,6 +104,10 @@ class CanonicalMembershipService:
 
     def get(self, tenant_id: str, actor_id: str) -> CanonicalMembership | None:
         with CanonicalUnitOfWork(self.db) as unit: return _membership(CanonicalMembershipRepository(unit.conn).get(tenant_id, actor_id))
+
+    def list_for_actor(self, actor_id: str) -> list[CanonicalMembership]:
+        with CanonicalUnitOfWork(self.db) as unit:
+            return [_membership(row) for row in CanonicalMembershipRepository(unit.conn).list_for_actor(str(actor_id)) if row]
 
 
 class CanonicalAuthorityService:
@@ -120,4 +132,3 @@ class CanonicalAuthorityService:
         if identity.status != "active": raise CanonicalAuthorityError("canonical_identity_inactive")
         if membership.status != "active": raise CanonicalAuthorityError("canonical_membership_inactive")
         return tenant, identity, membership
-

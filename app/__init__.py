@@ -78,7 +78,9 @@ def create_app():
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
+    from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
+    app.register_blueprint(browser)
     app.register_blueprint(automation_api)
     app.register_blueprint(integrations_api)
     app.register_blueprint(detection_api)

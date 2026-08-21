@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Sentinel DNA Analyst Dashboard{% endblock %}{% block content %}
+<header class="card"><p class="label">SENTINEL DNA</p><h1>Analyst Dashboard</h1><p>{{ analyst.name }} · {{ analyst.role }} · {{ tenant.name }}</p><nav><a href="/workspace/">Workspace</a> · <a href="/profile">Profile</a></nav></header>
+<section class="grid stats"><article class="card"><div class="label">Active investigations</div><div class="metric">{{ active_investigations|length }}</div></article><article class="card"><div class="label">Recent alerts</div><div class="metric">{{ recent_alerts|length }}</div></article></section>
+<article class="card"><h2>Recent investigations</h2>{% for item in investigations %}<p><a href="/workspace/investigation/{{ item.case_id }}">{{ item.case_id }}</a> · {{ item.status }} · risk {{ item.risk_score }} · confidence {{ item.confidence }}</p>{% else %}<p class="muted">No investigations are available.</p>{% endfor %}</article>
+{% endblock %}

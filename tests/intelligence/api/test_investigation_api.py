@@ -35,24 +35,28 @@ def client():
     return app.test_client()
 
 
+@pytest.fixture
+def authenticated_client(client):
+    import uuid
+    username = f"investigator-test-{uuid.uuid4().hex[:8]}"
+    email = f"{username}@example.test"
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!"}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}).status_code == 200
+    return client
+
+
 
 def test_api_health(client):
-
-    response = client.get("/")
-
+    assert client.get("/").status_code == 401
+    response = client.get("/health")
     assert response.status_code == 200
-
-    data = response.get_json()
-
-    assert data["status"] == "running"
-
-    assert data["service"] == "Sentinel DNA"
+    assert response.get_json()["status"] == "ok"
 
 
 
-def test_investigation_endpoint_exists(client):
+def test_investigation_endpoint_exists(authenticated_client):
 
-    response = client.post(
+    response = authenticated_client.post(
         "/investigate",
         json={
             "artifacts": [
@@ -109,9 +113,9 @@ def test_investigation_success_response(client):
 
 
 
-def test_investigation_empty_payload(client):
+def test_investigation_empty_payload(authenticated_client):
 
-    response = client.post(
+    response = authenticated_client.post(
         "/investigate",
         json={},
     )

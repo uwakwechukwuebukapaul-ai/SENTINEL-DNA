@@ -196,6 +196,15 @@ class InvestigationReportRepository:
             ).fetchone()
         return json.loads(row["report_json"]) if row else None
 
+    def get_by_case_id_for_tenant(self, case_id: str, tenant_id: str):
+        report = self.get_by_case_id(case_id)
+        if not isinstance(report, dict):
+            return None
+        context = report.get("tenant_context") if isinstance(report.get("tenant_context"), dict) else {}
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        owner = context.get("tenant_id") or metadata.get("tenant_id")
+        return report if str(owner or "") == str(tenant_id) else None
+
 
 
     def clear(self):
