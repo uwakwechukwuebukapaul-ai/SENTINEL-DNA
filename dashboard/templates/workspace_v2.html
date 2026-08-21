@@ -21,7 +21,7 @@
 
   <section class="panel"><div class="section-heading"><h2>Active investigations</h2><span>Canonical Investigator V1 data</span></div>
     <table><thead><tr><th>Investigation</th><th>Status</th><th>AI confidence</th><th>Risk score</th><th>Evidence</th><th>IOCs</th></tr></thead><tbody>
-      {% for item in active_investigations %}<tr><td><a href="{{ url_for('analyst_workspace.investigation_workspace', case_id=item.case_id) }}">{{ item.case_id }}</a><br><span>{{ item.title }}</span></td><td>{{ item.status|replace('_', ' ')|title }}</td><td>{{ '%.0f'|format((item.ai_confidence or 0) * 100) }}%</td><td>{{ item.risk_score }} <small>{{ item.risk_severity }}</small></td><td>{{ item.evidence_count }}</td><td>{{ item.ioc_count }}</td></tr>
+      {% for item in active_investigations %}<tr><td><a href="{{ url_for('workspace_entry.investigation_detail', investigation_id=item.case_id) }}">{{ item.case_id }}</a><br><span>{{ item.title }}</span></td><td>{{ item.status|replace('_', ' ')|title }}</td><td>{{ '%.0f'|format((item.ai_confidence or 0) * 100) }}%</td><td>{{ item.risk_score }} <small>{{ item.risk_severity }}</small></td><td>{{ item.evidence_count }}</td><td>{{ item.ioc_count }}</td></tr>
       {% else %}<tr><td colspan="6">No active investigations.</td></tr>{% endfor %}
     </tbody></table>
   </section>

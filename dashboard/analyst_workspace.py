@@ -1,6 +1,6 @@
 """Thin analyst-facing view over the canonical investigation repository."""
 from __future__ import annotations
-from flask import Blueprint, current_app, render_template, session
+from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
 from services.core.security_context import authorize_investigation, request_context
 from services.core.serialization import serialize
 from services.intelligence.workspace.v2 import AnalystWorkspaceV2Builder
@@ -37,6 +37,99 @@ def workspace_entry():
     coordinator = current_app.container.require("investigation_coordinator")
     snapshot = coordinator.get_workspace_snapshot(principal["tenant_id"])
     return render_template("workspace_v2.html", **principal, **snapshot)
+
+
+def _csrf_valid() -> bool:
+    expected = session.get("csrf_token")
+    supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    return bool(expected and supplied and supplied == expected)
+
+
+def _detail_projection(coordinator, investigation_id: str, tenant_id: str) -> dict | None:
+    report = coordinator.get_report_by_case_id(investigation_id, tenant_id)
+    intelligence = coordinator.intelligence_repository.get_by_case_id(investigation_id)
+    if report is None and intelligence is None:
+        return None
+    intelligence = serialize(intelligence) or {}
+    report = serialize(report) or {}
+    owner = (report.get("tenant_context") or {}).get("tenant_id") or (report.get("metadata") or {}).get("tenant_id")
+    intel_owner = (intelligence.get("metadata") or {}).get("tenant_id")
+    if (owner and str(owner) != str(tenant_id)) or (intel_owner and str(intel_owner) != str(tenant_id)):
+        return None
+    read_model = {}
+    context = request_context()
+    if callable(getattr(coordinator, "get_investigation_view", None)):
+        try:
+            read_model = coordinator.get_investigation_view(investigation_id, context) or {}
+        except (LookupError, PermissionError, AttributeError, ValueError):
+            read_model = {}
+    result = read_model.get("result") or read_model.get("investigation") or {}
+    bundle = result.get("intelligence") if isinstance(result, dict) else {}
+    bundle = bundle if isinstance(bundle, dict) else {}
+    evidence = report.get("evidence") or result.get("evidence") or intelligence.get("evidence") or intelligence.get("artifacts") or []
+    iocs = report.get("iocs") or result.get("indicators") or intelligence.get("iocs") or []
+    relationships = report.get("relationships") or result.get("relationships") or intelligence.get("relationships") or []
+    mitre = report.get("mitre") or result.get("mitre") or intelligence.get("mitre_techniques") or []
+    risk = report.get("risk") if isinstance(report.get("risk"), dict) else {}
+    return {
+        "id": investigation_id,
+        "status": report.get("status") or result.get("status") or intelligence.get("status", "unknown"),
+        "risk_score": risk.get("score", report.get("risk_score", result.get("risk_score", intelligence.get("risk_score", 0)))),
+        "confidence": report.get("confidence", result.get("confidence", intelligence.get("confidence", 0))),
+        "findings": report.get("findings") or result.get("findings") or intelligence.get("findings") or [],
+        "evidence": evidence if isinstance(evidence, list) else [evidence],
+        "iocs": iocs if isinstance(iocs, list) else [iocs],
+        "relationships": relationships if isinstance(relationships, list) else [relationships],
+        "mitre": mitre if isinstance(mitre, list) else [mitre],
+        "reasoning": report.get("reasoning_report") or result.get("reasoning_report") or result.get("reasoning") or bundle.get("reasoning_report") or "No AI reasoning report is available.",
+        "recommendations": report.get("recommendations") or result.get("recommendations") or intelligence.get("recommendations") or [],
+        "report": report,
+        "intelligence": intelligence,
+        "result": result,
+        "read_model": read_model,
+    }
+
+
+@workspace_entry_blueprint.route("/investigation/<investigation_id>", methods=["GET"])
+def investigation_detail(investigation_id: str):
+    try:
+        principal = _entry_context()
+    except (LookupError, PermissionError, ValueError):
+        principal = None
+    if principal is None:
+        return render_template("error.html", message="Authentication and tenant membership are required."), 401
+    coordinator = current_app.container.require("investigation_coordinator")
+    detail = _detail_projection(coordinator, investigation_id, principal["tenant_id"])
+    if detail is None:
+        return render_template("error.html", message="Investigation not found."), 404
+    return render_template("investigation_detail_v3.html", **principal, investigation=detail, csrf_token=session.get("csrf_token"))
+
+
+@workspace_entry_blueprint.post("/investigation/<investigation_id>/start")
+def start_investigation(investigation_id: str):
+    if not _csrf_valid():
+        return {"error": "csrf_validation_failed"}, 403
+    try:
+        principal = _entry_context()
+    except (LookupError, PermissionError, ValueError):
+        principal = None
+    if principal is None:
+        return {"error": "authentication_required"}, 401
+    if principal["analyst"]["role"].lower() not in {"admin", "soc_manager", "analyst"}:
+        return {"error": "forbidden"}, 403
+    coordinator = current_app.container.require("investigation_coordinator")
+    detail = _detail_projection(coordinator, investigation_id, principal["tenant_id"])
+    if detail is None:
+        return {"error": "investigation_not_found"}, 404
+    coordinator.investigate(
+        case_id=investigation_id,
+        alert={"case_id": investigation_id, "source": "analyst_workspace"},
+        artifacts=detail["evidence"],
+        tenant_id=principal["tenant_id"],
+        actor_id=principal["analyst"]["actor_id"],
+        correlation_id=request_context().correlation_id,
+    )
+    return redirect(url_for("workspace_entry.investigation_detail", investigation_id=investigation_id))
 
 @analyst_workspace.get("/<case_id>")
 def investigation_workspace(case_id: str):
