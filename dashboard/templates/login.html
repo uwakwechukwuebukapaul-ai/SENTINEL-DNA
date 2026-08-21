@@ -20,6 +20,7 @@
   <main>
     <h1>Sentinel DNA</h1>
     <p class="muted">Sign in to the SOC Command Center.</p>
+    <p id="registered-message" class="muted" hidden>Account created. Sign in to continue.</p>
     <form id="login-form">
       <label for="username">Username or email</label>
       <input id="username" name="username" autocomplete="username" required>
@@ -28,8 +29,10 @@
       <button type="submit">Sign in</button>
       <p id="status" role="alert" aria-live="polite"></p>
     </form>
+    <p class="muted">Don't have an account? <a href="/signup">Create one</a></p>
   </main>
   <script>
+    if (new URLSearchParams(window.location.search).get('registered') === 'true') document.getElementById('registered-message').hidden = false;
     document.getElementById('login-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const status = document.getElementById('status');

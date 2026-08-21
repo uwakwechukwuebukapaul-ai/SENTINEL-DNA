@@ -57,6 +57,47 @@ def test_login_page_is_available(auth_client):
     assert b"/api/auth/login" in response.data
 
 
+def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
+    response = auth_client.get("/signup")
+
+    assert response.status_code == 200
+    assert b"Create an analyst account" in response.data
+    assert b"confirm-password" in response.data
+    assert b"name=\"role\"" not in response.data
+    assert b"name=\"tenant_id\"" not in response.data
+
+
+def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):
+    payload = {
+        "username": "new-analyst",
+        "email": "new-analyst@example.test",
+        "password": "StrongSignupPassword123!",
+    }
+
+    created = auth_client.post("/api/auth/register", json=payload)
+    duplicate = auth_client.post("/api/auth/register", json=payload)
+    elevated = auth_client.post("/api/auth/register", json={**payload, "username": "another-analyst", "email": "another@example.test", "role": "admin"})
+
+    assert created.status_code == 201
+    assert duplicate.status_code == 409
+    assert elevated.status_code == 201
+    assert created.get_json()["role"] == "analyst"
+    assert elevated.get_json()["role"] == "analyst"
+
+
+def test_login_works_after_signup_and_dashboard_stays_protected(auth_client):
+    payload = {
+        "username": "signup-login-analyst",
+        "email": "signup-login@example.test",
+        "password": "StrongSignupPassword123!",
+    }
+
+    assert auth_client.get("/").status_code == 401
+    assert auth_client.post("/api/auth/register", json=payload).status_code == 201
+    assert auth_client.post("/api/auth/login", json={"username": payload["username"], "password": payload["password"]}).status_code == 200
+    assert auth_client.get("/").status_code == 200
+
+
 def test_successful_login_persists_session_and_redirects_authenticated_user(auth_client):
     login_user(auth_client)
 

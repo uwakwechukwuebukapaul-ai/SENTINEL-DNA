@@ -708,6 +708,14 @@ def login_page():
         return redirect(url_for("dashboard"))
     return render_template("login.html")
 
+
+@app.get("/signup")
+def signup_page():
+    """Render public analyst signup without exposing tenant or role controls."""
+    if current_role():
+        return redirect(url_for("dashboard"))
+    return render_template("signup.html")
+
 @app.get("/")
 @permission_required("investigations:read")
 def dashboard():

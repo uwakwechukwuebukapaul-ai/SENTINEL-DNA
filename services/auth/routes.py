@@ -3,6 +3,7 @@
 from flask import Blueprint, current_app, jsonify, request, session
 from sqlite3 import IntegrityError
 
+from database.errors import DatabaseError
 from .auth_service import AuthService
 from .security import csrf_token
 
@@ -17,9 +18,13 @@ def _service() -> AuthService:
 def register():
     data = request.get_json(silent=True) or {}
     try:
-        user = _service().register(data.get("username", ""), data.get("email", ""), data.get("password", ""), data.get("role", "analyst"))
+        user = _service().register(data.get("username", ""), data.get("email", ""), data.get("password", ""), "analyst")
     except IntegrityError:
-            return jsonify({"error": "user_exists"}), 409
+        return jsonify({"error": "user_exists"}), 409
+    except DatabaseError as exc:
+        if not isinstance(exc.__cause__, IntegrityError):
+            raise
+        return jsonify({"error": "user_exists"}), 409
     except ValueError:
         return jsonify({"error": "invalid_registration"}), 400
     return jsonify(user.public()), 201
