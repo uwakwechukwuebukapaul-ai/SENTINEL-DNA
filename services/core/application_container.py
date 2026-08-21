@@ -30,6 +30,7 @@ from services.intelligence.orchestration.investigation_coordinator import (
     InvestigationCoordinator,
 )
 from services.intelligence.ai_runtime import AIRuntimeService
+from services.intelligence.demo import AnalystDemoScenarioService
 
 from services.intelligence.agents.agent_registry import (
     AgentRegistry,
@@ -249,6 +250,10 @@ def build_container() -> ServiceRegistry:
         threat_intelligence_gateway=threat_intelligence_gateway,
         provider_neutral_fusion_engine=provider_neutral_fusion_engine,
     )
+    analyst_demo_scenario = AnalystDemoScenarioService(
+        coordinator.intelligence_repository,
+        coordinator.report_repository,
+    )
 
     dashboard_service = DashboardService()
     audit_service = AuditService()
@@ -339,6 +344,7 @@ def build_container() -> ServiceRegistry:
         "investigation_coordinator",
         coordinator,
     )
+    registry.register("analyst_demo_scenario", analyst_demo_scenario)
 
     registry.register("threat_intelligence_gateway", threat_intelligence_gateway)
     registry.register("provider_neutral_fusion_engine", provider_neutral_fusion_engine)

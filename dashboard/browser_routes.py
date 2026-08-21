@@ -43,6 +43,7 @@ def signup_page():
 @browser.get("/")
 @_authenticated
 def home(principal):
+    _ensure_demo_scenario(principal["tenant_id"])
     snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(principal["tenant_id"])
     return render_template("browser_dashboard.html", **principal, **snapshot)
 
@@ -56,12 +57,18 @@ def profile(principal):
 @browser.get("/workspace/")
 @_authenticated
 def workspace(principal):
+    _ensure_demo_scenario(principal["tenant_id"])
     snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(principal["tenant_id"])
     return render_template("workspace_v2.html", **principal, **snapshot)
 
 
 def _detail(investigation_id):
     return current_app.container.require("investigation_coordinator").get_investigation_view(investigation_id, request_context())
+
+
+def _ensure_demo_scenario(tenant_id):
+    if current_app.config.get("DEMO_DATA_ENABLED"):
+        current_app.container.require("analyst_demo_scenario").ensure_for_tenant(tenant_id)
 
 
 @browser.get("/workspace/investigation/<investigation_id>")
@@ -102,5 +109,11 @@ def start_investigation(investigation_id):
         detail = None
     if not detail:
         return jsonify({"error": "investigation_not_found"}), 404
-    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace"}, artifacts=(detail.get("evidence") or detail.get("intelligence", {}).get("evidence") or []), tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
+    report = detail.get("report") or {}
+    intelligence = detail.get("intelligence") or {}
+    evidence_summary = intelligence.get("evidence_summary") if isinstance(intelligence.get("evidence_summary"), dict) else {}
+    evidence = report.get("evidence") or intelligence.get("evidence") or evidence_summary.get("items") or []
+    iocs = report.get("iocs") or intelligence.get("iocs") or []
+    timeline = report.get("timeline") or intelligence.get("timeline") or []
+    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity")}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
     return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id))

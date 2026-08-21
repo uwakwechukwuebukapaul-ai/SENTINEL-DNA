@@ -1,4 +1,4 @@
 {% extends "base.html" %}{% block title %}Analyst Workspace{% endblock %}{% block content %}
-<header class="card"><p class="label">ANALYST WORKSPACE</p><h1>{{ tenant.name }}</h1><p>{{ analyst.name }} · {{ analyst.email }} · {{ analyst.role }}</p></header>
-<article class="card"><h2>Active investigations</h2>{% for item in investigations %}<div><a href="/workspace/investigation/{{ item.case_id }}">{{ item.case_id }}</a> · status {{ item.status }} · risk {{ item.risk_score }} · confidence {{ item.confidence }} · evidence {{ item.evidence_count }} · IOCs {{ item.ioc_count }}</div>{% else %}<p class="muted">No active investigations.</p>{% endfor %}</article>
+<header class="card"><p class="label">ANALYST WORKSPACE</p><h1>{{ tenant.name }}</h1><p>{{ analyst.name }} &middot; {{ analyst.email }} &middot; {{ analyst.role }}</p></header>
+<article class="card"><h2>Investigation queue</h2>{% for item in investigations %}<div><a href="/workspace/investigation/{{ item.case_id }}">{{ item.case_id }}</a> &middot; status {{ item.status }} &middot; severity {{ item.severity }} &middot; risk {{ item.risk_score }} &middot; confidence {{ item.confidence }} &middot; evidence {{ item.evidence_count }} &middot; IOCs {{ item.ioc_count }}</div>{% else %}<p class="muted">No investigations are available for this tenant.</p>{% endfor %}</article>
 {% endblock %}

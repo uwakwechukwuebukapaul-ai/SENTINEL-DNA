@@ -46,7 +46,9 @@ class AIInvestigatorReportService:
             return None
         view = serialize(view) or {}
         report = serialize(coordinator.get_report_by_case_id(investigation_id, tenant_id)) or {}
-        intelligence = serialize(coordinator.intelligence_repository.get_by_case_id(investigation_id)) or {}
+        scoped_intelligence = getattr(coordinator.intelligence_repository, "get_by_case_id_for_tenant", None)
+        intelligence_record = scoped_intelligence(investigation_id, tenant_id) if callable(scoped_intelligence) else None
+        intelligence = serialize(intelligence_record) or {}
         investigation = view.get("investigation") or {}
         summary = view.get("summary") or {}
         source = {**intelligence, **report}

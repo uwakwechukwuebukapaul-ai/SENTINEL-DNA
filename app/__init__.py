@@ -6,6 +6,7 @@ and API layers.
 """
 
 import logging
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,7 +26,7 @@ def create_app():
     )
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
-    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", DEMO_DATA_ENABLED=os.getenv("SENTINEL_DNA_DEMO_DATA", "0" if runtime_config.environment == "production" else "1") == "1")
     if runtime_config.environment == "production":
         app.config.update(PROPAGATE_EXCEPTIONS=False, TRAP_HTTP_EXCEPTIONS=False)
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
