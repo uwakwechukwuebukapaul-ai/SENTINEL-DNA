@@ -1,10 +1,42 @@
 """Thin analyst-facing view over the canonical investigation repository."""
 from __future__ import annotations
-from flask import Blueprint, current_app, render_template
-from services.core.security_context import authorize_investigation
+from flask import Blueprint, current_app, render_template, session
+from services.core.security_context import authorize_investigation, request_context
 from services.core.serialization import serialize
+from services.intelligence.workspace.v2 import AnalystWorkspaceV2Builder
 
 analyst_workspace = Blueprint("analyst_workspace", __name__, url_prefix="/workspace/analyst")
+workspace_entry_blueprint = Blueprint("workspace_entry", __name__, url_prefix="/workspace")
+
+
+def _entry_context():
+    """Resolve the authenticated canonical principal for the workspace entry page."""
+    context = request_context()
+    actor_id = session.get("actor_id") or (session.get("canonical_principal") or {}).get("actor_id")
+    if not context.user_id or not context.tenant_id or not actor_id:
+        return None
+    authority = current_app.container.require("canonical_authority")
+    tenant, identity, membership = authority.resolve(str(context.tenant_id), str(actor_id))
+    if membership.role.lower() not in {"admin", "soc_manager", "analyst", "viewer"}:
+        return None
+    return {
+        "analyst": {"actor_id": identity.actor_id, "name": identity.display_name or identity.email, "email": identity.email, "role": membership.role},
+        "tenant": {"id": tenant.tenant_id, "name": tenant.name},
+        "tenant_id": tenant.tenant_id,
+    }
+
+
+@workspace_entry_blueprint.get("/", endpoint="workspace_entry")
+def workspace_entry():
+    try:
+        principal = _entry_context()
+    except (LookupError, PermissionError, ValueError):
+        principal = None
+    if principal is None:
+        return render_template("error.html", message="Authentication and tenant membership are required."), 401
+    coordinator = current_app.container.require("investigation_coordinator")
+    snapshot = coordinator.get_workspace_snapshot(principal["tenant_id"])
+    return render_template("workspace_v2.html", **principal, **snapshot)
 
 @analyst_workspace.get("/<case_id>")
 def investigation_workspace(case_id: str):

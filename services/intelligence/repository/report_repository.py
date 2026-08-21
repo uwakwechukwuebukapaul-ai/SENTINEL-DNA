@@ -196,6 +196,18 @@ class InvestigationReportRepository:
             ).fetchone()
         return json.loads(row["report_json"]) if row else None
 
+    def list_for_tenant(self, tenant_id: str):
+        """Return reports carrying the requested canonical tenant context."""
+        reports = []
+        for report in self.get_all():
+            context = report.get("tenant_context") if isinstance(report, dict) else {}
+            metadata = report.get("metadata") if isinstance(report, dict) else {}
+            owner = context.get("tenant_id") if isinstance(context, dict) else None
+            owner = owner or (metadata.get("tenant_id") if isinstance(metadata, dict) else None)
+            if str(owner or "") == str(tenant_id):
+                reports.append(report)
+        return reports
+
 
 
     def clear(self):

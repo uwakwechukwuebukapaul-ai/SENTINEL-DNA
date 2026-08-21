@@ -386,3 +386,17 @@ class IntelligenceRepository:
                 payload[key] = default
         payload["attack_story"] = payload.get("attack_story") or ""
         return payload
+
+    def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Return intelligence records whose canonical metadata belongs to a tenant."""
+        with self.db.session() as connection:
+            rows = connection.execute(
+                "SELECT * FROM investigation_intelligence ORDER BY updated_at DESC, id DESC"
+            ).fetchall()
+        records = []
+        for row in rows:
+            payload = dict(row)
+            metadata = json.loads(payload.get("metadata_json") or "{}")
+            if isinstance(metadata, dict) and str(metadata.get("tenant_id") or "") == str(tenant_id):
+                records.append(self.get_by_case_id(str(payload["case_id"])))
+        return [record for record in records if record is not None]

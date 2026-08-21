@@ -33,7 +33,7 @@ def create_app():
 
     # Reuse the existing Analyst Workspace blueprint without importing the
     # separate dashboard application or duplicating workspace logic.
-    from dashboard.analyst_workspace import analyst_workspace
+    from dashboard.analyst_workspace import analyst_workspace, workspace_entry_blueprint
 
     app.jinja_loader = ChoiceLoader(
         [
@@ -143,6 +143,7 @@ def create_app():
         dashboard_bp
     )
     app.register_blueprint(analyst_workspace)
+    app.register_blueprint(workspace_entry_blueprint)
 
     @app.get("/workspace/dashboard/static/<path:filename>")
     def dashboard_static(filename: str):

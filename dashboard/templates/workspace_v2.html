@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analyst Workspace | Sentinel DNA</title>
+  <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/workspace-v2.css') }}">
+</head>
+<body>
+<main class="workspace-shell">
+  <header class="hero">
+    <div><p class="eyebrow">SENTINEL DNA / ANALYST WORKSPACE</p><h1>Investigation control room</h1></div>
+    <div class="identity"><strong>{{ analyst.name }}</strong><span>{{ analyst.email }} · {{ analyst.role }}</span><span>{{ tenant.name }} · {{ tenant.id }}</span></div>
+  </header>
+
+  <section class="metrics" aria-label="Workspace metrics">
+    <article><small>ACTIVE INVESTIGATIONS</small><strong>{{ active_investigations|length }}</strong></article>
+    <article><small>RECENT ALERTS</small><strong>{{ recent_alerts|length }}</strong></article>
+    <article><small>TENANT</small><strong>{{ tenant.name }}</strong></article>
+  </section>
+
+  <section class="panel"><div class="section-heading"><h2>Active investigations</h2><span>Canonical Investigator V1 data</span></div>
+    <table><thead><tr><th>Investigation</th><th>Status</th><th>AI confidence</th><th>Risk score</th><th>Evidence</th><th>IOCs</th></tr></thead><tbody>
+      {% for item in active_investigations %}<tr><td><a href="{{ url_for('analyst_workspace.investigation_workspace', case_id=item.case_id) }}">{{ item.case_id }}</a><br><span>{{ item.title }}</span></td><td>{{ item.status|replace('_', ' ')|title }}</td><td>{{ '%.0f'|format((item.ai_confidence or 0) * 100) }}%</td><td>{{ item.risk_score }} <small>{{ item.risk_severity }}</small></td><td>{{ item.evidence_count }}</td><td>{{ item.ioc_count }}</td></tr>
+      {% else %}<tr><td colspan="6">No active investigations.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+
+  <section class="panel"><div class="section-heading"><h2>Recent alerts</h2><span>Tenant-scoped activity</span></div>
+    <ul class="alerts">{% for alert in recent_alerts %}<li><strong>{{ alert.case_id }}</strong><span>{{ alert.description }}</span><small>{{ alert.created_at or 'Time unavailable' }}</small></li>{% else %}<li>No recent alerts.</li>{% endfor %}</ul>
+  </section>
+</main>
+</body>
+</html>

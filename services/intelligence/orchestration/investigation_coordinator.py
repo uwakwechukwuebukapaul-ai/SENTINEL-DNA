@@ -851,6 +851,46 @@ class InvestigationCoordinator:
             return report if report_tenant == tenant_id else None
         return self.report_repository.get_by_case_id(case_id)
 
+    def get_workspace_snapshot(self, tenant_id: str) -> dict[str, Any]:
+        """Build the analyst entry projection from the canonical V1 repositories."""
+        if not tenant_id:
+            raise PermissionError("investigation tenant authorization is required")
+        intelligence = {
+            item["case_id"]: item
+            for item in self.intelligence_repository.list_for_tenant(str(tenant_id))
+        }
+        reports = {
+            item.get("case_id"): item
+            for item in self.report_repository.list_for_tenant(str(tenant_id))
+            if isinstance(item, dict) and item.get("case_id")
+        }
+        investigations = []
+        alerts = []
+        for case_id in sorted(set(intelligence) | set(reports)):
+            result = intelligence.get(case_id) or {}
+            report = reports.get(case_id) or {}
+            evidence = report.get("evidence") or result.get("evidence") or result.get("artifacts") or []
+            iocs = report.get("iocs") or result.get("iocs") or []
+            risk = report.get("risk") if isinstance(report.get("risk"), dict) else {}
+            score = risk.get("score", report.get("risk_score", result.get("risk_score", 0)))
+            confidence = report.get("confidence", result.get("confidence", 0))
+            investigations.append({
+                "case_id": case_id,
+                "title": report.get("title") or report.get("summary") or case_id,
+                "status": str(report.get("status") or result.get("status") or "unknown").lower(),
+                "risk_score": score,
+                "risk_severity": risk.get("severity") or report.get("severity") or result.get("risk_severity", "unknown"),
+                "ai_confidence": confidence,
+                "evidence_count": len(evidence) if isinstance(evidence, (list, tuple)) else 0,
+                "ioc_count": len(iocs) if isinstance(iocs, (list, tuple)) else 0,
+            })
+            timeline = report.get("timeline") or result.get("timeline") or []
+            for event in timeline if isinstance(timeline, list) else []:
+                if isinstance(event, dict) and str(event.get("type") or event.get("event_type") or "").lower() == "alert":
+                    alerts.append({"case_id": case_id, "description": event.get("description") or event.get("summary") or "Alert observed", "created_at": event.get("created_at") or event.get("created")})
+        active_statuses = {"open", "active", "investigating", "in_progress", "pending", "queued"}
+        return {"investigations": investigations, "active_investigations": [item for item in investigations if item["status"] in active_statuses], "recent_alerts": alerts[-10:]}
+
     def submit_feedback(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, analyst_id: str) -> AnalystFeedback:
         report = self.get_report_by_case_id(case_id, tenant_id)
         if report is None:
