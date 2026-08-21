@@ -579,6 +579,7 @@ class InvestigationCoordinator:
         attack_story = engine_analysis.get("attack_story") or self.attack_story_builder.build(
             {"ioc": {"ioc_count": ioc_count}, "mitre": mitre}
         )
+        source_metadata = alert.get("metadata") if isinstance(alert.get("metadata"), dict) else {}
         normalized_intelligence = InvestigationIntelligence(
             findings=findings,
             recommendations=list(dict.fromkeys(recommendations)),
@@ -592,6 +593,7 @@ class InvestigationCoordinator:
             timeline=[],
             metadata={
                 "case_id": case_id,
+                **source_metadata,
                 **(
                     {"tenant_id": (tenant_context or {}).get("tenant_id")}
                     if (tenant_context or {}).get("tenant_id")
@@ -620,6 +622,7 @@ class InvestigationCoordinator:
             normalized_intelligence.timeline,
         )
         report.tenant_context = dict(tenant_context or {}) if scoped_tenant_id else None
+        report.metadata = {**(report.metadata or {}), **normalized_intelligence.metadata}
         if scoped_tenant_id:
             save_report_for_tenant = getattr(self.report_repository, "save_for_tenant", None)
             if callable(save_report_for_tenant):

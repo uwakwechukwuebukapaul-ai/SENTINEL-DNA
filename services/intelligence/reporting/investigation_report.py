@@ -323,6 +323,11 @@ class InvestigationReportGenerator:
             "report_type": "analyst_investigation_report",
             "recommendation_sources": list(data.get("recommendation_sources", []) or []),
         }
+        if isinstance(normalized, dict):
+            source_metadata = normalized.get("metadata") if isinstance(normalized.get("metadata"), dict) else {}
+            for key in ("synthetic", "scenario", "evidence_limitations"):
+                if key in source_metadata:
+                    report_metadata[key] = source_metadata[key]
         provenance = status_metadata.get("intelligence_provenance") if isinstance(status_metadata, dict) else None
         if isinstance(provenance, dict):
             report_metadata["intelligence_provenance"] = {

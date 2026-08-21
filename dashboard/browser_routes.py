@@ -115,5 +115,5 @@ def start_investigation(investigation_id):
     evidence = report.get("evidence") or intelligence.get("evidence") or evidence_summary.get("items") or []
     iocs = report.get("iocs") or intelligence.get("iocs") or []
     timeline = report.get("timeline") or intelligence.get("timeline") or []
-    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity")}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
+    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity"), "metadata": report.get("metadata") or intelligence.get("metadata") or {}}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
     return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id))

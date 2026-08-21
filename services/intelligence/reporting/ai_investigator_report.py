@@ -29,6 +29,7 @@ class InvestigationReportProjection:
     recommendations: list[Any]
     analyst_actions: list[Any]
     relationships: list[Any]
+    data_classification: str = "production_observed"
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -52,6 +53,7 @@ class AIInvestigatorReportService:
         investigation = view.get("investigation") or {}
         summary = view.get("summary") or {}
         source = {**intelligence, **report}
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
         risk = report.get("risk") if isinstance(report.get("risk"), dict) else {"score": source.get("risk_score", 0)}
         evidence = report.get("evidence") or intelligence.get("evidence") or view.get("evidence") or []
         reasoning = report.get("reasoning_report") or source.get("reasoning_report") or "No AI reasoning explanation is available."
@@ -67,4 +69,5 @@ class AIInvestigatorReportService:
             recommendations=_items(report.get("recommendations") or intelligence.get("recommendations")),
             analyst_actions=_items(report.get("analyst_actions")),
             relationships=_items(report.get("relationships") or intelligence.get("relationships")),
+            data_classification="synthetic_demo" if metadata.get("synthetic") else "production_observed",
         )

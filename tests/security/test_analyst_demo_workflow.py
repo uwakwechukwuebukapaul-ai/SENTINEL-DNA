@@ -65,7 +65,7 @@ def test_start_uses_canonical_coordinator_and_report(application):
     assert b"Evidence" in detail.data
     assert b"IOC intelligence" in detail.data
     assert b"Evidence summary" in report.data
-    assert b"Synthetic" not in report.data
+    assert b"synthetic_demo" in report.data
 
 
 def test_demo_case_is_not_readable_across_tenants(application):
