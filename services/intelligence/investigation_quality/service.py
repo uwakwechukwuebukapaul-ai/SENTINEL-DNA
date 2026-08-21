@@ -8,6 +8,7 @@ class InvestigationQualityService:
     def _audit(self,event,**payload):
         if self.audit_logger and hasattr(self.audit_logger,"record"): self.audit_logger.record(event,tenant_id=self.tenant_id,**payload)
     def assess_investigation(self, investigation_id, result):
+        if not self.tenant_id: raise ValueError("quality_assessment_tenant_required")
         assessment=self.repository.save_assessment(self.quality.assess(investigation_id,self.tenant_id,result)); self._audit("investigation_quality_assessed",investigation_id=investigation_id,score=assessment.overall_score); return assessment
     def benchmark_quality(self): return self.benchmark.benchmark(self.tenant_id,self.repository.list_assessments(self.tenant_id))
     def generate_recommendations(self, investigation_id):

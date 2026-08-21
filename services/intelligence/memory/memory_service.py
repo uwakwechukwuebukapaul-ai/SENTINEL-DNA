@@ -24,11 +24,12 @@ class MemoryService:
     def store_investigation_memory(self, context: Any, reasoning_report: Any = None, result: Any = None) -> InvestigationMemoryRecord:
         ctx, rep, outcome = self._data(context), self._data(reasoning_report), self._data(result)
         case_id = str(ctx.get("case_id") or outcome.get("case_id") or "unknown")
+        tenant_id = str(ctx.get("tenant_id") or outcome.get("tenant_id") or "") or None
         evidence = list(ctx.get("evidence", []) or [])
         scenario = str(ctx.get("scenario") or ctx.get("alert", {}).get("type") or "security investigation")
         payload = f"{case_id}|{scenario}|{json.dumps(rep, sort_keys=True, default=str)}"
         return self.repository.save(InvestigationMemoryRecord(
-            memory_id="MEM-" + hashlib.sha256(payload.encode()).hexdigest()[:20], case_id=case_id,
+            memory_id="MEM-" + hashlib.sha256(payload.encode()).hexdigest()[:20], case_id=case_id, tenant_id=tenant_id,
             investigation_type="security_investigation", scenario=scenario,
             risk_level=str(outcome.get("risk") if isinstance(outcome.get("risk"), str) else (outcome.get("risk") or {}).get("severity", "unknown")),
             confidence=float(outcome.get("confidence") or rep.get("confidence") or 0.0),
@@ -38,8 +39,8 @@ class MemoryService:
             outcome={"status": outcome.get("status", "completed"), "success": outcome.get("success", True)},
             created_at=datetime.now(timezone.utc).isoformat(), synthetic_only=True))
 
-    def retrieve_similar_investigations(self, investigation_type: str, scenario: str = "") -> list[InvestigationMemoryRecord]:
-        return self.repository.find_similar(investigation_type, scenario)
+    def retrieve_similar_investigations(self, investigation_type: str, scenario: str = "", tenant_id: str | None = None) -> list[InvestigationMemoryRecord]:
+        return self.repository.find_similar(investigation_type, scenario, tenant_id=tenant_id)
 
     def get_case_history(self, case_id: str) -> list[InvestigationMemoryRecord]:
         return self.repository.get_case_history(case_id)

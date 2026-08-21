@@ -14,6 +14,7 @@ class InvestigationMemoryRecord:
     scenario: str
     risk_level: str
     confidence: float
+    tenant_id: str | None = None
     evidence_summary: dict[str, Any] = field(default_factory=dict)
     reasoning_summary: dict[str, Any] = field(default_factory=dict)
     mitre_techniques: list[str] = field(default_factory=list)

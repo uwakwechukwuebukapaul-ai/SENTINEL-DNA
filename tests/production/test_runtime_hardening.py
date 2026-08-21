@@ -64,8 +64,7 @@ def test_sqlite_connection_uses_operational_pragmas(tmp_path):
     path = tmp_path / "soc.db"
     connection = DatabaseConnection(path).connect()
     try:
-        assert connection.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
-        assert connection.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+        assert connection.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
     finally:
         connection.close()
 

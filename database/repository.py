@@ -308,71 +308,35 @@ def get_evidence(case_id=None):
 def add_ioc(
         case_id,
         ioc_type,
-        value
+        value,
+        confidence="MEDIUM",
+        reputation="UNKNOWN",
+        source="LOCAL"
 ):
+    # Compatibility entry point: canonical IOC persistence lives in the
+    # dedicated repository to prevent SQL contract drift.
+    from database.ioc_repository import repository as ioc_repository
 
-    with database.session() as conn:
-
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO iocs
-            (
-                case_id,
-                type,
-                value,
-                created
-            )
-
-            VALUES (?,?,?,?)
-            """,
-            (
-                case_id,
-                ioc_type,
-                value,
-                datetime.now().isoformat()
-            )
-        )
-
-        conn.commit()
-
+    ioc_repository.create(
+        case_id,
+        ioc_type,
+        value,
+        confidence,
+        reputation,
+        source,
+    )
     return True
 
 
 
 def get_iocs(case_id=None):
+    from database.ioc_repository import repository as ioc_repository
 
-    with database.session() as conn:
-
-        cursor = conn.cursor()
-
-        if case_id:
-
-            cursor.execute(
-                """
-                SELECT *
-                FROM iocs
-                WHERE case_id=?
-                ORDER BY id DESC
-                """,
-                (case_id,)
-            )
-
-        else:
-
-            cursor.execute(
-                """
-                SELECT *
-                FROM iocs
-                ORDER BY id DESC
-                """
-            )
-
-        return [
-            dict(row)
-            for row in cursor.fetchall()
-        ]
+    return (
+        ioc_repository.list_for_case(case_id)
+        if case_id
+        else ioc_repository.list_all()
+    )
 
 
 

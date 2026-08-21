@@ -2,4 +2,5 @@
 from .models import HuntingQuery, HuntResult, ThreatHunt
 from .query_engine import HuntQueryEngine
 from .hunt_manager import HuntManager
-__all__ = ["HuntingQuery", "HuntResult", "ThreatHunt", "HuntQueryEngine", "HuntManager"]
+from .intelligence import ThreatHuntingIntelligenceBuilder
+__all__ = ["HuntingQuery", "HuntResult", "ThreatHunt", "HuntQueryEngine", "HuntManager", "ThreatHuntingIntelligenceBuilder"]
