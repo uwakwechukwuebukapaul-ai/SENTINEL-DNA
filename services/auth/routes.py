@@ -1,6 +1,6 @@
 """Authentication REST endpoints."""
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, redirect, request, session, url_for
 from sqlite3 import IntegrityError
 
 from database.errors import DatabaseError
@@ -75,12 +75,15 @@ def csrf():
 
 @auth_api.post("/logout")
 def logout():
+    browser_form = request.form.get("csrf_token") is not None
     expected = session.get("csrf_token")
     supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
     if not expected or supplied != expected:
         return jsonify({"error": "csrf_validation_failed"}), 403
     current_app.container.get("audit_service").record("USER_LOGOUT", user_id=session.get("user_id"))
     session.clear()
+    if browser_form:
+        return redirect(url_for("browser.login_page", signed_out="true"))
     return jsonify({"status": "logged_out"})
 
 

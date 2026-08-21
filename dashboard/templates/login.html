@@ -21,6 +21,7 @@
     <h1>Sentinel DNA</h1>
     <p class="muted">Sign in to the SOC Command Center.</p>
     <p id="registered-message" class="muted" hidden>Account created. Sign in to continue.</p>
+    <p id="signed-out-message" class="muted" hidden>You have been signed out.</p>
     <form id="login-form">
       <label for="username">Username or email</label>
       <input id="username" name="username" autocomplete="username" required>
@@ -33,6 +34,7 @@
   </main>
   <script>
     if (new URLSearchParams(window.location.search).get('registered') === 'true') document.getElementById('registered-message').hidden = false;
+    if (new URLSearchParams(window.location.search).get('signed_out') === 'true') document.getElementById('signed-out-message').hidden = false;
     document.getElementById('login-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const status = document.getElementById('status');
