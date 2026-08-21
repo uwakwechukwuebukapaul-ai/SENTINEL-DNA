@@ -1,81 +1,308 @@
-# AI SOC Analyst
+# 🧬 Sentinel DNA
 
-A Python-based phishing detection and SOC automation project.
+<div align="center">
 
-## Features
+<img src="assets/sentinel-dna-banner.png" width="900"/>
 
-- Analyze multiple sample emails
-- Detect suspicious phishing keywords
-- Detect suspicious sender domains
-- Extract URLs from email bodies
-- Flag suspicious URLs
-- Generate structured incident reports
-- Save reports as JSON files
-- Log incidents to a CSV file
-- Print a daily SOC summary dashboard
+### AI-Powered SOC Investigation Platform
 
-## Project Structure
+**Turning security alerts into evidence-backed investigations**
 
-```text
-AI-SOC-Analyst/
-├── main.py
-├── gmail_analyzer.py
-├── incident_report.py
-├── report_writer.py
-├── csv_logger.py
-├── sample_email.txt
-├── sample_emails/
-│   ├── email1.txt
-│   ├── email2.txt
-│   └── email3.txt
-├── reports/
-├── logs/
-└── README.md
+[![Python](https://img.shields.io/badge/Python-3.14-blue)]()
+[![Flask](https://img.shields.io/badge/Backend-Flask-black)]()
+[![Docker](https://img.shields.io/badge/Deployment-Docker-blue)]()
+[![Security](https://img.shields.io/badge/Focus-Cybersecurity-red)]()
+
+</div>
+
+
+---
+
+# 🚨 What is Sentinel DNA?
+
+Sentinel DNA is an AI SOC investigation platform designed to help security analysts investigate threats faster through:
+
+- AI-assisted investigations
+- Evidence collection and analysis
+- IOC enrichment
+- MITRE ATT&CK mapping
+- Threat intelligence correlation
+- Investigation reports
+- Analyst decision support
+
+
+---
+
+# 🎯 Vision
+
+Modern SOC teams face:
+
+- Alert fatigue
+- Slow investigations
+- Too much manual correlation
+- Limited analyst time
+
+Sentinel DNA aims to become an **AI investigation layer for security operations**, helping analysts understand:
+
+> "What happened, why it happened, and what should we do next?"
+
+
+---
+
+# 🧠 AI Investigator Workflow
+
+
+```
+Security Alert
+
+      ↓
+
+Evidence Collection
+
+      ↓
+
+IOC Intelligence
+
+      ↓
+
+Threat Analysis
+
+      ↓
+
+MITRE ATT&CK Mapping
+
+      ↓
+
+Attack Timeline Reconstruction
+
+      ↓
+
+AI Investigation Report
+
+      ↓
+
+Analyst Decision
 ```
 
-## How It Works
 
-1. The program reads email samples from the `sample_emails` folder.
-2. Each email is analyzed for phishing indicators.
-3. The analyzer assigns a risk score and risk level.
-4. A structured incident report is created.
-5. The report is saved as a JSON file.
-6. The incident is logged in a CSV file.
-7. A daily SOC summary is printed.
+---
 
-## How to Run
+# 🏗️ Architecture
 
-```powershell
-python main.py
+
+```
+                 SOC Alert
+                    |
+                    |
+        Investigation Coordinator
+                    |
+                    |
+        Investigation Orchestrator
+                    |
+     --------------------------------
+     |              |               |
+ Evidence       Intelligence     Timeline
+ Engine         Engine           Engine
+
+                    |
+
+            Investigation Report
+
+                    |
+
+            Analyst Workspace
+
 ```
 
-## Sample Output
 
-```text
-===== DAILY SOC SUMMARY =====
-Total Emails Analyzed : 3
-High Risk             : 2
-Medium Risk           : 0
-Low Risk              : 1
-Reports Saved         : 3
+---
+
+# 🔥 Current Features
+
+
+## ✅ AI Investigation Engine
+
+- Automated investigation workflow
+- Evidence-driven reasoning
+- Structured investigation context
+
+
+## ✅ Threat Intelligence
+
+- IOC enrichment
+- Reputation analysis
+- Threat context
+
+
+## ✅ MITRE ATT&CK Integration
+
+- Technique mapping
+- Attack sequence reconstruction
+
+
+## ✅ Analyst Workspace
+
+- Investigation visibility
+- Case intelligence
+- Decision support
+
+
+## ✅ Enterprise Foundation
+
+- Tenant-aware architecture
+- Security controls
+- Modular services
+
+
+---
+
+# 📊 Project Status
+
+## AI Investigator V1
+
+Status:
+
+🟢 Core Foundation Complete
+🟢 Validation Passed
+🟡 AI Investigator Demonstration Phase
+
+
+Validation:
+
+```
+Validation:
+
+✅ Automated test suite passing
+✅ Python compilation checks passing
+✅ Runtime validation completed
 ```
 
-## Skills Demonstrated
 
-- Python programming
-- File handling
-- Regex URL extraction
-- CSV logging
-- JSON report generation
-- Basic phishing detection
-- SOC-style incident reporting
-- Git and GitHub version control
+---
 
-## Future Improvements
+# 🛠️ Technology Stack
 
-- Connect to Gmail
-- Add AI-powered analysis
-- Send Slack alerts
-- Save reports to Notion
-- Add VirusTotal URL checks
-- Add a simple dashboard interface
+
+Backend:
+
+- Python
+- Flask
+- SQLite
+- Docker
+
+
+Security:
+
+- MITRE ATT&CK
+- IOC Intelligence
+- Threat Analysis
+
+
+Frontend:
+
+- HTML
+- CSS
+- JavaScript
+- Bootstrap
+
+
+---
+
+# 🚀 Running Locally
+
+
+Clone repository:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/Sentinel-DNA.git
+```
+
+
+Run:
+
+```bash
+docker build -t sentinel-dna .
+
+docker run --rm \
+--env-file .env \
+-p 5000:5000 \
+sentinel-dna
+```
+
+
+Open:
+
+```
+http://localhost:5000
+```
+
+
+---
+
+# 🗺️ Roadmap
+
+
+## Phase 1 ✅
+
+Foundation
+
+- Core architecture
+- Investigation engine
+- Evidence pipeline
+
+
+## Phase 2 ✅
+
+AI Investigator V1
+
+- Investigation workflow
+- Reports
+- Analyst workspace
+
+
+## Phase 3 🚧
+
+Enterprise Expansion
+
+- SIEM integrations
+- EDR connectors
+- SOAR automation
+- Cloud deployment
+- Multi-tenant SaaS
+
+
+---
+
+# 👨‍💻 Founder Note
+
+Sentinel DNA focuses on reducing investigation time while keeping analysts in control of security decisions.
+
+
+---
+
+# Why Sentinel DNA?
+
+Traditional security tools generate alerts.
+
+Sentinel DNA focuses on the investigation process:
+
+Alert → Evidence → Context → Reasoning → Decision
+
+The goal is to help analysts move from detection to understanding faster.
+
+___
+# 🤝 Collaboration
+
+Interested in:
+
+- Cybersecurity engineering
+- AI security
+- SOC automation
+- Threat intelligence
+
+Open to discussions and collaboration.
+
+
+---
+
+⭐ Star the project if you believe AI can transform security operations.

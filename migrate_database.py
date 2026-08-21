@@ -11,10 +11,11 @@ Updates:
 
 
 import sqlite3
+from database.connection import resolve_database_path
 
 
 
-DATABASE = "soc.db"
+DATABASE = resolve_database_path()
 
 
 
@@ -135,6 +136,11 @@ if ioc_table:
 
     if "type" not in columns:
 
+        raise RuntimeError(
+            "Canonical or unsupported IOC schema detected. "
+            "Run database/migrations/migrate_ioc_contract.py explicitly."
+        )
+
 
         print("⚠️ Old IOC table detected")
 
@@ -170,6 +176,11 @@ if ioc_table:
 
 
 else:
+
+    raise RuntimeError(
+        "IOC table is missing. Run database/migrations/migrate_ioc_contract.py "
+        "after provisioning the legacy IOC table."
+    )
 
 
     cursor.execute(

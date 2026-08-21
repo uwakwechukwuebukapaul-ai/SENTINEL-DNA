@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from uuid import uuid4
 
 @dataclass
 class InvestigationQualityAssessment:
@@ -14,6 +15,13 @@ class InvestigationQualityAssessment:
     confidence_score: float
     completeness_score: float
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    quality_id: str = field(default_factory=lambda: f"QUAL-{uuid4().hex}")
+    case_id: str | None = None
+    quality_status: str = "insufficient_data"
+    evidence_refs: list[str] = field(default_factory=list)
+    artifact_refs: list[str] = field(default_factory=list)
+    provenance: dict = field(default_factory=dict)
+    metadata: dict = field(default_factory=dict)
     def to_dict(self): return asdict(self)
 
 @dataclass

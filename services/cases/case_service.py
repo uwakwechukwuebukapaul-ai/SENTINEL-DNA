@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from database.connection import DatabaseConnection, database
 from services.audit import AuditService
 from .models import CaseAssignment
+
+
+@dataclass(frozen=True)
+class AuthorizedCaseAccess:
+    case_id: str
+    user_id: int
+    role: str
 
 
 class CaseService:
@@ -37,6 +45,27 @@ class CaseService:
         with self.db.session() as connection:
             row = connection.execute("SELECT case_id,user_id,assigned_by,assigned_at,status FROM case_assignments WHERE case_id=?", (case_id,)).fetchone()
         return dict(row) if row else None
+
+    def authorize(
+        self,
+        case_id: str,
+        user_id: int | None,
+        role: str | None,
+    ) -> AuthorizedCaseAccess | None:
+        """Return an authoritative case grant for an authenticated caller."""
+        if not user_id or not role:
+            return None
+        normalized_role = str(role).strip().lower()
+        if normalized_role in {"admin", "soc_manager"}:
+            return AuthorizedCaseAccess(case_id, int(user_id), normalized_role)
+        assignment = self.assignment(case_id)
+        if (
+            assignment
+            and assignment.get("status") == "ACTIVE"
+            and int(assignment.get("user_id", 0)) == int(user_id)
+        ):
+            return AuthorizedCaseAccess(case_id, int(user_id), normalized_role)
+        return None
 
     def add_note(self, case_id: str, user_id: int, note: str) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()

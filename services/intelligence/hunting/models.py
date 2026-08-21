@@ -34,3 +34,31 @@ class ThreatHunt:
     status: str = "open"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     def to_dict(self): return asdict(self)
+
+
+@dataclass(frozen=True)
+class HuntingHypothesis:
+    """An advisory hypothesis with explicit evidence basis."""
+    hypothesis_id: str
+    statement: str
+    tenant_id: str
+    evidence_references: tuple[str, ...]
+    evidence_source: str
+    provenance: dict[str, Any]
+    confidence: float
+    advisory_only: bool = True
+    def to_dict(self): return asdict(self)
+
+
+@dataclass(frozen=True)
+class IOCPivot:
+    """A read-only IOC pivot derived from canonical graph relationships."""
+    ioc_id: str
+    tenant_id: str
+    related_entities: tuple[dict[str, Any], ...]
+    related_events: tuple[dict[str, Any], ...]
+    evidence_references: tuple[str, ...]
+    evidence_source: str
+    provenance: dict[str, Any]
+    confidence: float
+    def to_dict(self): return asdict(self)
