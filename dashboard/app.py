@@ -15,6 +15,8 @@ from flask import (
     send_from_directory,
     Response,
     session,
+    redirect,
+    url_for,
 )
 
 from jinja2 import ChoiceLoader, FileSystemLoader
@@ -698,6 +700,13 @@ def dashboard_payload() -> dict:
 # ---------------------------------------------------------
 # DASHBOARD ROUTES
 # ---------------------------------------------------------
+
+@app.get("/login")
+def login_page():
+    """Render the browser login surface while retaining API authentication."""
+    if current_role():
+        return redirect(url_for("dashboard"))
+    return render_template("login.html")
 
 @app.get("/")
 @permission_required("investigations:read")
