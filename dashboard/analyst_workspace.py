@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, redirect, render_template, request, se
 from services.core.security_context import authorize_investigation, request_context
 from services.core.serialization import serialize
 from services.intelligence.workspace.v2 import AnalystWorkspaceV2Builder
+from services.intelligence.reporting.ai_investigator_report import AIInvestigatorReportService
 
 analyst_workspace = Blueprint("analyst_workspace", __name__, url_prefix="/workspace/analyst")
 workspace_entry_blueprint = Blueprint("workspace_entry", __name__, url_prefix="/workspace")
@@ -103,6 +104,23 @@ def investigation_detail(investigation_id: str):
     if detail is None:
         return render_template("error.html", message="Investigation not found."), 404
     return render_template("investigation_detail_v3.html", **principal, investigation=detail, csrf_token=session.get("csrf_token"))
+
+
+@workspace_entry_blueprint.get("/investigation/<investigation_id>/report")
+def investigation_report(investigation_id: str):
+    try:
+        principal = _entry_context()
+    except (LookupError, PermissionError, ValueError):
+        principal = None
+    if principal is None:
+        return render_template("error.html", message="Authentication and tenant membership are required."), 401
+    coordinator = current_app.container.require("investigation_coordinator")
+    report = AIInvestigatorReportService().build(
+        coordinator, investigation_id, principal["tenant_id"], request_context()
+    )
+    if report is None:
+        return render_template("error.html", message="Investigation not found."), 404
+    return render_template("investigation_report_v4.html", **principal, report=report.to_dict())
 
 
 @workspace_entry_blueprint.post("/investigation/<investigation_id>/start")
