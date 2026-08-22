@@ -17,7 +17,8 @@ def _principal():
         tenant, identity, membership = current_app.container.require("canonical_authority").resolve(context.tenant_id, context.actor_id)
     except (LookupError, PermissionError, ValueError):
         return None
-    return {"analyst": {"actor_id": identity.actor_id, "name": identity.display_name or identity.email, "email": identity.email, "role": membership.role}, "tenant": {"id": tenant.tenant_id, "name": tenant.name}, "tenant_id": tenant.tenant_id}
+    user = current_app.container.require("auth_service").get_by_id(context.user_id)
+    return {"analyst": {"actor_id": identity.actor_id, "name": identity.display_name or identity.email, "email": identity.email, "role": membership.role, "age": user.age() if user else None, "age_verified": bool(user and user.date_of_birth), "phone_verified": bool(user and user.phone_verified_at)}, "tenant": {"id": tenant.tenant_id, "name": tenant.name}, "tenant_id": tenant.tenant_id}
 
 
 def _authenticated(view):
@@ -38,6 +39,10 @@ def login_page():
 @browser.get("/signup")
 def signup_page():
     return redirect(url_for("browser.home")) if _principal() else render_template("signup.html")
+
+@browser.get("/forgot-password")
+def forgot_password_page():
+    return redirect(url_for("browser.home")) if _principal() else render_template("forgot_password.html")
 
 
 @browser.get("/")

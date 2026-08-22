@@ -66,8 +66,8 @@ def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
     response = auth_client.get("/signup")
 
     assert response.status_code == 200
-    assert b"Create an analyst account" in response.data
-    assert b"confirm-password" in response.data
+    assert b"Create your analyst account" in response.data
+    assert b"id=\"confirm\"" in response.data
     assert b"name=\"role\"" not in response.data
     assert b"name=\"tenant_id\"" not in response.data
 

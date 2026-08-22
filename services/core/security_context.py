@@ -33,9 +33,15 @@ def request_context() -> SecurityContext:
         if session_tenant and header_tenant and str(session_tenant) != str(header_tenant):
             error = "tenant_context_conflict"
         else:
-            candidate = session_tenant or header_tenant
+            if header_tenant and not session_tenant:
+                error = "tenant_context_required"
+                candidate = None
+            else:
+                candidate = session_tenant
             authority = current_app.container.get("canonical_authority")
             try:
+                if error:
+                    raise ValueError(error)
                 if candidate:
                     tenant, _identity, membership = authority.resolve(str(candidate), str(actor_id))
                     tenant_id = tenant.tenant_id

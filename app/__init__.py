@@ -7,6 +7,7 @@ and API layers.
 
 import logging
 import os
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -26,7 +27,7 @@ def create_app():
     )
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
-    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", DEMO_DATA_ENABLED=os.getenv("SENTINEL_DNA_DEMO_DATA", "0" if runtime_config.environment == "production" else "1") == "1")
+    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=timedelta(days=30), SESSION_REFRESH_EACH_REQUEST=False, AUTH_LEGACY_JSON_COMPAT=runtime_config.environment != "production", DEMO_DATA_ENABLED=os.getenv("SENTINEL_DNA_DEMO_DATA", "0" if runtime_config.environment == "production" else "1") == "1")
     if runtime_config.environment == "production":
         app.config.update(PROPAGATE_EXCEPTIONS=False, TRAP_HTTP_EXCEPTIONS=False)
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -79,6 +80,7 @@ def create_app():
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
+    from services.auth.routes import restore_persistent_session
     from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
     app.register_blueprint(browser)
@@ -104,6 +106,10 @@ def create_app():
     app.register_blueprint(pilot_reports_api)
     app.register_blueprint(pilot_management_api); app.register_blueprint(support_api)
     app.register_blueprint(exercise_api)
+
+    @app.before_request
+    def restore_authentication_cookie():
+        restore_persistent_session()
 
 
     # ==================================
@@ -193,6 +199,11 @@ def create_app():
 
     @app.after_request
     def add_runtime_headers(response):
+        from services.auth.routes import REMEMBER_COOKIE
+        if getattr(g, "remember_cookie", None):
+            response.set_cookie(REMEMBER_COOKIE, g.remember_cookie, max_age=30 * 24 * 60 * 60, httponly=True, secure=bool(app.config.get("SESSION_COOKIE_SECURE")), samesite="Lax", path="/")
+        if getattr(g, "clear_remember_cookie", False):
+            response.delete_cookie(REMEMBER_COOKIE, path="/")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
