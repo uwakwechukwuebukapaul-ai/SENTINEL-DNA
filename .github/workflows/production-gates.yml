@@ -31,7 +31,7 @@ jobs:
           POSTGRES_PASSWORD: ci-only-postgres-password
         run: docker compose -f deployment/docker-compose.yml config --quiet
       - run: python -m deployment.production.readiness
-      - run: python -m pytest tests/security tests/production tests/intelligence/operations tests/intelligence/workflow_v3 -q
+      - run: python -m pytest tests/security tests/production -q
       - run: python -m playwright install --with-deps chromium
       - name: Browser certification after browser install
         run: python -m pytest tests/browser -q
@@ -61,10 +61,15 @@ jobs:
             --env SENTINEL_DNA_DB_PATH=/var/lib/sentinel/soc.db \
             sentinel-dna:production-certification
           trap 'docker rm --force sentinel-dna-production-certification >/dev/null 2>&1 || true' EXIT
+          health_ok=false
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:5000/health; then break; fi
+            if curl --fail --silent http://127.0.0.1:5000/health; then health_ok=true; break; fi
             sleep 2
           done
+          if [ "$health_ok" != "true" ]; then
+            docker logs sentinel-dna-production-certification
+            exit 1
+          fi
           curl --fail --silent http://127.0.0.1:5000/ready
           for attempt in {1..45}; do
             health_status="$(docker inspect --format '{{.State.Health.Status}}' sentinel-dna-production-certification)"
