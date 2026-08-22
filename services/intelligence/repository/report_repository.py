@@ -208,6 +208,39 @@ class InvestigationReportRepository:
                 reports.append(report)
         return reports
 
+    def page_for_tenant(self, tenant_id: str, *, page: int = 1, page_size: int = 25, status: str | None = None):
+        """Return a bounded, stable tenant page from the canonical report table."""
+        page = int(page)
+        page_size = int(page_size)
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise ValueError("invalid_pagination")
+        clauses = [
+            "(json_extract(report_json, '$.tenant_context.tenant_id') = ? "
+            "OR json_extract(report_json, '$.metadata.tenant_id') = ?)"
+        ]
+        params: list[Any] = [str(tenant_id), str(tenant_id)]
+        if status:
+            clauses.append("json_extract(report_json, '$.status') = ?")
+            params.append(str(status))
+        where = " AND ".join(clauses)
+        offset = (page - 1) * page_size
+        with self.db.session() as connection:
+            rows = connection.execute(
+                f"SELECT report_json FROM investigation_reports WHERE {where} "
+                "ORDER BY updated_at DESC, case_id ASC LIMIT ? OFFSET ?",
+                [*params, page_size, offset],
+            ).fetchall()
+            total = connection.execute(
+                f"SELECT COUNT(*) AS total FROM investigation_reports WHERE {where}", params
+            ).fetchone()["total"]
+        return {
+            "items": [json.loads(row["report_json"]) for row in rows],
+            "page": page,
+            "page_size": page_size,
+            "total": int(total),
+            "has_next": offset + page_size < int(total),
+        }
+
 
 
     def clear(self):

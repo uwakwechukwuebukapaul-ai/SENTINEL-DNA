@@ -19,6 +19,15 @@
     <article><small>TENANT</small><strong>{{ tenant.name }}</strong></article>
   </section>
 
+  <section class="panel" role="region" aria-label="Investigation queue" aria-labelledby="analyst-queue-heading">
+    <div class="section-heading"><h2 id="analyst-queue-heading">Investigation queue</h2><span>Deterministic priority · {{ workflow_queue.get('total', 0) }} tenant-owned investigations</span></div>
+    <p class="muted">Priority reasons are evidence-backed and explainable. Recommendations remain advisory.</p>
+    <table><thead><tr><th>Investigation</th><th>Priority</th><th>Workflow</th><th>Risk / confidence</th><th>Owner</th><th>Why it needs attention</th><th>Action</th></tr></thead><tbody>
+      {% for item in workflow_queue.get('items', []) %}<tr data-queue-case="{{ item.case_id }}"><td><a href="{{ url_for('workspace_entry.investigation_detail', investigation_id=item.case_id) }}">{{ item.case_id }}</a><br><span>{{ item.title }}</span></td><td><strong>{{ item.priority|title }}</strong><br><small>{{ item.priority_score }}/100</small></td><td>{{ item.workflow_state|replace('_', ' ')|title }}</td><td>{{ item.risk|round(0) }} / {{ (item.confidence * 100)|round(0) }}%</td><td>{{ item.assigned_analyst or 'Unassigned' }}</td><td>{{ item.priority_reasons|join(', ') }}</td><td>{% if not item.assigned_analyst %}<button type="button" class="queue-claim" data-case-id="{{ item.case_id }}">Claim</button>{% else %}<span>Owned</span>{% endif %}</td></tr>{% else %}<tr><td colspan="7">No investigations require attention.</td></tr>{% endfor %}
+    </tbody></table>
+    <p id="queue-status" role="status" aria-live="polite"></p>
+  </section>
+
   <section class="panel"><div class="section-heading"><h2>Active investigations</h2><span>Canonical Investigator V1 data</span></div>
     <table><thead><tr><th>Investigation</th><th>Status</th><th>AI confidence</th><th>Risk score</th><th>Evidence</th><th>IOCs</th></tr></thead><tbody>
       {% for item in active_investigations %}<tr><td><a href="{{ url_for('workspace_entry.investigation_detail', investigation_id=item.case_id) }}">{{ item.case_id }}</a><br><span>{{ item.title }}</span></td><td>{{ item.status|replace('_', ' ')|title }}</td><td>{{ '%.0f'|format((item.ai_confidence or 0) * 100) }}%</td><td>{{ item.risk_score }} <small>{{ item.risk_severity }}</small></td><td>{{ item.evidence_count }}</td><td>{{ item.ioc_count }}</td></tr>
@@ -30,5 +39,6 @@
     <ul class="alerts">{% for alert in recent_alerts %}<li><strong>{{ alert.case_id }}</strong><span>{{ alert.description }}</span><small>{{ alert.created_at or 'Time unavailable' }}</small></li>{% else %}<li>No recent alerts.</li>{% endfor %}</ul>
   </section>
 </main>
+<script>(()=>{document.querySelectorAll('.queue-claim').forEach(button=>button.addEventListener('click',async()=>{button.disabled=true;const status=document.getElementById('queue-status');try{const r=await fetch('/api/investigations/'+encodeURIComponent(button.dataset.caseId)+'/claim',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'Claimed from analyst queue'})});if(!r.ok)throw new Error('Claim was not permitted.');status.textContent='Investigation claimed. Refreshing queue…';window.location.reload()}catch(error){status.textContent=error.message;button.disabled=false}}))})()</script>
 </body>
 </html>

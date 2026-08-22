@@ -77,17 +77,41 @@ from services.intelligence.investigation.analyst_feedback import AnalystFeedback
 from services.intelligence.investigation.analyst_feedback_service import AnalystFeedbackService
 from services.intelligence.investigation.read_model import InvestigationReadModelBuilder
 from services.intelligence.repository.feedback_repository import InvestigationFeedbackRepository
+from services.intelligence.repository.execution_repository import InvestigationExecutionRepository
+from services.intelligence.repository.collaboration_repository import AnalystCollaborationRepository
+from services.intelligence.repository.evidence_review_repository import EvidenceReviewRepository
+from services.intelligence.repository.operational_alert_repository import OperationalAlertRepository
+from services.intelligence.repository.operational_alert_policy_repository import OperationalAlertPolicyRepository
+from services.intelligence.repository.operational_alert_assignment_repository import OperationalAlertAssignmentRepository
+from services.intelligence.repository.operations_evaluation_repository import OperationsEvaluationRepository
+from services.intelligence.repository.operational_notification_repository import OperationalNotificationRepository
+from services.intelligence.repository.operations_notification_rule_repository import OperationsNotificationRuleRepository
+from services.intelligence.repository.case_lifecycle_repository import CaseLifecycleRepository
+from services.intelligence.reporting.compliance_export import ComplianceExportBuilder
 from services.intelligence.feedback.analytics import FeedbackAnalyticsService
 from services.intelligence.investigation_quality import InvestigationQualityRepository, InvestigationQualityService
 from services.audit.service import AuditService
 from services.intelligence.decision.engine import DecisionEngine
 from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
+from services.intelligence.reporting.investigation_report_v2 import InvestigationReportV2Builder, PdfReportRenderer
 from services.intelligence.threat_intelligence import ThreatCorrelationEngine
 from services.intelligence.fusion import ProviderNeutralFusionEngine
 from services.intelligence.investigation.decision import DecisionIntelligenceEngine
 from services.intelligence.investigation.attack_sequence import AttackSequenceAnalyzer
+from services.intelligence.workspace.explainability_projection import ExplainabilityProjectionBuilder
+from services.intelligence.workspace.evidence_graph import (
+    EvidenceGraphProjectionBuilder,
+    EvidenceGraphWorkspaceProjectionBuilder,
+    EvidenceComparisonProjectionBuilder,
+    ContradictionProjectionBuilder,
+    InvestigationReportExportBuilder,
+    productivity_latencies,
+)
+from services.intelligence.workflow_v3 import AnalystWorkflowV3Service
 import time
+from datetime import datetime, timezone
+from uuid import uuid4
 
 
 # ============================================================
@@ -198,6 +222,19 @@ class InvestigationCoordinator:
             else ProviderNeutralFusionEngine()
         )
         self.feedback_repository = InvestigationFeedbackRepository(database)
+        self.execution_repository = InvestigationExecutionRepository(database)
+        self.collaboration_repository = AnalystCollaborationRepository(database)
+        self.evidence_review_repository = EvidenceReviewRepository(database)
+        self.case_lifecycle_repository = CaseLifecycleRepository(database)
+        self.operational_alert_repository = OperationalAlertRepository(database)
+        self.operational_alert_policy_repository = OperationalAlertPolicyRepository(database)
+        self.operational_alert_assignment_repository = OperationalAlertAssignmentRepository(database)
+        self.operations_evaluation_repository = OperationsEvaluationRepository(database)
+        self.operational_notification_repository = OperationalNotificationRepository(database)
+        self.operations_notification_rule_repository = OperationsNotificationRuleRepository(database)
+        self.assignment_directory = None
+        self.audit_service = AuditService(database)
+        self.compliance_export_builder = ComplianceExportBuilder()
         self.feedback_service = AnalystFeedbackService(self.feedback_repository, AuditService(database))
         self.feedback_analytics = FeedbackAnalyticsService(self.feedback_repository)
         self.investigation_quality_repository = InvestigationQualityRepository(database)
@@ -207,6 +244,15 @@ class InvestigationCoordinator:
             self.investigation_quality_repository,
             self.feedback_repository,
         )
+        self.explainability_projection = ExplainabilityProjectionBuilder()
+        self.evidence_graph_projection = EvidenceGraphProjectionBuilder()
+        self.evidence_graph_workspace_projection = EvidenceGraphWorkspaceProjectionBuilder()
+        self.evidence_comparison_projection = EvidenceComparisonProjectionBuilder()
+        self.contradiction_projection = ContradictionProjectionBuilder()
+        self.report_export_projection = InvestigationReportExportBuilder()
+        self.report_v2_projection = InvestigationReportV2Builder()
+        self.pdf_report_renderer = PdfReportRenderer()
+        self.analyst_workflow_v3 = AnalystWorkflowV3Service(self)
 
 
     # ========================================================
@@ -897,6 +943,8 @@ class InvestigationCoordinator:
             raise LookupError("investigation_not_found")
         metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
         investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        history = self.feedback_repository.list_for_investigation(str(tenant_id), investigation_id)
+        previous_state = history[-1].to_dict().get("disposition") if history else "unassigned"
         feedback = self.feedback_service.record(
             investigation_id=investigation_id,
             case_id=str(case_id),
@@ -904,6 +952,7 @@ class InvestigationCoordinator:
             analyst_id=str(analyst_id),
             payload=payload,
             report=report,
+            previous_state=previous_state,
         )
         ObservabilityService().event(
             "investigation_feedback_recorded",
@@ -913,6 +962,147 @@ class InvestigationCoordinator:
             feedback_decision=feedback.decision,
         )
         return feedback
+
+    def add_collaboration_event(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        report = self.get_report_by_case_id(case_id, tenant_id)
+        if report is None:
+            raise LookupError("investigation_not_found")
+        evidence_ids = {str(item.get("evidence_id") or item.get("id") or item.get("reference")) for item in (report.get("evidence") or []) if isinstance(item, dict)}
+        evidence_id = payload.get("evidence_id")
+        if evidence_id and str(evidence_id) not in evidence_ids:
+            raise ValueError("evidence_not_found")
+        event_kind = str(payload.get("event_kind") or "note").lower()
+        if event_kind not in {"note", "comment", "finding_annotation", "ioc_annotation", "reasoning_annotation"}:
+            raise ValueError("invalid_collaboration_event")
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        event = self.collaboration_repository.append(investigation_id=investigation_id, case_id=case_id, tenant_id=tenant_id, actor_id=actor_id, event_kind=event_kind, content=payload.get("content") or payload.get("note") or "", parent_event_id=payload.get("parent_event_id"), evidence_id=evidence_id, mentions=payload.get("mentions", []))
+        AuditService(database).record("ANALYST_COLLABORATION_RECORDED", case_id=str(case_id), user_id=str(actor_id), details={"tenant_id": str(tenant_id), "event_id": event["event_id"], "event_kind": event_kind, "evidence_id": evidence_id})
+        return event
+
+    def get_collaboration(self, case_id: str, tenant_id: str) -> list[dict[str, Any]]:
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        return self.collaboration_repository.list_for_case(case_id, tenant_id=tenant_id)
+
+    def review_evidence(self, case_id: str, evidence_id: str, new_state: str, reason: str, *, tenant_id: str, actor_id: str, priority="normal", assigned_to=None, review_deadline=None) -> dict[str, Any]:
+        report = self.get_report_by_case_id(case_id, tenant_id)
+        if report is None:
+            raise LookupError("investigation_not_found")
+        evidence = report.get("evidence") or report.get("artifacts") or []
+        valid = {str(item.get("evidence_id") or item.get("id") or item.get("reference")) for item in evidence if isinstance(item, dict)}
+        if str(evidence_id) not in valid:
+            raise ValueError("evidence_not_found")
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        event = self.evidence_review_repository.append(investigation_id=investigation_id, case_id=case_id, tenant_id=tenant_id, actor_id=actor_id, evidence_id=evidence_id, new_state=new_state, reason=reason, priority=priority, assigned_to=assigned_to, review_deadline=review_deadline)
+        AuditService(database).record("EVIDENCE_REVIEW_CHANGED", case_id=str(case_id), user_id=str(actor_id), details={"tenant_id": str(tenant_id), "evidence_id": str(evidence_id), "previous_state": event["previous_state"], "new_state": event["new_state"]})
+        return event
+
+    def get_review_queue(self, tenant_id: str, *, states=None, priority=None, assigned_to=None) -> list[dict[str, Any]]:
+        items = self.evidence_review_repository.current_queue(tenant_id=str(tenant_id), states=None, priority=None, assigned_to=None)
+        if states:
+            items = [item for item in items if item.get("new_state") in set(states)]
+        if priority:
+            items = [item for item in items if item.get("priority") == priority]
+        if assigned_to:
+            items = [item for item in items if item.get("assigned_to") == assigned_to]
+        return items
+
+    def assign_case(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        target = str(payload.get("assignee_id") or "").strip()
+        assignment_type = str(payload.get("assignment_type") or "case_owner")
+        if assignment_type not in {"case_owner", "reviewer", "escalation_owner"} or not target:
+            raise ValueError("valid_assignment_required")
+        if self.assignment_directory is not None:
+            self.assignment_directory.validate_target(tenant_id=str(tenant_id), actor_id=target)
+        event = self.case_lifecycle_repository.append(case_id=case_id, investigation_id=case_id, tenant_id=tenant_id, actor_id=actor_id, event_kind="assignment", state=assignment_type, reason=str(payload.get("reason") or ""), details={"assigned_to": target, "assignment_type": assignment_type})
+        AuditService(database).record("INVESTIGATION_ASSIGNMENT_CHANGED", case_id=case_id, user_id=actor_id, details={"tenant_id": tenant_id, "assignment_type": assignment_type, "assigned_to": target})
+        return event
+
+    def get_assignments(self, case_id: str, tenant_id: str) -> list[dict[str, Any]]:
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        return self.case_lifecycle_repository.assignments(case_id, tenant_id=tenant_id)
+
+    def set_sla(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        priority = str(payload.get("priority") or "normal")
+        if priority not in {"low", "normal", "high", "critical"}:
+            raise ValueError("invalid_investigation_priority")
+        event = self.case_lifecycle_repository.append(case_id=case_id, investigation_id=case_id, tenant_id=tenant_id, actor_id=actor_id, event_kind="sla", state="overdue" if payload.get("overdue") else "active", reason=str(payload.get("reason") or ""), details={"priority": priority, "response_deadline": payload.get("response_deadline"), "review_deadline": payload.get("review_deadline"), "escalation_status": payload.get("escalation_status", "not_escalated")})
+        AuditService(database).record("INVESTIGATION_SLA_RECORDED", case_id=case_id, user_id=actor_id, details={"tenant_id": tenant_id, "priority": priority})
+        return event
+
+    def escalate_case(self, case_id: str, payload: dict[str, Any], *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        owner = str(payload.get("escalation_owner") or "").strip()
+        if not owner:
+            raise ValueError("escalation_owner_required")
+        event = self.case_lifecycle_repository.append(case_id=case_id, investigation_id=case_id, tenant_id=tenant_id, actor_id=actor_id, event_kind="escalation", state="escalated", reason=str(payload.get("reason") or ""), details={"escalation_owner": owner, "status": "open"})
+        AuditService(database).record("INVESTIGATION_ESCALATED", case_id=case_id, user_id=actor_id, details={"tenant_id": tenant_id, "escalation_owner": owner})
+        return event
+
+    def get_evidence_reviews(self, case_id: str, tenant_id: str) -> list[dict[str, Any]]:
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        return self.evidence_review_repository.list_for_case(case_id, tenant_id=tenant_id)
+
+    def change_case_lifecycle(self, case_id: str, state: str, reason: str, *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        allowed_states = {"open", "under_review", "ready_for_closure", "closed", "reopened"}
+        if state not in allowed_states:
+            raise ValueError("invalid_case_lifecycle_state")
+        report = self.get_report_by_case_id(case_id, tenant_id)
+        if report is None:
+            raise LookupError("investigation_not_found")
+        feedback = self.get_feedback(case_id, tenant_id)
+        if state == "closed" and not feedback:
+            raise ValueError("disposition_required_before_closure")
+        previous = self.case_lifecycle_repository.latest(case_id, tenant_id=tenant_id)
+        metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        event = self.case_lifecycle_repository.append(case_id=case_id, investigation_id=str(metadata.get("investigation_id") or case_id), tenant_id=tenant_id, actor_id=actor_id, event_kind="case_reopened" if state == "reopened" else "case_lifecycle", state=state, reason=reason, details={"previous_state": previous.get("state") if previous else "open"})
+        AuditService(database).record("INVESTIGATION_LIFECYCLE_CHANGED", case_id=str(case_id), user_id=str(actor_id), details={"tenant_id": str(tenant_id), "previous_state": event["details"].get("previous_state"), "new_state": state, "reason": reason})
+        return event
+
+    def approve_report(self, case_id: str, state: str, reason: str, *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        if state not in {"draft", "analyst_reviewed", "approved", "rejected"}:
+            raise ValueError("invalid_report_approval_state")
+        if self.get_report_by_case_id(case_id, tenant_id) is None:
+            raise LookupError("investigation_not_found")
+        event = self.case_lifecycle_repository.append(case_id=case_id, investigation_id=case_id, tenant_id=tenant_id, actor_id=actor_id, event_kind="report_approval", state=state, reason=reason, details={"reviewer_id": actor_id})
+        AuditService(database).record("INVESTIGATION_REPORT_APPROVAL_CHANGED", case_id=str(case_id), user_id=str(actor_id), details={"tenant_id": str(tenant_id), "state": state, "reason": reason})
+        return event
+
+    def get_compliance_export(self, case_id: str, security_context: Any) -> dict[str, Any] | None:
+        return self.compliance_export_builder.build(self, case_id, security_context)
+
+    def get_audit_timeline(self, case_id: str, security_context: Any) -> list[dict[str, Any]]:
+        tenant_id = getattr(security_context, "tenant_id", None)
+        report = self.get_report_by_case_id(case_id, str(tenant_id)) if tenant_id else None
+        if not tenant_id or report is None:
+            raise LookupError("investigation_not_found")
+        report_metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+        investigation_id = str(report_metadata.get("investigation_id") or report.get("investigation_id") or case_id)
+        events = []
+        for execution in self.execution_repository.list_for_case(case_id, tenant_id=str(tenant_id)):
+            events.append({"timestamp": execution.get("started_at"), "event": "investigation_started", "actor_id": execution.get("actor_id"), "execution_id": execution.get("execution_id")})
+            if execution.get("evidence_refs"):
+                events.append({"timestamp": execution.get("updated_at", execution.get("completed_at")), "event": "evidence_collected", "evidence_refs": execution.get("evidence_refs", [])})
+            for provider in execution.get("provider_states", []) or []:
+                events.append({"timestamp": provider.get("timestamp", execution.get("completed_at")), "event": "provider_unavailable" if str(provider.get("status", "")).upper() == "UNAVAILABLE" else "intelligence_queried", "provider": provider.get("provider"), "reason": provider.get("unavailable_reason")})
+        for item in self.feedback_repository.list_for_investigation(str(tenant_id), investigation_id):
+            value = item.to_dict(); events.append({"timestamp": value.get("created_at"), "event": "disposition_changed", "actor_id": value.get("analyst_id"), "previous_state": value.get("metadata", {}).get("previous_state"), "new_state": value.get("disposition"), "evidence_refs": value.get("evidence_refs", [])})
+        for item in self.collaboration_repository.list_for_case(case_id, tenant_id=str(tenant_id)):
+            events.append({"timestamp": item.get("created_at"), "event": "analyst_" + str(item.get("event_kind")), "actor_id": item.get("actor_id"), "content": item.get("content"), "evidence_id": item.get("evidence_id")})
+        for item in self.evidence_review_repository.list_for_case(case_id, tenant_id=str(tenant_id)):
+            events.append({"timestamp": item.get("created_at"), "event": "evidence_review_changed", "actor_id": item.get("actor_id"), "evidence_id": item.get("evidence_id"), "previous_state": item.get("previous_state"), "new_state": item.get("new_state"), "reason": item.get("reason")})
+        for item in self.case_lifecycle_repository.list_for_case(case_id, tenant_id=str(tenant_id)):
+            events.append({"timestamp": item.get("created_at"), "event": item.get("event_kind"), "actor_id": item.get("actor_id"), "state": item.get("state"), "reason": item.get("reason"), "previous_state": item.get("details", {}).get("previous_state")})
+        return sorted(events, key=lambda item: str(item.get("timestamp") or ""))
 
     def get_feedback(self, case_id: str, tenant_id: str) -> list[dict[str, Any]]:
         report = self.get_report_by_case_id(case_id, tenant_id)
@@ -933,6 +1123,151 @@ class InvestigationCoordinator:
         investigation_id = str(metadata.get("investigation_id") or report.get("investigation_id") or case_id)
         records = self.feedback_repository.list_for_investigation(tenant_id, investigation_id)
         return self.feedback_analytics.evidence_linked_quality(tenant_id, report, records, **filters)
+
+    def _persist_execution_snapshot(self, result: InvestigationResult, *, tenant_id: str, actor_id: str | None = None) -> None:
+        """Persist only the analyst-safe operational projection of a result."""
+        data = result.to_dict()
+        execution = dict(data.get("execution") or {})
+        evidence = list(data.get("artifacts") or data.get("evidence") or [])
+        evidence_refs = sorted({str(item.get("evidence_id") or item.get("reference") or item.get("id")) for item in evidence if isinstance(item, dict) and (item.get("evidence_id") or item.get("reference") or item.get("id"))})
+        intelligence = data.get("intelligence") if isinstance(data.get("intelligence"), dict) else {}
+        status = intelligence.get("normalized", {}).get("metadata", {}).get("intelligence_status", {}) if isinstance(intelligence.get("normalized"), dict) else {}
+        provider_states = status.get("provider_results") or status.get("observations") or []
+        snapshot = {
+            **execution,
+            "execution_id": data.get("execution_id") or execution.get("execution_id"),
+            "investigation_id": data.get("investigation_id") or data.get("case_id"),
+            "case_id": data.get("case_id"),
+            "status": data.get("status") or execution.get("status"),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "task_states": execution.get("tasks", []),
+            "provider_states": provider_states,
+            "evidence_refs": evidence_refs,
+            "findings": data.get("findings", []),
+            "risk": data.get("risk"),
+            "decision": data.get("decision_report"),
+            "failures": data.get("errors", []),
+        }
+        saved = self.execution_repository.save(snapshot, tenant_id=str(tenant_id), actor_id=actor_id)
+        data["execution_id"] = saved["execution_id"]
+        result.execution_id = saved["execution_id"]
+        result.execution = {**execution, "execution_id": saved["execution_id"], "started_at": saved.get("started_at"), "completed_at": saved.get("completed_at")}
+
+    def get_evidence_drilldown(self, case_id: str, evidence_id: str, security_context: Any) -> dict[str, Any] | None:
+        tenant_id = getattr(security_context, "tenant_id", None)
+        if not tenant_id:
+            raise PermissionError("investigation tenant authorization is required")
+        view = self.get_investigation_view(case_id, security_context)
+        if not view:
+            return None
+        evidence = next((item for item in view.get("evidence", []) if str(item.get("evidence_id") or item.get("id") or item.get("reference")) == str(evidence_id)), None)
+        if not evidence:
+            return None
+        findings = [item for item in view.get("findings", []) if str(evidence_id) in {str(ref) for ref in item.get("evidence_refs", [])}]
+        iocs = [item for item in view.get("iocs", []) if str(evidence_id) in {str(ref) for ref in item.get("evidence_refs", item.get("evidence_references", []))}]
+        mitre = [item for item in view.get("mitre", []) if str(evidence_id) in {str(ref) for ref in item.get("evidence_refs", item.get("evidence_references", []))}]
+        timeline = [item for item in view.get("timeline", []) if str(evidence_id) in {str(ref) for ref in item.get("evidence_refs", item.get("evidence_references", []))}]
+        reviews = self.evidence_review_repository.list_for_evidence(case_id, evidence_id, tenant_id=str(tenant_id))
+        return {"version": "evidence-drilldown-v1", "case_id": str(case_id), "evidence": evidence, "findings": findings, "reasoning_claims": findings, "iocs": iocs, "mitre": mitre, "timeline_events": timeline, "reviews": reviews, "why_it_matters": [item.get("finding") for item in findings if item.get("finding")], "provenance": evidence.get("provenance", {}), "tenant_id": str(tenant_id)}
+
+    def get_investigation_explainability(self, case_id: str, security_context: Any) -> dict[str, Any] | None:
+        tenant_id = getattr(security_context, "tenant_id", None)
+        if not tenant_id:
+            raise PermissionError("investigation tenant authorization is required")
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            return None
+        timeline = self.get_audit_timeline(case_id, security_context)
+        return self.explainability_projection.build(view, audit_timeline=timeline)
+
+    def get_investigation_productivity(self, security_context: Any) -> dict[str, Any]:
+        tenant_id = getattr(security_context, "tenant_id", None)
+        if not tenant_id:
+            raise PermissionError("investigation tenant authorization is required")
+        return productivity_latencies(self, str(tenant_id))
+
+    def get_evidence_graph(self, case_id: str, security_context: Any) -> dict[str, Any] | None:
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            return None
+        explainability = self.get_investigation_explainability(case_id, security_context) or {}
+        approval = self.case_lifecycle_repository.latest(case_id, tenant_id=str(getattr(security_context, "tenant_id", "")), event_kind="report_approval")
+        return self.evidence_graph_projection.build(view, explainability, self.get_audit_timeline(case_id, security_context), approval)
+
+    def compare_evidence(self, case_id: str, evidence_a: str, evidence_b: str, security_context: Any) -> dict[str, Any]:
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            raise LookupError("investigation_not_found")
+        return self.evidence_comparison_projection.build(case_id, view, evidence_a, evidence_b)
+
+    def get_contradictions(self, case_id: str, security_context: Any) -> dict[str, Any]:
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            raise LookupError("investigation_not_found")
+        projection = self.contradiction_projection.build(case_id, self.get_investigation_explainability(case_id, security_context) or {}, view)
+        tenant_id = str(getattr(security_context, "tenant_id", ""))
+        review_events = {}
+        for event in self.case_lifecycle_repository.list_for_case(case_id, tenant_id=tenant_id):
+            if event.get("event_kind") != "contradiction_review":
+                continue
+            contradiction_id = (event.get("details") or {}).get("contradiction_id")
+            if contradiction_id:
+                review_events[str(contradiction_id)] = event
+        for item in projection.get("items", []):
+            event = review_events.get(str(item.get("contradiction_id")))
+            if event:
+                item["analyst_review_state"] = event.get("state", "unreviewed")
+                item["review_reason"] = event.get("reason", "")
+                item["reviewed_at"] = event.get("created_at")
+                item["reviewer_id"] = event.get("actor_id")
+        return projection
+
+    def get_report_export(self, case_id: str, security_context: Any) -> dict[str, Any]:
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            raise LookupError("investigation_not_found")
+        tenant_id = str(getattr(security_context, "tenant_id", ""))
+        approval = self.case_lifecycle_repository.list_for_case(case_id, tenant_id=tenant_id)
+        approval = [item for item in approval if item.get("event_kind") == "report_approval"]
+        return self.report_export_projection.build(case_id, view, self.get_investigation_explainability(case_id, security_context) or {}, self.get_evidence_graph(case_id, security_context) or {}, self.get_audit_timeline(case_id, security_context), approval)
+
+    def get_evidence_graph_workspace(self, case_id: str, security_context: Any) -> dict[str, Any] | None:
+        graph = self.get_evidence_graph(case_id, security_context)
+        if graph is None:
+            return None
+        return self.evidence_graph_workspace_projection.build(graph, self.get_contradictions(case_id, security_context))
+
+    def get_report_v2(self, case_id: str, security_context: Any) -> dict[str, Any]:
+        view = self.get_investigation_view(case_id, security_context)
+        if view is None:
+            raise LookupError("investigation_not_found")
+        tenant_id = str(getattr(security_context, "tenant_id", ""))
+        lifecycle = self.case_lifecycle_repository.list_for_case(case_id, tenant_id=tenant_id)
+        approvals = [item for item in lifecycle if item.get("event_kind") == "report_approval"]
+        explainability = self.get_investigation_explainability(case_id, security_context) or {}
+        graph = self.get_evidence_graph(case_id, security_context) or {}
+        contradictions = self.get_contradictions(case_id, security_context)
+        return self.report_v2_projection.build(case_id, view, explainability, graph, contradictions, self.get_audit_timeline(case_id, security_context), approvals)
+
+    def get_report_v2_pdf(self, case_id: str, security_context: Any) -> bytes:
+        return self.pdf_report_renderer.render(self.get_report_v2(case_id, security_context))
+
+    def review_contradiction(self, case_id: str, contradiction_id: str, state: str, reason: str, *, tenant_id: str, actor_id: str) -> dict[str, Any]:
+        if state not in {"acknowledged", "reviewed", "resolved", "additional_evidence_requested"}:
+            raise ValueError("invalid_contradiction_review_state")
+        current = self.get_contradictions(case_id, type("Context", (), {"tenant_id": str(tenant_id)})())
+        contradiction = next((item for item in current.get("items", []) if item.get("contradiction_id") == contradiction_id), None)
+        if contradiction is None:
+            raise LookupError("contradiction_not_found")
+        event = self.case_lifecycle_repository.append(case_id=case_id, investigation_id=case_id, tenant_id=str(tenant_id), actor_id=str(actor_id), event_kind="contradiction_review", state=state, reason=reason, details={"contradiction_id": contradiction_id, "previous_state": contradiction.get("analyst_review_state", "unreviewed")})
+        AuditService(database).record("INVESTIGATION_CONTRADICTION_REVIEWED", case_id=str(case_id), user_id=str(actor_id), details={"tenant_id": str(tenant_id), "contradiction_id": contradiction_id, "state": state})
+        return event
+
+    def compare_execution_projections(self, execution_a: str, execution_b: str, security_context: Any) -> dict[str, Any] | None:
+        tenant_id = getattr(security_context, "tenant_id", None)
+        if not tenant_id:
+            raise PermissionError("execution tenant authorization is required")
+        return self.execution_repository.compare(execution_a, execution_b, tenant_id=str(tenant_id))
 
 
     def investigate(
@@ -1096,7 +1431,12 @@ class InvestigationCoordinator:
 
 
         execution = {
+            "execution_id": f"EXE-{uuid4().hex}",
             "case_id": case_id,
+            "investigation_id": alert_data.get("investigation_id", case_id),
+            "tenant_id": tenant_id,
+            "actor_id": actor_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "status": "pending",
             "capabilities": capabilities,
             "results": [],
@@ -1254,6 +1594,8 @@ class InvestigationCoordinator:
                 owned_evidence=owned_evidence,
                 source_timeline=context.timeline,
             )
+            if tenant_id:
+                self._persist_execution_snapshot(result, tenant_id=str(tenant_id), actor_id=actor_id)
             observer.event(
                 "INTELLIGENCE_GENERATED",
                 case_id=case_id,
@@ -1284,6 +1626,8 @@ class InvestigationCoordinator:
                 **({"correlation_id": kwargs.get("correlation_id")} if kwargs.get("correlation_id") else {}),
             },
         )
+        if tenant_id:
+            self._persist_execution_snapshot(result, tenant_id=str(tenant_id), actor_id=actor_id)
         observer.event(
             "INVESTIGATION_STARTED",
             case_id=case_id,

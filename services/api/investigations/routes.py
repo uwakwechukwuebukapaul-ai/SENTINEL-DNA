@@ -31,6 +31,7 @@ from flask import (
     jsonify,
     request,
     session,
+    Response,
 )
 
 
@@ -381,6 +382,519 @@ def get_investigation_feedback(case_id: str):
     except LookupError:
         return jsonify({"error": "investigation_not_found"}), 404
     return jsonify({"case_id": case_id, "feedback": feedback})
+
+
+@investigations_api.post("/<case_id>/collaboration")
+def add_investigation_collaboration(case_id: str):
+    context = request_context()
+    actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    try:
+        event = _coordinator().add_collaboration_event(case_id, request.get_json(silent=True) or {}, tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None)
+    return jsonify({"success": True, "event": event}), 201
+
+
+@investigations_api.get("/<case_id>/collaboration")
+def get_investigation_collaboration(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        events = _coordinator().get_collaboration(case_id, str(context.tenant_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    for event in events:
+        event.pop("tenant_id", None)
+    return jsonify({"version": "analyst-collaboration-v1", "case_id": case_id, "events": events})
+
+
+@investigations_api.post("/<case_id>/notes")
+def add_analyst_note(case_id: str):
+    context = request_context(); actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id: return jsonify({"error": "analyst_identity_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    payload["event_kind"] = "note" if payload.get("event_kind") == "handoff" else payload.get("event_kind", "note")
+    try:
+        event = _coordinator().add_collaboration_event(case_id, payload, tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError: return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc: return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None)
+    return jsonify({"success": True, "event": event}), 201
+
+
+@investigations_api.post("/<case_id>/decision")
+def post_analyst_decision(case_id: str):
+    return submit_investigation_feedback(case_id)
+
+
+@investigations_api.get("/<case_id>/audit-timeline")
+def get_investigation_audit_timeline(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        timeline = _coordinator().get_audit_timeline(case_id, context)
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"version": "investigation-audit-timeline-v1", "case_id": case_id, "events": timeline})
+
+
+@investigations_api.get("/<case_id>/evidence-review")
+def get_evidence_review(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        reviews = _coordinator().get_evidence_reviews(case_id, str(context.tenant_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"version": "evidence-review-v1", "case_id": case_id, "reviews": reviews})
+
+
+@investigations_api.get("/review-queue")
+def get_review_queue():
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    states = [item for item in request.args.get("states", "").split(",") if item] or None
+    return jsonify({"version": "evidence-review-queue-v1", "items": _coordinator().get_review_queue(str(context.tenant_id), states=states, priority=request.args.get("priority"), assigned_to=request.args.get("assigned_to"))})
+
+
+@investigations_api.post("/<case_id>/evidence-review")
+def post_evidence_review(case_id: str):
+    context = request_context()
+    actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        review = _coordinator().review_evidence(case_id, payload.get("evidence_id"), payload.get("new_state", "reviewed"), payload.get("reason", ""), tenant_id=str(context.tenant_id), actor_id=str(actor_id), priority=payload.get("priority", "normal"), assigned_to=payload.get("assigned_to"), review_deadline=payload.get("review_deadline"))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    review.pop("tenant_id", None)
+    return jsonify({"success": True, "review": review}), 201
+
+
+@investigations_api.get("/<case_id>/assignments")
+def get_case_assignments(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: items = _coordinator().get_assignments(case_id, str(context.tenant_id))
+    except LookupError: return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"version": "case-assignment-v1", "case_id": case_id, "assignments": items})
+
+
+@investigations_api.post("/<case_id>/assignment")
+def post_case_assignment(case_id: str):
+    context = request_context(); actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id: return jsonify({"error": "analyst_identity_required"}), 403
+    try: event = _coordinator().assign_case(case_id, request.get_json(silent=True) or {}, tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError: return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc: return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None); return jsonify({"success": True, "assignment": event}), 201
+
+
+@investigations_api.get("/<case_id>/sla")
+def get_case_sla(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: value = _coordinator().case_lifecycle_repository.latest_sla(case_id, tenant_id=str(context.tenant_id))
+    except Exception: value = None
+    return jsonify({"version": "investigation-sla-v1", "case_id": case_id, "sla": value})
+
+
+@investigations_api.post("/<case_id>/escalation")
+def post_case_escalation(case_id: str):
+    context = request_context(); actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id: return jsonify({"error": "analyst_identity_required"}), 403
+    try: event = _coordinator().escalate_case(case_id, request.get_json(silent=True) or {}, tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError: return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc: return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None); return jsonify({"success": True, "escalation": event}), 201
+
+
+@investigations_api.get("/<case_id>/compliance-export")
+def get_compliance_export(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        export = _coordinator().get_compliance_export(case_id, context)
+    except (LookupError, PermissionError):
+        return jsonify({"error": "investigation_not_found"}), 404
+    if export is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify(export)
+
+
+@investigations_api.post("/<case_id>/closure")
+def post_case_closure(case_id: str):
+    context = request_context()
+    actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        event = _coordinator().change_case_lifecycle(case_id, payload.get("state", "closed"), payload.get("reason", ""), tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None)
+    return jsonify({"success": True, "lifecycle": event}), 201
+
+
+@investigations_api.post("/<case_id>/report-approval")
+def post_report_approval(case_id: str):
+    context = request_context()
+    actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    requested_state = str(payload.get("state", "analyst_reviewed"))
+    if requested_state in {"approved", "rejected"} and not set(context.roles).intersection({"admin", "soc_manager"}):
+        return jsonify({"error": "approval_authorization_required"}), 403
+    try:
+        event = _coordinator().approve_report(case_id, requested_state, payload.get("reason", ""), tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None)
+    return jsonify({"success": True, "approval": event}), 201
+
+
+def _workflow_v3():
+    return _coordinator().analyst_workflow_v3
+
+
+@investigations_api.get("/queue")
+def get_analyst_workflow_queue():
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        page = int(request.args.get("page", 1)); page_size = int(request.args.get("page_size", 25))
+        filters = {key: request.args.get(key) for key in ("status", "severity", "workflow_state", "sla_state", "escalation_state", "contradiction_state", "intelligence_freshness", "priority") if request.args.get(key)}
+        filters["unassigned"] = request.args.get("unassigned")
+        filters["mitre"] = request.args.get("mitre")
+        return jsonify(_workflow_v3().queue(str(context.tenant_id), page=page, page_size=page_size, filters=filters))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@investigations_api.get("/<case_id>/workflow")
+def get_analyst_workflow(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: return jsonify(_workflow_v3().workflow(case_id, str(context.tenant_id)))
+    except (LookupError, PermissionError): return jsonify({"error": "investigation_not_found"}), 404
+
+
+@investigations_api.get("/<case_id>/readiness")
+def get_analyst_workflow_readiness(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: return jsonify(_workflow_v3().readiness(case_id, str(context.tenant_id)))
+    except (LookupError, PermissionError): return jsonify({"error": "investigation_not_found"}), 404
+
+
+@investigations_api.get("/<case_id>/evidence-priorities")
+def get_evidence_priorities(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: return jsonify(_workflow_v3().evidence_priorities(case_id, str(context.tenant_id)))
+    except (LookupError, PermissionError): return jsonify({"error": "investigation_not_found"}), 404
+
+
+@investigations_api.post("/<case_id>/claim")
+def claim_analyst_workflow_case(case_id: str):
+    context = request_context(); actor_id = getattr(context, "actor_id", None) or session.get("actor_id")
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: event = _workflow_v3().claim(case_id, str(context.tenant_id), str(actor_id), (request.get_json(silent=True) or {}).get("reason", ""))
+    except (LookupError, PermissionError) as exc: return jsonify({"error": str(exc)}), 404 if isinstance(exc, LookupError) else 403
+    event.pop("tenant_id", None); return jsonify({"success": True, "assignment": event}), 201
+
+
+@investigations_api.post("/<case_id>/release")
+def release_analyst_workflow_case(case_id: str):
+    context = request_context(); actor_id = getattr(context, "actor_id", None) or session.get("actor_id")
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try: event = _workflow_v3().release(case_id, str(context.tenant_id), str(actor_id), (request.get_json(silent=True) or {}).get("reason", ""))
+    except LookupError: return jsonify({"error": "investigation_not_found"}), 404
+    event.pop("tenant_id", None); return jsonify({"success": True, "assignment": event}), 201
+
+
+@investigations_api.get("/<case_id>/review-history")
+def get_analyst_review_history(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        return jsonify({"version": "analyst-review-history-v1", "case_id": case_id, "evidence": _coordinator().get_evidence_reviews(case_id, str(context.tenant_id)), "audit": _coordinator().get_audit_timeline(case_id, context)})
+    except LookupError: return jsonify({"error": "investigation_not_found"}), 404
+
+
+@investigations_api.get("/<case_id>/approval")
+def get_analyst_approval(case_id: str):
+    context = request_context(); allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed: return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if _coordinator().get_report_by_case_id(case_id, str(context.tenant_id)) is None: return jsonify({"error": "investigation_not_found"}), 404
+    history = [item for item in _coordinator().case_lifecycle_repository.list_for_case(case_id, tenant_id=str(context.tenant_id)) if item.get("event_kind") == "report_approval"]
+    return jsonify({"version": "investigation-approval-v1", "case_id": case_id, "current": history[-1] if history else {"state": "not_required"}, "history": history})
+
+
+@investigations_api.post("/<case_id>/approval/request")
+def request_analyst_approval(case_id: str):
+    return post_report_approval(case_id)
+
+
+@investigations_api.get("/<case_id>/evidence/<evidence_id>")
+def get_evidence_drilldown(case_id: str, evidence_id: str):
+    """Return one evidence item and only the conclusions that cite it."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        payload = _coordinator().get_evidence_drilldown(case_id, evidence_id, context)
+    except PermissionError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    if payload is None:
+        return jsonify({"error": "evidence_not_found"}), 404
+    payload.pop("tenant_id", None)
+    return jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/explainability")
+def get_investigation_explainability(case_id: str):
+    """Return auditable decision factors without private model reasoning."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        payload = _coordinator().get_investigation_explainability(case_id, context)
+    except (PermissionError, LookupError):
+        return jsonify({"error": "investigation_not_found"}), 404
+    if payload is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    payload.pop("tenant_id", None)
+    return jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/decision-support")
+def get_investigation_decision_support(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        payload = _coordinator().get_investigation_explainability(case_id, context)
+    except (PermissionError, LookupError):
+        return jsonify({"error": "investigation_not_found"}), 404
+    if payload is None:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"version": "investigation-decision-support-v1", "case_id": case_id, "decision_support": payload.get("decision_support", {})})
+
+
+@investigations_api.get("/productivity")
+def get_investigation_productivity():
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        payload = _coordinator().get_investigation_productivity(context)
+    except PermissionError:
+        return jsonify({"error": "organization_context_required"}), 403
+    payload.pop("tenant_id", None)
+    return jsonify(payload)
+
+
+def _authorized_investigation_projection(case_id: str, operation: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return None, (jsonify({"error": error}), 401 if error == "authentication_required" else 403)
+    if not context.tenant_id:
+        return None, (jsonify({"error": "organization_context_required"}), 403)
+    try:
+        value = getattr(_coordinator(), operation)(case_id, context)
+    except (PermissionError, LookupError, ValueError):
+        return None, (jsonify({"error": "investigation_not_found"}), 404)
+    if value is None:
+        return None, (jsonify({"error": "investigation_not_found"}), 404)
+    return value, None
+
+
+@investigations_api.get("/<case_id>/evidence-graph")
+def get_evidence_graph(case_id: str):
+    payload, error = _authorized_investigation_projection(case_id, "get_evidence_graph")
+    return error if error else jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/evidence-graph-workspace")
+def get_evidence_graph_workspace(case_id: str):
+    payload, error = _authorized_investigation_projection(case_id, "get_evidence_graph_workspace")
+    return error if error else jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/evidence-compare")
+def compare_evidence(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    evidence_a, evidence_b = request.args.get("evidence_a"), request.args.get("evidence_b")
+    if not evidence_a or not evidence_b or evidence_a == evidence_b:
+        return jsonify({"error": "two_distinct_evidence_ids_required"}), 400
+    try:
+        return jsonify(_coordinator().compare_evidence(case_id, evidence_a, evidence_b, context))
+    except (PermissionError, LookupError, ValueError):
+        return jsonify({"error": "evidence_not_found"}), 404
+
+
+@investigations_api.get("/<case_id>/contradictions")
+def get_contradictions(case_id: str):
+    payload, error = _authorized_investigation_projection(case_id, "get_contradictions")
+    return error if error else jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/report-export")
+def get_report_export(case_id: str):
+    payload, error = _authorized_investigation_projection(case_id, "get_report_export")
+    return error if error else jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/report-export-v2")
+def get_report_export_v2(case_id: str):
+    payload, error = _authorized_investigation_projection(case_id, "get_report_v2")
+    return error if error else jsonify(payload)
+
+
+@investigations_api.get("/<case_id>/report-export-v2/pdf")
+def get_report_export_v2_pdf(case_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        payload = _coordinator().get_report_v2_pdf(case_id, context)
+    except (PermissionError, LookupError, ValueError):
+        return jsonify({"error": "investigation_not_found"}), 404
+    return Response(payload, mimetype="application/pdf", headers={"Content-Disposition": f"attachment; filename=sentinel-dna-{case_id}-report-v2.pdf"})
+
+
+@investigations_api.post("/<case_id>/contradictions/<contradiction_id>/review")
+def review_contradiction(case_id: str, contradiction_id: str):
+    context = request_context()
+    actor_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id or not actor_id:
+        return jsonify({"error": "analyst_identity_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        event = _coordinator().review_contradiction(case_id, contradiction_id, str(payload.get("state") or "reviewed"), str(payload.get("reason") or ""), tenant_id=str(context.tenant_id), actor_id=str(actor_id))
+    except LookupError:
+        return jsonify({"error": "contradiction_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    event.pop("tenant_id", None)
+    return jsonify({"success": True, "review": event}), 201
+
+
+@investigations_api.get("/<case_id>/providers")
+def get_provider_observations(case_id: str):
+    """Return provider-neutral, redacted observations for an authorized case."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    try:
+        view = _coordinator().get_investigation_view(case_id, context)
+    except PermissionError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    if not view:
+        return jsonify({"error": "investigation_not_found"}), 404
+    return jsonify({"version": "provider-observations-v1", "case_id": case_id, "providers": view.get("provider_observations", [])})
+
+
+@investigations_api.get("/executions/compare")
+def compare_investigations():
+    """Compare two tenant-owned execution snapshots without raw evidence leakage."""
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    if not context.tenant_id:
+        return jsonify({"error": "organization_context_required"}), 403
+    execution_a = request.args.get("execution_a")
+    execution_b = request.args.get("execution_b")
+    if not execution_a or not execution_b:
+        return jsonify({"error": "execution_ids_required"}), 400
+    try:
+        payload = _coordinator().compare_execution_projections(execution_a, execution_b, context)
+    except PermissionError:
+        return jsonify({"error": "organization_context_required"}), 403
+    if payload is None:
+        return jsonify({"error": "execution_not_found"}), 404
+    return jsonify(payload)
 
 
 @investigations_api.get("/feedback/analytics")
