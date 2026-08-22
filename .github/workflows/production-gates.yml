@@ -1,0 +1,32 @@
+name: production-gates
+
+on:
+  push:
+    branches: ["feature/investigator-v1.4-production-hardening", "main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install -r tests/browser/requirements.txt
+      - run: python -m pip check
+      - run: python -m compileall -q app services dashboard config database deployment
+      - run: python -m deployment.production.readiness
+      - run: python -m pytest tests/security tests/production tests/intelligence/operations tests/intelligence/workflow_v3 -q
+      - run: python -m playwright install --with-deps chromium
+      - name: Browser certification after browser install
+        run: python -m pytest tests/browser -q
+      - run: python -m pytest -q
+      - run: git diff --check
