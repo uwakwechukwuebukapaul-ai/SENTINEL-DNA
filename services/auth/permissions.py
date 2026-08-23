@@ -43,6 +43,7 @@ PERMISSIONS = {
     "incidents:manage": {"admin", "soc_manager", "analyst"},
     "api:read": {"admin", "soc_manager"},
     "api:manage": {"admin", "soc_manager"},
+    "audit:read": {"admin", "soc_manager"},
     "billing:read": {"admin", "soc_manager"},
     "mssp:read": {"admin", "soc_manager"},
     "compliance:read": {"admin", "soc_manager", "analyst", "viewer"},

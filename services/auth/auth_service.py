@@ -60,13 +60,16 @@ class AuthService:
     def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, connection=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
             raise ValueError("invalid_user_registration")
+        normalized_role = str(role or "analyst").strip().lower()
+        if normalized_role not in self.ROLES:
+            raise ValueError("invalid_user_role")
         normalized_dob = validate_minimum_age(date_of_birth) if date_of_birth is not None else None
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             cursor = connection.execute(
                 "INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (username.strip(), email.strip().lower(), hash_password(password), "analyst", now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at),
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at),
             )
             user_id = cursor.lastrowid
             connection.execute(

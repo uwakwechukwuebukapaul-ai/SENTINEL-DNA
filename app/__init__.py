@@ -80,9 +80,11 @@ def create_app():
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
+    from services.audit import audit_api
     from services.auth.routes import restore_persistent_session
     from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
+    app.register_blueprint(audit_api)
     app.register_blueprint(browser)
     app.register_blueprint(automation_api)
     app.register_blueprint(integrations_api)
@@ -190,7 +192,7 @@ def create_app():
     @app.get("/ready")
     def ready():
         try:
-            app.container.validate_required(("investigation_coordinator", "investigation_orchestrator", "audit_service"))
+            app.container.validate_required(("investigation_coordinator", "investigation_orchestrator", "audit_service", "audit_read_service"))
             with database.session() as connection:
                 connection.execute("SELECT 1").fetchone()
             return {"status": "ready", "database": "ok", "services": "registered"}

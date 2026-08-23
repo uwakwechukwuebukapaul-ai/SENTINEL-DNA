@@ -60,6 +60,20 @@ def test_compose_preserves_internal_application_port_and_no_generated_env_mount(
 
     assert "env_file:" not in compose
     assert "5000:5000" not in compose
-    assert 'ports: ["80:80"]' in compose
+    assert 'ports: ["80:80", "443:443"]' in compose
+    assert "SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR" in compose
+    assert "target: /etc/nginx/tls" in compose
     assert "SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY" in compose
     assert "POSTGRES_PASSWORD:?set POSTGRES_PASSWORD" in compose
+
+
+def test_nginx_contract_preserves_internal_app_and_secure_tls_forwarding():
+    nginx = (ROOT / "deployment" / "nginx.conf").read_text(encoding="utf-8")
+
+    assert "listen 80;" in nginx
+    assert "return 308 https://$host$request_uri;" in nginx
+    assert "listen 443 ssl;" in nginx
+    assert "ssl_certificate /etc/nginx/tls/localhost.crt;" in nginx
+    assert "ssl_certificate_key /etc/nginx/tls/localhost.key;" in nginx
+    assert "proxy_pass http://app:5000;" in nginx
+    assert "proxy_set_header X-Forwarded-Proto https;" in nginx

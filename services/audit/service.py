@@ -19,7 +19,7 @@ from database.connection import DatabaseConnection, database
 
 _SENSITIVE_KEY_PARTS = (
     "password", "secret", "token", "authorization", "cookie", "credential",
-    "api_key", "apikey", "raw_payload", "raw_body", "provider_response",
+    "session", "bearer", "api_key", "apikey", "raw_payload", "raw_body", "provider_response",
     "evidence_payload", "prompt", "private_key",
 )
 _REDACTED = "[REDACTED]"
@@ -203,6 +203,36 @@ class AuditService:
         with self.db.session() as connection:
             row = connection.execute("SELECT * FROM audit_events WHERE event_id=? AND tenant_id=?", (str(event_id), str(tenant_id))).fetchone()
         return self._row(row) if row else None
+
+    @classmethod
+    def public_event(cls, event: dict[str, Any]) -> dict[str, Any]:
+        """Return the stable, secret-free HTTP projection of one event."""
+        fields = (
+            "event_id", "event_type", "case_id", "user_id", "created_at",
+            "tenant_id", "actor_id", "correlation_id", "request_id",
+            "resource_type", "resource_id", "operation", "outcome",
+            "latency_ms", "schema_version",
+        )
+        result = {field: event.get(field) for field in fields if field in event}
+        result["details"] = cls._public_details(event.get("details") or {})
+        return result
+
+    @classmethod
+    def _public_details(cls, value: Any, *, depth: int = 0) -> Any:
+        """Omit sensitive metadata keys from an externally readable event."""
+        if depth > _MAX_DEPTH:
+            return "[TRUNCATED]"
+        if isinstance(value, dict):
+            return {
+                str(key)[:128]: cls._public_details(item, depth=depth + 1)
+                for key, item in value.items()
+                if not _sensitive_key(key)
+            }
+        if isinstance(value, (list, tuple, set)):
+            return [cls._public_details(item, depth=depth + 1) for item in list(value)[:_MAX_COLLECTION]]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value if not isinstance(value, str) else value[:_MAX_STRING]
+        return str(value)[:_MAX_STRING]
 
     @staticmethod
     def _row(row: Any) -> dict[str, Any]:

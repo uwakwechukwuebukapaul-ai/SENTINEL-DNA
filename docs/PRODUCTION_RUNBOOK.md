@@ -111,6 +111,65 @@ deletion and does not remove persistent volumes. Never expose this operation as
 an HTTP endpoint or enable test providers, development mode, debug mode, or
 `AUTH_LEGACY_JSON_COMPAT` to replace it.
 
+## Privileged runtime identity bootstrap
+
+Gate 1 audit-read validation requires an existing tenant-bound `admin` or
+`soc_manager` identity. The checked-in privileged bootstrap command is an
+operator-only deployment action for the initial or recovery identity. It is not
+an HTTP endpoint, is not available to application users, and never changes an
+existing account.
+
+The command requires all of the following:
+
+- an authorized operator using the protected deployment environment;
+- `SENTINEL_DNA_PRIVILEGED_BOOTSTRAP=1` explicitly set for that command;
+- `SENTINEL_DNA_ENV=production`;
+- `SENTINEL_DNA_IMAGE_REVISION_FULL` matching the exact reviewed release;
+- `SENTINEL_DNA_SECURE_COOKIES=1`;
+- protected `SENTINEL_DNA_SECRET_KEY` and `SENTINEL_DNA_DB_PATH`; and
+- an already-existing active canonical tenant.
+
+Only `admin` and `soc_manager` are accepted. The command does not create a
+tenant, does not accept a password argument, does not reset or overwrite an
+existing username, and records a safe `PRIVILEGED_IDENTITY_PROVISIONED` audit
+event in the same transaction as the user, canonical identity, and membership.
+The operator enters the password and confirmation through hidden prompts.
+
+From an attached PowerShell terminal, after independently verifying the exact
+reviewed image and release metadata:
+
+```powershell
+$revision = (git rev-parse HEAD).Trim()
+$env:SENTINEL_DNA_PRIVILEGED_BOOTSTRAP = "1"
+$env:SENTINEL_DNA_ENV = "production"
+$env:SENTINEL_DNA_IMAGE_REVISION_FULL = $revision
+$env:SENTINEL_DNA_SECURE_COOKIES = "1"
+
+docker compose --env-file .env -f deployment/docker-compose.yml exec `
+  -e SENTINEL_DNA_PRIVILEGED_BOOTSTRAP=1 `
+  -e SENTINEL_DNA_ENV=production `
+  -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `
+  -e SENTINEL_DNA_SECURE_COOKIES=1 `
+  app python deployment/scripts/provision_privileged_identity.py `
+  --username <operator-selected-username> `
+  --email <operator-selected-email> `
+  --tenant <existing-canonical-tenant-id> `
+  --role admin `
+  --expected-revision $revision
+```
+
+Use `--role soc_manager` when that is the approved role. The command prints
+only nonsecret identity metadata after success. A duplicate username or invalid
+tenant fails closed. Never put the password in `.env`, PowerShell history,
+command arguments, logs, or reports.
+
+After successful bootstrap, authenticate the identity through the HTTPS Gate 1
+procedure using a fresh local `Read-Host -AsSecureString` prompt and validate
+`GET /api/admin/audit`. Analyst identities must remain denied. This bootstrap
+CLI is a bounded initial/recovery mechanism; enterprise deployments should
+progress toward Enterprise IdP/OIDC and SCIM or equivalent administrative
+provisioning while retaining the CLI for controlled break-glass recovery.
+
 ## CI/CD deployment contract
 
 The manual `deployment-contract` GitHub Actions workflow uses a protected `production` environment containing `SENTINEL_DNA_SECRET_KEY` and `POSTGRES_PASSWORD`. It derives the four release metadata values, validates the exact checkout, builds the immutable image, validates OCI provenance and the Compose contract, and runs deployment-adjacent tests.

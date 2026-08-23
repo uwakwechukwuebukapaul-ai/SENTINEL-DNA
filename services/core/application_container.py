@@ -54,6 +54,7 @@ from services.intelligence.dashboard.dashboard_service import (
 from services.auth.auth_service import AuthService
 from services.cases.case_service import CaseService
 from services.audit.service import AuditService
+from services.audit.read_service import ApplicationAuditReadService
 from services.intelligence.investigation_optimizer import FeedbackRecommendationService, InvestigationOptimizationService
 from services.tenancy.service import TenancyService
 from services.connectors.registry import ConnectorRegistry
@@ -257,6 +258,7 @@ def build_container() -> ServiceRegistry:
 
     dashboard_service = DashboardService()
     audit_service = AuditService()
+    audit_read_service = ApplicationAuditReadService(audit_service)
     auth_service = AuthService()
     case_service = CaseService()
     tenancy_service = TenancyService()
@@ -362,6 +364,7 @@ def build_container() -> ServiceRegistry:
         dashboard_service,
     )
     registry.register("audit_service", audit_service)
+    registry.register("audit_read_service", audit_read_service)
     registry.register("feedback_recommendation_service_factory", build_feedback_recommendation_service)
     registry.register("auth_service", auth_service)
     registry.register("case_service", case_service)

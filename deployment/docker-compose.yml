@@ -36,8 +36,13 @@ services:
   nginx:
     image: nginx:1.27-alpine
     depends_on: [app]
-    ports: ["80:80"]
-    volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - type: bind
+        source: ${SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR}
+        target: /etc/nginx/tls
+        read_only: true
 volumes:
   sentinel-data:
   sentinel-postgres:
