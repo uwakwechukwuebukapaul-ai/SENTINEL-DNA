@@ -1,8 +1,8 @@
 # Sentinel DNA Project Status
 
-**Status date:** 2026-08-23  
-**Branch:** `feature/investigator-v1.4-production-hardening`  
-**Current commit:** `95b1416c5961fd3819c30ac53ad6563b50a4bb6b`
+**Status date:** 2026-08-23
+**Branch:** `feature/investigator-v1.4-production-hardening`
+**Validated code commit:** `95b1416c5961fd3819c30ac53ad6563b50a4bb6b`
 
 This is the current operational status record. Historical pilot and readiness
 reports remain historical evidence and are not silently rewritten here.
@@ -51,9 +51,9 @@ authorization, tenant, report, or orchestration system is authorized.
 
 ## Current CI evidence
 
-Authoritative workflow: `.github/workflows/production-gates.yml`  
-Run: `32610273357`  
-Commit: `95b1416c5961fd3819c30ac53ad6563b50a4bb6b`  
+Authoritative workflow: `.github/workflows/production-gates.yml`
+Run: `32610273357`
+Commit: `95b1416c5961fd3819c30ac53ad6563b50a4bb6b`
 URL: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA/actions/runs/32610273357
 
 The remote runner used Python 3.12.14. The validation job passed dependency
