@@ -26,7 +26,20 @@ def create_client():
 
     app.testing = True
 
-    return app.test_client()
+    authority = app.container.get("canonical_authority")
+    authority.tenants.create("Integration Tenant", tenant_id="tenant-integration")
+    authority.identities.create("integration@example.test", "Integration Analyst", actor_id="actor-integration")
+    authority.memberships.add("tenant-integration", "actor-integration", "analyst")
+    user = app.container.get("auth_service").register(
+        "integration-analyst", "integration@example.test", "StrongPassword123!",
+        tenant_id="tenant-integration", actor_id="actor-integration",
+    )
+    client = app.test_client()
+    with client.session_transaction() as state:
+        state["user_id"] = user.id
+        state["actor_id"] = user.actor_id
+        state["organization_id"] = user.tenant_id
+    return client
 
 
 

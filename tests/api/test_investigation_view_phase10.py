@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from flask import Flask
+from flask import Flask, g
 
 from services.api.investigations.routes import investigations_api
 
@@ -12,6 +12,12 @@ def _app(view=None, metrics=None):
     app.testing = True
     coordinator = SimpleNamespace(get_investigation_view=lambda case_id, context: view, get_investigation_metrics=lambda case_id, context: metrics)
     app.container = SimpleNamespace(get=lambda name: coordinator)
+    @app.before_request
+    def authenticated_test_context():
+        g.security_context = SimpleNamespace(
+            user_id="user-a", actor_id="actor-a", tenant_id="tenant-a",
+            roles=("analyst",), tenant_context_valid=True,
+        )
     app.register_blueprint(investigations_api)
     return app
 

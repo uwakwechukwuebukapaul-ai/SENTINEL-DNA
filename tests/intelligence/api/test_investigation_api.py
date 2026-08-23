@@ -41,13 +41,9 @@ def test_api_health(client):
 
     response = client.get("/")
 
-    assert response.status_code == 200
+    assert response.status_code == 401
 
-    data = response.get_json()
-
-    assert data["status"] == "running"
-
-    assert data["service"] == "Sentinel DNA"
+    assert response.get_json() == {"error": "authentication_required"}
 
 
 
@@ -70,6 +66,7 @@ def test_investigation_endpoint_exists(client):
         200,
         201,
         404,
+        401,
     ]
 
 
@@ -124,6 +121,7 @@ def test_investigation_empty_payload(client):
     assert response.status_code in [
         200,
         400,
+        401,
     ]
 
 

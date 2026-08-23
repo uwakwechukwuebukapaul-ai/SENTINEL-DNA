@@ -24,7 +24,10 @@ def app():
     application.container = SimpleNamespace(require=lambda name: Coordinator())
     @application.before_request
     def context():
-        g.security_context = SimpleNamespace(tenant_id="tenant-a", actor_id="actor-a")
+        g.security_context = SimpleNamespace(
+            user_id="user-a", tenant_id="tenant-a", actor_id="actor-a",
+            roles=("analyst",), tenant_context_valid=True,
+        )
     application.register_blueprint(analyst_workspace)
     application.register_blueprint(investigations_api)
     return application

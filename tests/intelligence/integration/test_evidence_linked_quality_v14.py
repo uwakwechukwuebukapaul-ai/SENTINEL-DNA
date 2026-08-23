@@ -86,7 +86,14 @@ def api_app():
 
     @app.before_request
     def security_context():
-        g.security_context = SimpleNamespace(tenant_id="tenant-a", actor_id="actor-a", user_id="actor-a")
+        g.security_context = SimpleNamespace(
+            tenant_id="tenant-a",
+            actor_id="actor-a",
+            user_id="actor-a",
+            roles=("analyst",),
+            correlation_id="test-quality",
+            tenant_context_valid=True,
+        )
 
     app.register_blueprint(investigations_api)
     return app

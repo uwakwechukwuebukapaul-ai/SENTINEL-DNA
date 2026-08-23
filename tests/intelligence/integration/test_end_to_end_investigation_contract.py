@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from flask import g
+from types import SimpleNamespace
 
 flask = pytest.importorskip("flask")
 
@@ -25,6 +27,18 @@ ARTIFACTS = [
         ),
     }
 ]
+
+
+@app.before_request
+def authenticated_contract_context():
+    g.security_context = SimpleNamespace(
+        tenant_id="tenant-a",
+        actor_id="actor-a",
+        user_id="user-a",
+        roles=("analyst",),
+        correlation_id="test-contract",
+        tenant_context_valid=True,
+    )
 
 
 @pytest.fixture
