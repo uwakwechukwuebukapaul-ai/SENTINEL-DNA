@@ -57,12 +57,12 @@ class AuthService:
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
-    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None) -> User:
+    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, connection=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
             raise ValueError("invalid_user_registration")
         normalized_dob = validate_minimum_age(date_of_birth) if date_of_birth is not None else None
         now = datetime.now(timezone.utc).isoformat()
-        with self.db.session() as connection:
+        def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             cursor = connection.execute(
                 "INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -73,7 +73,13 @@ class AuthService:
                 "INSERT OR IGNORE INTO auth_identities(user_id,provider,provider_subject,normalized_identifier,verified_at,created_at,last_used_at) VALUES(?,?,?,?,?,?,?)",
                 (user_id, "password", str(user_id), email.strip().lower(), None, now, now),
             )
-        return self.get_by_id(user_id)
+            return user_id
+        if connection is None:
+            with self.db.session() as owned_connection:
+                user_id = create_user(owned_connection)
+            return self.get_by_id(user_id)
+        user_id = create_user(connection)
+        return self._user(connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone())
 
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
@@ -142,11 +148,37 @@ class AuthService:
             else:
                 connection.execute("DELETE FROM auth_identities WHERE user_id=? AND provider=? AND provider_subject=?", (user_id, provider, subject))
 
-    def get_by_email(self, email):
-        normalized = str(email or "").strip().lower()
-        with self.db.session() as connection:
-            row = connection.execute("SELECT * FROM users WHERE email=? AND is_active=1", (normalized,)).fetchone()
+    def get_by_username(self, username, connection=None):
+        normalized = str(username or "").strip()
+        if not normalized:
+            return None
+        if connection is None:
+            with self.db.session() as owned_connection:
+                row = owned_connection.execute("SELECT * FROM users WHERE username=?", (normalized,)).fetchone()
+        else:
+            row = connection.execute("SELECT * FROM users WHERE username=?", (normalized,)).fetchone()
         return self._user(row) if row else None
+
+    def get_by_email(self, email, connection=None, include_inactive=False):
+        normalized = str(email or "").strip().lower()
+        predicate = "email=?" if include_inactive else "email=? AND is_active=1"
+        if connection is None:
+            with self.db.session() as owned_connection:
+                row = owned_connection.execute(f"SELECT * FROM users WHERE {predicate}", (normalized,)).fetchone()
+        else:
+            row = connection.execute(f"SELECT * FROM users WHERE {predicate}", (normalized,)).fetchone()
+        return self._user(row) if row else None
+
+    def deactivate_user(self, user_id: int, connection=None) -> bool:
+        """Deactivate one user and revoke its persistent sessions."""
+        def deactivate(owned_connection):
+            cursor = owned_connection.execute("UPDATE users SET is_active=0 WHERE id=? AND is_active=1", (user_id,))
+            owned_connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (utcnow().isoformat(), user_id))
+            return cursor.rowcount == 1
+        if connection is None:
+            with self.db.session() as owned_connection:
+                return deactivate(owned_connection)
+        return deactivate(connection)
 
     def audit_event(self, event_type, *, user_id=None, actor_id=None, tenant_id=None,
                     correlation_id=None, method=None, outcome=None, reason=None, source_ip=None):

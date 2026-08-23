@@ -7,6 +7,7 @@ organization IDs or legacy authentication IDs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from database.canonical_authority import (
@@ -60,50 +61,88 @@ def _membership(row: Any) -> CanonicalMembership | None:
 class CanonicalTenantService:
     def __init__(self, db: DatabaseConnection = database): self.db = db
 
-    def create(self, name: str, tenant_id: str | None = None) -> CanonicalTenant:
+    def create(self, name: str, tenant_id: str | None = None, connection=None) -> CanonicalTenant:
         if not str(name).strip(): raise CanonicalAuthorityError("tenant_name_required")
+        if connection is not None:
+            return _tenant(CanonicalTenantRepository(connection).create(name, tenant_id))  # type: ignore[arg-type]
         with CanonicalUnitOfWork(self.db) as unit:
             return _tenant(CanonicalTenantRepository(unit.conn).create(name, tenant_id))  # type: ignore[arg-type]
 
-    def get(self, tenant_id: str) -> CanonicalTenant | None:
+    def get(self, tenant_id: str, connection=None) -> CanonicalTenant | None:
+        if connection is not None:
+            return _tenant(CanonicalTenantRepository(connection).get(tenant_id))
         with CanonicalUnitOfWork(self.db) as unit: return _tenant(CanonicalTenantRepository(unit.conn).get(tenant_id))
 
-    def set_status(self, tenant_id: str, status: str) -> CanonicalTenant | None:
+    def set_status(self, tenant_id: str, status: str, connection=None) -> CanonicalTenant | None:
         if status not in {"active", "inactive", "deleted"}: raise CanonicalAuthorityError("invalid_tenant_status")
+        if connection is not None:
+            return _tenant(CanonicalTenantRepository(connection).set_status(tenant_id, status))
         with CanonicalUnitOfWork(self.db) as unit: return _tenant(CanonicalTenantRepository(unit.conn).set_status(tenant_id, status))
 
 
 class CanonicalIdentityService:
     def __init__(self, db: DatabaseConnection = database): self.db = db
 
-    def create(self, email: str, display_name: str = "", actor_id: str | None = None) -> CanonicalIdentity:
+    def create(self, email: str, display_name: str = "", actor_id: str | None = None, connection=None) -> CanonicalIdentity:
         if "@" not in str(email): raise CanonicalAuthorityError("identity_email_required")
+        if connection is not None:
+            return _identity(CanonicalIdentityRepository(connection).create(email, display_name, actor_id))  # type: ignore[arg-type]
         with CanonicalUnitOfWork(self.db) as unit:
             return _identity(CanonicalIdentityRepository(unit.conn).create(email, display_name, actor_id))  # type: ignore[arg-type]
 
-    def get(self, actor_id: str) -> CanonicalIdentity | None:
+    def get(self, actor_id: str, connection=None) -> CanonicalIdentity | None:
+        if connection is not None:
+            return _identity(CanonicalIdentityRepository(connection).get(actor_id))
         with CanonicalUnitOfWork(self.db) as unit: return _identity(CanonicalIdentityRepository(unit.conn).get(actor_id))
 
-    def get_by_email(self, email: str) -> CanonicalIdentity | None:
+    def get_by_email(self, email: str, connection=None) -> CanonicalIdentity | None:
         value = str(email or "").strip().lower()
         if not value:
             return None
+        if connection is not None:
+            return _identity(connection.execute("SELECT * FROM canonical_identities WHERE email=?", (value,)).fetchone())
         with CanonicalUnitOfWork(self.db) as unit:
             row = unit.conn.execute("SELECT * FROM canonical_identities WHERE email=?", (value,)).fetchone()
             return _identity(row)
+
+    def set_status(self, actor_id: str, status: str, connection=None) -> CanonicalIdentity | None:
+        if status not in {"active", "inactive", "deleted"}:
+            raise CanonicalAuthorityError("invalid_identity_status")
+        now = datetime.now(timezone.utc).isoformat()
+        if connection is not None:
+            connection.execute("UPDATE canonical_identities SET status=?, updated_at=? WHERE actor_id=?", (status, now, actor_id))
+            return _identity(CanonicalIdentityRepository(connection).get(actor_id))
+        with CanonicalUnitOfWork(self.db) as unit:
+            unit.conn.execute("UPDATE canonical_identities SET status=?, updated_at=? WHERE actor_id=?", (status, now, actor_id))
+            return _identity(CanonicalIdentityRepository(unit.conn).get(actor_id))
 
 
 class CanonicalMembershipService:
     def __init__(self, db: DatabaseConnection = database): self.db = db
 
-    def add(self, tenant_id: str, actor_id: str, role: str = "viewer") -> CanonicalMembership:
+    def add(self, tenant_id: str, actor_id: str, role: str = "viewer", connection=None) -> CanonicalMembership:
         if not str(role).strip(): raise CanonicalAuthorityError("membership_role_required")
+        if connection is not None:
+            return _membership(CanonicalMembershipRepository(connection).add(tenant_id, actor_id, role))
         with CanonicalUnitOfWork(self.db) as unit:
             row = CanonicalMembershipRepository(unit.conn).add(tenant_id, actor_id, role)
             return _membership(row)  # type: ignore[arg-type]
 
-    def get(self, tenant_id: str, actor_id: str) -> CanonicalMembership | None:
+    def get(self, tenant_id: str, actor_id: str, connection=None) -> CanonicalMembership | None:
+        if connection is not None:
+            return _membership(CanonicalMembershipRepository(connection).get(tenant_id, actor_id))
         with CanonicalUnitOfWork(self.db) as unit: return _membership(CanonicalMembershipRepository(unit.conn).get(tenant_id, actor_id))
+
+    def set_status(self, tenant_id: str, actor_id: str, status: str, connection=None) -> CanonicalMembership | None:
+        if status not in {"active", "inactive"}:
+            raise CanonicalAuthorityError("invalid_membership_status")
+        now = datetime.now(timezone.utc).isoformat()
+        if connection is not None:
+            connection.execute("UPDATE canonical_memberships SET status=?, updated_at=? WHERE tenant_id=? AND actor_id=?", (status, now, tenant_id, actor_id))
+            return _membership(CanonicalMembershipRepository(connection).get(tenant_id, actor_id))
+        with CanonicalUnitOfWork(self.db) as unit:
+            unit.conn.execute("UPDATE canonical_memberships SET status=?, updated_at=? WHERE tenant_id=? AND actor_id=?", (status, now, tenant_id, actor_id))
+            return _membership(CanonicalMembershipRepository(unit.conn).get(tenant_id, actor_id))
 
     def list_for_actor(self, actor_id: str) -> list[CanonicalMembership]:
         with CanonicalUnitOfWork(self.db) as unit:
