@@ -20,9 +20,7 @@ from database.connection import database
 
 def create_app():
 
-    app = Flask(
-        __name__
-    )
+    app = Flask(__name__, static_folder="../static", static_url_path="/static")
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
     app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
@@ -78,7 +76,9 @@ def create_app():
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
+    from services.auth.routes import auth_web
     app.register_blueprint(auth_api)
+    app.register_blueprint(auth_web)
     app.register_blueprint(automation_api)
     app.register_blueprint(integrations_api)
     app.register_blueprint(detection_api)

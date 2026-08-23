@@ -1,0 +1,1 @@
+document.addEventListener('click',function(e){const b=e.target.closest('[data-password-toggle]');if(!b)return;const i=document.getElementById(b.dataset.passwordToggle),v=i.type==='text';i.type=v?'password':'text';b.setAttribute('aria-label',v?'Show password':'Hide password');b.setAttribute('aria-pressed',String(!v));});
