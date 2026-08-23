@@ -17,6 +17,48 @@ The release process derives these nonsecret values from the exact Git checkout:
 
 Never place secret values in Git, image labels, command output, generated reports, or logs. The Compose contract fails closed when secrets or immutable metadata are absent or inconsistent with HEAD.
 
+## Trusted Gate 1 release artifact
+
+Gate 1 uses a deployment-owned release artifact in addition to ordinary
+Compose metadata. Before deployment, an authorized release operator must create
+the artifact outside the repository with the checked-in verifier:
+
+```powershell
+$image = "deployment-app:<reviewed-full-sha>"
+$revision = "<reviewed-full-sha>"
+$digest = "sha256:<reviewed-image-digest>"
+$manifest = "C:\ProgramData\Sentinel-DNA\release\metadata.json"
+python deployment/scripts/prepare_trusted_release_metadata.py `
+  --image $image `
+  --expected-revision $revision `
+  --expected-digest $digest `
+  --output $manifest `
+  --docker-executable "C:\Users\<operator>\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+```
+
+The verifier derives the current Git revision, inspects the local immutable
+image digest and OCI revision/source, rejects mismatches, and atomically writes
+only `release_sha` and `image_digest`. The output directory must be outside the
+source tree and protected from untrusted users. On Linux the file and parent
+directory must not be group/other writable; on Windows use an ACL granting
+read access to the Docker engine and denying write access to the application
+operator/runtime identity.
+
+Set only the nonsecret deployment references in the protected operator
+environment:
+
+```powershell
+$env:SENTINEL_DNA_IMAGE_DIGEST = $digest
+$env:SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE = $manifest
+```
+
+Compose mounts that host file read-only at the fixed container path
+`/run/sentinel/release/metadata.json` and sets the in-container path itself.
+The application rejects path substitution, symlinks, malformed JSON, extra
+fields, unsafe permissions, revision mismatches, and digest mismatches. The
+manifest contains no passwords or other credentials and is never copied into
+the image or source tree.
+
 ## Protected local deployment
 
 Create a protected, untracked `.env` from `.env.example` and provide only the two secret values. Do not add release metadata manually. Derive metadata into the current shell:
@@ -29,6 +71,8 @@ $env:SENTINEL_DNA_IMAGE_TAG = $metadata.SENTINEL_DNA_IMAGE_TAG
 $env:SENTINEL_DNA_IMAGE_REVISION = $metadata.SENTINEL_DNA_IMAGE_REVISION
 $env:SENTINEL_DNA_IMAGE_REVISION_FULL = $metadata.SENTINEL_DNA_IMAGE_REVISION_FULL
 $env:SENTINEL_DNA_IMAGE_CREATED = $metadata.SENTINEL_DNA_IMAGE_CREATED
+$env:SENTINEL_DNA_IMAGE_DIGEST = $digest
+$env:SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE = $manifest
 python deployment/scripts/validate_deployment_config.py --env-file .env
 docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
 ```

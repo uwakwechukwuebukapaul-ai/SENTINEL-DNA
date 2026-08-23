@@ -55,6 +55,42 @@ def test_placeholder_secret_is_rejected_without_echoing_value():
     assert secret not in " ".join(errors)
 
 
+def test_deployment_validation_requires_exact_trusted_release_artifact(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "a" * 64
+    manifest = tmp_path / "metadata.json"
+    manifest.write_text(
+        '{"image_digest":"' + digest + '","release_sha":"' + metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"] + '"}\n',
+        encoding="utf-8",
+    )
+    manifest.chmod(0o444)
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": "test-only-secret-value-0123456789-abcdef",
+        "POSTGRES_PASSWORD": "test-only-postgres-value-0123456789",
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(manifest),
+    }
+    assert validate_configuration(environ=environment, repository_root=ROOT) == []
+
+
+def test_deployment_validation_rejects_missing_trusted_release_artifact(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": "test-only-secret-value-0123456789-abcdef",
+        "POSTGRES_PASSWORD": "test-only-postgres-value-0123456789",
+        "SENTINEL_DNA_IMAGE_DIGEST": "sha256:" + "a" * 64,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(tmp_path / "missing.json"),
+    }
+    errors = validate_configuration(environ=environment, repository_root=ROOT)
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unavailable" in errors
+
+
 def test_compose_preserves_internal_application_port_and_no_generated_env_mount():
     compose = (ROOT / "deployment" / "docker-compose.yml").read_text(encoding="utf-8")
 
@@ -65,6 +101,11 @@ def test_compose_preserves_internal_application_port_and_no_generated_env_mount(
     assert "target: /etc/nginx/tls" in compose
     assert "SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY" in compose
     assert "POSTGRES_PASSWORD:?set POSTGRES_PASSWORD" in compose
+    assert "SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST" in compose
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:?set SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in compose
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json" in compose
+    assert "target: /run/sentinel/release/metadata.json" in compose
+    assert "read_only: true" in compose
 
 
 def test_nginx_contract_preserves_internal_app_and_secure_tls_forwarding():

@@ -7,9 +7,11 @@ read in memory and are never printed, serialized, or included in exceptions.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Mapping
 
 try:
@@ -25,6 +27,7 @@ METADATA_NAMES = (
     "SENTINEL_DNA_IMAGE_REVISION_FULL",
     "SENTINEL_DNA_IMAGE_CREATED",
 )
+IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _PLACEHOLDER_MARKERS = ("change-me", "replace-with", "development-only")
 
 
@@ -91,6 +94,40 @@ def validate_configuration(
             else:
                 if created.tzinfo is None or not value.endswith("Z"):
                     errors.append(f"{name}:must-be-UTC")
+
+    image_digest = values.get("SENTINEL_DNA_IMAGE_DIGEST", "").strip()
+    if not image_digest:
+        errors.append("SENTINEL_DNA_IMAGE_DIGEST:missing")
+    elif not IMAGE_DIGEST_PATTERN.fullmatch(image_digest):
+        errors.append("SENTINEL_DNA_IMAGE_DIGEST:invalid")
+
+    metadata_path_value = values.get("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE", "").strip()
+    if not metadata_path_value:
+        errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:missing")
+    else:
+        metadata_path = Path(metadata_path_value)
+        try:
+            if not metadata_path.is_absolute():
+                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:must-be-absolute")
+            elif metadata_path.is_symlink() or not metadata_path.is_file():
+                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unavailable")
+            elif os.name != "nt" and (metadata_path.stat().st_mode & 0o222 or os.access(metadata_path, os.W_OK)):
+                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:writable")
+            else:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                if not isinstance(metadata, dict):
+                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:invalid")
+                elif set(metadata) != {"release_sha", "image_digest"}:
+                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unexpected-fields")
+                elif (
+                    not isinstance(metadata.get("release_sha"), str)
+                    or not isinstance(metadata.get("image_digest"), str)
+                    or metadata["release_sha"] != expected["SENTINEL_DNA_IMAGE_REVISION_FULL"]
+                    or metadata["image_digest"] != image_digest
+                ):
+                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:mismatch")
+        except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError):
+            errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:invalid")
 
     if values.get("SENTINEL_DNA_ENV", "production").lower() != "production":
         errors.append("SENTINEL_DNA_ENV:must-be-production")

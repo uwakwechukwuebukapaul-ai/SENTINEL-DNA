@@ -27,6 +27,7 @@ GATE1_ACTOR = "gate1-synthetic-provisioner"
 GATE1_MARKER = "gate1-synthetic"
 REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+TRUSTED_METADATA_RUNTIME_PATH = Path("/run/sentinel/release/metadata.json")
 
 
 class Gate1ProvisioningError(RuntimeError):
@@ -83,16 +84,24 @@ class RotatedSyntheticIdentity:
 
 
 def assert_trusted_release_metadata(expected_revision: str) -> None:
-    """Require independently provisioned, nonsecret release identity metadata."""
+    """Require the deployment-provided, immutable release identity artifact."""
     trusted_path = os.getenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", "").strip()
     if not trusted_path:
         raise Gate1ProvisioningError("trusted_release_metadata_required")
-    path = Path(trusted_path)
+    path = TRUSTED_METADATA_RUNTIME_PATH
+    try:
+        configured_path = Path(trusted_path).resolve()
+        runtime_path = path.resolve()
+    except OSError:
+        raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+    if configured_path != runtime_path:
+        raise Gate1ProvisioningError("trusted_release_metadata_path_mismatch")
     try:
         if path.is_symlink() or not path.is_file():
             raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
-        if os.name != "nt" and path.stat().st_mode & 0o022:
-            raise Gate1ProvisioningError("trusted_release_metadata_insecure")
+        if os.name != "nt":
+            if path.stat().st_mode & 0o222 or os.access(path, os.W_OK):
+                raise Gate1ProvisioningError("trusted_release_metadata_writable")
         metadata = json.loads(path.read_text(encoding="utf-8"))
     except Gate1ProvisioningError:
         raise
@@ -100,8 +109,12 @@ def assert_trusted_release_metadata(expected_revision: str) -> None:
         raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
     if not isinstance(metadata, dict):
         raise Gate1ProvisioningError("trusted_release_metadata_invalid")
-    trusted_revision = str(metadata.get("release_sha", ""))
-    trusted_digest = str(metadata.get("image_digest", ""))
+    if set(metadata) != {"release_sha", "image_digest"}:
+        raise Gate1ProvisioningError("trusted_release_metadata_unexpected_fields")
+    trusted_revision = metadata.get("release_sha")
+    trusted_digest = metadata.get("image_digest")
+    if not isinstance(trusted_revision, str) or not isinstance(trusted_digest, str):
+        raise Gate1ProvisioningError("trusted_release_metadata_invalid")
     if not REVISION_PATTERN.fullmatch(trusted_revision) or not IMAGE_DIGEST_PATTERN.fullmatch(trusted_digest):
         raise Gate1ProvisioningError("trusted_release_metadata_invalid")
     if trusted_revision != expected_revision:

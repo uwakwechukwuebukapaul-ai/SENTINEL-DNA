@@ -13,6 +13,8 @@ services:
     environment:
       SENTINEL_DNA_ENV: production
       SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY}
+      SENTINEL_DNA_IMAGE_DIGEST: ${SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST}
+      SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
@@ -20,7 +22,12 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
-    volumes: [sentinel-data:/var/lib/sentinel]
+    volumes:
+      - sentinel-data:/var/lib/sentinel
+      - type: bind
+        source: ${SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:?set SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE}
+        target: /run/sentinel/release/metadata.json
+        read_only: true
   postgres:
     image: postgres:16-alpine
     environment:

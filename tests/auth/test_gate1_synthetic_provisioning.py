@@ -1,8 +1,10 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
+import services.auth.gate1_synthetic_provisioning as gate1_module
 
 from database.connection import DatabaseConnection
 from services.audit.service import AuditService
@@ -22,12 +24,14 @@ def build_services(tmp_path, monkeypatch, audit=None):
     db = DatabaseConnection(tmp_path / "gate1.sqlite")
     trusted_metadata = tmp_path / "gate1-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    trusted_metadata.chmod(0o444)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db.database_path))
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db, auth=auth)
@@ -163,7 +167,9 @@ def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkey
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     trusted_metadata = tmp_path / "rollback-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    trusted_metadata.chmod(0o444)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db, auth=auth)
@@ -221,7 +227,9 @@ def test_provisioned_users_are_tenant_isolated_through_application_api(tmp_path,
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     trusted_metadata = tmp_path / "application-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    trusted_metadata.chmod(0o444)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "application.sqlite"))
     try:
@@ -453,7 +461,9 @@ def test_rotation_audit_failure_rolls_back_every_selected_lane(tmp_path, monkeyp
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     trusted_metadata = tmp_path / "rotation-rollback-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    trusted_metadata.chmod(0o444)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
     _enable_rotation(monkeypatch)
     auth = AuthService(db)
@@ -482,7 +492,9 @@ def test_rotation_invalidates_existing_signed_session_epoch(tmp_path, monkeypatc
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     trusted_metadata = tmp_path / "session-epoch-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    trusted_metadata.chmod(0o444)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "session-epoch.sqlite"))
     try:
@@ -570,10 +582,57 @@ def test_release_guard_requires_trusted_revision_and_digest_metadata(tmp_path, m
 
     metadata = tmp_path / "wrong-release.json"
     metadata.write_text(json.dumps({"release_sha": "b2" * 20, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_revision_mismatch"):
         service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
 
+    metadata.chmod(0o644)
     metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "b" * 64}), encoding="utf-8")
+    metadata.chmod(0o444)
     with pytest.raises(Gate1ProvisioningError, match="image_digest_mismatch"):
+        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+
+
+def test_trusted_metadata_rejects_unexpected_fields_and_malformed_content(tmp_path, monkeypatch):
+    _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
+    metadata = tmp_path / "unexpected-fields.json"
+    metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64, "password": "not-used"}), encoding="utf-8")
+    metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
+    monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
+    with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_unexpected_fields"):
+        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+
+    metadata.chmod(0o644)
+    metadata.write_text("not-json", encoding="utf-8")
+    metadata.chmod(0o444)
+    with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_unavailable"):
+        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not authoritative on Windows")
+def test_trusted_metadata_rejects_writable_file(tmp_path, monkeypatch):
+    _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
+    metadata = tmp_path / "writable.json"
+    metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    metadata.chmod(0o644)
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
+    monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
+    with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_writable"):
+        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+
+
+def test_trusted_metadata_runtime_path_cannot_be_operator_substituted(tmp_path, monkeypatch):
+    _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
+    expected = tmp_path / "expected.json"
+    substitute = tmp_path / "substitute.json"
+    expected.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    substitute.write_text(expected.read_text(encoding="utf-8"), encoding="utf-8")
+    expected.chmod(0o444)
+    substitute.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", expected)
+    monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(substitute))
+    with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_path_mismatch"):
         service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
