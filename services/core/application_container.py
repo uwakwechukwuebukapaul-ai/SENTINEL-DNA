@@ -46,6 +46,7 @@ from services.intelligence.agents.runtime_adapter import (
 from services.intelligence.runtime.runtime_task_executor import (
     RuntimeTaskExecutor,
 )
+from services.intelligence.operations.assignment_directory import CanonicalAssignmentDirectory
 
 from services.intelligence.dashboard.dashboard_service import (
     DashboardService,
@@ -249,6 +250,7 @@ def build_container() -> ServiceRegistry:
         threat_intelligence_gateway=threat_intelligence_gateway,
         provider_neutral_fusion_engine=provider_neutral_fusion_engine,
     )
+    coordinator.assignment_directory = CanonicalAssignmentDirectory(canonical_authority)
 
     dashboard_service = DashboardService()
     audit_service = AuditService()
