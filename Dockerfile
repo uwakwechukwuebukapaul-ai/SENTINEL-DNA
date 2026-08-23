@@ -1,4 +1,14 @@
 FROM python:3.12-slim
+ARG VCS_REF=unknown
+ARG VCS_REF_FULL=unknown
+ARG IMAGE_VERSION=unknown
+ARG IMAGE_SOURCE=unknown
+ARG IMAGE_CREATED=unknown
+LABEL org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.created="${IMAGE_CREATED}" \
+      com.sentinel-dna.git.revision.full="${VCS_REF_FULL}"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SENTINEL_DNA_ENV=production
 WORKDIR /app
 COPY requirements.txt .
