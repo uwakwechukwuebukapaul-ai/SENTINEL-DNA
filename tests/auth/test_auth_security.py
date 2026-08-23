@@ -5,11 +5,15 @@ from app import create_app
 
 
 @pytest.fixture()
-def client(tmp_path):
+def client(tmp_path, monkeypatch):
 
     db_path = tmp_path / "auth_test.db"
 
-    os.environ["SENTINEL_DNA_DB_PATH"] = str(db_path)
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db_path))
 
     app = create_app()
 

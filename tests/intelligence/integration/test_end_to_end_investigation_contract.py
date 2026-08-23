@@ -33,6 +33,10 @@ def client(tmp_path, monkeypatch):
     from database.connection import database
     from services.auth.auth_service import AuthService
 
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
     original_path = database.database_path
     database.database_path = str(tmp_path / "contract.sqlite")
     app = create_app()
