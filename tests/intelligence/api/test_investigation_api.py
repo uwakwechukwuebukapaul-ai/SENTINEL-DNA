@@ -41,9 +41,13 @@ def test_api_health(client):
 
     response = client.get("/")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
-    assert response.get_json() == {"error": "authentication_required"}
+    data = response.get_json()
+
+    assert data["status"] == "running"
+
+    assert data["service"] == "Sentinel DNA"
 
 
 
