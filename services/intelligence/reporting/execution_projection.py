@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -47,6 +47,10 @@ class ExecutionProjectionV1:
     provenance: dict[str, Any]
     failures: list[dict[str, Any]]
     unavailable_reasons: list[dict[str, Any]]
+    created_at: str | None = None
+    queued_at: str | None = None
+    correlation_id: str | None = None
+    state_history: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -106,6 +110,10 @@ class ExecutionProjectionBuilder:
             },
             failures=list(envelope.get("failures", []) or []),
             unavailable_reasons=list(envelope.get("unavailable_reasons", []) or []),
+            created_at=envelope.get("created_at"),
+            queued_at=envelope.get("queued_at"),
+            correlation_id=envelope.get("correlation_id"),
+            state_history=list(envelope.get("state_history", []) or []),
         )
 
 

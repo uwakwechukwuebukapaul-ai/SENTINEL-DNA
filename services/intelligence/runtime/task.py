@@ -25,6 +25,7 @@ from .task_priority import TaskPriority
 
 class RuntimeTaskState(str, Enum):
     PENDING = "PENDING"
+    QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
@@ -108,6 +109,7 @@ class Task:
         """
 
         self.status = TaskStatus.QUEUED
+        self.execution_status = "queued"
 
 
     def start(self) -> None:

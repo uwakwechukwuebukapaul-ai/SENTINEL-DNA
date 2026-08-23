@@ -30,6 +30,15 @@ def test_start():
     assert task.started_at is not None
 
 
+def test_queue_sets_durable_execution_state():
+    task = Task(capability="test", payload={})
+    task.queue()
+
+    assert task.status == TaskStatus.QUEUED
+    assert task.execution_status == "queued"
+    assert task.to_dict()["execution_state"] == "QUEUED"
+
+
 def test_complete():
 
     task = Task(

@@ -228,7 +228,7 @@ class InvestigationCoordinator:
     # Context
     # ========================================================
 
-    def _persist_execution(self, execution: dict[str, Any], *, tenant_id: str | None, actor_id: str | None, investigation_id: str, alert: dict[str, Any], evidence: list[dict[str, Any]]) -> None:
+    def _persist_execution(self, execution: dict[str, Any], *, tenant_id: str | None, actor_id: str | None, investigation_id: str, alert: dict[str, Any], evidence: list[dict[str, Any]], create: bool = False) -> None:
         """Persist only operational references; raw alert/provider payloads stay out of this store."""
         if not tenant_id:
             return
@@ -264,10 +264,37 @@ class InvestigationCoordinator:
                 "service": item.get("capability") or item.get("service"),
                 "reason": str(item.get("error") or item.get("reason") or "Unavailable")[:256],
             } for item in execution.get("errors", []) if isinstance(item, dict) and str(item.get("status", "")).lower() in {"unavailable", "blocked"}],
+            created_at=str(execution.get("created_at") or execution.get("started_at") or _utc_iso()),
+            queued_at=str(execution.get("queued_at") or execution.get("started_at") or _utc_iso()),
+            correlation_id=str(execution.get("correlation_id")) if execution.get("correlation_id") else None,
+            state_history=list(execution.get("state_history", []) or []),
         )
-        self.execution_repository.save(envelope)
+        if create:
+            self.execution_repository.create(envelope)
+        else:
+            self.execution_repository.save(envelope)
         if envelope.provider_states:
             self.execution_repository.save_provider_health(execution_id=envelope.execution_id, tenant_id=envelope.tenant_id, snapshots=envelope.provider_states)
+
+    def _transition_execution(self, execution: dict[str, Any], status: str, *, actor_id: str | None = None) -> None:
+        """Apply an explicit durable execution transition before persistence."""
+        next_status = str(status).upper()
+        previous = str(execution.get("status") or "PENDING").upper()
+        now = _utc_iso()
+        execution["status"] = next_status.lower()
+        if next_status == "RUNNING":
+            execution["started_at"] = now
+        if next_status in {"COMPLETED", "FAILED", "UNAVAILABLE", "BLOCKED"}:
+            execution["completed_at"] = now
+        history = execution.setdefault("state_history", [])
+        if not history or history[-1].get("to") != next_status:
+            history.append({
+                "from": previous,
+                "to": next_status,
+                "at": now,
+                "actor_id": actor_id,
+                "correlation_id": execution.get("correlation_id"),
+            })
 
 
     def create_context(
@@ -1268,6 +1295,43 @@ class InvestigationCoordinator:
         context.tenant_id = tenant_id
         context.actor_id = actor_id
         intelligence_metadata: dict[str, Any] = {}
+        investigation_id = str(alert_data.get("investigation_id") or case_id)
+        capabilities = self._get_plan_capabilities(plan)
+        queued_at = _utc_iso()
+        execution = {
+            "case_id": case_id,
+            "execution_id": execution_id,
+            "created_at": queued_at,
+            "queued_at": queued_at,
+            "started_at": queued_at,
+            "status": "queued",
+            "correlation_id": correlation_id,
+            "capabilities": capabilities,
+            "results": [],
+            "errors": [],
+            "tasks": [],
+            "workflow": None,
+            "intelligence": intelligence_metadata,
+            "provider_health": [],
+            "evidence": normalized_artifacts,
+            "evidence_metadata": evidence_metadata,
+            "state_history": [{
+                "from": None,
+                "to": "QUEUED",
+                "at": queued_at,
+                "actor_id": actor_id,
+                "correlation_id": correlation_id,
+            }],
+        }
+        self._persist_execution(
+            execution,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            investigation_id=investigation_id,
+            alert=alert_data,
+            evidence=normalized_artifacts,
+            create=True,
+        )
         if self.threat_intelligence_gateway is not None and normalized_iocs:
             if not tenant_id or not actor_id:
                 observer.event(
@@ -1278,6 +1342,13 @@ class InvestigationCoordinator:
                     reason="tenant and actor context are required for intelligence lookup",
                     **({"correlation_id": correlation_id} if correlation_id else {}),
                 )
+                execution["errors"].append({
+                    "status": "failed",
+                    "error_code": "intelligence_authorization_denied",
+                    "error": "Tenant and actor context are required for intelligence lookup",
+                })
+                self._transition_execution(execution, "FAILED", actor_id=actor_id)
+                self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
                 raise PermissionError("tenant and actor context are required for intelligence lookup")
             for item in normalized_iocs:
                 if not isinstance(item, dict) or not item.get("value"):
@@ -1311,6 +1382,13 @@ class InvestigationCoordinator:
                         reason="gateway authorization denied",
                         **({"correlation_id": correlation_id} if correlation_id else {}),
                     )
+                    execution["errors"].append({
+                        "status": "failed",
+                        "error_code": "intelligence_authorization_denied",
+                        "error": "Threat intelligence authorization denied",
+                    })
+                    self._transition_execution(execution, "FAILED", actor_id=actor_id)
+                    self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
                     raise
                 normalized_lookup = self._normalize_intelligence_gateway_result(result)
                 normalized_lookup["provider_health"] = [item.to_dict() if hasattr(item, "to_dict") else item for item in getattr(result, "provider_health", ())]
@@ -1331,35 +1409,29 @@ class InvestigationCoordinator:
         orchestrator_kwargs.pop("tenant_id", None)
         orchestrator_kwargs.pop("actor_id", None)
         orchestrator_kwargs["context"] = context
-        workflow = self.orchestrator.investigate(
-            case_id=case_id,
-            artifacts=normalized_artifacts,
-            alert=alert_data,
-            **orchestrator_kwargs,
-        )
+        try:
+            workflow = self.orchestrator.investigate(
+                case_id=case_id,
+                artifacts=normalized_artifacts,
+                alert=alert_data,
+                **orchestrator_kwargs,
+            )
+        except Exception as exc:
+            execution["errors"].append({
+                "status": "failed",
+                "error_code": "orchestration_failed",
+                "error": "Investigation orchestration failed",
+                "exception_type": type(exc).__name__,
+            })
+            self._transition_execution(execution, "FAILED", actor_id=actor_id)
+            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
+            raise
 
 
-        capabilities = self._get_plan_capabilities(
-            plan
-        )
-
-
-        execution = {
-            "case_id": case_id,
-            "execution_id": execution_id,
-            "started_at": _utc_iso(),
-            "status": "pending",
-            "capabilities": capabilities,
-            "results": [],
-            "errors": [],
-            "tasks": [],
-            "workflow": workflow,
-            "intelligence": intelligence_metadata,
-            "provider_health": list(intelligence_metadata.get("provider_health", []) or []),
-            "evidence": normalized_artifacts,
-            "evidence_metadata": evidence_metadata,
-        }
-        self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=str(alert_data.get("investigation_id") or case_id), alert=alert_data, evidence=normalized_artifacts)
+        execution["workflow"] = workflow
+        execution["intelligence"] = intelligence_metadata
+        execution["provider_health"] = list(intelligence_metadata.get("provider_health", []) or [])
+        self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
 
 
         # ----------------------------------------------------
@@ -1369,9 +1441,13 @@ class InvestigationCoordinator:
 
         if self.runtime is None:
 
-            execution["status"] = "FAILED"
-            execution["completed_at"] = _utc_iso()
-            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=str(alert_data.get("investigation_id") or case_id), alert=alert_data, evidence=normalized_artifacts)
+            execution["errors"].append({
+                "status": "failed",
+                "error_code": "runtime_unavailable",
+                "error": "Runtime task executor is not configured.",
+            })
+            self._transition_execution(execution, "FAILED", actor_id=actor_id)
+            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
 
             return InvestigationResult(
                 success=False,
@@ -1409,14 +1485,17 @@ class InvestigationCoordinator:
 
         if missing:
 
-            execution["status"] = "FAILED"
-            execution["completed_at"] = _utc_iso()
-            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=str(alert_data.get("investigation_id") or case_id), alert=alert_data, evidence=normalized_artifacts)
-
             error_message = (
                 "Missing runtime capabilities: "
                 + ", ".join(missing)
             )
+            execution["errors"].append({
+                "status": "failed",
+                "error_code": "runtime_capability_missing",
+                "error": error_message,
+            })
+            self._transition_execution(execution, "FAILED", actor_id=actor_id)
+            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
 
             return InvestigationResult(
                 success=False,
@@ -1452,6 +1531,9 @@ class InvestigationCoordinator:
         # ----------------------------------------------------
 
 
+        self._transition_execution(execution, "RUNNING", actor_id=actor_id)
+        self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
+
         for capability in capabilities:
 
             task = self._create_runtime_task(
@@ -1462,6 +1544,9 @@ class InvestigationCoordinator:
                 context=context,
                 execution_id=execution_id,
             )
+            task.queue()
+            execution["tasks"].append(task.to_dict())
+            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
 
 
             try:
@@ -1476,7 +1561,10 @@ class InvestigationCoordinator:
                     result_status = result_status.value
                 if isinstance(result, dict):
                     result_status = result.get("status", result_status)
-                if task_status == "pending" and result is not None and result_status not in {"failed", "unavailable", "blocked"}:
+                if task_status in {"pending", "queued"} and result is not None and result_status not in {"failed", "unavailable", "blocked"}:
+                    # Preserve compatibility with runtime adapters that return
+                    # a result without mutating the Task lifecycle themselves.
+                    task.complete(result)
                     task_status = "success"
                 execution["results"].append(
                     {
@@ -1505,14 +1593,17 @@ class InvestigationCoordinator:
                     {
                         "capability": capability,
                         "task_id": task.task_id,
-                        "error": str(exc),
+                        "execution_id": task.execution_id,
+                        "status": "failed",
+                        "error_code": "runtime_exception",
+                        "error": "Runtime capability raised an exception",
+                        "exception_type": type(exc).__name__,
                     }
                 )
 
 
-            execution["tasks"].append(
-                task.to_dict()
-            )
+            execution["tasks"][-1] = task.to_dict()
+            self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
 
 
         success = not bool(
@@ -1520,14 +1611,9 @@ class InvestigationCoordinator:
         )
 
 
-        execution["status"] = (
-            "completed"
-            if success
-            else "failed"
-        )
-        execution["completed_at"] = _utc_iso()
+        self._transition_execution(execution, "COMPLETED" if success else "FAILED", actor_id=actor_id)
         execution["provider_health"] = list(execution.get("provider_health", []) or [])
-        self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=str(alert_data.get("investigation_id") or case_id), alert=alert_data, evidence=normalized_artifacts)
+        self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
 
 
         if success:

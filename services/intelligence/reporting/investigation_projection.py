@@ -207,6 +207,10 @@ class InvestigationProjectionBuilder:
         execution_status = {
             "status": execution.get("status", data.get("status", "unknown")),
             "execution_id": execution.get("execution_id") or data.get("execution_id"),
+            "created_at": execution.get("created_at"),
+            "queued_at": execution.get("queued_at"),
+            "correlation_id": execution.get("correlation_id"),
+            "state_history": list(execution.get("state_history", []) or []),
             "tasks": list(execution.get("tasks", []) or []),
             "errors": errors,
             "task_summary": {

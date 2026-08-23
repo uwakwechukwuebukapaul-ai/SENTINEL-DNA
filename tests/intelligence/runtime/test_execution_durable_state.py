@@ -1,5 +1,12 @@
+import pytest
+
 from database.connection import DatabaseConnection
-from services.intelligence.repository.execution_repository import ExecutionEnvelope, ExecutionRepository
+from services.intelligence.repository.execution_repository import (
+    ExecutionConflictError,
+    ExecutionEnvelope,
+    ExecutionRepository,
+    InvalidExecutionTransition,
+)
 
 
 def repository(tmp_path):
@@ -57,3 +64,47 @@ def test_failure_and_unavailable_states_are_replayable(tmp_path):
     replay = repo.get("EXE-3", "tenant-a")
     assert replay["status"] == "UNAVAILABLE"
     assert replay["unavailable_reasons"][0]["reason"] == "not configured"
+
+
+def test_execution_lifecycle_is_transition_validated_and_reloadable(tmp_path):
+    repo = repository(tmp_path)
+    envelope = ExecutionEnvelope(
+        "EXE-LIFECYCLE",
+        "tenant-a",
+        "analyst-a",
+        "INV-LIFECYCLE",
+        "ALERT-LIFECYCLE",
+        status="QUEUED",
+        correlation_id="CORR-LIFECYCLE",
+        state_history=[{"from": None, "to": "QUEUED", "at": "2026-08-23T00:00:00+00:00"}],
+    )
+    repo.create(envelope)
+
+    envelope.status = "RUNNING"
+    envelope.state_history.append({"from": "QUEUED", "to": "RUNNING", "at": "2026-08-23T00:00:01+00:00"})
+    repo.save(envelope)
+    envelope.status = "COMPLETED"
+    envelope.completed_at = "2026-08-23T00:00:02+00:00"
+    envelope.state_history.append({"from": "RUNNING", "to": "COMPLETED", "at": envelope.completed_at})
+    repo.save(envelope)
+
+    reloaded = repository(tmp_path).get("EXE-LIFECYCLE", "tenant-a")
+    assert reloaded["status"] == "COMPLETED"
+    assert reloaded["correlation_id"] == "CORR-LIFECYCLE"
+    assert [item["to"] for item in reloaded["state_history"]] == ["QUEUED", "RUNNING", "COMPLETED"]
+
+    envelope.status = "RUNNING"
+    with pytest.raises(InvalidExecutionTransition):
+        repo.save(envelope)
+
+
+def test_duplicate_execution_identity_is_rejected(tmp_path):
+    repo = repository(tmp_path)
+    envelope = ExecutionEnvelope("EXE-DUPLICATE", "tenant-a", "analyst-a", "INV-1", "ALERT-1", status="QUEUED")
+    repo.create(envelope)
+
+    with pytest.raises(ExecutionConflictError):
+        repo.create(ExecutionEnvelope("EXE-DUPLICATE", "tenant-a", "analyst-a", "INV-1", "ALERT-1", status="QUEUED"))
+
+    with pytest.raises(ExecutionConflictError):
+        repo.save(ExecutionEnvelope("EXE-DUPLICATE", "tenant-b", "analyst-b", "INV-2", "ALERT-2", status="FAILED"))
