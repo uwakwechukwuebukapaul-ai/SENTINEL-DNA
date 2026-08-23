@@ -181,14 +181,27 @@ def create_app():
 
     @app.get("/ready")
     def ready():
+        checks = {"database": "ok", "operations": "ok"}
         try:
             app.container.validate_required(("investigation_coordinator", "investigation_orchestrator", "audit_service"))
             with database.session() as connection:
                 connection.execute("SELECT 1").fetchone()
-            return {"status": "ready", "database": "ok", "services": "registered"}
+            return {"status": "ready", "database": "ok", "services": "registered", "checks": checks}
         except Exception:
-            return {"status": "not_ready"}, 503
+            checks["database"] = "unavailable"
+            checks["operations"] = "unavailable"
+            return {"status": "not_ready", "checks": checks}, 503
 
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        if request.path.startswith("/api/"):
+            return jsonify(
+                {
+                    "error": {"code": "NOT_FOUND", "message": "The requested resource was not found."},
+                    "correlation_id": request.headers.get("X-Correlation-ID"),
+                }
+            ), 404
+        return error
     @app.after_request
     def add_runtime_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")

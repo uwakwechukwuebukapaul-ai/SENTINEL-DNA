@@ -13,13 +13,17 @@ class SecurityContext:
     user_id: str | None
     roles: tuple[str, ...]
     correlation_id: str
+    tenant_context_valid: bool = True
 
 
 def request_context() -> SecurityContext:
     context = getattr(g, "security_context", None)
     if context is not None:
         return context
-    tenant_id = session.get("organization_id") or request.headers.get("X-Organization-ID")
+    session_tenant = session.get("organization_id")
+    header_tenant = request.headers.get("X-Organization-ID")
+    tenant_id = session_tenant or header_tenant
+    tenant_context_valid = not (session_tenant and header_tenant and str(session_tenant) != str(header_tenant))
     user_id = session.get("user_id")
     roles: tuple[str, ...] = ()
     if user_id:
@@ -34,6 +38,7 @@ def request_context() -> SecurityContext:
         user_id=user_id,
         roles=roles,
         correlation_id=request.headers.get("X-Correlation-ID") or str(uuid4()),
+        tenant_context_valid=tenant_context_valid,
     )
     g.security_context = context
     return context
@@ -42,6 +47,8 @@ def request_context() -> SecurityContext:
 def authorize_investigation(payload: dict | None = None, write: bool = False) -> tuple[bool, str]:
     """Authorize an investigation boundary without exposing internal details."""
     context = request_context()
+    if not context.tenant_context_valid:
+        return False, "organization_context_required"
     if current_app.testing or current_app.config.get("ENVIRONMENT", "development") in {"development", "test"}:
         return True, ""
     if not context.user_id:

@@ -4,6 +4,8 @@ __pycache__
 *.pyc
 .env
 soc.db
+*.db
+*.sqlite
 logs
 work
 tests
