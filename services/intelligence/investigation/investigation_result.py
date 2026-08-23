@@ -67,6 +67,10 @@ class InvestigationResult:
         default_factory=list
     )
 
+    # Canonical normalized evidence, retained separately from the legacy
+    # artifacts field so downstream projections can establish traceability.
+    evidence: list[Any] = field(default_factory=list)
+
 
 
     # =========================================================
@@ -170,6 +174,9 @@ class InvestigationResult:
     compliance_monitoring_context: Any = None
 
     intelligence: Any = None
+
+    # Versioned product projection; optional for legacy callers.
+    projection: Any = None
 
     ai_reasoning: Optional[str] = None
 
@@ -380,6 +387,9 @@ class InvestigationResult:
             "artifacts":
                 self.artifacts,
 
+            "evidence":
+                self.evidence,
+
             "correlation":
                 self.correlation,
 
@@ -470,6 +480,9 @@ class InvestigationResult:
 
             "intelligence":
                 self.intelligence,
+
+            "projection":
+                self.projection.to_dict() if hasattr(self.projection, "to_dict") else self.projection,
 
             "ai_reasoning": self.ai_reasoning,
 

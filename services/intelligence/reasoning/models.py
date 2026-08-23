@@ -31,7 +31,18 @@ class ReasoningReport:
     generated_by: str = "EvidenceReasoner"
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def evidence_refs(self) -> list[str]:
+        """All evidence supporting this report, in stable order."""
+        refs: list[str] = []
+        for finding in self.findings:
+            for reference in finding.evidence_refs:
+                if reference not in refs:
+                    refs.append(reference)
+        return refs
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["findings"] = [finding.to_dict() for finding in self.findings]
+        data["evidence_refs"] = self.evidence_refs
         return data

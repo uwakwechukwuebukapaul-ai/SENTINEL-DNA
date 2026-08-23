@@ -1,7 +1,50 @@
-{% extends "base.html" %}{% block title %}Sentinel DNA SOC Command Center{% endblock %}{% block content %}
-<header><h1>SOC Command Center</h1><p class="muted">Evidence-backed operational view of current cases and analyst activity.</p><button id="logout-button" type="button">Log out</button></header><script>document.getElementById('logout-button').addEventListener('click',async()=>{const response=await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-Token':{{ session.get('csrf_token','')|tojson }}}});if(response.ok)window.location.assign('/login')});</script>
+{% extends "base.html" %}
+{% block title %}Sentinel DNA SOC Command Center{% endblock %}
+{% block content %}
+<style>.dashboard-header{display:flex;justify-content:space-between;gap:24px;align-items:flex-start}.identity-summary{display:grid;gap:4px;min-width:240px}.dashboard-nav{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0}.dashboard-nav a,.dashboard-nav button{color:#b8d9ff;text-decoration:none;background:transparent;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer}.dashboard-nav .active{background:#123b58}.welcome-card{border-color:#2e6591}.onboarding-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.onboarding-grid>div{border-left:3px solid var(--blue);padding-left:12px}.onboarding-grid p{color:var(--muted);margin-bottom:0}.profile-card dl{display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:10px;margin:0}.profile-card dt{color:var(--muted)}.profile-card dd{margin:0}@media(max-width:800px){.dashboard-header{flex-direction:column}.onboarding-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:500px){.onboarding-grid{grid-template-columns:1fr}}</style>
+<header class="dashboard-header">
+  <div>
+    <p class="label">Sentinel DNA</p>
+    <h1>Welcome to Sentinel DNA SOC Command Center</h1>
+    <p class="muted">Evidence-backed operational view of current cases and analyst activity.</p>
+  </div>
+  <div class="card identity-summary">
+    <strong>{{ analyst.name }}</strong>
+    <span>{{ analyst.email }}</span>
+    <span>{{ analyst.role|replace('_', ' ')|title }}</span>
+    <span>Tenant: {{ analyst.tenant_id }}</span>
+  </div>
+</header>
+<nav class="dashboard-nav" aria-label="SOC Command Center navigation">
+  <a class="active" href="/">Command Center</a>
+  <a href="/workspace">Investigations</a>
+  <a href="#threat-intelligence">Threat Intelligence</a>
+  <a href="#cases">Cases</a>
+  <a href="/profile">Analyst Profile</a>
+  <button id="logout-button" type="button">Logout</button>
+</nav>
+<script>document.getElementById('logout-button').addEventListener('click',async()=>{const response=await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-Token':{{ session.get('csrf_token','')|tojson }}}});if(response.ok)window.location.assign('/login')});</script>
+<section class="card welcome-card">
+  <h2>First-run analyst guide</h2>
+  <p>Start with an alert, follow the evidence, and record a defensible decision.</p>
+  <div class="onboarding-grid">
+    <div><strong>Investigations</strong><p>Open an alert and follow its lifecycle through the canonical AI investigation workflow.</p></div>
+    <div><strong>Threat Intelligence</strong><p>Review IOC reputation, provider observations, and enrichment history.</p></div>
+    <div><strong>Evidence Analysis</strong><p>Inspect source, provenance, timestamps, and the findings each item supports.</p></div>
+    <div><strong>AI Investigator</strong><p>Understand the reasoning, ATT&amp;CK mapping, confidence, verdict, and report.</p></div>
+  </div>
+</section>
 <section class="grid stats">{% for key,label in [('cases','Total Cases'),('evidence','Evidence'),('timeline','Timeline Events'),('iocs','IOCs'),('high_risk_cases','High/Critical Cases'),('active_cases','Active Cases')] %}<article class="card"><div class="label">{{ label }}</div><div class="metric">{{ stats[key] or 0 }}</div></article>{% endfor %}</section>
-<section class="grid columns"><div><article class="card"><div class="section-title"><h2>Recent cases</h2><span class="muted">{{ cases|length }} shown</span></div><table><thead><tr><th>Case</th><th>Severity</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>{% for c in cases %}<tr><td><strong>{{ c.title }}</strong><br><span class="muted">{{ c.case_id }}</span></td><td><span class="badge {{ c.severity|lower }}">{{ c.severity }}</span></td><td><span class="badge {{ c.status|lower }}">{{ c.status }}</span></td><td>{{ c.created }}</td><td><a class="button" href="/api/cases/{{ c.case_id }}">View API</a></td></tr>{% else %}<tr><td colspan="5" class="muted">No cases available.</td></tr>{% endfor %}</tbody></table></article>
-<article class="card"><div class="section-title"><h2>Investigation</h2><span class="muted">Canonical coordinator path</span></div><p>Run an investigation using the case evidence through <strong>InvestigationCoordinator → InvestigationOrchestrator → RuntimeTaskExecutor</strong>.</p><p class="muted">Use <code>POST /api/investigations/run</code> with <code>{"case_id":"..."}</code>.</p></article>
-<article class="card"><h2>Evidence and timeline</h2><table><thead><tr><th>Case</th><th>Type/event</th><th>Details</th><th>Time</th></tr></thead><tbody>{% for e in evidence %}<tr><td>{{ e.case_id }}</td><td>{{ e.type }}</td><td>{{ e.data }}</td><td>{{ e.created }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No evidence available.</td></tr>{% endfor %}{% for e in timeline %}<tr><td>{{ e.case_id }}</td><td>{{ e.event_type }}</td><td>{{ e.description }} <span class="muted">({{ e.actor }})</span></td><td>{{ e.created }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No timeline events available.</td></tr>{% endfor %}</tbody></table></article></div>
-<aside><article class="card"><h2>IOC intelligence</h2><table><thead><tr><th>Type</th><th>Value</th><th>Case</th></tr></thead><tbody>{% for i in iocs %}<tr><td>{{ i.ioc_type }}</td><td>{{ i.value }}</td><td class="muted">{{ i.case_id }}</td></tr>{% else %}<tr><td colspan="3" class="muted">No indicators available.</td></tr>{% endfor %}</tbody></table></article><article class="card"><h2>Analyst actions</h2>{% for a in actions %}<p><strong>{{ a.action }}</strong><br><span class="muted">{{ a.analyst }} · {{ a.case_id }} · {{ a.created }}</span></p>{% else %}<p class="muted">No analyst actions recorded.</p>{% endfor %}</article><article class="card"><h2>MITRE / notes</h2>{% for n in notes %}<p>{{ n.note }}<br><span class="muted">{{ n.case_id }} · {{ n.created }}</span></p>{% else %}<p class="muted">No investigation notes or MITRE mappings available.</p>{% endfor %}</article></aside></section>{% endblock %}
+<section class="grid columns">
+  <div>
+    <article id="cases" class="card"><div class="section-title"><h2>Recent cases</h2><span class="muted">{{ cases|length }} shown</span></div><table><thead><tr><th>Case</th><th>Severity</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>{% for c in cases %}<tr><td><strong>{{ c.title }}</strong><br><span class="muted">{{ c.case_id }}</span></td><td><span class="badge {{ c.severity|lower }}">{{ c.severity }}</span></td><td><span class="badge {{ c.status|lower }}">{{ c.status }}</span></td><td>{{ c.created }}</td><td><a class="button" href="/api/cases/{{ c.case_id }}">View API</a></td></tr>{% else %}<tr><td colspan="5" class="muted">No cases available.</td></tr>{% endfor %}</tbody></table></article>
+    <article class="card"><div class="section-title"><h2>Investigation</h2><span class="muted">Canonical coordinator path</span></div><p>Run an investigation using the case evidence through <strong>InvestigationCoordinator &rarr; InvestigationOrchestrator &rarr; RuntimeTaskExecutor</strong>.</p><p class="muted">Use <code>POST /api/investigations/run</code> with <code>{"case_id":"..."}</code>.</p></article>
+    <article class="card"><h2>Evidence and timeline</h2><table><thead><tr><th>Case</th><th>Type/event</th><th>Details</th><th>Time</th></tr></thead><tbody>{% for e in evidence %}<tr><td>{{ e.case_id }}</td><td>{{ e.type }}</td><td>{{ e.data }}</td><td>{{ e.created }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No evidence available.</td></tr>{% endfor %}{% for e in timeline %}<tr><td>{{ e.case_id }}</td><td>{{ e.event_type }}</td><td>{{ e.description }} <span class="muted">({{ e.actor }})</span></td><td>{{ e.created }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No timeline events available.</td></tr>{% endfor %}</tbody></table></article>
+  </div>
+  <aside>
+    <article id="threat-intelligence" class="card"><h2>IOC intelligence</h2><table><thead><tr><th>Type</th><th>Value</th><th>Case</th></tr></thead><tbody>{% for i in iocs %}<tr><td>{{ i.ioc_type }}</td><td>{{ i.value }}</td><td class="muted">{{ i.case_id }}</td></tr>{% else %}<tr><td colspan="3" class="muted">No indicators available.</td></tr>{% endfor %}</tbody></table></article>
+    <article class="card"><h2>Analyst actions</h2>{% for a in actions %}<p><strong>{{ a.action }}</strong><br><span class="muted">{{ a.analyst }} &middot; {{ a.case_id }} &middot; {{ a.created }}</span></p>{% else %}<p class="muted">No analyst actions recorded.</p>{% endfor %}</article>
+    <article class="card"><h2>MITRE / notes</h2>{% for n in notes %}<p>{{ n.note }}<br><span class="muted">{{ n.case_id }} &middot; {{ n.created }}</span></p>{% else %}<p class="muted">No investigation notes or MITRE mappings available.</p>{% endfor %}</article>
+  </aside>
+</section>
+{% endblock %}

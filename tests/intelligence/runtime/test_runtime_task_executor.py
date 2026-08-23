@@ -118,7 +118,8 @@ def test_missing_handler():
     )
 
 
-    assert result is None
+    assert result["status"] == "unavailable"
+    assert result["error_code"] == "capability_unavailable"
 
 
 

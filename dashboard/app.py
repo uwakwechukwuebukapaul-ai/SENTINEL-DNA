@@ -32,6 +32,7 @@ from services.api.investigations.controller import InvestigationController
 from services.auth import auth_api
 from services.auth.security import csrf_token
 from services.auth.permissions import current_role, permission_required
+from services.core.security_context import request_context
 
 # Case management
 from services.cases import cases_api
@@ -696,6 +697,18 @@ def dashboard_payload() -> dict:
     }
 
 
+def analyst_identity() -> dict:
+    """Return the authenticated analyst identity and trusted tenant context."""
+    user = app.container.get("auth_service").get_by_id(session.get("user_id"))
+    context = request_context()
+    return {
+        "name": getattr(user, "username", "Analyst") if user else "Analyst",
+        "email": getattr(user, "email", "Unavailable") if user else "Unavailable",
+        "role": getattr(user, "role", "Unavailable") if user else "Unavailable",
+        "tenant_id": context.tenant_id or "Not provided by current session",
+    }
+
+
 
 # ---------------------------------------------------------
 # DASHBOARD ROUTES
@@ -719,11 +732,19 @@ def signup_page():
 @app.get("/")
 @permission_required("investigations:read")
 def dashboard():
-
+    payload = dashboard_payload()
+    payload["analyst"] = analyst_identity()
     return render_template(
         "dashboard.html",
-        **dashboard_payload()
+        **payload
     )
+
+
+@app.get("/profile")
+@permission_required("investigations:read")
+def analyst_profile():
+    """Render the authenticated analyst's server-derived profile context."""
+    return render_template("profile.html", analyst=analyst_identity())
 
 
 
@@ -740,10 +761,11 @@ def dashboard_api():
 @app.get("/workspace")
 @permission_required("investigations:read")
 def workspace_home():
-
+    payload = dashboard_payload()
+    payload["analyst"] = analyst_identity()
     return render_template(
         "dashboard.html",
-        **dashboard_payload()
+        **payload
     )
 
 

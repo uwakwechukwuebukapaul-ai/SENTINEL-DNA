@@ -156,6 +156,35 @@ def _execute_investigation():
 # ============================================================
 
 
+@investigations_api.get("/executions")
+def list_investigation_executions():
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        limit = int(request.args.get("limit", 50))
+        executions = _coordinator().list_execution_projections(context, limit=limit)
+    except (PermissionError, ValueError):
+        return jsonify({"error": "execution_access_denied"}), 403
+    return jsonify({"version": "execution-projection-v1", "executions": executions})
+
+
+@investigations_api.get("/executions/<execution_id>")
+def get_investigation_execution(execution_id: str):
+    context = request_context()
+    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        projection = _coordinator().get_execution_projection(execution_id, context)
+    except PermissionError:
+        return jsonify({"error": "execution_not_found"}), 404
+    if projection is None:
+        return jsonify({"error": "execution_not_found"}), 404
+    return jsonify(projection)
+
+
 @investigations_api.post("")
 def create_investigation():
 

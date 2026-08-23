@@ -29,6 +29,7 @@ ARTIFACTS = [
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    import uuid
     from database.connection import database
     from services.auth.auth_service import AuthService
 
@@ -39,8 +40,14 @@ def client(tmp_path, monkeypatch):
     auth = app.container.get("auth_service")
     app.container.register("auth_service", AuthService(database))
     client = app.test_client()
-    assert client.post("/api/auth/register", json={"username": "contract-user", "email": "contract@example.test", "password": "CorrectHorseBattery1!"}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": "contract-user", "password": "CorrectHorseBattery1!"}).status_code == 200
+    # Keep the production limiter active while isolating this fixture's
+    # bucket from earlier test processes and shared local SQLite state.
+    client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
+    username = f"contract-{uuid.uuid4().hex[:12]}"
+    email = f"{username}@example.test"
+    password = "CorrectHorseBattery1!"
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
     try:
         yield client
     finally:

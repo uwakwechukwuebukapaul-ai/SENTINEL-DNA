@@ -26,7 +26,15 @@ def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
     response = client.get("/workspace/")
     assert response.status_code == 200
     assert b"DEMO-PS-" in response.data
-    assert b"Synthetic" not in response.data
+    assert b"Synthetic" in response.data
+    dashboard = client.get("/")
+    assert b"Threat level" in dashboard.data
+    assert b"Risk distribution" in dashboard.data
+    assert b"Confidence distribution" in dashboard.data
+    assert b"MITRE ATT&amp;CK coverage" in dashboard.data
+    assert b"Recent investigation activity" in dashboard.data
+    assert b"Tenant-scoped investigations" in response.data
+    assert b"MITRE ATT&CK coverage" in response.data
 
     with client.session_transaction() as state:
         tenant_id = state["organization_id"]
@@ -35,6 +43,13 @@ def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
     assert seeded["metadata"]["synthetic"] is True
     assert seeded["metadata"]["tenant_id"] == tenant_id
     assert scenario.ensure_for_tenant(tenant_id)["case_id"] == seeded["case_id"]
+    snapshot = application.container.require("investigation_coordinator").get_workspace_snapshot(tenant_id)
+    assert snapshot["overview"]["evidence_collected"] == 3
+    assert snapshot["overview"]["ioc_intelligence"] == 1
+    assert snapshot["visualizations"]["severity_distribution"] == [{"label": "High", "count": 1}]
+    assert snapshot["visualizations"]["ioc_reputation_distribution"] == [{"label": "Not Queried", "count": 1}]
+    assert snapshot["visualizations"]["confidence_distribution"]
+    assert snapshot["visualizations"]["activity"]
 
 
 def test_start_uses_canonical_coordinator_and_report(application):
@@ -66,6 +81,14 @@ def test_start_uses_canonical_coordinator_and_report(application):
     assert b"IOC intelligence" in detail.data
     assert b"Evidence summary" in report.data
     assert b"synthetic_demo" in report.data
+
+
+def test_disabled_demo_mode_preserves_honest_empty_states(application):
+    application.config["DEMO_DATA_ENABLED"] = False
+    client = application.test_client()
+    login(client, "empty-user", "empty@example.test")
+    assert b"No investigations are available" in client.get("/").data
+    assert b"No active investigations" in client.get("/workspace/").data
 
 
 def test_demo_case_is_not_readable_across_tenants(application):

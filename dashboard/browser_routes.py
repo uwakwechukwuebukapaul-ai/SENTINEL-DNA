@@ -5,6 +5,7 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 from services.core.security_context import request_context
 from services.intelligence.reporting.ai_investigator_report import AIInvestigatorReportService
+from services.intelligence.reporting.investigation_projection import InvestigationProjectionBuilder
 
 browser = Blueprint("browser", __name__)
 
@@ -85,7 +86,16 @@ def investigation_detail(principal, investigation_id):
         detail = None
     if not detail:
         return render_template("error.html", message="Investigation not found."), 404
-    return render_template("investigation_detail_v3.html", **principal, investigation={"id": investigation_id, **detail}, csrf_token=session.get("csrf_token"))
+    projection = InvestigationProjectionBuilder().build_from_read_model(
+        detail,
+        tenant_id=principal["tenant_id"],
+    )
+    return render_template(
+        "investigation_detail_v3.html",
+        **principal,
+        investigation={"id": investigation_id, "projection": projection.to_dict(), **detail},
+        csrf_token=session.get("csrf_token"),
+    )
 
 
 @browser.get("/workspace/investigation/<investigation_id>/report")
@@ -114,6 +124,20 @@ def start_investigation(investigation_id):
         detail = None
     if not detail:
         return jsonify({"error": "investigation_not_found"}), 404
+    demo_service = current_app.container.get("analyst_demo_scenario")
+    if current_app.config.get("DEMO_DATA_ENABLED") and demo_service and str(investigation_id) == demo_service.case_id_for_tenant(principal["tenant_id"]):
+        demo_input = demo_service.investigation_input_for_tenant(principal["tenant_id"])
+        current_app.container.require("investigation_coordinator").investigate(
+            case_id=demo_input["case_id"],
+            alert=demo_input["alert"],
+            artifacts=demo_input["artifacts"],
+            evidence=demo_input["evidence"],
+            iocs=demo_input["iocs"],
+            tenant_id=principal["tenant_id"],
+            actor_id=principal["analyst"]["actor_id"],
+            correlation_id=request_context().correlation_id,
+        )
+        return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id))
     report = detail.get("report") or {}
     intelligence = detail.get("intelligence") or {}
     evidence_summary = intelligence.get("evidence_summary") if isinstance(intelligence.get("evidence_summary"), dict) else {}

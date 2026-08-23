@@ -40,6 +40,7 @@ def authenticated_client(client):
     import uuid
     username = f"investigator-test-{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.test"
+    client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
     assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!"}).status_code == 201
     assert client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}).status_code == 200
     return client

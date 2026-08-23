@@ -220,7 +220,8 @@ def test_runtime_task_executor_missing_capability_fails_task():
     )
 
 
-    assert result is None
+    assert result["status"] == "unavailable"
+    assert result["error_code"] == "capability_unavailable"
 
     assert task.status == TaskStatus.FAILED
 

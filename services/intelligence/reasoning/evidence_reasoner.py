@@ -79,7 +79,21 @@ class EvidenceReasoner:
             and (reference := self._ref(item)) is not None
         ]
         findings: list[ReasoningFinding] = []
-        if any(term in haystack for term in ("phishing", "credential", "malicious url", "credential harvesting")):
+        powershell = any(term in haystack for term in ("powershell", "pwsh", "encodedcommand", "encoded command"))
+        phishing = any(term in haystack for term in ("phishing", "credential", "malicious url", "credential harvesting"))
+        if powershell:
+            findings.append(ReasoningFinding(
+                finding_id="RF-POWERSHELL-001",
+                title="Suspicious PowerShell execution",
+                description="PowerShell execution with an encoded command and an external domain is consistent with obfuscated script delivery.",
+                severity="high",
+                confidence=0.91,
+                evidence_refs=refs,
+                mitre_techniques=["T1059.001"],
+                evidence_status="attached" if refs else "not_attached",
+                intelligence_provenance=intelligence_provenance,
+            ))
+        if phishing:
             confidence = 0.88
             findings.append(ReasoningFinding(
                 finding_id="RF-PHISHING-001",
@@ -99,9 +113,13 @@ class EvidenceReasoner:
             if ai_refs and all(str(ref).isdigit() for ref in ai_refs) and refs:
                 ai_refs = [refs[int(ref)] if int(ref) < len(refs) else ref for ref in ai_refs]
             metadata.update({"provider": response.metadata.get("provider", "unknown"), "synthetic_only": bool(response.metadata.get("synthetic", response.metadata.get("offline_only", False))), "ai_confidence": response.confidence, "ai_evidence_references": ai_refs, "prompt": self.build_prompt(context, plan)})
-        confidence = findings[0].confidence if findings else 0.25
+        confidence = max((finding.confidence for finding in findings), default=0.25)
         return ReasoningReport(
-            summary="Evidence supports a potential credential harvesting attempt." if findings else "No deterministic evidence-backed finding was identified.",
+            summary=(
+                "Evidence supports suspicious PowerShell execution with an encoded command and external-domain activity."
+                if powershell else "Evidence supports a potential credential harvesting attempt."
+                if phishing else "No deterministic evidence-backed finding was identified."
+            ),
             findings=findings,
             confidence=confidence,
             metadata=metadata,

@@ -184,7 +184,11 @@ class AgentRuntimeAdapter:
                             indicator
                         )
 
-                for indicator in self.ioc_extractor.extract(item):
+                # Evidence envelopes contain integrity/provenance hashes.
+                # Extract observables from content fields only; audit hashes
+                # must never become investigation IOCs.
+                content = item.get("data") or item.get("value") or item.get("raw") or item.get("description") or "" if isinstance(item, dict) else item
+                for indicator in self.ioc_extractor.extract(content):
                     iocs.append(indicator.get("value"))
 
 

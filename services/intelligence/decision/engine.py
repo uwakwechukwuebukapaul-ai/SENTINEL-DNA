@@ -12,6 +12,11 @@ class DecisionEngine:
         reasoning = self._data(reasoning_report or data.get("reasoning_report"))
         case_id = str(data.get("case_id") or "unknown")
         evidence = data.get("evidence", data.get("artifacts", [])) or []
+        evidence_ids = [
+            str(item.get("evidence_id"))
+            for item in evidence
+            if isinstance(item, dict) and item.get("evidence_id")
+        ]
         text = json.dumps({"result": data, "reasoning": reasoning}, default=str).lower()
         confidence = float(data.get("confidence") or reasoning.get("confidence") or 0.0)
         severity = str((data.get("risk") or {}).get("severity", "") if isinstance(data.get("risk"), dict) else data.get("risk") or "unknown").lower()
@@ -35,7 +40,8 @@ class DecisionEngine:
             decision_id="DEC-" + hashlib.sha256(payload.encode()).hexdigest()[:20], case_id=case_id,
             verdict=verdict, severity=severity, confidence=confidence, rationale=rationale,
             recommended_actions=["Escalate for analyst review"] if verdict in {"true_positive", "needs_review"} else ["Close as benign"],
-            evidence_summary={"count": len(evidence), "memory_reference": memory_reference},
+            evidence_summary={"count": len(evidence), "memory_reference": memory_reference, "evidence_ids": evidence_ids},
+            evidence_ids=evidence_ids,
             mitre_summary=list(data.get("mitre", []) or reasoning.get("mitre_techniques", []) or []), synthetic_only=True)
 
     @staticmethod
