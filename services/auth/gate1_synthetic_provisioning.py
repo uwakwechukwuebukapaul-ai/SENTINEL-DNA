@@ -12,6 +12,7 @@ from datetime import date, datetime, timezone
 import json
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -83,6 +84,84 @@ class RotatedSyntheticIdentity:
     state: str = "rotated"
 
 
+def _mode_grants_write_to_process(file_stat) -> bool:
+    """Return whether POSIX mode bits grant write access to this process."""
+    mode = file_stat.st_mode
+    if file_stat.st_uid == os.geteuid():
+        return bool(mode & stat.S_IWUSR)
+    groups = set(os.getgroups()) | {os.getegid()}
+    if file_stat.st_gid in groups:
+        return bool(mode & stat.S_IWGRP)
+    return bool(mode & stat.S_IWOTH)
+
+
+def _read_only_filesystem(path: Path) -> bool:
+    """Require the filesystem containing ``path`` to report read-only."""
+    try:
+        flags = os.statvfs(path).f_flag
+        return bool(flags & getattr(os, "ST_RDONLY", 1))
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def _metadata_is_effectively_read_only(path: Path) -> bool:
+    """Validate effective protection, including Docker Desktop's 9P mounts.
+
+    The application runs in a Linux container. Native Windows execution has no
+    portable equivalent for the container mount check and therefore fails
+    closed. Docker Desktop may report synthetic POSIX write bits for a Windows
+    bind mount even when the mount is read-only; in that case the effective
+    access checks and read-only filesystem flag are authoritative.
+    """
+    if os.name == "nt":
+        return False
+    try:
+        file_stat = os.lstat(path)
+        parent_stat = os.lstat(path.parent)
+        if not stat.S_ISREG(file_stat.st_mode) or not stat.S_ISDIR(parent_stat.st_mode):
+            return False
+        if os.access(path, os.W_OK) or os.access(path.parent, os.W_OK):
+            return False
+        if _mode_grants_write_to_process(file_stat) or _mode_grants_write_to_process(parent_stat):
+            return _read_only_filesystem(path)
+        return True
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def _read_metadata_from_protected_file(path: Path) -> dict:
+    """Open and parse the validated file without following a link."""
+    try:
+        file_stat = os.lstat(path)
+        parent_stat = os.lstat(path.parent)
+        if stat.S_ISLNK(file_stat.st_mode) or stat.S_ISLNK(parent_stat.st_mode):
+            raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+        if not stat.S_ISREG(file_stat.st_mode) or not stat.S_ISDIR(parent_stat.st_mode):
+            raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+        if not _metadata_is_effectively_read_only(path):
+            raise Gate1ProvisioningError("trusted_release_metadata_writable")
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        try:
+            opened_stat = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(opened_stat.st_mode)
+                or opened_stat.st_dev != file_stat.st_dev
+                or opened_stat.st_ino != file_stat.st_ino
+            ):
+                raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+            with os.fdopen(descriptor, "r", encoding="utf-8") as metadata_file:
+                descriptor = -1
+                return json.load(metadata_file)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+    except Gate1ProvisioningError:
+        raise
+    except (OSError, UnicodeError, ValueError, TypeError):
+        raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+
+
 def assert_trusted_release_metadata(expected_revision: str) -> None:
     """Require the deployment-provided, immutable release identity artifact."""
     trusted_path = os.getenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", "").strip()
@@ -96,17 +175,7 @@ def assert_trusted_release_metadata(expected_revision: str) -> None:
         raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
     if configured_path != runtime_path:
         raise Gate1ProvisioningError("trusted_release_metadata_path_mismatch")
-    try:
-        if path.is_symlink() or not path.is_file():
-            raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
-        if os.name != "nt":
-            if path.stat().st_mode & 0o222 or os.access(path, os.W_OK):
-                raise Gate1ProvisioningError("trusted_release_metadata_writable")
-        metadata = json.loads(path.read_text(encoding="utf-8"))
-    except Gate1ProvisioningError:
-        raise
-    except (OSError, UnicodeError, ValueError, TypeError):
-        raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+    metadata = _read_metadata_from_protected_file(path)
     if not isinstance(metadata, dict):
         raise Gate1ProvisioningError("trusted_release_metadata_invalid")
     if set(metadata) != {"release_sha", "image_digest"}:

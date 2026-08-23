@@ -55,9 +55,14 @@ $env:SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE = $manifest
 Compose mounts that host file read-only at the fixed container path
 `/run/sentinel/release/metadata.json` and sets the in-container path itself.
 The application rejects path substitution, symlinks, malformed JSON, extra
-fields, unsafe permissions, revision mismatches, and digest mismatches. The
-manifest contains no passwords or other credentials and is never copied into
-the image or source tree.
+fields, unsafe effective permissions, revision mismatches, and digest
+mismatches. The Linux runtime checks that the application user cannot write the
+file or its parent directory. When Docker Desktop exposes a Windows bind mount
+with synthetic POSIX write bits, the runtime additionally requires the
+containing filesystem to report a read-only mount; mode bits alone are not
+trusted in that environment. Native Windows application execution remains
+unsupported and fails closed. The manifest contains no passwords or other
+credentials and is never copied into the image or source tree.
 
 ## Protected local deployment
 

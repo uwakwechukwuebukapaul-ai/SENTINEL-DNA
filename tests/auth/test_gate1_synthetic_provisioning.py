@@ -25,6 +25,7 @@ def build_services(tmp_path, monkeypatch, audit=None):
     trusted_metadata = tmp_path / "gate1-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
     trusted_metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
@@ -168,6 +169,7 @@ def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkey
     trusted_metadata = tmp_path / "rollback-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
     trusted_metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
@@ -228,6 +230,7 @@ def test_provisioned_users_are_tenant_isolated_through_application_api(tmp_path,
     trusted_metadata = tmp_path / "application-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
     trusted_metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
@@ -462,6 +465,7 @@ def test_rotation_audit_failure_rolls_back_every_selected_lane(tmp_path, monkeyp
     trusted_metadata = tmp_path / "rotation-rollback-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
     trusted_metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
@@ -493,6 +497,7 @@ def test_rotation_invalidates_existing_signed_session_epoch(tmp_path, monkeypatc
     trusted_metadata = tmp_path / "session-epoch-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
     trusted_metadata.chmod(0o444)
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", trusted_metadata)
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_DIGEST", "sha256:" + "a" * 64)
@@ -620,8 +625,42 @@ def test_trusted_metadata_rejects_writable_file(tmp_path, monkeypatch):
     metadata.chmod(0o644)
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: False)
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_writable"):
         service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux container mount semantics are required")
+def test_trusted_metadata_accepts_docker_desktop_read_only_mount_with_synthetic_mode_bits(tmp_path, monkeypatch):
+    _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
+    metadata = tmp_path / "docker-desktop-metadata.json"
+    metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    metadata.chmod(0o777)
+    monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
+    monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
+    monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
+
+    gate1_module.assert_trusted_release_metadata(TEST_REVISION)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mount semantics are required")
+def test_trusted_metadata_rejects_write_bits_without_read_only_filesystem(tmp_path, monkeypatch):
+    metadata = tmp_path / "not-read-only-mount.json"
+    metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    metadata.chmod(0o777)
+    monkeypatch.setattr(gate1_module.os, "access", lambda _path, _mode: False)
+    monkeypatch.setattr(gate1_module.os, "statvfs", lambda _path: type("StatVfs", (), {"f_flag": 0})())
+
+    assert gate1_module._metadata_is_effectively_read_only(metadata) is False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX parent-directory semantics are required")
+def test_trusted_metadata_rejects_replaceable_parent_directory(tmp_path):
+    metadata = tmp_path / "replaceable-parent.json"
+    metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
+    metadata.chmod(0o444)
+
+    assert gate1_module._metadata_is_effectively_read_only(metadata) is False
 
 
 def test_trusted_metadata_runtime_path_cannot_be_operator_substituted(tmp_path, monkeypatch):
