@@ -59,7 +59,9 @@ def _membership(row: Any) -> CanonicalMembership | None:
 
 
 class CanonicalTenantService:
-    def __init__(self, db: DatabaseConnection = database): self.db = db
+    def __init__(self, db: DatabaseConnection = database, auth=None):
+        self.db = db
+        self.auth = auth
 
     def create(self, name: str, tenant_id: str | None = None, connection=None) -> CanonicalTenant:
         if not str(name).strip(): raise CanonicalAuthorityError("tenant_name_required")
@@ -76,8 +78,19 @@ class CanonicalTenantService:
     def set_status(self, tenant_id: str, status: str, connection=None) -> CanonicalTenant | None:
         if status not in {"active", "inactive", "deleted"}: raise CanonicalAuthorityError("invalid_tenant_status")
         if connection is not None:
-            return _tenant(CanonicalTenantRepository(connection).set_status(tenant_id, status))
-        with CanonicalUnitOfWork(self.db) as unit: return _tenant(CanonicalTenantRepository(unit.conn).set_status(tenant_id, status))
+            repository = CanonicalTenantRepository(connection)
+            previous = repository.get(tenant_id)
+            result = _tenant(repository.set_status(tenant_id, status))
+            if self.auth and previous and previous["status"] != status:
+                self.auth.invalidate_tenant_sessions(tenant_id, connection=connection)
+            return result
+        with CanonicalUnitOfWork(self.db) as unit:
+            repository = CanonicalTenantRepository(unit.conn)
+            previous = repository.get(tenant_id)
+            result = _tenant(repository.set_status(tenant_id, status))
+            if self.auth and previous and previous["status"] != status:
+                self.auth.invalidate_tenant_sessions(tenant_id, connection=unit.conn)
+            return result
 
 
 class CanonicalIdentityService:
@@ -160,9 +173,9 @@ class CanonicalMembershipService:
 class CanonicalAuthorityService:
     """Read/resolve facade used by future canonical context composition."""
 
-    def __init__(self, db: DatabaseConnection = database):
+    def __init__(self, db: DatabaseConnection = database, auth=None):
         self.db = db
-        self.tenants = CanonicalTenantService(db)
+        self.tenants = CanonicalTenantService(db, auth=auth)
         self.identities = CanonicalIdentityService(db)
         self.memberships = CanonicalMembershipService(db)
 

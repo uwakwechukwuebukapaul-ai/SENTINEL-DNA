@@ -80,6 +80,14 @@ def restore_persistent_session():
     _login_session(user, remember=True, auth_method="remember_me")
     _audit("remember_me_authentication", user_id=user.id, method="remember_me", outcome="success")
 
+
+def enforce_current_session():
+    """Reject signed sessions whose user authentication epoch is stale."""
+    user_id = session.get("user_id")
+    if user_id and _service().session_user(user_id, session.get("session_version")) is None:
+        g.clear_remember_cookie = True
+        session.clear()
+
 @auth_api.post("/register")
 def register():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403

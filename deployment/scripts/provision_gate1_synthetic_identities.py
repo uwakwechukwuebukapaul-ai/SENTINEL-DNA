@@ -25,6 +25,7 @@ from services.auth.auth_service import AuthService
 from services.auth.gate1_synthetic_provisioning import (
     Gate1ProvisioningError,
     Gate1SyntheticProvisioningService,
+    assert_trusted_release_metadata,
 )
 from services.identity.canonical_authority import CanonicalAuthorityService
 
@@ -56,12 +57,13 @@ def _guard(expected_revision: str) -> None:
         raise Gate1ProvisioningError("database_path_configuration_required")
     if not Path(db_path).is_file():
         raise Gate1ProvisioningError("database_path_unavailable")
+    assert_trusted_release_metadata(expected_revision)
 
 
 def _service() -> Gate1SyntheticProvisioningService:
     db = DatabaseConnection(os.environ["SENTINEL_DNA_DB_PATH"])
     auth = AuthService(db)
-    authority = CanonicalAuthorityService(db)
+    authority = CanonicalAuthorityService(db, auth=auth)
     audit = AuditService(db)
     return Gate1SyntheticProvisioningService(auth, authority, audit, db, expected_revision=os.environ["SENTINEL_DNA_IMAGE_REVISION_FULL"])
 

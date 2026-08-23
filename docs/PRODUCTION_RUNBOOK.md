@@ -12,6 +12,7 @@ The release process derives these nonsecret values from the exact Git checkout:
 - `SENTINEL_DNA_IMAGE_TAG` = full commit SHA
 - `SENTINEL_DNA_IMAGE_REVISION` = nine-character commit prefix
 - `SENTINEL_DNA_IMAGE_REVISION_FULL` = full commit SHA
+- `SENTINEL_DNA_IMAGE_DIGEST` = immutable deployed image digest
 - `SENTINEL_DNA_IMAGE_CREATED` = UTC build timestamp, or `SOURCE_DATE_EPOCH` when reproducibility is required
 
 Never place secret values in Git, image labels, command output, generated reports, or logs. The Compose contract fails closed when secrets or immutable metadata are absent or inconsistent with HEAD.
@@ -57,6 +58,11 @@ when all of the following are true:
 - `SENTINEL_DNA_GATE1_PROVISIONING=1` is set explicitly for that command;
 - `SENTINEL_DNA_ENV=production` is set;
 - `SENTINEL_DNA_IMAGE_REVISION_FULL` matches the full reviewed Git revision;
+- `SENTINEL_DNA_IMAGE_DIGEST` matches the digest in the protected, read-only
+  Gate 1 release metadata file;
+- `SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH` points to that protected file. The
+  file contains only nonsecret `release_sha` and `image_digest` fields and is
+  established independently by the reviewed image release process;
 - `SENTINEL_DNA_SECRET_KEY` and `SENTINEL_DNA_DB_PATH` are available through
   protected configuration; and
 - the command is run interactively so password prompts are hidden.
@@ -126,6 +132,12 @@ records must be inactive, the membership role must remain `analyst`, the graph
 must remain bound to the reserved tenant and actor identifiers, and no duplicate,
 cross-tenant, provider, partial, or mixed state may exist. Any other state is
 rejected before password prompts.
+
+The trusted release metadata file is not operator-entered release metadata. It
+must be provisioned by the reviewed release process, remain a regular
+non-symlink file, and not be writable by group or other users. Missing,
+malformed, mismatched, or unavailable metadata fails closed before any state
+inspection or password prompt.
 
 Rotation is additionally gated by `SENTINEL_DNA_GATE1_ROTATION=1` alongside the
 existing provisioning, production, full-release, protected-configuration, and

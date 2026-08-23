@@ -118,6 +118,26 @@ class AuthService:
             return
         revoke(connection)
 
+    def invalidate_tenant_sessions(self, tenant_id, connection=None):
+        """Invalidate every authentication session bound to a tenant."""
+        def invalidate(owned_connection):
+            now = utcnow().isoformat()
+            owned_connection.execute(
+                "UPDATE users SET session_version=COALESCE(session_version, 0)+1 WHERE tenant_id=?",
+                (tenant_id,),
+            )
+            owned_connection.execute(
+                """UPDATE persistent_sessions SET revoked_at=?
+                   WHERE revoked_at IS NULL
+                     AND user_id IN (SELECT id FROM users WHERE tenant_id=?)""",
+                (now, tenant_id),
+            )
+        if connection is None:
+            with self.db.session() as owned_connection:
+                invalidate(owned_connection)
+            return
+        invalidate(connection)
+
     def list_sessions(self, user_id):
         with self.db.session() as connection:
             return [dict(row) for row in connection.execute("SELECT id,user_id,tenant_id,created_at,expires_at,revoked_at,last_used_at,user_agent,auth_method FROM persistent_sessions WHERE user_id=? AND revoked_at IS NULL ORDER BY last_used_at DESC,created_at DESC", (user_id,)).fetchall()]
@@ -194,8 +214,11 @@ class AuthService:
     def deactivate_user(self, user_id: int, connection=None) -> bool:
         """Deactivate one user and revoke its persistent sessions."""
         def deactivate(owned_connection):
-            cursor = owned_connection.execute("UPDATE users SET is_active=0 WHERE id=? AND is_active=1", (user_id,))
-            owned_connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (utcnow().isoformat(), user_id))
+            cursor = owned_connection.execute(
+                "UPDATE users SET is_active=0, session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=1",
+                (user_id,),
+            )
+            self.revoke_all_sessions(user_id, connection=owned_connection)
             return cursor.rowcount == 1
         if connection is None:
             with self.db.session() as owned_connection:
@@ -205,7 +228,11 @@ class AuthService:
     def activate_user(self, user_id: int, connection=None) -> bool:
         """Activate one previously inactive user within the caller's transaction."""
         def activate(owned_connection):
-            cursor = owned_connection.execute("UPDATE users SET is_active=1 WHERE id=? AND is_active=0", (user_id,))
+            cursor = owned_connection.execute(
+                "UPDATE users SET is_active=1, session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=0",
+                (user_id,),
+            )
+            self.revoke_all_sessions(user_id, connection=owned_connection)
             return cursor.rowcount == 1
         if connection is None:
             with self.db.session() as owned_connection:

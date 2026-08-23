@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+import json
 import os
 import re
 from pathlib import Path
@@ -25,6 +26,7 @@ from services.identity.canonical_authority import CanonicalAuthorityService
 GATE1_ACTOR = "gate1-synthetic-provisioner"
 GATE1_MARKER = "gate1-synthetic"
 REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class Gate1ProvisioningError(RuntimeError):
@@ -80,6 +82,34 @@ class RotatedSyntheticIdentity:
     state: str = "rotated"
 
 
+def assert_trusted_release_metadata(expected_revision: str) -> None:
+    """Require independently provisioned, nonsecret release identity metadata."""
+    trusted_path = os.getenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", "").strip()
+    if not trusted_path:
+        raise Gate1ProvisioningError("trusted_release_metadata_required")
+    path = Path(trusted_path)
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+        if os.name != "nt" and path.stat().st_mode & 0o022:
+            raise Gate1ProvisioningError("trusted_release_metadata_insecure")
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except Gate1ProvisioningError:
+        raise
+    except (OSError, UnicodeError, ValueError, TypeError):
+        raise Gate1ProvisioningError("trusted_release_metadata_unavailable")
+    if not isinstance(metadata, dict):
+        raise Gate1ProvisioningError("trusted_release_metadata_invalid")
+    trusted_revision = str(metadata.get("release_sha", ""))
+    trusted_digest = str(metadata.get("image_digest", ""))
+    if not REVISION_PATTERN.fullmatch(trusted_revision) or not IMAGE_DIGEST_PATTERN.fullmatch(trusted_digest):
+        raise Gate1ProvisioningError("trusted_release_metadata_invalid")
+    if trusted_revision != expected_revision:
+        raise Gate1ProvisioningError("trusted_release_revision_mismatch")
+    if os.getenv("SENTINEL_DNA_IMAGE_DIGEST", "").strip() != trusted_digest:
+        raise Gate1ProvisioningError("image_digest_mismatch")
+
+
 def synthetic_identity_specs() -> tuple[SyntheticIdentitySpec, ...]:
     """Return the two deterministic, reserved Gate 1 identities."""
     return (
@@ -132,6 +162,7 @@ class Gate1SyntheticProvisioningService:
             raise Gate1ProvisioningError("database_path_unavailable")
         if Path(configured_path).resolve() != Path(self.db.database_path).resolve():
             raise Gate1ProvisioningError("database_path_mismatch")
+        assert_trusted_release_metadata(self.expected_revision)
 
     def _assert_rotation_authorized(self) -> None:
         self._assert_authorized()
@@ -186,6 +217,7 @@ class Gate1SyntheticProvisioningService:
             and identity
             and membership
             and user.is_active
+            and user.role == "analyst"
             and user.phone_verified_at
             and user.email_verified_at
             and tenant.status == "active"
@@ -206,7 +238,11 @@ class Gate1SyntheticProvisioningService:
             return Gate1IdentityState.PARTIAL_STATE
         try:
             self._assert_no_conflict(spec, state)
-            if identity.display_name != spec.display_name or user.phone_number != spec.phone_number:
+            if (
+                user.role != "analyst"
+                or identity.display_name != spec.display_name
+                or user.phone_number != spec.phone_number
+            ):
                 return Gate1IdentityState.CONFLICTING_STATE
             memberships = self.authority.memberships.list_for_actor(spec.actor_id, connection=connection)
             if len(memberships) != 1 or memberships[0] != membership:
@@ -283,6 +319,15 @@ class Gate1SyntheticProvisioningService:
                 password = replacement_passwords[spec.lane]
                 if not isinstance(password, str) or len(password) < 10:
                     raise Gate1ProvisioningError(f"synthetic_password_missing_or_too_short_{spec.lane}")
+            # Re-read the complete graph inside the same transaction immediately
+            # before the first mutation. This closes the role/state TOCTOU
+            # window and preserves fail-closed behavior under concurrent review.
+            for spec in specs:
+                state = self._state(spec, unit.conn)
+                lifecycle = self._classify(spec, state, unit.conn)
+                if lifecycle != Gate1IdentityState.INACTIVE_COMPLETE:
+                    raise self._rotation_state_error(spec.lane, lifecycle)
+                states[spec.lane] = state
             for spec in specs:
                 user, _tenant, _identity, _membership = states[spec.lane]
                 self.auth.reset_password(user.id, replacement_passwords[spec.lane], connection=unit.conn)

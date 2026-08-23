@@ -81,7 +81,7 @@ def create_app():
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
     from services.audit import audit_api
-    from services.auth.routes import restore_persistent_session
+    from services.auth.routes import enforce_current_session, restore_persistent_session
     from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
     app.register_blueprint(audit_api)
@@ -115,9 +115,7 @@ def create_app():
 
     @app.before_request
     def enforce_authentication_epoch():
-        user_id = session.get("user_id")
-        if user_id and app.container.require("auth_service").session_user(user_id, session.get("session_version")) is None:
-            session.clear()
+        enforce_current_session()
 
 
     # ==================================

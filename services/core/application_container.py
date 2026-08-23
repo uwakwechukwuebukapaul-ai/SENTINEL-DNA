@@ -210,7 +210,8 @@ def build_container() -> ServiceRegistry:
     # for provider lookups.  No providers are enabled by default, preserving
     # the offline, zero-network runtime until an explicit provider adapter is
     # approved and injected here.
-    canonical_authority = CanonicalAuthorityService()
+    auth_service = AuthService()
+    canonical_authority = CanonicalAuthorityService(auth=auth_service)
     canonical_request_context = CanonicalRequestContextService(canonical_authority)
     canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
 
@@ -259,7 +260,6 @@ def build_container() -> ServiceRegistry:
     dashboard_service = DashboardService()
     audit_service = AuditService()
     audit_read_service = ApplicationAuditReadService(audit_service)
-    auth_service = AuthService()
     case_service = CaseService()
     tenancy_service = TenancyService()
     connector_registry = ConnectorRegistry()

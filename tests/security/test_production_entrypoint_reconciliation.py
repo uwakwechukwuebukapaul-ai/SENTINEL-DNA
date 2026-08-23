@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,12 @@ def test_factory_exposes_canonical_browser_entrypoints(application):
     assert client.get("/workspace/").status_code == 401
     assert client.get("/workspace/investigation/CASE-1").status_code == 401
     assert client.get("/workspace/investigation/CASE-1/report").status_code == 401
+
+
+def test_production_deploys_only_the_canonical_wsgi_entrypoint():
+    assert "from app import create_app" in Path("wsgi.py").read_text(encoding="utf-8")
+    assert "application = create_app()" in Path("wsgi.py").read_text(encoding="utf-8")
+    assert '"wsgi:application"' in Path("Dockerfile").read_text(encoding="utf-8")
 
 
 def test_login_establishes_server_owned_canonical_context(application):
