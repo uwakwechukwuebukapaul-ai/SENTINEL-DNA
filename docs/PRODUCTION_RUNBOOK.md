@@ -64,33 +64,41 @@ trusted in that environment. Native Windows application execution remains
 unsupported and fails closed. The manifest contains no passwords or other
 credentials and is never copied into the image or source tree.
 
-## Protected local deployment
+## Controlled protected deployment
 
-Create a protected, untracked `.env` from `.env.example` and provide only the two secret values. Do not add release metadata manually. Derive metadata into the current shell:
+The repository `.env` and `.env.example` are not production authority. An
+authorized provider must materialize the complete protected production
+configuration outside the repository, with Windows ACLs that prevent ordinary
+users from modifying, replacing, renaming, or deleting it. Do not copy the
+repository `.env`, guess values, or print secrets. The controlled adapter owns
+the validation and deployment boundary; use an authorized protected path in
+place of `<AUTHORIZED_PROTECTED_ENV_FILE>` below.
 
 PowerShell:
 
 ```powershell
-$metadata = python deployment/scripts/release_metadata.py --format json | ConvertFrom-Json
-$env:SENTINEL_DNA_IMAGE_TAG = $metadata.SENTINEL_DNA_IMAGE_TAG
-$env:SENTINEL_DNA_IMAGE_REVISION = $metadata.SENTINEL_DNA_IMAGE_REVISION
-$env:SENTINEL_DNA_IMAGE_REVISION_FULL = $metadata.SENTINEL_DNA_IMAGE_REVISION_FULL
-$env:SENTINEL_DNA_IMAGE_CREATED = $metadata.SENTINEL_DNA_IMAGE_CREATED
-$env:SENTINEL_DNA_IMAGE_DIGEST = $digest
-$env:SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE = $manifest
-python deployment/scripts/validate_deployment_config.py --env-file .env
-docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
+$protectedEnv = "<AUTHORIZED_PROTECTED_ENV_FILE>"
+$python = ".venv\\Scripts\\python.exe"
+& $python deployment/scripts/controlled_deploy.py `
+  --reviewed-sha <reviewed-full-sha> `
+  --expected-digest <verified-image-digest> `
+  --env-file $protectedEnv `
+  --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
+  --validate-only
 ```
 
 POSIX shell:
 
 ```sh
-eval "$(python deployment/scripts/release_metadata.py --format shell)"
-python deployment/scripts/validate_deployment_config.py --env-file .env
-docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
+python deployment/scripts/controlled_deploy.py \
+  --reviewed-sha <reviewed-full-sha> \
+  --expected-digest <verified-image-digest> \
+  --env-file <AUTHORIZED_PROTECTED_ENV_FILE> \
+  --metadata-file <AUTHORIZED_PROTECTED_METADATA_FILE> \
+  --validate-only
 ```
 
-Use only `deployment/docker-compose.yml`. Recreate only the application service after configuration validation. Never use the root Compose file for production because it publishes port 5000.
+Use only `deployment/docker-compose.yml`. The adapter recreates only the application service with `--no-build --no-deps` after validation. Never use the root Compose file for production because it publishes port 5000.
 
 ## Gate 1 synthetic identity provisioning
 
@@ -132,7 +140,7 @@ $revision = (git rev-parse HEAD).Trim()
 $env:SENTINEL_DNA_GATE1_PROVISIONING = "1"
 $env:SENTINEL_DNA_ENV = "production"
 $env:SENTINEL_DNA_IMAGE_REVISION_FULL = $revision
-docker compose --env-file .env -f deployment/docker-compose.yml exec `
+docker compose --env-file $protectedEnv -f deployment/docker-compose.yml exec `
   -e SENTINEL_DNA_GATE1_PROVISIONING=1 `
   -e SENTINEL_DNA_ENV=production `
   -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `
@@ -151,7 +159,7 @@ After Gate 1 evidence is collected, the same guarded command can expire only the
 two identities it created:
 
 ```powershell
-docker compose --env-file .env -f deployment/docker-compose.yml exec `
+docker compose --env-file $protectedEnv -f deployment/docker-compose.yml exec `
   -e SENTINEL_DNA_GATE1_PROVISIONING=1 `
   -e SENTINEL_DNA_ENV=production `
   -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `
@@ -246,7 +254,7 @@ $env:SENTINEL_DNA_ENV = "production"
 $env:SENTINEL_DNA_IMAGE_REVISION_FULL = $revision
 $env:SENTINEL_DNA_SECURE_COOKIES = "1"
 
-docker compose --env-file .env -f deployment/docker-compose.yml exec `
+docker compose --env-file $protectedEnv -f deployment/docker-compose.yml exec `
   -e SENTINEL_DNA_PRIVILEGED_BOOTSTRAP=1 `
   -e SENTINEL_DNA_ENV=production `
   -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `
