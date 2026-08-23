@@ -144,9 +144,17 @@ class CanonicalMembershipService:
             unit.conn.execute("UPDATE canonical_memberships SET status=?, updated_at=? WHERE tenant_id=? AND actor_id=?", (status, now, tenant_id, actor_id))
             return _membership(CanonicalMembershipRepository(unit.conn).get(tenant_id, actor_id))
 
-    def list_for_actor(self, actor_id: str) -> list[CanonicalMembership]:
+    def list_for_actor(self, actor_id: str, connection=None) -> list[CanonicalMembership]:
+        if connection is not None:
+            return [_membership(row) for row in CanonicalMembershipRepository(connection).list_for_actor(str(actor_id)) if row]
         with CanonicalUnitOfWork(self.db) as unit:
             return [_membership(row) for row in CanonicalMembershipRepository(unit.conn).list_for_actor(str(actor_id)) if row]
+
+    def list_for_tenant(self, tenant_id: str, connection=None) -> list[CanonicalMembership]:
+        if connection is not None:
+            return [_membership(row) for row in CanonicalMembershipRepository(connection).list_for_tenant(str(tenant_id)) if row]
+        with CanonicalUnitOfWork(self.db) as unit:
+            return [_membership(row) for row in CanonicalMembershipRepository(unit.conn).list_for_tenant(str(tenant_id)) if row]
 
 
 class CanonicalAuthorityService:

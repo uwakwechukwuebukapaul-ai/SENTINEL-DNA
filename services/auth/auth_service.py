@@ -29,6 +29,8 @@ class AuthService:
             columns = {row[1] for row in connection.execute("PRAGMA table_info(users)")}
             for name in ("phone_number", "phone_verified_at", "tenant_id", "actor_id", "date_of_birth", "email_verified_at"):
                 if name not in columns: connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            if "session_version" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
             connection.execute("""CREATE TABLE IF NOT EXISTS auth_identities (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
                 provider TEXT NOT NULL, provider_subject TEXT NOT NULL,
@@ -68,8 +70,8 @@ class AuthService:
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             cursor = connection.execute(
-                "INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at),
+                "INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0),
             )
             user_id = cursor.lastrowid
             connection.execute(
@@ -107,8 +109,14 @@ class AuthService:
     def revoke_persistent_session(self, session_id):
         with self.db.session() as connection: connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE id=?", (utcnow().isoformat(), session_id))
 
-    def revoke_all_sessions(self, user_id):
-        with self.db.session() as connection: connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (utcnow().isoformat(), user_id))
+    def revoke_all_sessions(self, user_id, connection=None):
+        def revoke(owned_connection):
+            owned_connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (utcnow().isoformat(), user_id))
+        if connection is None:
+            with self.db.session() as owned_connection:
+                revoke(owned_connection)
+            return
+        revoke(connection)
 
     def list_sessions(self, user_id):
         with self.db.session() as connection:
@@ -124,11 +132,20 @@ class AuthService:
             cursor = connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE user_id=? AND id<>? AND revoked_at IS NULL", (utcnow().isoformat(), user_id, current_session_id or ""))
         return cursor.rowcount
 
-    def reset_password(self, user_id, password):
+    def reset_password(self, user_id, password, *, connection=None):
         if len(str(password or "")) < 10: raise ValueError("invalid_password")
-        with self.db.session() as connection: connection.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(password), user_id))
-        self.revoke_all_sessions(user_id)
-        self.audit_event("password_changed", user_id=user_id, outcome="success", method="password")
+        def reset(owned_connection):
+            owned_connection.execute(
+                "UPDATE users SET password_hash=?, session_version=COALESCE(session_version, 0)+1 WHERE id=?",
+                (hash_password(password), user_id),
+            )
+            self.revoke_all_sessions(user_id, connection=owned_connection)
+            self.audit_event("password_changed", user_id=user_id, outcome="success", method="password", connection=owned_connection)
+        if connection is None:
+            with self.db.session() as owned_connection:
+                reset(owned_connection)
+            return
+        reset(connection)
 
     def add_identity(self, user_id, provider, subject, identifier=None):
         now = utcnow().isoformat()
@@ -140,9 +157,11 @@ class AuthService:
             row = connection.execute("SELECT user_id FROM auth_identities WHERE provider=? AND provider_subject=?", (provider, subject)).fetchone()
         return self.get_by_id(row["user_id"]) if row else None
 
-    def identities_for_user(self, user_id):
-        with self.db.session() as connection:
-            return [dict(row) for row in connection.execute("SELECT * FROM auth_identities WHERE user_id=? ORDER BY provider", (user_id,)).fetchall()]
+    def identities_for_user(self, user_id, connection=None):
+        if connection is None:
+            with self.db.session() as owned_connection:
+                return [dict(row) for row in owned_connection.execute("SELECT * FROM auth_identities WHERE user_id=? ORDER BY provider", (user_id,)).fetchall()]
+        return [dict(row) for row in connection.execute("SELECT * FROM auth_identities WHERE user_id=? ORDER BY provider", (user_id,)).fetchall()]
 
     def remove_identity(self, user_id, provider, subject=None):
         with self.db.session() as connection:
@@ -183,13 +202,29 @@ class AuthService:
                 return deactivate(owned_connection)
         return deactivate(connection)
 
+    def activate_user(self, user_id: int, connection=None) -> bool:
+        """Activate one previously inactive user within the caller's transaction."""
+        def activate(owned_connection):
+            cursor = owned_connection.execute("UPDATE users SET is_active=1 WHERE id=? AND is_active=0", (user_id,))
+            return cursor.rowcount == 1
+        if connection is None:
+            with self.db.session() as owned_connection:
+                return activate(owned_connection)
+        return activate(connection)
+
     def audit_event(self, event_type, *, user_id=None, actor_id=None, tenant_id=None,
-                    correlation_id=None, method=None, outcome=None, reason=None, source_ip=None):
-        with self.db.session() as connection:
-            connection.execute(
+                    correlation_id=None, method=None, outcome=None, reason=None, source_ip=None,
+                    connection=None):
+        def record(owned_connection):
+            owned_connection.execute(
                 "INSERT INTO auth_events(event_type,user_id,actor_id,tenant_id,correlation_id,method,outcome,reason,source_ip,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (event_type, user_id, actor_id, tenant_id, correlation_id, method, outcome, reason, source_ip, utcnow().isoformat()),
             )
+        if connection is None:
+            with self.db.session() as owned_connection:
+                record(owned_connection)
+            return
+        record(connection)
 
     def rate_allow(self, bucket, *, limit, window_seconds, tenant_id=None, actor_id=None,
                    api_key_id=None, ip_address=None, endpoint="auth", operation=None,
@@ -244,6 +279,17 @@ class AuthService:
             row = connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         return self._user(row) if row else None
 
+    def session_user(self, user_id: int | None, session_version: int | None = None) -> User | None:
+        """Return an active user only when the signed session epoch is current."""
+        user = self.get_by_id(user_id)
+        if not user or not user.is_active:
+            return None
+        try:
+            presented = 0 if session_version is None else int(session_version)
+        except (TypeError, ValueError):
+            return None
+        return user if presented == user.session_version else None
+
     @staticmethod
     def _user(row: Any) -> User:
-        return User(row["id"], row["username"], row["email"], row["password_hash"], row["role"], row["created_at"], row["last_login"], bool(row["is_active"]), row["phone_number"], row["phone_verified_at"], row["tenant_id"], row["actor_id"], row["date_of_birth"], row["email_verified_at"])
+        return User(row["id"], row["username"], row["email"], row["password_hash"], row["role"], row["created_at"], row["last_login"], bool(row["is_active"]), row["phone_number"], row["phone_verified_at"], row["tenant_id"], row["actor_id"], row["date_of_birth"], row["email_verified_at"], int(row["session_version"] or 0))

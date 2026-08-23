@@ -11,7 +11,7 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Flask, jsonify, g, request, send_from_directory
+from flask import Flask, jsonify, g, request, send_from_directory, session
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 
@@ -112,6 +112,12 @@ def create_app():
     @app.before_request
     def restore_authentication_cookie():
         restore_persistent_session()
+
+    @app.before_request
+    def enforce_authentication_epoch():
+        user_id = session.get("user_id")
+        if user_id and app.container.require("auth_service").session_user(user_id, session.get("session_version")) is None:
+            session.clear()
 
 
     # ==================================

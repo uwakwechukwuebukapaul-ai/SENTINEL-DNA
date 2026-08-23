@@ -20,6 +20,7 @@ class User:
     actor_id: str | None = None
     date_of_birth: str | None = None
     email_verified_at: str | None = None
+    session_version: int = 0
 
     def public(self) -> dict[str, Any]:
         return {

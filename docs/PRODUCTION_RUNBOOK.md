@@ -111,6 +111,46 @@ deletion and does not remove persistent volumes. Never expose this operation as
 an HTTP endpoint or enable test providers, development mode, debug mode, or
 `AUTH_LEGACY_JSON_COMPAT` to replace it.
 
+### Guarded recovery after cleanup
+
+`cleanup -> ordinary provision` is unsupported. Ordinary `provision` continues
+to fail closed when any retained Gate 1 record exists, including a complete
+inactive graph. A future reviewed release may use the separate
+`rotate` action to perform:
+
+`ABSENT -> provision -> ACTIVE_COMPLETE -> cleanup -> INACTIVE_COMPLETE -> rotate -> ACTIVE_COMPLETE`
+
+Rotation requires every selected lane to contain exactly its reserved inactive
+user, password identity, canonical identity, membership, and tenant. All four
+records must be inactive, the membership role must remain `analyst`, the graph
+must remain bound to the reserved tenant and actor identifiers, and no duplicate,
+cross-tenant, provider, partial, or mixed state may exist. Any other state is
+rejected before password prompts.
+
+Rotation is additionally gated by `SENTINEL_DNA_GATE1_ROTATION=1` alongside the
+existing provisioning, production, full-release, protected-configuration, and
+database-path guards. It is operator-only and must run interactively. The command
+uses hidden `getpass` prompts for replacement passwords; passwords are never
+arguments, environment values, logs, audit metadata, results, or exceptions.
+
+On a reviewed release, select one lane with `--lane A` or `--lane B`, or select
+both by omitting `--lane`. A single-lane operation never expands to the other
+lane. Both-lane rotation is one transaction: password hashing, persistent-session
+revocation, session-epoch advancement, reactivation, and one safe
+`GATE1_SYNTHETIC_IDENTITY_ROTATED` audit event per lane commit together or roll
+back together. The rotation command prints only safe lane, tenant, actor, user,
+and result-state metadata.
+
+The reviewed release adds the additive `users.session_version` epoch with a
+default of zero. Existing signed sessions remain compatible at epoch zero;
+rotation advances the reserved user epoch and the request boundary rejects older
+signed sessions. Persistent sessions are revoked in the same transaction.
+
+The current certified release remains cleanup-terminal and does not support this
+rotation action. Do not run the rotation command until its reviewed release SHA,
+immutable image digest, operator authorization, and runtime certification have
+been independently verified.
+
 ## Privileged runtime identity bootstrap
 
 Gate 1 audit-read validation requires an existing tenant-bound `admin` or

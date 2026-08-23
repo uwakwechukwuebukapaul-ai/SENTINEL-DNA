@@ -200,6 +200,9 @@ class CanonicalMembershipRepository:
     def list_for_actor(self, actor_id: str):
         return self.connection.execute("SELECT * FROM canonical_memberships WHERE actor_id=?", (actor_id,)).fetchall()
 
+    def list_for_tenant(self, tenant_id: str):
+        return self.connection.execute("SELECT * FROM canonical_memberships WHERE tenant_id=?", (tenant_id,)).fetchall()
+
 
 class CanonicalIdentityBindingRepository:
     def __init__(self, connection: sqlite3.Connection): self.connection = connection

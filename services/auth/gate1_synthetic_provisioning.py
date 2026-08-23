@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 import os
 import re
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from database.canonical_authority import CanonicalUnitOfWork
 from database.connection import DatabaseConnection
@@ -29,6 +29,16 @@ REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 class Gate1ProvisioningError(RuntimeError):
     """Safe operator-facing provisioning failure without sensitive details."""
+
+
+class Gate1IdentityState:
+    ABSENT = "absent"
+    ACTIVE_COMPLETE = "active_complete"
+    INACTIVE_COMPLETE = "inactive_complete"
+    PARTIAL_STATE = "partial_state"
+    MIXED_STATE = "mixed_state"
+    CONFLICTING_STATE = "conflicting_state"
+    UNKNOWN_STATE = "unknown_state"
 
 
 @dataclass(frozen=True)
@@ -50,6 +60,24 @@ class ProvisionedSyntheticIdentity:
     actor_id: str
     user_id: int
     state: str
+
+
+@dataclass(frozen=True)
+class RotationState:
+    lane: str
+    tenant_id: str
+    actor_id: str
+    user_id: int | None
+    state: str
+
+
+@dataclass(frozen=True)
+class RotatedSyntheticIdentity:
+    lane: str
+    tenant_id: str
+    actor_id: str
+    user_id: int
+    state: str = "rotated"
 
 
 def synthetic_identity_specs() -> tuple[SyntheticIdentitySpec, ...]:
@@ -105,6 +133,18 @@ class Gate1SyntheticProvisioningService:
         if Path(configured_path).resolve() != Path(self.db.database_path).resolve():
             raise Gate1ProvisioningError("database_path_mismatch")
 
+    def _assert_rotation_authorized(self) -> None:
+        self._assert_authorized()
+        if os.getenv("SENTINEL_DNA_GATE1_ROTATION") != "1":
+            raise Gate1ProvisioningError("explicit_gate1_rotation_authorization_required")
+
+    @staticmethod
+    def _selected_lanes(lanes: Iterable[str]) -> tuple[str, ...]:
+        requested = tuple(str(lane).strip().upper() for lane in lanes)
+        if not requested or len(set(requested)) != len(requested) or any(lane not in {"A", "B"} for lane in requested):
+            raise Gate1ProvisioningError("invalid_gate1_rotation_lane_selection")
+        return tuple(spec.lane for spec in synthetic_identity_specs() if spec.lane in requested)
+
     @staticmethod
     def _user_matches(user, spec: SyntheticIdentitySpec) -> bool:
         return bool(
@@ -116,9 +156,11 @@ class Gate1SyntheticProvisioningService:
         )
 
     def _state(self, spec: SyntheticIdentitySpec, connection):
-        user = self.auth.get_by_username(spec.username, connection=connection)
-        if user is None:
-            user = self.auth.get_by_email(spec.email, connection=connection, include_inactive=True)
+        user_by_username = self.auth.get_by_username(spec.username, connection=connection)
+        user_by_email = self.auth.get_by_email(spec.email, connection=connection, include_inactive=True)
+        if user_by_username and user_by_email and user_by_username.id != user_by_email.id:
+            raise Gate1ProvisioningError(f"synthetic_identity_conflict_{spec.lane}")
+        user = user_by_username or user_by_email
         tenant = self.authority.tenants.get(spec.tenant_id, connection=connection)
         identity = self.authority.identities.get(spec.actor_id, connection=connection)
         membership = self.authority.memberships.get(spec.tenant_id, spec.actor_id, connection=connection)
@@ -151,6 +193,125 @@ class Gate1SyntheticProvisioningService:
             and membership.status == "active"
             and membership.role == "analyst"
         )
+
+    def _classify(self, spec: SyntheticIdentitySpec, state, connection) -> str:
+        user, tenant, identity, membership = state
+        if not any(value is not None for value in state):
+            orphan = connection.execute(
+                "SELECT 1 FROM auth_identities WHERE normalized_identifier=? LIMIT 1",
+                (spec.email.lower(),),
+            ).fetchone()
+            return Gate1IdentityState.CONFLICTING_STATE if orphan else Gate1IdentityState.ABSENT
+        if not all(value is not None for value in state):
+            return Gate1IdentityState.PARTIAL_STATE
+        try:
+            self._assert_no_conflict(spec, state)
+            if identity.display_name != spec.display_name or user.phone_number != spec.phone_number:
+                return Gate1IdentityState.CONFLICTING_STATE
+            memberships = self.authority.memberships.list_for_actor(spec.actor_id, connection=connection)
+            if len(memberships) != 1 or memberships[0] != membership:
+                return Gate1IdentityState.CONFLICTING_STATE
+            if membership.tenant_id != spec.tenant_id or membership.actor_id != spec.actor_id or membership.role != "analyst":
+                return Gate1IdentityState.CONFLICTING_STATE
+            identities = self.auth.identities_for_user(user.id, connection=connection)
+            if len(identities) != 1:
+                return Gate1IdentityState.CONFLICTING_STATE
+            password_identity = identities[0]
+            if (
+                password_identity.get("provider") != "password"
+                or str(password_identity.get("provider_subject")) != str(user.id)
+                or password_identity.get("normalized_identifier") != spec.email.lower()
+            ):
+                return Gate1IdentityState.CONFLICTING_STATE
+            if not user.email_verified_at or not user.phone_verified_at:
+                return Gate1IdentityState.CONFLICTING_STATE
+            statuses = ("active" if user.is_active else "inactive", tenant.status, identity.status, membership.status)
+            if any(status not in {"active", "inactive"} for status in statuses):
+                return Gate1IdentityState.UNKNOWN_STATE
+            if all(status == "active" for status in statuses):
+                return Gate1IdentityState.ACTIVE_COMPLETE
+            if all(status == "inactive" for status in statuses):
+                return Gate1IdentityState.INACTIVE_COMPLETE
+            return Gate1IdentityState.MIXED_STATE
+        except Gate1ProvisioningError:
+            return Gate1IdentityState.CONFLICTING_STATE
+
+    def inspect_rotation_state(self, lanes: Iterable[str] = ("A", "B")) -> tuple[RotationState, ...]:
+        """Inspect only reserved lanes without exposing authentication material."""
+        self._assert_rotation_authorized()
+        selected = self._selected_lanes(lanes)
+        by_lane = {spec.lane: spec for spec in synthetic_identity_specs()}
+        result: list[RotationState] = []
+        with CanonicalUnitOfWork(self.db) as unit:
+            for lane in selected:
+                spec = by_lane[lane]
+                try:
+                    state = self._state(spec, unit.conn)
+                    lifecycle = self._classify(spec, state, unit.conn)
+                    user_id = state[0].id if state[0] is not None else None
+                except Gate1ProvisioningError:
+                    lifecycle = Gate1IdentityState.CONFLICTING_STATE
+                    user_id = None
+                result.append(RotationState(spec.lane, spec.tenant_id, spec.actor_id, user_id, lifecycle))
+        return tuple(result)
+
+    @staticmethod
+    def _rotation_state_error(lane: str, state: str) -> Gate1ProvisioningError:
+        return Gate1ProvisioningError(f"gate1_rotation_{state}_{lane}")
+
+    def rotate_inactive(
+        self,
+        replacement_passwords: Mapping[str, str],
+        lanes: Iterable[str] = ("A", "B"),
+    ) -> tuple[RotatedSyntheticIdentity, ...]:
+        """Atomically reactivate only complete, reserved inactive identity graphs."""
+        self._assert_rotation_authorized()
+        selected = self._selected_lanes(lanes)
+        if set(replacement_passwords) != set(selected):
+            raise Gate1ProvisioningError("gate1_rotation_password_lane_mismatch")
+        specs = tuple(spec for spec in synthetic_identity_specs() if spec.lane in selected)
+        results: list[RotatedSyntheticIdentity] = []
+        with CanonicalUnitOfWork(self.db) as unit:
+            states = {}
+            for spec in specs:
+                state = self._state(spec, unit.conn)
+                lifecycle = self._classify(spec, state, unit.conn)
+                if lifecycle != Gate1IdentityState.INACTIVE_COMPLETE:
+                    raise self._rotation_state_error(spec.lane, lifecycle)
+                states[spec.lane] = state
+            for spec in specs:
+                password = replacement_passwords[spec.lane]
+                if not isinstance(password, str) or len(password) < 10:
+                    raise Gate1ProvisioningError(f"synthetic_password_missing_or_too_short_{spec.lane}")
+            for spec in specs:
+                user, _tenant, _identity, _membership = states[spec.lane]
+                self.auth.reset_password(user.id, replacement_passwords[spec.lane], connection=unit.conn)
+                self.authority.memberships.set_status(spec.tenant_id, spec.actor_id, "active", connection=unit.conn)
+                self.authority.identities.set_status(spec.actor_id, "active", connection=unit.conn)
+                self.authority.tenants.set_status(spec.tenant_id, "active", connection=unit.conn)
+                if not self.auth.activate_user(user.id, connection=unit.conn):
+                    raise Gate1ProvisioningError(f"gate1_rotation_activation_failed_{spec.lane}")
+                self.audit.record(
+                    "GATE1_SYNTHETIC_IDENTITY_ROTATED",
+                    user_id=user.id,
+                    tenant_id=spec.tenant_id,
+                    actor_id=GATE1_ACTOR,
+                    resource_type="synthetic_identity",
+                    resource_id=spec.actor_id,
+                    operation="rotate_inactive",
+                    outcome="success",
+                    metadata={
+                        "synthetic": True,
+                        "gate": "gate1",
+                        "lane": spec.lane,
+                        "synthetic_actor_id": spec.actor_id,
+                        "previous_lifecycle_state": "inactive_complete",
+                        "resulting_lifecycle_state": "active_complete",
+                    },
+                    connection=unit.conn,
+                )
+                results.append(RotatedSyntheticIdentity(spec.lane, spec.tenant_id, spec.actor_id, user.id))
+        return tuple(results)
 
     def provision(self, passwords: Mapping[str, str]) -> tuple[ProvisionedSyntheticIdentity, ...]:
         self._assert_authorized()
