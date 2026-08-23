@@ -17,10 +17,13 @@ def _sanitize(value: Any):
 class AnalystFeedbackService:
     """Create server-authored append-only analyst feedback."""
     def __init__(self, repository, audit_service=None): self.repository, self.audit_service = repository, audit_service
-    def record(self, investigation_id: str, case_id: str, tenant_id: str, analyst_id: str, payload: dict[str, Any], report: dict[str, Any]) -> AnalystFeedback:
+    def record(self, investigation_id: str, case_id: str, tenant_id: str, analyst_id: str, payload: dict[str, Any], report: dict[str, Any], previous_state: str | None = None) -> AnalystFeedback:
         if not tenant_id or not analyst_id: raise PermissionError("analyst_identity_required")
         if not isinstance(payload, dict): raise ValueError("malformed_payload")
-        if set(payload) - {"decision", "reason", "finding_id", "recommendation_id"}: raise ValueError("invalid_feedback_fields")
+        if set(payload) - {"decision", "disposition", "reason", "finding_id", "recommendation_id"}: raise ValueError("invalid_feedback_fields")
+        requested_disposition = str(payload.get("disposition") or payload.get("decision") or "").strip().lower().replace(" ", "_")
+        aliases = {"confirmed_threat": "accepted", "benign": "false_positive", "requires_review": "escalated", "false_positive": "false_positive", "closed": "accepted"}
+        canonical_decision = aliases.get(requested_disposition, requested_disposition)
         report = report if isinstance(report, dict) else {}
         finding_id = payload.get("finding_id")
         if finding_id:
@@ -38,7 +41,7 @@ class AnalystFeedbackService:
             if isinstance(item, dict):
                 evidence_refs.update(str(item[key]) for key in ("evidence_id", "reference", "id") if item.get(key))
                 artifact_refs.update(str(item["artifact_id"]) for _ in (0,) if item.get("artifact_id"))
-        feedback = AnalystFeedback(investigation_id=str(investigation_id), case_id=str(case_id), tenant_id=str(tenant_id), analyst_id=str(analyst_id), decision=payload.get("decision", ""), reason=payload.get("reason", ""), finding_id=str(finding_id) if finding_id else None, recommendation_id=str(recommendation_id) if recommendation_id else None, metadata=_sanitize({"source": "analyst_feedback_boundary"}), evidence_refs=sorted(evidence_refs), artifact_refs=sorted(artifact_refs))
+        feedback = AnalystFeedback(investigation_id=str(investigation_id), case_id=str(case_id), tenant_id=str(tenant_id), analyst_id=str(analyst_id), decision=canonical_decision, reason=payload.get("reason", ""), finding_id=str(finding_id) if finding_id else None, recommendation_id=str(recommendation_id) if recommendation_id else None, metadata=_sanitize({"source": "analyst_feedback_boundary", "disposition": requested_disposition, "previous_state": previous_state or "unassigned", "new_state": requested_disposition}), evidence_refs=sorted(evidence_refs), artifact_refs=sorted(artifact_refs))
         saved = self.repository.save(feedback)
         if self.audit_service is not None:
             self.audit_service.record("ANALYST_FEEDBACK_RECORDED", case_id=str(case_id), user_id=str(analyst_id), details={"investigation_id": str(investigation_id), "tenant_id": str(tenant_id), "decision": saved.decision})

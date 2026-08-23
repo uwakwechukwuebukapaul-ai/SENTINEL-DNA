@@ -68,4 +68,6 @@ class AnalystFeedback:
         object.__setattr__(self, "artifact_refs", sorted({str(item) for item in self.artifact_refs if item}))
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data["disposition"] = self.metadata.get("disposition", self.decision)
+        return data

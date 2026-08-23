@@ -76,7 +76,10 @@ class InvestigationFeedbackRepository:
     def list_for_investigation(self, tenant_id: str, investigation_id: str) -> list[AnalystFeedback]:
         with self.db.session() as connection:
             rows = connection.execute(
-                "SELECT * FROM investigation_feedback WHERE tenant_id=? AND investigation_id=? ORDER BY created_at, feedback_id",
+                # SQLite's implicit rowid preserves append order.  Analyst decisions
+                # are an append-only history; wall-clock timestamps can tie or move
+                # backward on a developer workstation and must not reorder decisions.
+                "SELECT * FROM investigation_feedback WHERE tenant_id=? AND investigation_id=? ORDER BY rowid",
                 (tenant_id, investigation_id),
             ).fetchall()
         return [self._from_row(row) for row in rows]
@@ -106,7 +109,7 @@ class InvestigationFeedbackRepository:
             parameters.append(str(investigation_id))
         with self.db.session() as connection:
             rows = connection.execute(
-                f"SELECT * FROM investigation_feedback WHERE {' AND '.join(clauses)} ORDER BY created_at, feedback_id",
+                f"SELECT * FROM investigation_feedback WHERE {' AND '.join(clauses)} ORDER BY rowid",
                 parameters,
             ).fetchall()
         return [self._from_row(row) for row in rows]
