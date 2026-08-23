@@ -1,13 +1,16 @@
 # Sentinel DNA production readiness
 
-Controlled V1 deployment uses one Gunicorn worker because report persistence is SQLite-backed. Set these values before startup:
+Controlled V1 deployment uses one Gunicorn worker because report persistence is SQLite-backed. Only the following values are protected secrets:
 
 ```text
 SENTINEL_DNA_ENV=production
 SENTINEL_DNA_SECRET_KEY=<32+ character random secret>
+POSTGRES_PASSWORD=<protected database password>
 SENTINEL_DNA_SECURE_COOKIES=1
 SENTINEL_DNA_DB_PATH=/var/lib/sentinel/soc.db
 ```
+
+The release process derives the immutable image tag, Git revision labels, and UTC creation timestamp from the checked-out commit. Use `deployment/scripts/release_metadata.py` and `deployment/scripts/validate_deployment_config.py`; do not maintain release metadata manually or commit generated environment files.
 
 The database parent directory must already exist and be writable by the service user. Mount `/var/lib/sentinel` as persistent storage, back it up before upgrades, and validate restore procedures. Horizontal scaling and shared managed database infrastructure are future milestones; do not run multiple application workers against the same SQLite file.
 

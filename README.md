@@ -218,7 +218,7 @@ git clone https://github.com/YOUR_USERNAME/Sentinel-DNA.git
 ```
 
 
-Run:
+Development-only direct container run:
 
 ```bash
 docker build -t sentinel-dna .
@@ -235,6 +235,8 @@ Open:
 ```
 http://localhost:5000
 ```
+
+For production, use only `deployment/docker-compose.yml`. nginx publishes port 80 and the application port 5000 remains internal-only. Derive immutable image metadata with `deployment/scripts/release_metadata.py` and validate protected configuration before startup; never use the root Compose file for production.
 
 
 ---

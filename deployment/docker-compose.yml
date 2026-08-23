@@ -10,12 +10,13 @@ services:
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
         IMAGE_SOURCE: ${SENTINEL_DNA_IMAGE_SOURCE:-https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA}
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
-    env_file: ../.env
     environment:
       SENTINEL_DNA_ENV: production
       SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY}
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
+      DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}

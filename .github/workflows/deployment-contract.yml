@@ -1,0 +1,66 @@
+name: deployment-contract
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release-contract:
+    name: Validate protected production release contract
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SENTINEL_DNA_ENV: production
+      SENTINEL_DNA_SECURE_COOKIES: "1"
+      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
+      SENTINEL_DNA_SECRET_KEY: ${{ secrets.SENTINEL_DNA_SECRET_KEY }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+    steps:
+      - name: Checkout workflow commit
+        uses: actions/checkout@v4
+
+      - name: Verify checkout identity
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Derive immutable release metadata
+        shell: bash
+        run: python deployment/scripts/release_metadata.py --format github-env >> "$GITHUB_ENV"
+
+      - name: Validate protected configuration and metadata
+        run: python deployment/scripts/validate_deployment_config.py
+
+      - name: Build immutable application image
+        shell: bash
+        run: |
+          docker build \
+            --tag "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" \
+            --build-arg "VCS_REF=${SENTINEL_DNA_IMAGE_REVISION}" \
+            --build-arg "VCS_REF_FULL=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --build-arg "IMAGE_VERSION=${SENTINEL_DNA_IMAGE_TAG}" \
+            --build-arg "IMAGE_SOURCE=https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
+            --build-arg "IMAGE_CREATED=${SENTINEL_DNA_IMAGE_CREATED}" \
+            .
+
+      - name: Verify image provenance and non-root configuration
+        shell: bash
+        run: |
+          image="deployment-app:${SENTINEL_DNA_IMAGE_TAG}"
+          test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "sentinel"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SENTINEL_DNA_IMAGE_REVISION"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "com.sentinel-dna.git.revision.full"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$SENTINEL_DNA_IMAGE_TAG"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+
+      - name: Validate deployment Compose contract
+        run: docker compose -f deployment/docker-compose.yml config --quiet
+
+      - name: Run deployment-adjacent regression tests
+        run: |
+          python -m pytest -q \
+            tests/production/test_runtime_hardening.py \
+            tests/intelligence/api/test_execution_visibility_api.py \
+            tests/security/test_production_entrypoint_reconciliation.py \
+            tests/intelligence/runtime/test_execution_durable_state.py
