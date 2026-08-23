@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -50,6 +50,7 @@ class InvestigationReadModel:
     timeline: tuple[dict[str, Any], ...]
     quality: dict[str, Any]
     feedback: tuple[dict[str, Any], ...]
+    provider_observations: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
         return deepcopy({
@@ -64,6 +65,7 @@ class InvestigationReadModel:
             "timeline": list(self.timeline),
             "quality": self.quality,
             "feedback": list(self.feedback),
+            "provider_observations": list(self.provider_observations),
         })
 
 
@@ -95,6 +97,12 @@ class InvestigationReadModelBuilder:
             "confidence": item.get("confidence", item.get("confidence_score")),
             "evidence_refs": sorted({str(ref) for ref in item.get("evidence_refs", item.get("evidence", [])) if ref}),
             "provenance": item.get("provenance", item.get("source", {})) or {},
+            # Preserve classification metadata required by the explainability
+            # projection; omitting it silently turns contradictions into
+            # supporting factors.
+            "contradiction": bool(item.get("contradiction")),
+            "contradicting": bool(item.get("contradicting")),
+            "is_contradiction": bool(item.get("is_contradiction")),
         }
 
     @staticmethod
@@ -157,9 +165,11 @@ class InvestigationReadModelBuilder:
 
         risk = source.get("risk") if isinstance(source.get("risk"), dict) else {}
         raw_status = str(source.get("status", "created") or "created").lower()
-        status = raw_status if raw_status in {"created", "running", "completed", "reviewed", "closed"} else "created"
+        status = raw_status if raw_status in {"created", "running", "in_progress", "completed", "reviewed", "closed"} else "created"
         if feedback and status == "completed":
             status = "reviewed"
         investigation = _clean({"id": investigation_id, "case_id": str(case_id), "tenant_id": str(tenant_id), "status": status, "created_at": source.get("created_at") or metadata.get("created_at")})
         summary = _clean({"title": source.get("title", ""), "risk": risk.get("score", source.get("risk_score", 0)), "confidence": source.get("confidence", 0), "decision": source.get("decision") or source.get("intelligence_disposition", {}).get("decision") if isinstance(source.get("intelligence_disposition"), dict) else source.get("decision")})
-        return InvestigationReadModel(investigation, summary, tuple(findings), tuple(recommendations), tuple(evidence), tuple(artifacts), tuple(iocs), tuple(mitre), tuple(timeline), quality_data, tuple(feedback))
+        status_metadata = intelligence_metadata.get("intelligence_status") if isinstance(intelligence_metadata.get("intelligence_status"), dict) else {}
+        observations = status_metadata.get("observations") or status_metadata.get("provider_results") or report.get("provider_observations") or []
+        return InvestigationReadModel(investigation, summary, tuple(findings), tuple(recommendations), tuple(evidence), tuple(artifacts), tuple(iocs), tuple(mitre), tuple(timeline), quality_data, tuple(feedback), tuple(_clean(item) for item in observations if isinstance(item, dict)))
