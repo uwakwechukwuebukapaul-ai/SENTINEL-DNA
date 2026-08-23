@@ -19,7 +19,17 @@ def _audit(event, *, user_id=None, method=None, outcome=None, reason=None):
     except Exception:
         current_app.logger.warning("authentication audit write failed", exc_info=True)
 def _allowed(bucket, limit, window):
-    allowed = _service().rate_allow(f"{bucket}|{request.remote_addr or 'unknown'}", limit=limit, window_seconds=window)
+    allowed = _service().rate_allow(
+        bucket,
+        limit=limit,
+        window_seconds=window,
+        tenant_id=session.get("organization_id"),
+        actor_id=session.get("actor_id"),
+        ip_address=request.remote_addr,
+        endpoint="/api/auth",
+        operation=bucket,
+        cost_class="authentication",
+    )
     if not allowed: _audit("rate_limit_triggered", method=bucket.split("|", 1)[0], outcome="rejected", reason="limit_exceeded")
     return allowed
 def _csrf_ok():

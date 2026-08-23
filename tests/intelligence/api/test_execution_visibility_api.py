@@ -65,3 +65,19 @@ def test_execution_api_missing_execution_is_not_found():
     authenticate(client, "tenant-b")
     response = client.get("/api/investigations/executions/EXE-MISSING")
     assert response.status_code == 404
+
+
+def test_execution_api_rejects_malformed_identifier_without_querying_runtime():
+    client = make_app().test_client()
+    authenticate(client)
+    response = client.get("/api/investigations/executions/EXE%20BAD")
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "execution_not_found"}
+
+
+def test_execution_api_rejects_unbounded_limit():
+    client = make_app().test_client()
+    authenticate(client)
+    response = client.get("/api/investigations/executions?limit=101")
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid_execution_query"}

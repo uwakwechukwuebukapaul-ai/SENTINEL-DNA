@@ -12,6 +12,7 @@ from .age import validate_minimum_age
 from .otp import code_hash, expires_at, generate_code, utcnow, OTP_COOLDOWN_SECONDS, OTP_MAX_ATTEMPTS
 from .phone import normalize_phone
 from .rate_limit import DatabaseRateLimitBackend
+from services.rate_limiting import RateLimitPolicy, RateLimitRequest, RateLimitService
 
 
 class AuthService:
@@ -54,6 +55,7 @@ class AuthService:
                 bucket_hash TEXT PRIMARY KEY, window_started TEXT NOT NULL,
                 count INTEGER NOT NULL DEFAULT 0)""")
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
+        self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
     def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
@@ -154,8 +156,28 @@ class AuthService:
                 (event_type, user_id, actor_id, tenant_id, correlation_id, method, outcome, reason, source_ip, utcnow().isoformat()),
             )
 
-    def rate_allow(self, bucket, *, limit, window_seconds):
-        return self.rate_limit_backend.allow(bucket, limit=limit, window_seconds=window_seconds)
+    def rate_allow(self, bucket, *, limit, window_seconds, tenant_id=None, actor_id=None,
+                   api_key_id=None, ip_address=None, endpoint="auth", operation=None,
+                   cost_class="authentication"):
+        policy = RateLimitPolicy(
+            name=f"auth:{str(bucket).split('|', 1)[0]}",
+            limit=limit,
+            window_seconds=window_seconds,
+            cost_class=cost_class,
+        )
+        decision = self.rate_limit_service.allow(
+            RateLimitRequest(
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                api_key_id=api_key_id,
+                ip_address=ip_address,
+                endpoint=endpoint,
+                operation=operation or str(bucket).split("|", 1)[0],
+                cost_class=cost_class,
+            ),
+            policy,
+        )
+        return decision.allowed
 
     def issue_otp(self, destination, purpose, *, user_id=None, secret="development-only-secret", provider_request_id=None):
         with self.db.session() as connection:

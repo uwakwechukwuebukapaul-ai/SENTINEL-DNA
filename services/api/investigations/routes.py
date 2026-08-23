@@ -42,6 +42,7 @@ from services.core.serialization import serialize
 from services.core.security_context import authorize_investigation
 from services.core.security_context import request_context
 from services.observability import ObservabilityService
+from services.validation.canonical import CanonicalValidationError, normalize_identifier, normalize_limit
 import time
 
 
@@ -163,8 +164,10 @@ def list_investigation_executions():
     if not allowed:
         return jsonify({"error": error}), 401 if error == "authentication_required" else 403
     try:
-        limit = int(request.args.get("limit", 50))
+        limit = normalize_limit(request.args.get("limit", 50), default=50, maximum=100)
         executions = _coordinator().list_execution_projections(context, limit=limit)
+    except CanonicalValidationError:
+        return jsonify({"error": "invalid_execution_query"}), 400
     except (PermissionError, ValueError):
         return jsonify({"error": "execution_access_denied"}), 403
     return jsonify({"version": "execution-projection-v1", "executions": executions})
@@ -176,6 +179,10 @@ def get_investigation_execution(execution_id: str):
     allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=False)
     if not allowed:
         return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        execution_id = normalize_identifier(execution_id, field="execution_id")
+    except CanonicalValidationError:
+        return jsonify({"error": "execution_not_found"}), 404
     try:
         projection = _coordinator().get_execution_projection(execution_id, context)
     except PermissionError:
