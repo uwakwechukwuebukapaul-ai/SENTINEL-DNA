@@ -277,9 +277,12 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
             "NT AUTHORITY\\SYSTEM:(I)(F)\n"
         )
 
-        def fake_subprocess_run(args, **_):
-            assert args[0] == "icacls"
-            return subprocess.CompletedProcess(args, 0, stdout=acl_output, stderr="")
+        real_subprocess_run = subprocess.run
+
+        def fake_subprocess_run(args, **kwargs):
+            if args[0] == "icacls":
+                return subprocess.CompletedProcess(args, 0, stdout=acl_output, stderr="")
+            return real_subprocess_run(args, **kwargs)
 
         monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
         monkeypatch.chdir(tmp_path)
