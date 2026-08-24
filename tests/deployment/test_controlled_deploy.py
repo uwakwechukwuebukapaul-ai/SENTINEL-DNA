@@ -1,5 +1,6 @@
 import runpy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -83,6 +84,8 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         json.dumps(metadata or {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}),
         encoding="utf-8",
     )
+    if os.name != "nt":
+        metadata_file.chmod(0o444)
     release_manifest_file = tmp_path / "trusted" / "release-manifest.json"
     write_manifest(
         build_manifest(
@@ -177,6 +180,7 @@ def test_parse_icacls_preserves_deny_entries():
     assert entries == (AclEntry("BUILTIN\\Users", "DENY", "W"),)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows ACL semantics are tested on Windows")
 def test_acl_rejects_untrusted_write_access(tmp_path):
     config = tmp_path / "config"
     config.write_text("placeholder", encoding="utf-8")
@@ -193,6 +197,7 @@ def test_acl_rejects_untrusted_write_access(tmp_path):
         )
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows ACL semantics are tested on Windows")
 def test_acl_rejects_privileged_deny_access(tmp_path):
     config = tmp_path / "config"
     config.write_text("placeholder", encoding="utf-8")
@@ -210,6 +215,27 @@ def test_acl_rejects_privileged_deny_access(tmp_path):
         )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode semantics are tested on POSIX")
+def test_posix_acl_rejects_group_or_other_write_access(tmp_path):
+    config = tmp_path / "config"
+    config.write_text("placeholder", encoding="utf-8")
+    config.chmod(0o664)
+    with pytest.raises(ControlledDeploymentError, match="protected_path_writable_by_group_or_other"):
+        validate_acl(config, FakeAclInspector())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode semantics are tested on POSIX")
+def test_posix_acl_rejects_writable_parent_directory(tmp_path):
+    protected = tmp_path / "protected"
+    protected.mkdir()
+    protected.chmod(0o733)
+    config = protected / "config"
+    config.write_text("placeholder", encoding="utf-8")
+    config.chmod(0o600)
+    with pytest.raises(ControlledDeploymentError, match="protected_path_writable_by_group_or_other"):
+        validate_acl(config, FakeAclInspector())
+
+
 def test_acl_rejects_unknown_format():
     with pytest.raises(ControlledDeploymentError, match="acl_format"):
         parse_icacls_output("unexpected acl output")
@@ -218,7 +244,7 @@ def test_acl_rejects_unknown_format():
 def test_protected_configuration_must_be_outside_repository(tmp_path):
     repository_root = Path(__file__).resolve().parents[2]
     with pytest.raises(ControlledDeploymentError, match="inside_repository"):
-        validate_protected_file(repository_root / ".env", repository_root, FakeAclInspector())
+        validate_protected_file(Path(__file__), repository_root, FakeAclInspector())
 
 
 def test_protected_configuration_rejects_reparse_points(tmp_path, monkeypatch):
