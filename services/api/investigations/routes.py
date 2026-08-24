@@ -76,6 +76,10 @@ def _coordinator():
     )
 
 
+def _intake():
+    return current_app.container.get("investigation_intake")
+
+
 def _investigation_execution_failure(observer: ObservabilityService, case_id: str, exc: Exception):
     """Return a safe API error while keeping failure details internal."""
     try:
@@ -155,6 +159,30 @@ def _execute_investigation():
 # ============================================================
 # CANONICAL API
 # ============================================================
+
+
+@investigations_api.post("/jobs")
+def create_investigation_job():
+    """Accept an authorized alert into the durable runtime without executing it."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": {"code": "invalid_request", "message": "JSON object required"}}), 400
+    context = request_context()
+    allowed, error = authorize_investigation(payload, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 401 if error == "authentication_required" else 403
+    try:
+        result = _intake().accept(
+            payload,
+            context=context,
+            source=str(payload.get("source") or "api"),
+            idempotency_key=request.headers.get("Idempotency-Key"),
+        )
+    except (PermissionError, ValueError):
+        return jsonify({"error": {"code": "intake_blocked", "message": "Durable intake was blocked"}}), 403
+    except Exception:
+        return jsonify({"error": {"code": "intake_unavailable", "message": "Durable intake is unavailable"}}), 503
+    return jsonify(result.to_dict()), result.http_status
 
 
 @investigations_api.get("/executions")
