@@ -21,6 +21,11 @@ SCHEMA_VERSION = "sentinel-dna-release-manifest-v1"
 EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+MANIFEST_FIELDS = frozenset(("schema_version", "repository", "files", "image", "manifest_policy"))
+REPOSITORY_FIELDS = frozenset(("release_sha", "tree_id", "tree_id_type"))
+FILE_FIELDS = frozenset(("git_blob", "sha256"))
+IMAGE_FIELDS = frozenset(("reference", "digest", "id", "oci_revision", "oci_source"))
+MANIFEST_POLICY_FIELDS = frozenset(("generated_output", "self_hash"))
 
 # This is the reviewed release boundary.  The generated manifest is not part
 # of this tuple and must be written outside the repository tree.
@@ -92,6 +97,12 @@ def _validate_release_sha(release_sha: str) -> None:
 def _validate_digest(digest: str | None) -> None:
     if digest is not None and not DIGEST_RE.fullmatch(digest):
         raise ReleaseManifestError("image digest must be a full lowercase sha256 digest")
+
+
+def _require_exact_keys(value: Any, expected: frozenset[str], error_code: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ReleaseManifestError(error_code)
+    return value
 
 
 def _assert_outside_repository(path: Path, repository_root: Path) -> None:
@@ -218,16 +229,23 @@ def verify_manifest(
     except (OSError, json.JSONDecodeError) as exc:
         raise ReleaseManifestError("release manifest is not valid JSON") from exc
 
-    if manifest.get("schema_version") != SCHEMA_VERSION:
+    manifest = _require_exact_keys(manifest, MANIFEST_FIELDS, "release manifest fields are invalid")
+    if manifest["schema_version"] != SCHEMA_VERSION:
         raise ReleaseManifestError("unsupported release manifest schema")
-    policy = manifest.get("manifest_policy")
+    policy = _require_exact_keys(
+        manifest["manifest_policy"],
+        MANIFEST_POLICY_FIELDS,
+        "release manifest policy fields are invalid",
+    )
     if policy != {"generated_output": "outside-repository", "self_hash": "excluded"}:
         raise ReleaseManifestError("release manifest self-hash policy is invalid")
 
-    repository = manifest.get("repository")
-    if not isinstance(repository, dict):
-        raise ReleaseManifestError("release manifest repository section is invalid")
-    release_sha = repository.get("release_sha")
+    repository = _require_exact_keys(
+        manifest["repository"],
+        REPOSITORY_FIELDS,
+        "release manifest repository section is invalid",
+    )
+    release_sha = repository["release_sha"]
     if not isinstance(release_sha, str):
         raise ReleaseManifestError("release manifest release SHA is missing")
     _validate_release_sha(release_sha)
@@ -235,38 +253,42 @@ def verify_manifest(
         raise ReleaseManifestError("release manifest SHA does not match requested release")
     _validate_digest(expected_image_digest)
     expected_tree = _git_text(root, "rev-parse", f"{release_sha}^{{tree}}")
-    if repository.get("tree_id") != expected_tree:
+    if repository["tree_id"] != expected_tree:
         raise ReleaseManifestError("release manifest tree identity does not match Git")
-    if repository.get("tree_id_type") != "git-object-id":
+    if repository["tree_id_type"] != "git-object-id":
         raise ReleaseManifestError("release manifest tree identity type is invalid")
     if require_current_head and _git_text(root, "rev-parse", "HEAD") != release_sha:
         raise ReleaseManifestError("release manifest SHA does not match checked-out HEAD")
     if require_current_head:
         _assert_clean_worktree(root)
 
-    files = manifest.get("files")
+    files = manifest["files"]
     if not isinstance(files, dict) or set(files) != set(RELEASE_FILE_SET):
         raise ReleaseManifestError("release manifest file set does not match policy")
     for file_path in RELEASE_FILE_SET:
         if file_path in {"deployment/release-manifest.json", "release-manifest.json"}:
             raise ReleaseManifestError("release manifest must not hash its own output")
-        entry = files.get(file_path)
-        if not isinstance(entry, dict):
-            raise ReleaseManifestError(f"release manifest entry is invalid: {file_path}")
+        entry = _require_exact_keys(
+            files[file_path],
+            FILE_FIELDS,
+            f"release manifest entry is invalid: {file_path}",
+        )
         blob_id, content = _git_blob(root, release_sha, file_path)
-        if entry.get("git_blob") != blob_id:
+        if entry["git_blob"] != blob_id:
             raise ReleaseManifestError(f"Git blob mismatch: {file_path}")
-        if entry.get("sha256") != hashlib.sha256(content).hexdigest():
+        if entry["sha256"] != hashlib.sha256(content).hexdigest():
             raise ReleaseManifestError(f"SHA-256 mismatch: {file_path}")
 
-    image = manifest.get("image")
-    if not isinstance(image, dict):
-        raise ReleaseManifestError("release manifest image section is invalid")
-    if image.get("oci_revision") != release_sha:
+    image = _require_exact_keys(
+        manifest["image"],
+        IMAGE_FIELDS,
+        "release manifest image section is invalid",
+    )
+    if image["oci_revision"] != release_sha:
         raise ReleaseManifestError("image OCI revision does not match release SHA")
-    if image.get("oci_source") != EXPECTED_IMAGE_SOURCE:
+    if image["oci_source"] != EXPECTED_IMAGE_SOURCE:
         raise ReleaseManifestError("image source identity is invalid")
-    digest = image.get("digest")
+    digest = image["digest"]
     if digest is not None:
         if not isinstance(digest, str):
             raise ReleaseManifestError("image digest field is invalid")
