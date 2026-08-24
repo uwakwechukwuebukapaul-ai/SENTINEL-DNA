@@ -12,7 +12,7 @@ Compose topology in memory.
 The intended custody chain is:
 
 ```text
-protected GitHub production authority
+approved enterprise secret authority (design target; not yet provisioned)
   -> approved operator/provider materialization
   -> protected Windows environment file
   -> controlled_deploy.py
@@ -40,8 +40,8 @@ operator. Do not substitute the repository `.env`:
 
 ```powershell
 python deployment/scripts/controlled_deploy.py `
-  --reviewed-sha 4ccd97552723b7171e9a29bbfde415ba054bd3b0 `
-  --expected-digest sha256:9a212a06eed455a43675c75cf1324827b33bc44070c6f0ccd7d5f9df0be4b91d `
+  --reviewed-sha <REVIEWED_RELEASE_SHA> `
+  --expected-digest <VERIFIED_IMAGE_DIGEST> `
   --env-file <AUTHORIZED_PROTECTED_ENV_FILE> `
   --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
   --docker-executable C:\Users\<operator>\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe `
@@ -79,6 +79,49 @@ Optional `--evidence-output` writes only safe JSON fields: release SHA, image
 identity, OCI provenance, validation results, mode, and mutation status. The
 output path must be treated as a deployment evidence artifact and must not be
 used for environment configuration.
+
+## Release-boundary manifest
+
+`deployment/scripts/release_manifest.py` produces a deterministic, non-secret
+release evidence artifact outside the repository. It records the reviewed
+commit SHA, Git tree identity, and SHA-256 plus Git blob identity for the
+controller, validator, metadata helpers, Compose, nginx, Dockerfile, CI
+workflow, release documentation, and required deployment/security tests. The
+generated manifest is explicitly excluded from its own file set, so no
+circular self-hash exists.
+
+The release workflow must generate and verify this artifact from a clean
+checkout before a release is considered reviewable. A manifest verifies source
+provenance; it does not authorize Gate 1, provision secrets, or replace the
+independent image-digest and trusted-metadata gates. Final release
+certification must run verification with `--require-image` and an independently
+verified digest for the same release SHA. The controller's existing reviewed
+SHA check does not replace this artifact check; the release process must
+complete manifest verification before any deployment validation is authorized,
+so a working-tree controller is never accepted as a reviewed release by
+process convention.
+
+## Secret provisioning design (DESIGN ONLY)
+
+No approved host-side provisioning mechanism currently exists. The target
+enterprise custody model is:
+
+```text
+enterprise secret manager
+  -> Windows machine identity and JIT authorization
+  -> approved provisioning service with dual control
+  -> atomic protected configuration/TLS materialization
+  -> controlled_deploy.py validation
+```
+
+The future provider must enforce least privilege, operator approval and
+separation of duties, auditable access, rotation and revocation, emergency
+revocation, atomic replacement with rollback, parent-directory and file ACLs,
+reparse-point rejection, TLS lifecycle controls, and zero secret-value
+logging. Native secret injection should remain the longer-term migration path;
+the flat protected environment file is a compatibility boundary, not a secret
+authority. This section is a design proposal only and has not installed,
+connected, or implemented a secret manager.
 
 ## Current integration gap
 

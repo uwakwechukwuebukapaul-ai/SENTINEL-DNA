@@ -23,11 +23,41 @@ jobs:
 
       - name: Verify checkout identity
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Verify tracked deployment release boundary
+        shell: bash
+        run: |
+          test -f deployment/scripts/controlled_deploy.py
+          test -f deployment/scripts/validate_deployment_config.py
+          test -f deployment/scripts/release_metadata.py
+          test -f deployment/scripts/prepare_trusted_release_metadata.py
+          test -f deployment/scripts/release_manifest.py
+          test -f deployment/docker-compose.yml
+          test -f deployment/nginx.conf
+          test -f Dockerfile
+          test -f tests/deployment/test_controlled_deploy.py
+          test -f tests/deployment/test_release_contract.py
+          test -f tests/deployment/test_release_manifest.py
+          test -f tests/deployment/test_trusted_release_metadata.py
 
       - name: Derive immutable release metadata
         shell: bash
         run: python deployment/scripts/release_metadata.py --format github-env >> "$GITHUB_ENV"
+
+      - name: Generate and verify deterministic release manifest
+        shell: bash
+        run: |
+          manifest="$RUNNER_TEMP/sentinel-dna-release-manifest.json"
+          python deployment/scripts/release_manifest.py build \
+            --output "$manifest" \
+            --image-reference "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" \
+            --image-revision "$SENTINEL_DNA_IMAGE_REVISION_FULL" \
+            --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+          python deployment/scripts/release_manifest.py verify \
+            --manifest "$manifest"
 
       - name: Validate protected configuration and metadata
         run: python deployment/scripts/validate_deployment_config.py
@@ -60,6 +90,10 @@ jobs:
       - name: Run deployment-adjacent regression tests
         run: |
           python -m pytest -q \
+            tests/deployment/test_controlled_deploy.py \
+            tests/deployment/test_release_contract.py \
+            tests/deployment/test_release_manifest.py \
+            tests/deployment/test_trusted_release_metadata.py \
             tests/production/test_runtime_hardening.py \
             tests/intelligence/api/test_execution_visibility_api.py \
             tests/security/test_production_entrypoint_reconciliation.py \
