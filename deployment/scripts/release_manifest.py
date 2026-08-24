@@ -26,9 +26,11 @@ DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 # of this tuple and must be written outside the repository tree.
 RELEASE_FILE_SET = (
     ".github/workflows/deployment-contract.yml",
+    ".dockerignore",
     "Dockerfile",
     "deployment/docker-compose.yml",
     "deployment/nginx.conf",
+    "deployment/scripts/build_context_policy.py",
     "deployment/scripts/controlled_deploy.py",
     "deployment/scripts/prepare_trusted_release_metadata.py",
     "deployment/scripts/release_manifest.py",
@@ -38,6 +40,7 @@ RELEASE_FILE_SET = (
     "docs/DEPLOYMENT_GUIDE.md",
     "docs/PRODUCTION_RUNBOOK.md",
     "tests/deployment/test_controlled_deploy.py",
+    "tests/deployment/test_build_context_policy.py",
     "tests/deployment/test_release_contract.py",
     "tests/deployment/test_release_manifest.py",
     "tests/deployment/test_trusted_release_metadata.py",

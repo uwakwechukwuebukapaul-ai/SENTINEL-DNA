@@ -35,12 +35,14 @@ jobs:
           test -f deployment/scripts/release_metadata.py
           test -f deployment/scripts/prepare_trusted_release_metadata.py
           test -f deployment/scripts/release_manifest.py
+          test -f deployment/scripts/build_context_policy.py
           test -f deployment/docker-compose.yml
           test -f deployment/nginx.conf
           test -f Dockerfile
           test -f tests/deployment/test_controlled_deploy.py
           test -f tests/deployment/test_release_contract.py
           test -f tests/deployment/test_release_manifest.py
+          test -f tests/deployment/test_build_context_policy.py
           test -f tests/deployment/test_trusted_release_metadata.py
 
       - name: Derive immutable release metadata
@@ -61,6 +63,10 @@ jobs:
 
       - name: Validate protected configuration and metadata
         run: python deployment/scripts/validate_deployment_config.py
+
+      - name: Verify Docker build-context policy
+        shell: bash
+        run: python deployment/scripts/build_context_policy.py --repository-root .
 
       - name: Build immutable application image
         shell: bash
@@ -93,6 +99,7 @@ jobs:
             tests/deployment/test_controlled_deploy.py \
             tests/deployment/test_release_contract.py \
             tests/deployment/test_release_manifest.py \
+            tests/deployment/test_build_context_policy.py \
             tests/deployment/test_trusted_release_metadata.py \
             tests/production/test_runtime_hardening.py \
             tests/intelligence/api/test_execution_visibility_api.py \
