@@ -20,9 +20,16 @@ from deployment.scripts.controlled_deploy import (
     validate_compose_file,
     validate_protected_file,
 )
+from deployment.scripts.release_metadata import derive_release_metadata
 
 
-RELEASE_SHA = "4ccd97552723b7171e9a29bbfde415ba054bd3b0"
+RELEASE_METADATA = derive_release_metadata(
+    repository_root=Path(__file__).resolve().parents[2],
+    source_date_epoch="0",
+)
+RELEASE_SHA = RELEASE_METADATA["SENTINEL_DNA_IMAGE_REVISION_FULL"]
+RELEASE_REVISION = RELEASE_METADATA["SENTINEL_DNA_IMAGE_REVISION"]
+RELEASE_CREATED = RELEASE_METADATA["SENTINEL_DNA_IMAGE_CREATED"]
 RELEASE_DIGEST = "sha256:9a212a06eed455a43675c75cf1324827b33bc44070c6f0ccd7d5f9df0be4b91d"
 SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 
@@ -84,9 +91,9 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
                 "SENTINEL_DNA_SECRET_KEY=" + ("S" * 48),
                 "POSTGRES_PASSWORD=" + ("P" * 32),
                 f"SENTINEL_DNA_IMAGE_TAG={RELEASE_SHA}",
-                "SENTINEL_DNA_IMAGE_REVISION=4ccd97552",
+                f"SENTINEL_DNA_IMAGE_REVISION={RELEASE_REVISION}",
                 f"SENTINEL_DNA_IMAGE_REVISION_FULL={RELEASE_SHA}",
-                "SENTINEL_DNA_IMAGE_CREATED=2026-08-23T00:00:00Z",
+                f"SENTINEL_DNA_IMAGE_CREATED={RELEASE_CREATED}",
                 f"SENTINEL_DNA_IMAGE_DIGEST={digest}",
                 f"SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE={metadata_file}",
                 f"SENTINEL_DNA_TLS_DIR={tls_dir}",
