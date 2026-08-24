@@ -44,6 +44,7 @@ python deployment/scripts/controlled_deploy.py `
   --expected-digest <VERIFIED_IMAGE_DIGEST> `
   --env-file <AUTHORIZED_PROTECTED_ENV_FILE> `
   --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
+  --release-manifest <VERIFIED_RELEASE_MANIFEST> `
   --docker-executable C:\Users\<operator>\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe `
   --dry-run
 ```

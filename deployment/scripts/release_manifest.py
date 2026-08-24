@@ -201,6 +201,8 @@ def verify_manifest(
     repository_root: Path,
     require_current_head: bool = True,
     require_image: bool = False,
+    expected_release_sha: str | None = None,
+    expected_image_digest: str | None = None,
 ) -> None:
     """Verify a manifest against the reviewed Git tree without reading secrets."""
 
@@ -226,6 +228,9 @@ def verify_manifest(
     if not isinstance(release_sha, str):
         raise ReleaseManifestError("release manifest release SHA is missing")
     _validate_release_sha(release_sha)
+    if expected_release_sha is not None and release_sha != expected_release_sha:
+        raise ReleaseManifestError("release manifest SHA does not match requested release")
+    _validate_digest(expected_image_digest)
     expected_tree = _git_text(root, "rev-parse", f"{release_sha}^{{tree}}")
     if repository.get("tree_id") != expected_tree:
         raise ReleaseManifestError("release manifest tree identity does not match Git")
@@ -265,6 +270,8 @@ def verify_manifest(
         _validate_digest(digest)
     if require_image and digest is None:
         raise ReleaseManifestError("verified image digest is required for release certification")
+    if expected_image_digest is not None and digest != expected_image_digest:
+        raise ReleaseManifestError("release manifest image digest does not match requested digest")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -286,6 +293,8 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--allow-different-head", action="store_true")
     verify.add_argument("--require-image", action="store_true")
+    verify.add_argument("--expected-release-sha")
+    verify.add_argument("--expected-image-digest")
     return parser
 
 
@@ -310,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
                 repository_root=args.repository_root,
                 require_current_head=not args.allow_different_head,
                 require_image=args.require_image,
+                expected_release_sha=args.expected_release_sha,
+                expected_image_digest=args.expected_image_digest,
             )
             print("Release manifest verified")
     except ReleaseManifestError as exc:

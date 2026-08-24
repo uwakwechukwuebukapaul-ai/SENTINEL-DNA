@@ -25,6 +25,9 @@ from typing import Any, Mapping, Protocol, Sequence
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if __package__ in {None, ""} and str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest
+
 EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 EXPECTED_METADATA_FIELDS = frozenset(("release_sha", "image_digest"))
 EXPECTED_DOCKER_CONTEXT = "desktop-linux"
@@ -329,6 +332,7 @@ class ControlledDeploymentAdapter:
         expected_digest: str,
         env_file: Path,
         metadata_file: Path,
+        release_manifest_file: Path,
         compose_file: Path,
         repository_root: Path = REPOSITORY_ROOT,
         docker_executable: str = "docker",
@@ -339,6 +343,7 @@ class ControlledDeploymentAdapter:
         self.expected_digest = expected_digest
         self.env_file = env_file
         self.metadata_file = metadata_file
+        self.release_manifest_file = release_manifest_file
         self.compose_file = compose_file
         self.repository_root = repository_root
         self.docker_executable = docker_executable
@@ -383,6 +388,19 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("tls_directory_symlink_forbidden")
         validate_protected_directory(tls_dir, self.repository_root, self.acl_inspector)
         return values
+
+    def _validate_release_manifest(self) -> None:
+        try:
+            verify_manifest(
+                manifest_path=self.release_manifest_file,
+                repository_root=self.repository_root,
+                require_current_head=True,
+                require_image=True,
+                expected_release_sha=self.reviewed_sha,
+                expected_image_digest=self.expected_digest,
+            )
+        except ReleaseManifestError as exc:
+            raise ControlledDeploymentError("release_manifest_invalid") from exc
 
     def _validate_release(self) -> ReleaseEvidence:
         from deployment.scripts.release_metadata import derive_release_metadata
@@ -463,6 +481,7 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("compose_tls_mount_not_read_only")
 
     def validate(self) -> ReleaseEvidence:
+        self._validate_release_manifest()
         self._validate_configuration()
         self._validate_metadata()
         evidence = self._validate_release()
@@ -591,6 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-digest", required=True)
     parser.add_argument("--env-file", required=True, type=Path)
     parser.add_argument("--metadata-file", required=True, type=Path)
+    parser.add_argument("--release-manifest", required=True, type=Path)
     parser.add_argument("--compose-file", default=REPOSITORY_ROOT / "deployment" / "docker-compose.yml", type=Path)
     parser.add_argument("--docker-executable", default="docker")
     parser.add_argument("--evidence-output", type=Path)
@@ -608,6 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_digest=args.expected_digest,
         env_file=args.env_file,
         metadata_file=args.metadata_file,
+        release_manifest_file=args.release_manifest,
         compose_file=args.compose_file,
         docker_executable=args.docker_executable,
     )

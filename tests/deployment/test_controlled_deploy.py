@@ -21,6 +21,7 @@ from deployment.scripts.controlled_deploy import (
     validate_protected_file,
 )
 from deployment.scripts.release_metadata import derive_release_metadata
+from deployment.scripts.release_manifest import build_manifest, write_manifest
 
 
 RELEASE_METADATA = derive_release_metadata(
@@ -82,6 +83,19 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         json.dumps(metadata or {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}),
         encoding="utf-8",
     )
+    release_manifest_file = tmp_path / "trusted" / "release-manifest.json"
+    write_manifest(
+        build_manifest(
+            repository_root=Path(__file__).resolve().parents[2],
+            release_sha=RELEASE_SHA,
+            image_reference=f"deployment-app:{RELEASE_SHA}",
+            image_digest=RELEASE_DIGEST,
+            image_revision=RELEASE_SHA,
+            image_source=SOURCE,
+        ),
+        output=release_manifest_file,
+        repository_root=Path(__file__).resolve().parents[2],
+    )
     tls_dir = tmp_path / "tls"
     tls_dir.mkdir()
     env_file.write_text(
@@ -139,6 +153,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         expected_digest=RELEASE_DIGEST,
         env_file=env_file,
         metadata_file=metadata_file,
+        release_manifest_file=release_manifest_file,
         compose_file=Path("deployment/docker-compose.yml").resolve(),
         runner=runner or FakeRunner(image_info, compose_info),
         acl_inspector=FakeAclInspector(acl or SAFE_ENTRIES),
@@ -227,6 +242,20 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
     env_file = tmp_path / "protected" / "production.env"
     env_file.parent.mkdir()
     env_file.write_text("SENTINEL_DNA_ENV=production\n", encoding="utf-8")
+    release_manifest_file = tmp_path / "release" / "release-manifest.json"
+    release_manifest_file.parent.mkdir()
+    write_manifest(
+        build_manifest(
+            repository_root=repository_root,
+            release_sha=RELEASE_SHA,
+            image_reference=f"deployment-app:{RELEASE_SHA}",
+            image_digest=RELEASE_DIGEST,
+            image_revision=RELEASE_SHA,
+            image_source=SOURCE,
+        ),
+        output=release_manifest_file,
+        repository_root=repository_root,
+    )
 
     validator = types.ModuleType("deployment.scripts.validate_deployment_config")
     validator.merged_environment = lambda **_: {}
@@ -272,6 +301,8 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
                 str(env_file),
                 "--metadata-file",
                 str(tmp_path / "trusted" / "metadata.json"),
+                "--release-manifest",
+                str(release_manifest_file),
                 "--validate-only",
             ],
         )

@@ -84,6 +84,7 @@ $python = ".venv\\Scripts\\python.exe"
   --expected-digest <verified-image-digest> `
   --env-file $protectedEnv `
   --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
+  --release-manifest <VERIFIED_RELEASE_MANIFEST> `
   --validate-only
 ```
 
@@ -95,6 +96,7 @@ python deployment/scripts/controlled_deploy.py \
   --expected-digest <verified-image-digest> \
   --env-file <AUTHORIZED_PROTECTED_ENV_FILE> \
   --metadata-file <AUTHORIZED_PROTECTED_METADATA_FILE> \
+  --release-manifest <VERIFIED_RELEASE_MANIFEST> \
   --validate-only
 ```
 
