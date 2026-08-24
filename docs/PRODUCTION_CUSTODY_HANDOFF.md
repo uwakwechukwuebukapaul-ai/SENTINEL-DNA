@@ -11,11 +11,11 @@ prerequisites is complete.
 
 | Artifact | Certified value |
 | --- | --- |
-| SHA | `8a7df7e07da0b50054fabcb393dffee1b58a8cff` |
-| Git tree | `497c82a893d67ebf86751253b039abd30cb7d7e5` |
-| Image ID | `sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25` |
-| RepoDigest | `deployment-app@sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25` |
-| OCI revision | `8a7df7e07` |
+| SHA | `8eef9afd588a1dda80975bb997e4baae06a1d06d` |
+| Git tree | `6ca1c289586f84e93d5e9bb29fa4490f3dfbae9a` |
+| Image ID | **NOT MEASURED FOR THIS COMMIT** |
+| RepoDigest | **NOT MEASURED FOR THIS COMMIT** |
+| OCI revision | `8eef9afd5` |
 | OCI source | `https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA` |
 | OCI version | Exact full certified SHA |
 | Runtime user | `sentinel` |
@@ -24,10 +24,11 @@ prerequisites is complete.
 
 ## 2. Certified artifact statement
 
-The application release and immutable image are frozen. Every externally
-provisioned production input must be associated with the exact SHA, Git tree,
-image ID, RepoDigest, and verified release manifest above. Mutable tags,
-working-tree files, stale metadata, and local development TLS are not release
+The application source release is frozen at the exact SHA and Git tree above.
+The immutable image ID and RepoDigest remain external gates until independently
+measured for this commit. Every externally provisioned production input must be
+associated with the exact SHA, Git tree, image ID, RepoDigest, and verified
+release manifest. Mutable tags, working-tree files, stale metadata, and local development TLS are not release
 authority.
 
 ## 3. Infrastructure custody requirements
@@ -113,8 +114,8 @@ The exact expected schema for this release is:
 
 ```json
 {
-  "release_sha": "8a7df7e07da0b50054fabcb393dffee1b58a8cff",
-  "image_digest": "sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25"
+  "release_sha": "8eef9afd588a1dda80975bb997e4baae06a1d06d",
+  "image_digest": "<EXTERNAL_RELEASE_GATE_IMAGE_DIGEST>"
 }
 ```
 
@@ -219,8 +220,8 @@ must:
 
 ```powershell
 python deployment/scripts/controlled_deploy.py `
-  --reviewed-sha 8a7df7e07da0b50054fabcb393dffee1b58a8cff `
-  --expected-digest sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25 `
+  --reviewed-sha 8eef9afd588a1dda80975bb997e4baae06a1d06d `
+  --expected-digest <EXTERNAL_RELEASE_GATE_IMAGE_DIGEST> `
   --env-file <AUTHORIZED_PROTECTED_ENV_FILE> `
   --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
   --release-manifest <VERIFIED_RELEASE_MANIFEST> `

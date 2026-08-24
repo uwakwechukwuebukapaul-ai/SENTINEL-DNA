@@ -7,30 +7,30 @@ independent-review use. It does not authorize deployment or Gate 1.
 
 | Artifact | Certified value |
 | --- | --- |
-| Commit | `8a7df7e07da0b50054fabcb393dffee1b58a8cff` |
-| Git tree | `497c82a893d67ebf86751253b039abd30cb7d7e5` |
-| Image ID | `sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25` |
-| RepoDigest | `deployment-app@sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25` |
+| Commit | `8eef9afd588a1dda80975bb997e4baae06a1d06d` |
+| Git tree | `6ca1c289586f84e93d5e9bb29fa4490f3dfbae9a` |
+| Image ID | **NOT MEASURED FOR THIS COMMIT** |
+| RepoDigest | **NOT MEASURED FOR THIS COMMIT** |
 
 ## Engineering evidence
 
 - Release engineering: **COMPLETE**.
-- The frozen hardening boundary contains exactly six files; no subsequent
-  application or deployment mutation is part of the certified commit.
+- The certified engineering boundary is the committed tree identified above;
+  no deployment authorization is implied by this document.
 - Build-context security policy: **PASS**.
 - Immutable image: **PASS**. The image runs as non-root user `sentinel` with
   effective command `gunicorn wsgi:application` and exposes `5000/tcp`.
 - OCI provenance: **PASS**.
-  - Full revision: `8a7df7e07da0b50054fabcb393dffee1b58a8cff`
-  - OCI revision: `8a7df7e07`
+  - Full revision: `8eef9afd588a1dda80975bb997e4baae06a1d06d`
+  - OCI revision: `8eef9afd5`
   - OCI source: `https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA`
   - OCI version: exact full release SHA
-  - Created: `2026-08-24T03:22:34Z`
-- Image-bound release manifest: **PASS**. It binds the exact SHA, Git tree,
-  image ID, RepoDigest, release-boundary hashes, and self-hash exclusion;
-  `--require-image` verification passed.
-- Deployment/security suite: **91 passed**.
-- Full regression: **2778 passed, 4 skipped, 0 failed**.
+  - Created: **NOT MEASURED FOR THIS COMMIT**
+- Image-bound release manifest: **EXTERNAL GATE**. Image ID, RepoDigest, and
+  OCI creation evidence must be supplied by the authorized image release
+  process for this exact SHA.
+- Release/deployment validation: **33 passed** in the certified validation.
+- Full regression: **2869 passed, 4 skipped, 0 failed**.
 
 Operational procedures remain in [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md),
 [CONTROLLED_DEPLOYMENT_ADAPTER.md](CONTROLLED_DEPLOYMENT_ADAPTER.md), and

@@ -12,10 +12,10 @@ Current release identity:
 
 | Artifact | Certified identity |
 | --- | --- |
-| Git SHA | `8a7df7e07da0b50054fabcb393dffee1b58a8cff` |
-| Git tree | `497c82a893d67ebf86751253b039abd30cb7d7e5` |
-| Image ID | `sha256:5f92c7d28dbe0eeee5e5cc9e0051292a312364a39c3a83e78d09501a496f5d25` |
-| Release posture | Engineering complete; image certified; production blocked |
+| Git SHA | `8eef9afd588a1dda80975bb997e4baae06a1d06d` |
+| Git tree | `6ca1c289586f84e93d5e9bb29fa4490f3dfbae9a` |
+| Image ID | **NOT MEASURED FOR THIS COMMIT** |
+| Release posture | Engineering complete; image certification external; production blocked |
 
 ## 1. Product positioning
 
