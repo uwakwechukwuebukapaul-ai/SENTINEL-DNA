@@ -5,6 +5,7 @@ from deployment.scripts.validate_deployment_config import validate_configuration
 
 
 ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW = ROOT / ".github" / "workflows" / "deployment-contract.yml"
 
 
 def test_release_metadata_is_derived_from_current_head():
@@ -118,3 +119,20 @@ def test_nginx_contract_preserves_internal_app_and_secure_tls_forwarding():
     assert "ssl_certificate_key /etc/nginx/tls/localhost.key;" in nginx
     assert "proxy_pass http://app:5000;" in nginx
     assert "proxy_set_header X-Forwarded-Proto https;" in nginx
+
+
+def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "contents: read" in workflow
+    assert "packages: write" in workflow
+    assert "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna" in workflow
+    assert "sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}" in workflow
+    assert "github.token" in workflow
+    assert "--password-stdin" in workflow
+    assert "docker push" in workflow
+    assert ":latest" not in workflow.lower()
+    assert "controlled_deploy.py --execute" not in workflow
+    assert "docker compose up" not in workflow
+    assert "org.opencontainers.image.revision" in workflow
+    assert "SENTINEL_DNA_IMAGE_REVISION_FULL" in workflow
