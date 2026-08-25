@@ -127,9 +127,23 @@ def test_manifest_output_is_append_only(tmp_path: Path) -> None:
             write_manifest(manifest, output=target, repository_root=REPOSITORY_ROOT)
 
 
-def test_release_hygiene_reports_bounded_repository_state() -> None:
+def test_release_hygiene_reports_bounded_repository_state(tmp_path: Path) -> None:
+    test_repository = tmp_path / "repository"
+    subprocess.run(
+        ["git", "clone", "--no-local", str(REPOSITORY_ROOT), str(test_repository)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    tracked_probe = test_repository / "README.md"
+    tracked_probe.write_bytes(tracked_probe.read_bytes() + b"\nrelease hygiene test modification\n")
+    untracked_probe = test_repository / "release-evidence" / "release-hygiene-test-evidence.json"
+    untracked_probe.parent.mkdir()
+    untracked_probe.write_text("{}\n", encoding="utf-8")
+
     report = ReleaseHygieneValidator(
-        repository_root=REPOSITORY_ROOT,
+        repository_root=test_repository,
         generated_at="2026-08-25T00:00:00+00:00",
     ).run()
 
