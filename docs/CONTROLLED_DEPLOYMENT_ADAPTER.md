@@ -127,7 +127,8 @@ connected, or implemented a secret manager.
 ## Current integration gap
 
 The existing GitHub Actions `deployment-contract` workflow validates and builds
-under its protected `production` environment, but it has no approved transport
-or deployment-host adapter. It does not materialize a local environment file,
-prepare the trusted host artifact, push an image, or deploy containers. A future
-integration must be separately reviewed before `--execute` is used from CI.
+under its protected `production` environment, publishes the exact authorized
+candidate image to private GHCR, captures its immutable digest and non-secret
+release evidence, but has no approved transport or deployment-host adapter. It
+does not deploy containers. A future integration must be separately reviewed
+before `--execute` is used from CI.
