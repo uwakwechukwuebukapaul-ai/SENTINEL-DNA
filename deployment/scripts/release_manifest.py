@@ -9,23 +9,40 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import re
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = "sentinel-dna-release-manifest-v1"
+SCHEMA_VERSION = "sentinel-dna-release-manifest-v2"
 EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
-MANIFEST_FIELDS = frozenset(("schema_version", "repository", "files", "image", "manifest_policy"))
-REPOSITORY_FIELDS = frozenset(("release_sha", "tree_id", "tree_id_type"))
+MANIFEST_FIELDS = frozenset(
+    (
+        "schema_version",
+        "repository",
+        "files",
+        "tracked_files",
+        "artifact_references",
+        "validation_evidence_references",
+        "replay_digest_references",
+        "image",
+        "manifest_policy",
+    )
+)
+REPOSITORY_FIELDS = frozenset(("release_sha", "branch", "tree_id", "tree_id_type"))
 FILE_FIELDS = frozenset(("git_blob", "sha256"))
+ARTIFACT_FIELDS = frozenset(("reference", "artifact_digest", "replay_digest", "commit_sha", "immutable"))
+VALIDATION_EVIDENCE_FIELDS = frozenset(("source", "report_digest", "replay_digest"))
+REPLAY_REFERENCE_FIELDS = frozenset(("source", "digest"))
 IMAGE_FIELDS = frozenset(("reference", "digest", "id", "oci_revision", "oci_source"))
-MANIFEST_POLICY_FIELDS = frozenset(("generated_output", "self_hash"))
+MANIFEST_POLICY_FIELDS = frozenset(("generated_output", "self_hash", "identity_excludes"))
 
 # This is the reviewed release boundary.  The generated manifest is not part
 # of this tuple and must be written outside the repository tree.
@@ -55,6 +72,10 @@ RELEASE_FILE_SET = (
 
 class ReleaseManifestError(RuntimeError):
     """Raised when release evidence cannot be established safely."""
+
+
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
 
 
 def _git(root: Path, *args: str, text: bool = True) -> str | bytes:
@@ -131,6 +152,88 @@ def _assert_clean_worktree(repository_root: Path) -> None:
         raise ReleaseManifestError("repository worktree is not clean")
 
 
+def _tracked_file_inventory(root: Path, release_sha: str) -> dict[str, dict[str, str]]:
+    tree_lines = _git_text(root, "ls-tree", "-r", "--full-tree", release_sha).splitlines()
+    inventory: dict[str, dict[str, str]] = {}
+    blob_ids: dict[str, str] = {}
+    for line in tree_lines:
+        metadata, path = line.split("\t", 1)
+        _mode, object_type, blob_id = metadata.split(" ", 2)
+        if object_type == "blob":
+            blob_ids[path] = blob_id
+
+    archive = _git(root, "archive", "--format=tar", release_sha, text=False)
+    assert isinstance(archive, bytes)
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as stream:
+        for member in stream.getmembers():
+            path = member.name
+            if path not in blob_ids:
+                continue
+            if member.isfile():
+                handle = stream.extractfile(member)
+                content = handle.read() if handle is not None else b""
+            else:
+                _blob_id, content = _git_blob(root, release_sha, path)
+            inventory[path] = {
+                "git_blob": blob_ids[path],
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+    if set(inventory) != set(blob_ids):
+        missing = sorted(set(blob_ids) - set(inventory))
+        raise ReleaseManifestError(f"tracked file inventory could not be materialized: {missing[0]}")
+    return inventory
+
+
+def _artifact_reference(path: Path, release_sha: str) -> dict[str, Any]:
+    _assert_regular_nonreparse(path, "evidence artifact")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise ReleaseManifestError(f"evidence artifact is not valid JSON: {path.name}") from exc
+    if not isinstance(payload, dict):
+        raise ReleaseManifestError(f"evidence artifact shape is invalid: {path.name}")
+    if payload.get("immutable") is not True:
+        raise ReleaseManifestError(f"evidence artifact is not immutable: {path.name}")
+    if payload.get("commit_sha") != release_sha:
+        raise ReleaseManifestError(f"evidence artifact commit association is invalid: {path.name}")
+    artifact_digest = payload.get("artifact_digest")
+    replay_digest = payload.get("replay_digest")
+    if not isinstance(artifact_digest, str) or not artifact_digest:
+        raise ReleaseManifestError(f"evidence artifact digest is missing: {path.name}")
+    if not isinstance(replay_digest, str) or not replay_digest:
+        raise ReleaseManifestError(f"evidence artifact replay digest is missing: {path.name}")
+    body = dict(payload)
+    body.pop("artifact_digest", None)
+    if hashlib.sha256((_canonical(body) + "\n").encode("utf-8")).hexdigest() != artifact_digest:
+        raise ReleaseManifestError(f"evidence artifact digest mismatch: {path.name}")
+    return {
+        "reference": path.name,
+        "artifact_digest": artifact_digest,
+        "replay_digest": replay_digest,
+        "commit_sha": release_sha,
+        "immutable": True,
+    }
+
+
+def _artifact_evidence_references(payload: dict[str, Any]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    evidence: list[dict[str, str]] = []
+    replay: list[dict[str, str]] = []
+    source_items = payload.get("evidence_sources", ())
+    if isinstance(source_items, dict):
+        source_items = [dict(value, source=name) for name, value in source_items.items() if isinstance(value, dict)]
+    if isinstance(source_items, list):
+        for item in source_items:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("source")
+            report_digest = item.get("report_digest")
+            replay_digest = item.get("replay_digest")
+            if source and report_digest and replay_digest:
+                evidence.append({"source": str(source), "report_digest": str(report_digest), "replay_digest": str(replay_digest)})
+                replay.append({"source": str(source), "digest": str(replay_digest)})
+    return evidence, replay
+
+
 def build_manifest(
     *,
     repository_root: Path,
@@ -140,6 +243,7 @@ def build_manifest(
     image_id: str | None = None,
     image_revision: str | None = None,
     image_source: str = EXPECTED_IMAGE_SOURCE,
+    artifact_paths: tuple[Path, ...] = (),
 ) -> dict[str, Any]:
     """Return deterministic release evidence for the current reviewed tree."""
 
@@ -151,6 +255,9 @@ def build_manifest(
         raise ReleaseManifestError("release SHA must equal the checked-out HEAD")
     _assert_clean_worktree(root)
 
+    branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+    if not branch:
+        raise ReleaseManifestError("release branch is unavailable")
     tree_id = _git_text(root, "rev-parse", f"{selected_sha}^{{tree}}")
     files: dict[str, dict[str, str]] = {}
     for path in RELEASE_FILE_SET:
@@ -159,6 +266,26 @@ def build_manifest(
             "git_blob": blob_id,
             "sha256": hashlib.sha256(content).hexdigest(),
         }
+
+    tracked_files = _tracked_file_inventory(root, selected_sha)
+    artifact_references: list[dict[str, Any]] = []
+    validation_evidence_references: list[dict[str, str]] = []
+    replay_digest_references: list[dict[str, str]] = []
+    for artifact_path in artifact_paths:
+        reference = _artifact_reference(Path(artifact_path).resolve(), selected_sha)
+        artifact_references.append(reference)
+        replay_digest_references.append({"source": reference["reference"], "digest": reference["replay_digest"]})
+        try:
+            artifact_payload = json.loads(Path(artifact_path).resolve().read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            raise ReleaseManifestError(f"evidence artifact is not valid JSON: {Path(artifact_path).name}") from exc
+        if isinstance(artifact_payload, dict):
+            evidence, replay = _artifact_evidence_references(artifact_payload)
+            validation_evidence_references.extend(evidence)
+            replay_digest_references.extend(replay)
+    artifact_references.sort(key=lambda item: item["reference"])
+    validation_evidence_references.sort(key=lambda item: (item["source"], item["replay_digest"]))
+    replay_digest_references.sort(key=lambda item: (item["source"], item["digest"]))
 
     _validate_digest(image_digest)
     image = {
@@ -175,14 +302,20 @@ def build_manifest(
         "schema_version": SCHEMA_VERSION,
         "repository": {
             "release_sha": selected_sha,
+            "branch": branch,
             "tree_id": tree_id,
             "tree_id_type": "git-object-id",
         },
         "files": files,
+        "tracked_files": tracked_files,
+        "artifact_references": artifact_references,
+        "validation_evidence_references": validation_evidence_references,
+        "replay_digest_references": replay_digest_references,
         "image": image,
         "manifest_policy": {
             "generated_output": "outside-repository",
             "self_hash": "excluded",
+            "identity_excludes": ["timestamps", "manifest_identity"],
         },
     }
 
@@ -197,6 +330,8 @@ def write_manifest(manifest: dict[str, Any], *, output: Path, repository_root: P
         raise ReleaseManifestError("manifest output parent must already exist")
     if target.parent.is_symlink():
         raise ReleaseManifestError("manifest output parent must not be a symlink")
+    if target.exists():
+        raise ReleaseManifestError("refusing to overwrite existing release manifest")
 
     payload = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     temporary = target.with_name(f".{target.name}.tmp")
@@ -217,6 +352,9 @@ def verify_manifest(
     require_image: bool = False,
     expected_release_sha: str | None = None,
     expected_image_digest: str | None = None,
+    artifact_paths: tuple[Path, ...] = (),
+    require_artifact_references: bool = False,
+    require_validation_evidence: bool = False,
 ) -> None:
     """Verify a manifest against the reviewed Git tree without reading secrets."""
 
@@ -237,7 +375,11 @@ def verify_manifest(
         MANIFEST_POLICY_FIELDS,
         "release manifest policy fields are invalid",
     )
-    if policy != {"generated_output": "outside-repository", "self_hash": "excluded"}:
+    if policy != {
+        "generated_output": "outside-repository",
+        "self_hash": "excluded",
+        "identity_excludes": ["timestamps", "manifest_identity"],
+    }:
         raise ReleaseManifestError("release manifest self-hash policy is invalid")
 
     repository = _require_exact_keys(
@@ -261,6 +403,9 @@ def verify_manifest(
         raise ReleaseManifestError("release manifest SHA does not match checked-out HEAD")
     if require_current_head:
         _assert_clean_worktree(root)
+        current_branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+        if current_branch != repository["branch"]:
+            raise ReleaseManifestError("release manifest branch does not match checked-out branch")
 
     files = manifest["files"]
     if not isinstance(files, dict) or set(files) != set(RELEASE_FILE_SET):
@@ -278,6 +423,71 @@ def verify_manifest(
             raise ReleaseManifestError(f"Git blob mismatch: {file_path}")
         if entry["sha256"] != hashlib.sha256(content).hexdigest():
             raise ReleaseManifestError(f"SHA-256 mismatch: {file_path}")
+
+    tracked_files = manifest["tracked_files"]
+    if not isinstance(tracked_files, dict) or set(tracked_files) != set(_tracked_file_inventory(root, release_sha)):
+        raise ReleaseManifestError("release manifest tracked file inventory does not match repository")
+    expected_inventory = _tracked_file_inventory(root, release_sha)
+    for file_path, expected_entry in expected_inventory.items():
+        entry = _require_exact_keys(
+            tracked_files[file_path],
+            FILE_FIELDS,
+            f"release manifest tracked file entry is invalid: {file_path}",
+        )
+        if entry != expected_entry:
+            raise ReleaseManifestError(f"Tracked file inventory mismatch: {file_path}")
+
+    artifact_references = manifest["artifact_references"]
+    if not isinstance(artifact_references, list):
+        raise ReleaseManifestError("release manifest artifact references are invalid")
+    normalized_artifact_refs = []
+    for reference in artifact_references:
+        item = _require_exact_keys(reference, ARTIFACT_FIELDS, "release manifest artifact reference is invalid")
+        if item["commit_sha"] != release_sha or item["immutable"] is not True:
+            raise ReleaseManifestError("release manifest artifact provenance is invalid")
+        normalized_artifact_refs.append(item)
+    if require_artifact_references and not normalized_artifact_refs:
+        raise ReleaseManifestError("release manifest artifact references are missing")
+    expected_evidence_references: list[dict[str, str]] = []
+    expected_replay_references: list[dict[str, str]] = []
+    if artifact_paths:
+        expected_artifacts = [_artifact_reference(Path(path).resolve(), release_sha) for path in artifact_paths]
+        if sorted(normalized_artifact_refs, key=lambda item: item["reference"]) != sorted(expected_artifacts, key=lambda item: item["reference"]):
+            raise ReleaseManifestError("release manifest artifact references do not match supplied artifacts")
+        for artifact_path, artifact_reference in zip(artifact_paths, expected_artifacts):
+            artifact_path = Path(artifact_path).resolve()
+            try:
+                artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+                raise ReleaseManifestError(f"evidence artifact is not valid JSON: {artifact_path.name}") from exc
+            if not isinstance(artifact_payload, dict):
+                raise ReleaseManifestError(f"evidence artifact shape is invalid: {artifact_path.name}")
+            evidence, replay = _artifact_evidence_references(artifact_payload)
+            expected_evidence_references.extend(evidence)
+            expected_replay_references.append({"source": artifact_reference["reference"], "digest": artifact_reference["replay_digest"]})
+            expected_replay_references.extend(replay)
+        expected_evidence_references.sort(key=lambda item: (item["source"], item["replay_digest"]))
+        expected_replay_references.sort(key=lambda item: (item["source"], item["digest"]))
+
+    evidence_references = manifest["validation_evidence_references"]
+    if not isinstance(evidence_references, list):
+        raise ReleaseManifestError("release manifest validation evidence references are invalid")
+    for reference in evidence_references:
+        _require_exact_keys(reference, VALIDATION_EVIDENCE_FIELDS, "release manifest validation evidence reference is invalid")
+    if require_validation_evidence and not evidence_references:
+        raise ReleaseManifestError("release manifest validation evidence references are missing")
+    if artifact_paths and evidence_references != expected_evidence_references:
+        raise ReleaseManifestError("release manifest validation evidence references do not match supplied artifacts")
+
+    replay_references = manifest["replay_digest_references"]
+    if not isinstance(replay_references, list):
+        raise ReleaseManifestError("release manifest replay digest references are invalid")
+    for reference in replay_references:
+        _require_exact_keys(reference, REPLAY_REFERENCE_FIELDS, "release manifest replay digest reference is invalid")
+    if require_artifact_references and not replay_references:
+        raise ReleaseManifestError("release manifest replay digest references are missing")
+    if artifact_paths and replay_references != expected_replay_references:
+        raise ReleaseManifestError("release manifest replay digest references do not match supplied artifacts")
 
     image = _require_exact_keys(
         manifest["image"],
@@ -312,6 +522,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--image-id")
     build.add_argument("--image-revision")
     build.add_argument("--image-source", default=EXPECTED_IMAGE_SOURCE)
+    build.add_argument("--artifact", action="append", type=Path, default=[])
 
     verify = subparsers.add_parser("verify", help="verify a deterministic manifest")
     verify.add_argument("--repository-root", type=Path, default=Path.cwd())
@@ -320,6 +531,9 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--require-image", action="store_true")
     verify.add_argument("--expected-release-sha")
     verify.add_argument("--expected-image-digest")
+    verify.add_argument("--artifact", action="append", type=Path, default=[])
+    verify.add_argument("--require-artifact-references", action="store_true")
+    verify.add_argument("--require-validation-evidence", action="store_true")
     return parser
 
 
@@ -335,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
                 image_id=args.image_id,
                 image_revision=args.image_revision,
                 image_source=args.image_source,
+                artifact_paths=tuple(args.artifact),
             )
             write_manifest(manifest, output=args.output, repository_root=args.repository_root)
             print("Release manifest generated without secret material")
@@ -346,6 +561,9 @@ def main(argv: list[str] | None = None) -> int:
                 require_image=args.require_image,
                 expected_release_sha=args.expected_release_sha,
                 expected_image_digest=args.expected_image_digest,
+                artifact_paths=tuple(args.artifact),
+                require_artifact_references=args.require_artifact_references,
+                require_validation_evidence=args.require_validation_evidence,
             )
             print("Release manifest verified")
     except ReleaseManifestError as exc:
