@@ -82,6 +82,14 @@ def test_enterprise_report_preserves_safety_boundaries_and_contracts():
     assert first.safety_validation["cross_tenant_access_denied"] is True
     assert first.safety_validation["append_only_evidence"] is True
     assert first.safety_validation["deterministic_replay_valid"] is True
+    assert first.safety_validation["billing_entitlement_validation"] is True
+    assert first.safety_validation["billing_audit_continuity"] is True
+    assert first.safety_validation["billing_fail_closed"] is True
+    assert first.safety_validation["billing_tenant_isolation"] is True
+    assert first.safety_validation["billing_provenance_tracking"] is True
+    assert first.billing_entitlement["validation_result"] == "passed"
+    assert first.billing_entitlement["replay_digest"]
+    assert len(first.billing_entitlement["scenarios"]) == 5
 
 
 def test_enterprise_report_write_is_append_only(tmp_path):

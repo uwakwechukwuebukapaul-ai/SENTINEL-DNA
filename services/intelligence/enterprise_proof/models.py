@@ -145,6 +145,7 @@ class EnterpriseProofValidationReport:
     tenant_isolation: TenantIsolationCertification
     analyst_effectiveness: AnalystEffectivenessBenchmark
     scale_benchmark: InvestigationScaleBenchmark
+    billing_entitlement: dict[str, Any]
     architecture_summary: dict[str, Any]
     safety_validation: dict[str, bool]
     replay_digest: str
@@ -159,6 +160,7 @@ class EnterpriseProofValidationReport:
             "tenant_isolation": self.tenant_isolation.to_dict(),
             "analyst_effectiveness": self.analyst_effectiveness.to_dict(),
             "scale_benchmark": self.scale_benchmark.to_dict(),
+            "billing_entitlement": self.billing_entitlement,
             "architecture_summary": self.architecture_summary,
             "safety_validation": self.safety_validation,
             "replay_digest": self.replay_digest,

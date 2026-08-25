@@ -13,6 +13,7 @@ EXPECTED_SOURCES = {
     "enterprise_proof",
     "controlled_operational_pilot",
     "performance_telemetry",
+    "billing_entitlement_validation",
 }
 
 
@@ -31,14 +32,14 @@ def test_certification_aggregates_all_required_evidence_sources():
     assert all(item.source_replay_digest for item in report.evidence)
     assert all(item.source_report_digest for item in report.evidence if item.source != "performance_telemetry")
     assert all(item.evidence_digest for item in report.evidence)
-    assert len(report.evidence_references) == 6
+    assert len(report.evidence_references) == 7
 
 
 def test_certification_controls_cover_security_ai_performance_and_operations():
     report = _report()
     control_ids = {item.control_id for item in report.controls}
 
-    assert len(report.controls) == 15
+    assert len(report.controls) == 22
     assert report.failed_controls == ()
     assert set(report.passed_controls) == control_ids
     assert {
@@ -57,7 +58,31 @@ def test_certification_controls_cover_security_ai_performance_and_operations():
         "OPS-REPLAY-STABILITY",
         "OPS-DETERMINISTIC-EXECUTION",
         "OPS-REPORT-INTEGRITY",
+        "BILLING-UNPAID-SAFETY",
+        "BILLING-ENTITLEMENT-TRANSITION",
+        "BILLING-UPGRADE-PRESERVATION",
+        "BILLING-DOWNGRADE-SAFETY",
+        "BILLING-INVESTIGATION-PRESERVATION",
+        "BILLING-FAILURE-FAIL-CLOSED",
+        "BILLING-AUDIT-CONTINUITY",
     } == control_ids
+
+
+def test_certification_consumes_billing_scenarios_and_security_invariants():
+    report = _report()
+    evidence = next(item for item in report.evidence if item.source == "billing_entitlement_validation")
+
+    assert evidence.summary["metrics"]["scenario_count"] == 5
+    assert all(evidence.summary["security_invariants"].values())
+    assert {item.control_id for item in report.controls if item.domain == "billing"} == {
+        "BILLING-UNPAID-SAFETY",
+        "BILLING-ENTITLEMENT-TRANSITION",
+        "BILLING-UPGRADE-PRESERVATION",
+        "BILLING-DOWNGRADE-SAFETY",
+        "BILLING-INVESTIGATION-PRESERVATION",
+        "BILLING-FAILURE-FAIL-CLOSED",
+        "BILLING-AUDIT-CONTINUITY",
+    }
 
 
 def test_certification_metrics_and_findings_are_auditable():

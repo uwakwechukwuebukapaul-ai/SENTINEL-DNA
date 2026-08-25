@@ -30,7 +30,7 @@ class EnterpriseTrustClosureRunner:
         generated_at: str | None = None,
         commit_sha: str | None = None,
         repository_root: str | Path | None = None,
-        previous_certification_path: str | Path = "artifacts/enterprise-certification-refresh-2026-08-25.json",
+        previous_certification_path: str | Path = "artifacts/enterprise-certification-billing-refresh-2026-08-25.json",
     ) -> None:
         self.generated_at = str(generated_at or datetime.now(timezone.utc).isoformat())
         self.repository_root = Path(repository_root or Path(__file__).resolve().parents[3]).resolve()
@@ -176,9 +176,9 @@ class EnterpriseTrustClosureRunner:
             "memory_advisory_boundary": certification_controls.get("AI-MEMORY-ADVISORY", False),
         }
         artifact_paths = (
-            self.repository_root / "artifacts/enterprise-proof-refresh-2026-08-25.json",
+            self.repository_root / "artifacts/enterprise-proof-billing-refresh-2026-08-25.json",
             self.repository_root / "artifacts/operational-pilot-refresh-2026-08-25.json",
-            self.repository_root / "artifacts/enterprise-certification-refresh-2026-08-25.json",
+            self.repository_root / "artifacts/enterprise-certification-billing-refresh-2026-08-25.json",
         )
         release_hygiene = {
             "clean_git_state_required": not self._git_dirty(),

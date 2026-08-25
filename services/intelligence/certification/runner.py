@@ -15,6 +15,7 @@ from services.intelligence.memory.validation import OperationalCyberMemoryValida
 from services.intelligence.enterprise_proof import EnterpriseProofValidator
 from services.intelligence.pilot import OperationalPilotRunner
 from services.intelligence.telemetry import run_performance_benchmark
+from services.billing.validation import BillingEntitlementValidationRunner
 
 from .models import (
     CertificationControl,
@@ -37,6 +38,7 @@ class EnterpriseCertificationRunner:
         "enterprise_proof",
         "controlled_operational_pilot",
         "performance_telemetry",
+        "billing_entitlement_validation",
     )
 
     def __init__(
@@ -143,6 +145,11 @@ class EnterpriseCertificationRunner:
             summary["metrics"] = report.metrics.to_dict()
         if source == "performance_telemetry" and report is not None:
             summary["component_statistics"] = report.component_statistics
+        if source == "billing_entitlement_validation" and report is not None:
+            summary["scenarios"] = report.scenarios
+            summary["metrics"] = report.metrics
+            summary["security_invariants"] = report.security_invariants
+            summary["evidence_policy"] = report.evidence_policy
         references = (
             f"{source}:report_digest:{self._source_report_digest(report) or 'unavailable'}",
             f"{source}:replay_digest:{replay_digest or 'unavailable'}",
@@ -184,6 +191,13 @@ class EnterpriseCertificationRunner:
     def _control_value(cls, report: Any, *keys: str) -> bool:
         mapping = cls._mapping(report, "safety_validation", "control_invariants", "control_checks")
         return bool(mapping) and all(bool(mapping.get(key, False)) for key in keys)
+
+    @staticmethod
+    def _scenario_checks(scenario: dict[str, Any] | None, *keys: str) -> bool:
+        if not scenario:
+            return False
+        checks = scenario.get("checks", {})
+        return bool(scenario.get("status") == "passed") and all(bool(checks.get(key, False)) for key in keys)
 
     @staticmethod
     def _control(
@@ -233,6 +247,7 @@ class EnterpriseCertificationRunner:
             ("enterprise_proof", lambda: EnterpriseProofValidator(generated_at=self.generated_at).run()),
             ("controlled_operational_pilot", lambda: OperationalPilotRunner(generated_at=self.generated_at).run()),
             ("performance_telemetry", lambda: run_performance_benchmark(iterations=self.performance_iterations, generated_at=self.generated_at)),
+            ("billing_entitlement_validation", lambda: BillingEntitlementValidationRunner(generated_at=self.generated_at).run()),
         )
         evidence = tuple(self._collect_source(source, factory, reports) for source, factory in factories)
         evidence_ids = {item.source: item.evidence_id for item in evidence}
@@ -248,7 +263,14 @@ class EnterpriseCertificationRunner:
         enterprise_controls = self._mapping(enterprise, "safety_validation")
         pilot_controls = self._mapping(pilot, "safety_validation")
         performance_controls = self._mapping(performance, "control_checks")
-        security_ids = tuple(evidence_ids[item] for item in ("investigation_memory", "organizational_cyber_memory", "enterprise_proof", "controlled_operational_pilot"))
+        billing = reports.get("billing_entitlement_validation")
+        billing_scenarios = {
+            item["scenario_id"]: item
+            for item in (getattr(billing, "scenarios", ()) if billing is not None else ())
+        }
+        billing_security = getattr(billing, "security_invariants", {}) if billing is not None else {}
+        billing_evidence_id = evidence_ids["billing_entitlement_validation"]
+        security_ids = tuple(evidence_ids[item] for item in ("investigation_memory", "organizational_cyber_memory", "enterprise_proof", "controlled_operational_pilot", "billing_entitlement_validation"))
         controls = (
             self._control(
                 "SEC-TENANT-ISOLATION", "security", "Tenant isolation", all((
@@ -257,6 +279,7 @@ class EnterpriseCertificationRunner:
                     bool(accuracy_controls.get("tenant_isolation_unchanged")),
                     bool(enterprise_controls.get("tenant_isolation_unchanged")),
                     bool(pilot_controls.get("tenant_isolation_unchanged")),
+                    bool(billing_security.get("tenant_isolation_preserved")),
                 )), security_ids, "All validation layers preserve tenant-scoped evidence and memory custody."),
             self._control(
                 "SEC-AUTHORIZATION", "security", "Authorization boundaries", all((
@@ -272,6 +295,7 @@ class EnterpriseCertificationRunner:
                     bool(accuracy_controls.get("fail_closed_behavior_unchanged")),
                     bool(enterprise_controls.get("fail_closed_behavior_unchanged")),
                     bool(pilot_controls.get("fail_closed_behavior_unchanged")),
+                    bool(billing_security.get("fail_closed_behavior")),
                 )), security_ids, "Blocked and failed paths remain fail-closed."),
             self._control(
                 "SEC-AUDIT-INTEGRITY", "security", "Audit integrity", all((
@@ -279,12 +303,14 @@ class EnterpriseCertificationRunner:
                     bool(getattr(enterprise, "report_digest", "")),
                     bool(getattr(pilot, "provenance_chain", ())),
                     bool(performance_controls.get("audit_path_unchanged")),
+                    bool(billing_security.get("audit_integrity")),
                 )), tuple(evidence_ids.values()), "Source audit trails, hash chains, and telemetry audit paths are present."),
             self._control(
                 "SEC-APPEND-ONLY", "security", "Append-only evidence", all((
                     bool(enterprise_controls.get("append_only_evidence")),
                     bool(pilot_controls.get("append_only_audit_evidence")),
                     bool(getattr(memory, "audit_trail", ())),
+                    bool(billing_security.get("append_only_evidence")),
                 )), tuple(evidence_ids[item] for item in ("investigation_memory", "enterprise_proof", "controlled_operational_pilot")), "Validation artifact writers and audit evidence remain append-only."),
             self._control(
                 "AI-VERDICT-CONSISTENCY", "ai_investigation", "Verdict consistency", all((
@@ -299,6 +325,7 @@ class EnterpriseCertificationRunner:
                     bool(org_controls.get("evidence_provenance_preserved")),
                     bool(enterprise_controls.get("evidence_provenance_valid")),
                     bool(pilot_controls.get("evidence_provenance_valid")),
+                    bool(billing_security.get("provenance_tracking")),
                 )), security_ids, "Evidence remains linked to its tenant and source investigation."),
             self._control(
                 "AI-CONFIDENCE-CALIBRATION", "ai_investigation", "Confidence calibration", bool(
@@ -337,6 +364,20 @@ class EnterpriseCertificationRunner:
                 )), tuple(evidence_ids.values()), "Stable fixture inputs and replay digests are preserved; observed timing is excluded."),
             self._control(
                 "OPS-REPORT-INTEGRITY", "operational", "Report integrity", all(bool(item.source_report_digest) for item in evidence if item.source != "performance_telemetry") and all(bool(item.evidence_digest) for item in evidence), tuple(item.evidence_id for item in evidence), "Source report references and certification evidence digests are present."),
+            self._control(
+                "BILLING-UNPAID-SAFETY", "billing", "Unpaid tenant safety", self._scenario_checks(billing_scenarios.get("unpaid-tenant-lifecycle"), "tenant_exists_without_active_billing", "identity_remains_valid", "restricted_capabilities_fail_closed", "enterprise_features_not_exposed", "audit_validation"), (billing_evidence_id,), "Unpaid tenants remain identifiable while restricted capabilities fail closed and billing observations are audited."),
+            self._control(
+                "BILLING-ENTITLEMENT-TRANSITION", "billing", "Entitlement transition correctness", self._scenario_checks(billing_scenarios.get("subscription-activation"), "billing_transition_applied", "new_capabilities_match_entitlement", "only_entitlement_state_changed", "identity_unchanged", "tenant_id_unchanged"), (billing_evidence_id,), "Activation changes entitlement state without changing identity, ownership, or investigation state."),
+            self._control(
+                "BILLING-UPGRADE-PRESERVATION", "billing", "Upgrade preservation", self._scenario_checks(billing_scenarios.get("subscription-activation"), "investigation_digest_preserved", "evidence_digest_preserved", "provenance_digest_preserved", "provenance_tenant_unchanged"), (billing_evidence_id,), "Subscription activation preserves existing investigation evidence and provenance."),
+            self._control(
+                "BILLING-DOWNGRADE-SAFETY", "billing", "Downgrade safety", self._scenario_checks(billing_scenarios.get("paid-tenant-downgrade"), "tenant_remains_valid", "historical_investigation_accessible", "restricted_features_removed", "no_privilege_escalation", "evidence_ownership_unchanged", "audit_validation"), (billing_evidence_id,), "Downgrade removes restricted capabilities without changing tenant validity or historical evidence ownership."),
+            self._control(
+                "BILLING-INVESTIGATION-PRESERVATION", "billing", "Investigation preservation", self._scenario_checks(billing_scenarios.get("pre-billing-investigation-preservation"), "investigation_retrievable", "investigation_digest_preserved", "evidence_digest_preserved", "provenance_digest_preserved", "provenance_tenant_unchanged"), (billing_evidence_id,), "Investigations created before billing activation remain retrievable with unchanged evidence provenance."),
+            self._control(
+                "BILLING-FAILURE-FAIL-CLOSED", "billing", "Billing failure fail-closed", self._scenario_checks(billing_scenarios.get("billing-failure-handling"), "provider_failure_rejected", "no_partial_entitlement_activation", "no_elevated_privileges", "subscription_state_consistent", "failed_billing_event_not_recorded", "fail_closed_behavior_preserved"), (billing_evidence_id,), "Provider or billing failure does not create partial entitlements or elevated privileges."),
+            self._control(
+                "BILLING-AUDIT-CONTINUITY", "billing", "Billing audit continuity", bool(billing_security.get("audit_integrity")) and bool(billing_security.get("append_only_evidence")) and all(self._scenario_checks(item, "audit_validation") for item in billing_scenarios.values()), (billing_evidence_id,), "Billing lifecycle observations preserve tenant-bound append-only audit continuity."),
         )
         metrics: list[CertificationMetric] = []
         if accuracy:
@@ -360,6 +401,11 @@ class EnterpriseCertificationRunner:
         if performance:
             coordinator = performance.component_statistics.get("coordinator", {})
             metrics.append(self._metric("METRIC-TELEMETRY-COORDINATOR-P50", "performance", "Telemetry coordinator p50", coordinator.get("p50_ms", 0.0), "ms", (evidence_ids["performance_telemetry"],), "Host-observed telemetry; not part of replay identity."))
+        if billing:
+            metrics.extend((
+                self._metric("METRIC-BILLING-SCENARIOS", "billing", "Billing lifecycle scenarios passed", billing.metrics.get("passed_scenario_count", 0), "count", (billing_evidence_id,), "Synthetic offline billing lifecycle evidence."),
+                self._metric("METRIC-BILLING-AUDIT-COVERAGE", "billing", "Billing scenarios with audit validation", billing.metrics.get("audit_validated_scenario_count", 0), "count", (billing_evidence_id,), "Each scenario must retain append-only tenant-bound audit evidence."),
+            ))
         passed_controls = tuple(item.control_id for item in controls if item.passed)
         failed_controls = tuple(item.control_id for item in controls if not item.passed)
         warnings = (

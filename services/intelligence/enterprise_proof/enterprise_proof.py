@@ -6,6 +6,7 @@ import hashlib
 import json
 
 from services.intelligence.evaluation.benchmark_runner import OperationalAccuracyBenchmarkRunner
+from services.billing.validation import BillingEntitlementValidationRunner
 
 from .analyst_effectiveness import AnalystEffectivenessBenchmarker
 from .models import EnterpriseProofValidationReport
@@ -36,6 +37,14 @@ class EnterpriseProofValidator:
         analyst_effectiveness = self.analyst_benchmarker.run()
         scale_benchmark = self.scale_benchmarker.run()
         accuracy_report = OperationalAccuracyBenchmarkRunner().run()
+        billing_report = BillingEntitlementValidationRunner(generated_at=self.generated_at).run()
+        billing_replay_evidence = {
+            "replay_digest": billing_report.replay_digest,
+            "scenario_ids": [item["scenario_id"] for item in billing_report.scenarios],
+            "scenario_statuses": [item["status"] for item in billing_report.scenarios],
+            "metrics": billing_report.metrics,
+            "security_invariants": billing_report.security_invariants,
+        }
         declared_tenants = tuple(sorted({
             *tenant_isolation.tenant_ids,
             analyst_effectiveness.tenant_id,
@@ -64,6 +73,11 @@ class EnterpriseProofValidator:
             ),
             "append_only_evidence": True,
             "deterministic_replay_valid": True,
+            "billing_entitlement_validation": billing_report.validation_result == "passed",
+            "billing_audit_continuity": billing_report.security_invariants["audit_integrity"],
+            "billing_fail_closed": billing_report.security_invariants["fail_closed_behavior"],
+            "billing_tenant_isolation": billing_report.security_invariants["tenant_isolation_preserved"],
+            "billing_provenance_tracking": billing_report.security_invariants["provenance_tracking"],
         }
         architecture_summary = {
             "validation_scope": "synthetic enterprise trust proof",
@@ -72,6 +86,7 @@ class EnterpriseProofValidator:
                 "SOC analyst effectiveness benchmark",
                 "investigation scale benchmark",
                 "operational accuracy safety regression",
+                "billing entitlement operational validation",
             ],
             "preserved_contracts": [
                 "InvestigationCoordinator",
@@ -84,6 +99,8 @@ class EnterpriseProofValidator:
                 "memory is advisory-only",
                 "cross-tenant reads fail closed",
                 "evidence provenance remains tenant-scoped",
+                "billing changes modify entitlements only",
+                "production payment operations are out of scope",
                 "no response automation is executed",
             ],
             "decision_authority": "production authorization and verdict enforcement remain outside proof evaluation",
@@ -93,6 +110,7 @@ class EnterpriseProofValidator:
             "tenant_isolation": tenant_isolation.to_dict(),
             "analyst_effectiveness": analyst_effectiveness.to_dict(),
             "scale_benchmark": scale_benchmark.to_dict(),
+            "billing_entitlement": billing_replay_evidence,
             "architecture_summary": architecture_summary,
             "safety_validation": safety,
         }
@@ -117,6 +135,7 @@ class EnterpriseProofValidator:
             tenant_isolation=tenant_isolation,
             analyst_effectiveness=analyst_effectiveness,
             scale_benchmark=scale_benchmark,
+            billing_entitlement=billing_report.to_dict(),
             architecture_summary=architecture_summary,
             safety_validation=safety,
             replay_digest=replay_digest,

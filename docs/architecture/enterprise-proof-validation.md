@@ -10,8 +10,10 @@ autonomous decisions.
                                       |
           +---------------------------+--------------------------+
           |                           |                          |
- Tenant isolation              SOC analyst                 Investigation scale
- certification                 effectiveness                benchmark
+Tenant isolation              SOC analyst                 Investigation scale
+certification                 effectiveness                benchmark
+                                      |                          |
+                                      |            Billing entitlement validation
           |                           |                          |
           +---------------------------+--------------------------+
                                       v
@@ -38,6 +40,14 @@ not use host wall-clock measurements or external providers; this makes replay
 digests stable. Production performance certification remains a separate
 deployment exercise.
 
+The billing entitlement validation source adds five offline lifecycle
+scenarios: unpaid tenant safety, subscription activation, paid tenant
+downgrade, pre-billing investigation preservation, and billing failure
+fail-closed handling. It records entitlement transitions, access decisions,
+tenant-bound audit continuity, investigation/evidence preservation, provenance,
+and security invariants. Enterprise proof includes the complete billing report
+and a timestamp-free billing replay projection.
+
 ## Security boundaries
 
 - `InvestigationCoordinator`, `InvestigationOrchestrator`,
@@ -49,6 +59,12 @@ deployment exercise.
 - Tenant A/B data is synthetic and disjoint. Cross-tenant access is fail-closed.
 - Evidence provenance is checked for tenant identity, source, and observed
   investigation context.
+- Billing validation proves that subscription changes affect entitlements only;
+  authentication, authorization, tenant isolation enforcement, verdict
+  enforcement, investigation contracts, and autonomous response boundaries are
+  not modified or invoked.
+- Real payment providers, production billing changes, credential operations,
+  and external integrations are out of scope.
 - Reports are frozen models with a content digest. The writer refuses to
   overwrite an existing report path, preserving append-only evidence handling.
 
@@ -58,6 +74,7 @@ Run:
 
 ```text
 python scripts/validate_enterprise_proof.py --output artifacts/enterprise-proof-validation.json
+python scripts/validate_enterprise_proof.py --output artifacts/enterprise-proof-billing-refresh-2026-08-25.json --generated-at 2026-08-25T00:00:00+00:00
 ```
 
 The report contains the architecture summary, certification attempts, analyst

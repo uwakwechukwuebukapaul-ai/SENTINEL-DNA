@@ -9,6 +9,7 @@ from .models import (
 )
 from .report import CertificationReportGenerator
 from .runner import EnterpriseCertificationRunner
+from .evidence_closure import EvidenceClosureReport, EvidenceClosureReportGenerator, EnterpriseEvidenceClosureRunner
 
 __all__ = [
     "CertificationControl",
@@ -18,4 +19,7 @@ __all__ = [
     "CertificationReport",
     "CertificationReportGenerator",
     "EnterpriseCertificationRunner",
+    "EnterpriseEvidenceClosureRunner",
+    "EvidenceClosureReport",
+    "EvidenceClosureReportGenerator",
 ]
