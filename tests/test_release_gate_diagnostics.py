@@ -51,6 +51,12 @@ def run(
         "event": event,
         "head_sha": sha,
         "head_branch": branch,
+        "head_repository_id": DEFAULT_REPOSITORY_ID,
+        "head_commit": {"id": sha},
+        "repository": {
+            "id": DEFAULT_REPOSITORY_ID,
+            "full_name": f"{DEFAULT_OWNER}/{DEFAULT_REPOSITORY}",
+        },
     }
 
 
@@ -135,6 +141,35 @@ def test_unrelated_workflow_run_cannot_satisfy_exact_sha_gate():
     )
 
     with pytest.raises(ReleaseGateError, match="exact target SHA"):
+        make_diagnostic(api).collect()
+
+
+def test_duplicate_exact_sha_runs_select_newest_run_deterministically():
+    api = diagnostic_api(
+        runs=[
+            run(32795099633, "security"),
+            run(32795099621, "tests"),
+            run(32795100000, "security"),
+        ]
+    )
+
+    result = make_diagnostic(api).collect()
+
+    assert result.ci_runs[0]["databaseId"] == 32795100000
+    assert result.custody_status == "PASS"
+
+
+def test_run_from_different_repository_cannot_satisfy_custody_gate():
+    api = diagnostic_api(
+        runs=[run(32795099633, "security"), run(32795099621, "tests")]
+    )
+    repo = repository()
+    resource = repo.resource(
+        "actions/runs?head_sha=" + TARGET_SHA + "&per_page=100", numeric=True
+    )
+    api.responses[resource]["workflow_runs"][0]["repository"]["id"] = 999
+
+    with pytest.raises(ReleaseGateError, match="repository ID"):
         make_diagnostic(api).collect()
 
 

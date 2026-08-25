@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 DEFAULT_OWNER = "uwakwechukwuebukpaul-ai"
 DEFAULT_REPOSITORY = "SENTINEL-DNA"
 DEFAULT_REPOSITORY_ID = 1315476770
-DEFAULT_BRANCH = "feature/controlled-production-deployment-adapter"
+DEFAULT_BRANCH: str | None = None
 DEFAULT_WORKFLOWS = ("security", "tests")
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -187,6 +187,8 @@ class ReleaseGateResult:
     target_sha: str
     ci_status: str
     ci_runs: tuple[Mapping[str, Any], ...]
+    custody_status: str
+    custody_reason: str
     deployment_status: str
     deployment_reason: str
     ghcr_status: str
@@ -199,6 +201,10 @@ class ReleaseGateResult:
             "repository_id": self.repository_id,
             "target_sha": self.target_sha,
             "ci": {"status": self.ci_status, "runs": list(self.ci_runs)},
+            "commit_custody": {
+                "status": self.custody_status,
+                "reason": self.custody_reason,
+            },
             "deployment": {
                 "status": self.deployment_status,
                 "reason": self.deployment_reason,
@@ -248,25 +254,39 @@ class ReleaseGateDiagnostics:
         evidence: list[Mapping[str, Any]] = []
         for workflow in self.expected_workflows:
             matches = [run for run in exact_runs if run.get("name") == workflow]
-            if len(matches) != 1:
+            if not matches:
                 self._blocked(
-                    runs_resource,
+                    self.repository.resource(runs_resource, numeric=True),
                     None,
-                    f"expected exactly one {workflow} run for the exact target SHA; "
-                    f"found {len(matches)}",
+                    f"no {workflow} run was found for the exact target SHA",
                 )
-            run = matches[0]
-            self._require_run_identity(run, workflow, runs_resource)
+            run = self._select_deterministic_run(
+                matches,
+                workflow,
+                self.repository.resource(runs_resource, numeric=True),
+            )
+            self._require_run_identity(
+                run,
+                workflow,
+                self.repository.resource(runs_resource, numeric=True),
+            )
             evidence.append(
                 {
                     "databaseId": run.get("id"),
                     "workflow": run.get("name"),
+                    "runNumber": run.get("run_number"),
                     "status": run.get("status"),
                     "conclusion": run.get("conclusion"),
                     "event": run.get("event"),
+                    "head_branch": run.get("head_branch"),
                     "head_sha": run.get("head_sha"),
                 }
             )
+
+        custody_reason = (
+            "selected workflow runs are bound to the exact target SHA and "
+            "authoritative repository identity"
+        )
 
         deployments_resource = "deployments?" + urlencode({"sha": self.target_sha})
         deployments = self._authoritative_get(deployments_resource)
@@ -290,12 +310,34 @@ class ReleaseGateDiagnostics:
             target_sha=self.target_sha,
             ci_status="PASS",
             ci_runs=tuple(evidence),
+            custody_status="PASS",
+            custody_reason=custody_reason,
             deployment_status="BLOCKED",
             deployment_reason=deployment_reason,
             ghcr_status=ghcr_status,
             ghcr_reason=ghcr_reason,
             gate_status="BLOCKED",
         )
+
+    def _select_deterministic_run(
+        self,
+        matches: list[Mapping[str, Any]],
+        workflow: str,
+        resource: str,
+    ) -> Mapping[str, Any]:
+        """Select the newest exact-SHA run without hiding an invalid winner.
+
+        A commit can legitimately produce more than one push run (for example,
+        when a tag is created after the branch push).  Run IDs are monotonic in
+        GitHub's Actions API, so the largest valid integer ID is a stable
+        tie-breaker.  The selected run still has to pass every custody and
+        success check below; an older failed run is evidence, not a reason to
+        let a newer successful run become ambiguous.
+        """
+
+        if not all(isinstance(run.get("id"), int) and run["id"] > 0 for run in matches):
+            self._blocked(resource, None, f"{workflow} run database ID is invalid")
+        return max(matches, key=lambda run: run["id"])
 
     def _authoritative_get(self, suffix: str):
         resource = self.repository.resource(suffix, numeric=True)
@@ -339,6 +381,19 @@ class ReleaseGateDiagnostics:
             )
         if not isinstance(run.get("id"), int) or run["id"] <= 0:
             self._blocked(resource, None, f"{workflow} run database ID is invalid")
+        repository = run.get("repository")
+        if not isinstance(repository, Mapping):
+            self._blocked(resource, None, f"{workflow} repository custody payload is invalid")
+        if repository.get("id") != self.repository.repository_id:
+            self._blocked(resource, None, f"{workflow} run repository ID does not match custody")
+        if repository.get("full_name") != self.repository.canonical:
+            self._blocked(resource, None, f"{workflow} run repository name does not match custody")
+        head_repository_id = run.get("head_repository_id")
+        if head_repository_id != self.repository.repository_id:
+            self._blocked(resource, None, f"{workflow} head repository ID does not match custody")
+        head_commit = run.get("head_commit")
+        if not isinstance(head_commit, Mapping) or head_commit.get("id") != self.target_sha:
+            self._blocked(resource, None, f"{workflow} head commit does not match custody")
 
     def _ghcr_status(self) -> tuple[str, str]:
         resource = "user/packages?" + urlencode(
