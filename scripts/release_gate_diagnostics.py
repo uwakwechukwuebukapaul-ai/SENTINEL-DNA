@@ -151,10 +151,13 @@ class RepositoryAddress:
 class RepositoryResourceResolver:
     """Resolve a repository resource with explicit numeric-ID preference.
 
-    ``prefer_numeric=True`` is the production path and fails closed if the
-    authoritative route fails.  ``prefer_numeric=False`` exists for callers
-    migrating from owner/name addressing: an owner/name HTTP 404 then falls
-    back to the authoritative numeric route, but no other error is hidden.
+    ``prefer_numeric=True`` first tries the numeric repository route, then
+    falls back to the owner/name route when GitHub does not expose that
+    resource by numeric ID.  GitHub's Actions and deployment endpoints use
+    owner/name routes even when the numeric repository ID is the authoritative
+    custody identity.  ``prefer_numeric=False`` preserves the inverse order
+    for callers that already use an owner/name route.  No non-404 error is
+    hidden by either mode.
     """
 
     def __init__(self, api: GitHubApi, repository: RepositoryAddress):
@@ -163,18 +166,18 @@ class RepositoryResourceResolver:
 
     def get(self, suffix: str, *, prefer_numeric: bool = True):
         routes = (
-            ((True, False),)
+            ((True, False), (False, True))
             if prefer_numeric
             else ((False, False), (True, True))
         )
         last_error: GitHubApiError | None = None
-        for numeric, is_fallback in routes:
+        for numeric, _ in routes:
             resource = self.repository.resource(suffix, numeric=numeric)
             try:
                 return self.api.get(resource)
             except GitHubApiError as exc:
                 last_error = exc
-                if exc.status != 404 or (prefer_numeric and not is_fallback):
+                if exc.status != 404:
                     raise
         assert last_error is not None
         raise last_error
@@ -340,11 +343,10 @@ class ReleaseGateDiagnostics:
         return max(matches, key=lambda run: run["id"])
 
     def _authoritative_get(self, suffix: str):
-        resource = self.repository.resource(suffix, numeric=True)
         try:
             return self.resources.get(suffix, prefer_numeric=True)
         except GitHubApiError as exc:
-            self._blocked(resource, exc.status, exc.reason)
+            self._blocked(exc.resource, exc.status, exc.reason)
 
     def _list_field(
         self, payload: Mapping[str, Any] | list[Any], field: str, resource: str

@@ -111,6 +111,27 @@ def test_owner_name_404_falls_back_to_authoritative_repository_id():
     assert api.calls == [canonical, numeric]
 
 
+def test_numeric_repository_route_404_falls_back_to_owner_name_route():
+    repo = repository()
+    numeric = repo.resource("actions/runs", numeric=True)
+    canonical = repo.resource("actions/runs", numeric=False)
+    api = FakeApi(
+        {
+            numeric: GitHubApiError(
+                resource=numeric, status=404, reason="Not Found"
+            ),
+            canonical: {"workflow_runs": []},
+        }
+    )
+
+    result = RepositoryResourceResolver(api, repo).get(
+        "actions/runs", prefer_numeric=True
+    )
+
+    assert result == {"workflow_runs": []}
+    assert api.calls == [numeric, canonical]
+
+
 def test_diagnostics_use_numeric_repository_address_and_keep_ci_evidence_exact():
     api = diagnostic_api(
         runs=[
@@ -218,18 +239,24 @@ def test_missing_read_packages_permission_keeps_ghcr_absence_unproven():
     assert "read:packages" in result.ghcr_reason
 
 
-def test_numeric_repository_failure_is_fail_closed_and_contextual():
+def test_repository_route_failure_is_fail_closed_and_contextual():
     repo = repository()
-    runs_resource = repo.resource(
+    numeric_resource = repo.resource(
         "actions/runs?head_sha=" + TARGET_SHA + "&per_page=100", numeric=True
+    )
+    owner_resource = repo.resource(
+        "actions/runs?head_sha=" + TARGET_SHA + "&per_page=100", numeric=False
     )
     api = FakeApi(
         {
-            runs_resource: GitHubApiError(
-                resource=runs_resource,
-                status=404,
-                reason="Not Found token=gho_super-secret-value",
-            )
+            numeric_resource: GitHubApiError(
+                resource=numeric_resource, status=404, reason="Not Found"
+            ),
+            owner_resource: GitHubApiError(
+                resource=owner_resource,
+                status=500,
+                reason="Internal failure token=gho_super-secret-value",
+            ),
         }
     )
 
@@ -240,8 +267,8 @@ def test_numeric_repository_failure_is_fail_closed_and_contextual():
     assert "repository_id=1315476770" in message
     assert "repository=uwakwechukwuebukpaul-ai/SENTINEL-DNA" in message
     assert f"target_sha={TARGET_SHA}" in message
-    assert "repositories/1315476770/actions/runs" in message
-    assert "http_status=404" in message
+    assert "repos/uwakwechukwuebukpaul-ai/SENTINEL-DNA/actions/runs" in message
+    assert "http_status=500" in message
     assert "gho_super-secret-value" not in message
     assert "super-secret-value" not in message
 
