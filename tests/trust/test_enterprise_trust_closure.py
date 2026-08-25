@@ -1,6 +1,40 @@
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
+from services.intelligence.certification import CertificationReportGenerator, EnterpriseCertificationRunner
 from services.intelligence.trust import EnterpriseTrustClosureRunner, TrustClosureReportGenerator
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _isolated_repository(tmp_path: Path) -> Path:
+    repository = tmp_path / "repository"
+    subprocess.run(
+        ["git", "clone", "--no-local", str(REPOSITORY_ROOT), str(repository)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shutil.copyfile(
+        repository / "artifacts" / "enterprise-proof-refresh-2026-08-25.json",
+        repository / "artifacts" / "enterprise-proof-billing-refresh-2026-08-25.json",
+    )
+    CertificationReportGenerator.write(
+        EnterpriseCertificationRunner(
+            generated_at="2026-08-25T00:00:00+00:00",
+            commit_sha="synthetic-commit-sha",
+        ).run(),
+        repository / "artifacts" / "enterprise-certification-billing-refresh-2026-08-25.json",
+    )
+
+    tracked_probe = repository / "README.md"
+    tracked_probe.write_bytes(tracked_probe.read_bytes() + b"\ntrust closure dirty-state fixture\n")
+    return repository
 
 
 def _report():
@@ -32,12 +66,13 @@ def test_trust_report_preserves_certification_security_controls():
     assert report.security_hardening["memory_advisory_boundary"] is True
 
 
-def test_release_hygiene_preserves_artifacts_and_blocks_dirty_manifest(monkeypatch):
+def test_release_hygiene_preserves_artifacts_and_blocks_dirty_manifest(tmp_path):
+    repository = _isolated_repository(tmp_path)
     runner = EnterpriseTrustClosureRunner(
         generated_at="2026-08-25T00:00:00+00:00",
         commit_sha="synthetic-commit-sha",
+        repository_root=repository,
     )
-    monkeypatch.setattr(runner, "_git_dirty", lambda: True)
     report = runner.run()
 
     assert report.release_evidence_hygiene["artifact_provenance"] is True

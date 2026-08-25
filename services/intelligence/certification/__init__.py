@@ -9,7 +9,23 @@ from .models import (
 )
 from .report import CertificationReportGenerator
 from .runner import EnterpriseCertificationRunner
-from .evidence_closure import EvidenceClosureReport, EvidenceClosureReportGenerator, EnterpriseEvidenceClosureRunner
+
+
+_EVIDENCE_CLOSURE_EXPORTS = {
+    "EnterpriseEvidenceClosureRunner",
+    "EvidenceClosureReport",
+    "EvidenceClosureReportGenerator",
+}
+
+
+def __getattr__(name):
+    if name in _EVIDENCE_CLOSURE_EXPORTS:
+        from . import evidence_closure
+
+        value = getattr(evidence_closure, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "CertificationControl",
