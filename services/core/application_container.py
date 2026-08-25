@@ -47,6 +47,7 @@ from services.intelligence.agents.runtime_adapter import (
 from services.intelligence.runtime.runtime_task_executor import (
     RuntimeTaskExecutor,
 )
+from services.intelligence.runtime.investigation_intake import InvestigationIntake
 
 from services.intelligence.dashboard.dashboard_service import (
     DashboardService,
@@ -210,7 +211,8 @@ def build_container() -> ServiceRegistry:
     # for provider lookups.  No providers are enabled by default, preserving
     # the offline, zero-network runtime until an explicit provider adapter is
     # approved and injected here.
-    canonical_authority = CanonicalAuthorityService()
+    auth_service = AuthService()
+    canonical_authority = CanonicalAuthorityService(auth=auth_service)
     canonical_request_context = CanonicalRequestContextService(canonical_authority)
     canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
 
@@ -258,8 +260,11 @@ def build_container() -> ServiceRegistry:
 
     dashboard_service = DashboardService()
     audit_service = AuditService()
+    investigation_intake = InvestigationIntake(
+        coordinator.execution_repository,
+        audit_service=audit_service,
+    )
     audit_read_service = ApplicationAuditReadService(audit_service)
-    auth_service = AuthService()
     case_service = CaseService()
     tenancy_service = TenancyService()
     connector_registry = ConnectorRegistry()
@@ -346,6 +351,8 @@ def build_container() -> ServiceRegistry:
         "investigation_coordinator",
         coordinator,
     )
+    registry.register("execution_repository", coordinator.execution_repository)
+    registry.register("investigation_intake", investigation_intake)
     registry.register("analyst_demo_scenario", analyst_demo_scenario)
 
     registry.register("threat_intelligence_gateway", threat_intelligence_gateway)

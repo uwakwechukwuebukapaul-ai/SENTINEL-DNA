@@ -54,7 +54,7 @@ def _bind(user):
         connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, membership.tenant_id, user.id))
     return identity, membership
 def _login_session(user, remember=False, auth_method="password"):
-    identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
+    identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
     if remember:
         raw = secrets.token_urlsafe(48); sid = secrets.token_urlsafe(18); expires = datetime.now(timezone.utc) + timedelta(days=30)
         _service().create_persistent_session(user, raw, membership.tenant_id, sid, expires.isoformat(), user_agent=request.user_agent.string[:256], ip_address=request.remote_addr, auth_method=auth_method); session["persistent_session_id"] = sid; session.permanent = True
@@ -79,6 +79,14 @@ def restore_persistent_session():
     _service().revoke_persistent_session(sid)
     _login_session(user, remember=True, auth_method="remember_me")
     _audit("remember_me_authentication", user_id=user.id, method="remember_me", outcome="success")
+
+
+def enforce_current_session():
+    """Reject signed sessions whose user authentication epoch is stale."""
+    user_id = session.get("user_id")
+    if user_id and _service().session_user(user_id, session.get("session_version")) is None:
+        g.clear_remember_cookie = True
+        session.clear()
 
 @auth_api.post("/register")
 def register():
@@ -141,7 +149,7 @@ def logout():
 
 @auth_api.get("/me")
 def me():
-    user = _service().get_by_id(session.get("user_id"))
+    user = _service().session_user(session.get("user_id"), session.get("session_version"))
     return jsonify(user.public()) if user else (jsonify({"error": "authentication_required"}), 401)
 
 @auth_api.get("/sessions")

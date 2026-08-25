@@ -11,7 +11,7 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Flask, jsonify, g, request, send_from_directory
+from flask import Flask, jsonify, g, request, send_from_directory, session
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 
@@ -81,7 +81,7 @@ def create_app():
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
     from services.audit import audit_api
-    from services.auth.routes import restore_persistent_session
+    from services.auth.routes import enforce_current_session, restore_persistent_session
     from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
     app.register_blueprint(audit_api)
@@ -112,6 +112,10 @@ def create_app():
     @app.before_request
     def restore_authentication_cookie():
         restore_persistent_session()
+
+    @app.before_request
+    def enforce_authentication_epoch():
+        enforce_current_session()
 
 
     # ==================================

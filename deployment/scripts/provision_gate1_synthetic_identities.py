@@ -25,6 +25,7 @@ from services.auth.auth_service import AuthService
 from services.auth.gate1_synthetic_provisioning import (
     Gate1ProvisioningError,
     Gate1SyntheticProvisioningService,
+    assert_trusted_release_metadata,
 )
 from services.identity.canonical_authority import CanonicalAuthorityService
 
@@ -56,31 +57,60 @@ def _guard(expected_revision: str) -> None:
         raise Gate1ProvisioningError("database_path_configuration_required")
     if not Path(db_path).is_file():
         raise Gate1ProvisioningError("database_path_unavailable")
+    assert_trusted_release_metadata(expected_revision)
 
 
 def _service() -> Gate1SyntheticProvisioningService:
     db = DatabaseConnection(os.environ["SENTINEL_DNA_DB_PATH"])
     auth = AuthService(db)
-    authority = CanonicalAuthorityService(db)
+    authority = CanonicalAuthorityService(db, auth=auth)
     audit = AuditService(db)
     return Gate1SyntheticProvisioningService(auth, authority, audit, db, expected_revision=os.environ["SENTINEL_DNA_IMAGE_REVISION_FULL"])
 
 
 def _passwords(service: Gate1SyntheticProvisioningService) -> dict[str, str]:
     passwords: dict[str, str] = {}
-    for lane in service.missing_password_lanes():
-        first = getpass.getpass(f"Gate 1 synthetic Tenant {lane} password: ")
-        second = getpass.getpass(f"Confirm Gate 1 synthetic Tenant {lane} password: ")
-        if first != second:
-            raise Gate1ProvisioningError(f"synthetic_password_confirmation_failed_{lane}")
-        passwords[lane] = first
-    return passwords
+    try:
+        for lane in service.missing_password_lanes():
+            first = getpass.getpass(f"Gate 1 synthetic Tenant {lane} password: ")
+            second = getpass.getpass(f"Confirm Gate 1 synthetic Tenant {lane} password: ")
+            if first != second:
+                raise Gate1ProvisioningError(f"synthetic_password_confirmation_failed_{lane}")
+            passwords[lane] = first
+        return passwords
+    except Exception:
+        _clear_passwords(passwords)
+        raise
+
+
+def _rotation_passwords(lanes: tuple[str, ...]) -> dict[str, str]:
+    passwords: dict[str, str] = {}
+    try:
+        for lane in lanes:
+            first = getpass.getpass(f"Gate 1 synthetic Tenant {lane} replacement password (hidden): ")
+            second = getpass.getpass(f"Confirm Gate 1 synthetic Tenant {lane} replacement password (hidden): ")
+            if first != second:
+                raise Gate1ProvisioningError(f"synthetic_password_confirmation_failed_{lane}")
+            passwords[lane] = first
+        return passwords
+    except Exception:
+        for lane in tuple(passwords):
+            passwords[lane] = ""
+        passwords.clear()
+        raise
+
+
+def _clear_passwords(passwords: dict[str, str]) -> None:
+    for lane in tuple(passwords):
+        passwords[lane] = ""
+    passwords.clear()
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("provision", "cleanup"))
+    parser.add_argument("action", choices=("provision", "cleanup", "rotate"))
     parser.add_argument("--expected-revision", required=True, help="full immutable Git/image revision")
+    parser.add_argument("--lane", choices=("A", "B"), action="append", help="one reserved lane; omit to select both for rotate")
     return parser
 
 
@@ -90,9 +120,25 @@ def main(argv: list[str] | None = None) -> int:
         _guard(args.expected_revision)
         service = _service()
         if args.action == "provision":
-            result = service.provision(_passwords(service))
-        else:
+            provision_passwords = _passwords(service)
+            try:
+                result = service.provision(provision_passwords)
+            finally:
+                _clear_passwords(provision_passwords)
+        elif args.action == "cleanup":
             result = service.cleanup()
+        else:
+            if os.getenv("SENTINEL_DNA_GATE1_ROTATION") != "1":
+                raise Gate1ProvisioningError("explicit_gate1_rotation_authorization_required")
+            lanes = tuple(args.lane or ("A", "B"))
+            states = service.inspect_rotation_state(lanes)
+            if any(item.state != "inactive_complete" for item in states):
+                raise Gate1ProvisioningError("gate1_rotation_requires_complete_inactive_state")
+            replacement_passwords = _rotation_passwords(lanes)
+            try:
+                result = service.rotate_inactive(replacement_passwords, lanes=lanes)
+            finally:
+                _clear_passwords(replacement_passwords)
         for item in result:
             print(f"Gate 1 synthetic Tenant {item.lane}: {item.state}; tenant={item.tenant_id}; actor={item.actor_id}; user_id={item.user_id}")
         if not result:

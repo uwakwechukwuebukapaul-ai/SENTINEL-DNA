@@ -105,7 +105,7 @@ PERMISSIONS = {
 }
 
 def current_role() -> str | None:
-    user = current_app.container.get("auth_service").get_by_id(session.get("user_id"))
+    user = current_app.container.get("auth_service").session_user(session.get("user_id"), session.get("session_version"))
     return ROLE_ALIASES.get(str(user.role).upper()) if user else None
 
 def permission_required(permission: str):

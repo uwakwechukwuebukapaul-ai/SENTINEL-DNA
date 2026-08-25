@@ -46,6 +46,16 @@ def test_global_dashboard_ioc_routes_require_existing_rbac(monkeypatch):
     assert client.get("/workspace/iocs").status_code == 401
 
 
+def test_alternate_dashboard_rejects_stale_signed_session(monkeypatch):
+    auth = dashboard_app.app.container.require("auth_service")
+    monkeypatch.setattr(auth, "session_user", lambda *_args, **_kwargs: None)
+    client = make_client()
+    with client.session_transaction() as state:
+        state["user_id"] = 1
+        state["session_version"] = 0
+    assert client.get("/workspace/dashboard/data").status_code == 401
+
+
 def test_global_dashboard_ioc_route_uses_existing_read_permission(monkeypatch):
     monkeypatch.setattr(permissions, "current_role", lambda: "analyst")
     monkeypatch.setattr(dashboard_app, "current_role", lambda: "analyst")

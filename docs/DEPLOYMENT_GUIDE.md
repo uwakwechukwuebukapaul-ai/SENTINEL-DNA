@@ -2,9 +2,35 @@
 
 Set `SENTINEL_DNA_ENV` to `production`. Production requires protected `SENTINEL_DNA_SECRET_KEY` and `POSTGRES_PASSWORD` values. The release helper derives immutable image metadata from Git; operators must not maintain those values manually.
 
-Use a protected `.env` only for local secrets, derive release metadata with `deployment/scripts/release_metadata.py`, validate with `deployment/scripts/validate_deployment_config.py`, and use only `deployment/docker-compose.yml`. The container runs as a non-root `sentinel` user and persists data under `/var/lib/sentinel`. V1 uses one Gunicorn worker because SQLite is the current persistence boundary; do not add workers or replicas against the same database file.
+Use the controlled deployment adapter in `deployment/scripts/controlled_deploy.py`. An authorized provider must materialize the protected production configuration outside the repository; never use the repository `.env` as production authority. Prepare the deployment-owned Gate 1 artifact with `deployment/scripts/prepare_trusted_release_metadata.py`, then run the adapter in `--dry-run` or `--validate-only` mode before any explicitly authorized `--execute` operation. The adapter uses only `deployment/docker-compose.yml`, pins the verified immutable digest, and recreates only the application service. The container runs as a non-root `sentinel` user and persists data under `/var/lib/sentinel`. V1 uses one Gunicorn worker because SQLite is the current persistence boundary; do not add workers or replicas against the same database file.
 
 `GET /health` checks application and database availability. `GET /ready` additionally validates required registered services. Use the `deployment/docker-compose.yml` topology when an Nginx reverse proxy is required. Nginx is the public edge: port 80 redirects to HTTPS on port 443, while the application remains internal on port 5000. The proxy forwards `X-Forwarded-Proto=https`, `X-Forwarded-For`, and `X-Correlation-ID`; do not expose the application port directly to the public internet. The manual `deployment-contract` GitHub Actions workflow validates protected production configuration and provenance without assuming a remote hosting provider.
+
+## Canonical production entrypoint
+
+Only the WSGI/Gunicorn path is supported for production deployment:
+
+```text
+Dockerfile -> gunicorn wsgi:application -> wsgi.py -> app.create_app()
+```
+
+`app.py` and `main.py` are development/legacy Flask entrypoints. Dashboard-specific applications, archived applications, and other alternate modules are non-production and must not be selected by Compose, Gunicorn, or an operator command. The controlled deployment boundary uses only the checked-in `Dockerfile`, `deployment/docker-compose.yml`, and `wsgi:application` entrypoint.
+
+## Current persistence boundary
+
+Option A is the supported database decision for the current V1 release: SQLite is the implemented application persistence backend and the deployment documentation deliberately constrains the service to one Gunicorn worker. PostgreSQL and Redis are declared in the controlled Compose topology for future infrastructure alignment, but no PostgreSQL driver, Redis client, migration path, or application startup integration is currently implemented. Their presence in Compose does not certify them as active application persistence.
+
+| Domain data | Current boundary |
+| --- | --- |
+| Cases, notes, evidence, timeline, IOCs, incidents, analyst actions | Persistent SQLite tables and repositories |
+| Investigations, reports, execution envelopes, provider observations, investigation quality, feedback | Persistent SQLite repositories |
+| Audit records, tenant metadata, identity bindings, provider-tenant trust | Persistent SQLite tables/services |
+| Billing and payment state | Persistent SQLite repositories/migrations |
+| Intelligence and fusion | Mixed: SQLite-backed repositories where wired; process-local derived results in some engines |
+| Replay data | Mixed: derived/process-local Customer Zero replay plus selected SQLite execution/report records; no dedicated immutable replay store |
+| PostgreSQL and Redis Compose services | Declared external services, not currently used by the demonstrated application persistence path |
+
+This boundary is not a production-scale database certification. Backup/restore, multi-instance operation, PostgreSQL integration, Redis integration, and RPO/RTO evidence remain separate release blockers.
 
 ## Local operator HTTPS validation
 
@@ -19,11 +45,19 @@ localhost.crt
 localhost.key
 ```
 
-Set the directory only in the operator's local PowerShell session before Compose validation and deployment:
+The authorized protected configuration must contain `SENTINEL_DNA_TLS_DIR`
+referencing this protected directory. Do not use a shell environment override
+for controlled deployment variables; the adapter deliberately removes those
+overrides before invoking Compose.
 
 ```powershell
-$env:SENTINEL_DNA_TLS_DIR = "C:\Users\<operator>\AppData\Local\Sentinel-DNA\tls"
-docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
+python deployment/scripts/controlled_deploy.py `
+  --reviewed-sha <reviewed-full-sha> `
+  --expected-digest <verified-image-digest> `
+  --env-file <AUTHORIZED_PROTECTED_ENV_FILE> `
+  --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
+  --release-manifest <VERIFIED_RELEASE_MANIFEST> `
+  --dry-run
 ```
 
 Restrict the directory and key to the operator, SYSTEM, and administrators. Mounting is read-only inside nginx. Validate the actual configuration with `nginx -t`, verify that HTTP returns a 308 redirect to HTTPS, verify the certificate SAN for `localhost` or `127.0.0.1`, and verify `/health` and `/ready` over HTTPS without insecure certificate flags. Rotate or remove local-only material after validation; never treat it as production trust material.
@@ -34,4 +68,4 @@ Back up the persistent SQLite file before upgrades or migrations. Stop the appli
 
 ## Restart and rollback
 
-Restart only the required service with `docker compose --env-file .env -f deployment/docker-compose.yml restart app` or `nginx` as directed by the approved procedure, and verify `/health` and `/ready` over HTTPS. For rollback, stop the stack, deploy the previous known-good image/configuration, preserve the persistent volume, and restore the last validated SQLite backup only when the database itself must be rolled back. Re-run health, readiness, authorization, and report-retrieval checks before reopening traffic.
+Restart or rollback only through an approved operator procedure using the protected configuration and independently verified immutable image. Do not use the repository `.env`, mutable tags, or an ad-hoc Compose command. Preserve persistent volumes and repeat provenance, health, readiness, authorization, and report-retrieval checks before reopening traffic.

@@ -95,6 +95,7 @@ class AuditService:
                 "operation": "ALTER TABLE audit_events ADD COLUMN operation TEXT",
                 "outcome": "ALTER TABLE audit_events ADD COLUMN outcome TEXT",
                 "latency_ms": "ALTER TABLE audit_events ADD COLUMN latency_ms REAL",
+                "sequence_number": "ALTER TABLE audit_events ADD COLUMN sequence_number INTEGER",
                 "schema_version": "ALTER TABLE audit_events ADD COLUMN schema_version TEXT NOT NULL DEFAULT 'audit-event-v1'",
             }
             for column, statement in migrations.items():
@@ -102,6 +103,11 @@ class AuditService:
                     connection.execute(statement)
             connection.execute("UPDATE audit_events SET event_id='legacy-' || id WHERE event_id IS NULL OR event_id=''")
             connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_audit_events_event_id ON audit_events(event_id)")
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_audit_events_resource_sequence "
+                "ON audit_events(tenant_id, resource_type, resource_id, sequence_number) "
+                "WHERE sequence_number IS NOT NULL"
+            )
             connection.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_created ON audit_events(tenant_id, created_at, id)")
             connection.execute(
                 """CREATE TRIGGER IF NOT EXISTS audit_events_append_only_update
@@ -149,6 +155,7 @@ class AuditService:
         operation: str | None = None,
         outcome: str | None = None,
         latency_ms: float | int | None = None,
+        sequence_number: int | None = None,
         metadata: dict[str, Any] | None = None,
         **extra: Any,
     ) -> str:
@@ -168,13 +175,15 @@ class AuditService:
             _safe_text(correlation_id, limit=128), _safe_text(request_id, limit=128),
             _safe_text(resource_type, limit=128), _safe_text(resource_id, limit=256),
             _safe_text(operation, limit=128), _safe_text(outcome, limit=64),
-            float(latency_ms) if latency_ms is not None else None, "audit-event-v1",
+            float(latency_ms) if latency_ms is not None else None,
+            int(sequence_number) if sequence_number is not None else None,
+            "audit-event-v1",
         )
         statement = """INSERT INTO audit_events
             (event_id,event_type,case_id,user_id,details_json,created_at,
              tenant_id,actor_id,correlation_id,request_id,resource_type,
-             resource_id,operation,outcome,latency_ms,schema_version)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+             resource_id,operation,outcome,latency_ms,sequence_number,schema_version)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
         if connection is not None:
             connection.execute(statement, values)
         else:
@@ -211,7 +220,7 @@ class AuditService:
             "event_id", "event_type", "case_id", "user_id", "created_at",
             "tenant_id", "actor_id", "correlation_id", "request_id",
             "resource_type", "resource_id", "operation", "outcome",
-            "latency_ms", "schema_version",
+            "latency_ms", "sequence_number", "schema_version",
         )
         result = {field: event.get(field) for field in fields if field in event}
         result["details"] = cls._public_details(event.get("details") or {})

@@ -73,16 +73,16 @@ class ProviderObservationRepository:
         self.max_projection_observations = self._positive_bound(
             max_projection_observations
             if max_projection_observations is not None
-            else configured.provider_observation_projection_max,
+            else getattr(configured, "provider_observation_projection_max", 1000),
             "provider observation projection maximum",
         )
         self.max_projection_events = self._positive_bound(
             max_projection_events
             if max_projection_events is not None
-            else configured.provider_observation_lifecycle_event_projection_max,
+            else getattr(configured, "provider_observation_lifecycle_event_projection_max", 1000),
             "provider observation lifecycle-event projection maximum",
         )
-        self.replay_batch_size = replay_batch_size if replay_batch_size is not None else configured.provider_observation_replay_batch_size
+        self.replay_batch_size = replay_batch_size if replay_batch_size is not None else getattr(configured, "provider_observation_replay_batch_size", 100)
         if isinstance(self.replay_batch_size, bool) or not isinstance(self.replay_batch_size, int) or not 0 < self.replay_batch_size <= 1000:
             raise ValueError("provider observation replay batch size is invalid")
         self._ensure_schema()

@@ -12,35 +12,95 @@ The release process derives these nonsecret values from the exact Git checkout:
 - `SENTINEL_DNA_IMAGE_TAG` = full commit SHA
 - `SENTINEL_DNA_IMAGE_REVISION` = nine-character commit prefix
 - `SENTINEL_DNA_IMAGE_REVISION_FULL` = full commit SHA
+- `SENTINEL_DNA_IMAGE_DIGEST` = immutable deployed image digest
 - `SENTINEL_DNA_IMAGE_CREATED` = UTC build timestamp, or `SOURCE_DATE_EPOCH` when reproducibility is required
 
 Never place secret values in Git, image labels, command output, generated reports, or logs. The Compose contract fails closed when secrets or immutable metadata are absent or inconsistent with HEAD.
 
-## Protected local deployment
+## Trusted Gate 1 release artifact
 
-Create a protected, untracked `.env` from `.env.example` and provide only the two secret values. Do not add release metadata manually. Derive metadata into the current shell:
+Gate 1 uses a deployment-owned release artifact in addition to ordinary
+Compose metadata. Before deployment, an authorized release operator must create
+the artifact outside the repository with the checked-in verifier:
+
+```powershell
+$image = "deployment-app:<reviewed-full-sha>"
+$revision = "<reviewed-full-sha>"
+$digest = "sha256:<reviewed-image-digest>"
+$manifest = "C:\ProgramData\Sentinel-DNA\release\metadata.json"
+python deployment/scripts/prepare_trusted_release_metadata.py `
+  --image $image `
+  --expected-revision $revision `
+  --expected-digest $digest `
+  --output $manifest `
+  --docker-executable "C:\Users\<operator>\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+```
+
+The verifier derives the current Git revision, inspects the local immutable
+image digest and OCI revision/source, rejects mismatches, and atomically writes
+only `release_sha` and `image_digest`. The output directory must be outside the
+source tree and protected from untrusted users. On Linux the file and parent
+directory must not be group/other writable; on Windows use an ACL granting
+read access to the Docker engine and denying write access to the application
+operator/runtime identity.
+
+Set only the nonsecret deployment references in the protected operator
+environment:
+
+```powershell
+$env:SENTINEL_DNA_IMAGE_DIGEST = $digest
+$env:SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE = $manifest
+```
+
+Compose mounts that host file read-only at the fixed container path
+`/run/sentinel/release/metadata.json` and sets the in-container path itself.
+The application rejects path substitution, symlinks, malformed JSON, extra
+fields, unsafe effective permissions, revision mismatches, and digest
+mismatches. The Linux runtime checks that the application user cannot write the
+file or its parent directory. When Docker Desktop exposes a Windows bind mount
+with synthetic POSIX write bits, the runtime additionally requires the
+containing filesystem to report a read-only mount; mode bits alone are not
+trusted in that environment. Native Windows application execution remains
+unsupported and fails closed. The manifest contains no passwords or other
+credentials and is never copied into the image or source tree.
+
+## Controlled protected deployment
+
+The repository `.env` and `.env.example` are not production authority. An
+authorized provider must materialize the complete protected production
+configuration outside the repository, with Windows ACLs that prevent ordinary
+users from modifying, replacing, renaming, or deleting it. Do not copy the
+repository `.env`, guess values, or print secrets. The controlled adapter owns
+the validation and deployment boundary; use an authorized protected path in
+place of `<AUTHORIZED_PROTECTED_ENV_FILE>` below.
 
 PowerShell:
 
 ```powershell
-$metadata = python deployment/scripts/release_metadata.py --format json | ConvertFrom-Json
-$env:SENTINEL_DNA_IMAGE_TAG = $metadata.SENTINEL_DNA_IMAGE_TAG
-$env:SENTINEL_DNA_IMAGE_REVISION = $metadata.SENTINEL_DNA_IMAGE_REVISION
-$env:SENTINEL_DNA_IMAGE_REVISION_FULL = $metadata.SENTINEL_DNA_IMAGE_REVISION_FULL
-$env:SENTINEL_DNA_IMAGE_CREATED = $metadata.SENTINEL_DNA_IMAGE_CREATED
-python deployment/scripts/validate_deployment_config.py --env-file .env
-docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
+$protectedEnv = "<AUTHORIZED_PROTECTED_ENV_FILE>"
+$python = ".venv\\Scripts\\python.exe"
+& $python deployment/scripts/controlled_deploy.py `
+  --reviewed-sha <reviewed-full-sha> `
+  --expected-digest <verified-image-digest> `
+  --env-file $protectedEnv `
+  --metadata-file C:\ProgramData\Sentinel-DNA\release\metadata.json `
+  --release-manifest <VERIFIED_RELEASE_MANIFEST> `
+  --validate-only
 ```
 
 POSIX shell:
 
 ```sh
-eval "$(python deployment/scripts/release_metadata.py --format shell)"
-python deployment/scripts/validate_deployment_config.py --env-file .env
-docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
+python deployment/scripts/controlled_deploy.py \
+  --reviewed-sha <reviewed-full-sha> \
+  --expected-digest <verified-image-digest> \
+  --env-file <AUTHORIZED_PROTECTED_ENV_FILE> \
+  --metadata-file <AUTHORIZED_PROTECTED_METADATA_FILE> \
+  --release-manifest <VERIFIED_RELEASE_MANIFEST> \
+  --validate-only
 ```
 
-Use only `deployment/docker-compose.yml`. Recreate only the application service after configuration validation. Never use the root Compose file for production because it publishes port 5000.
+Use only `deployment/docker-compose.yml`. The adapter recreates only the application service with `--no-build --no-deps` after validation. Never use the root Compose file for production because it publishes port 5000.
 
 ## Gate 1 synthetic identity provisioning
 
@@ -57,6 +117,11 @@ when all of the following are true:
 - `SENTINEL_DNA_GATE1_PROVISIONING=1` is set explicitly for that command;
 - `SENTINEL_DNA_ENV=production` is set;
 - `SENTINEL_DNA_IMAGE_REVISION_FULL` matches the full reviewed Git revision;
+- `SENTINEL_DNA_IMAGE_DIGEST` matches the digest in the protected, read-only
+  Gate 1 release metadata file;
+- `SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH` points to that protected file. The
+  file contains only nonsecret `release_sha` and `image_digest` fields and is
+  established independently by the reviewed image release process;
 - `SENTINEL_DNA_SECRET_KEY` and `SENTINEL_DNA_DB_PATH` are available through
   protected configuration; and
 - the command is run interactively so password prompts are hidden.
@@ -77,7 +142,7 @@ $revision = (git rev-parse HEAD).Trim()
 $env:SENTINEL_DNA_GATE1_PROVISIONING = "1"
 $env:SENTINEL_DNA_ENV = "production"
 $env:SENTINEL_DNA_IMAGE_REVISION_FULL = $revision
-docker compose --env-file .env -f deployment/docker-compose.yml exec `
+docker compose --env-file $protectedEnv -f deployment/docker-compose.yml exec `
   -e SENTINEL_DNA_GATE1_PROVISIONING=1 `
   -e SENTINEL_DNA_ENV=production `
   -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `
@@ -96,7 +161,7 @@ After Gate 1 evidence is collected, the same guarded command can expire only the
 two identities it created:
 
 ```powershell
-docker compose --env-file .env -f deployment/docker-compose.yml exec `
+docker compose --env-file $protectedEnv -f deployment/docker-compose.yml exec `
   -e SENTINEL_DNA_GATE1_PROVISIONING=1 `
   -e SENTINEL_DNA_ENV=production `
   -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `
@@ -110,6 +175,52 @@ does not exactly match the reserved synthetic marker. It does not perform broad
 deletion and does not remove persistent volumes. Never expose this operation as
 an HTTP endpoint or enable test providers, development mode, debug mode, or
 `AUTH_LEGACY_JSON_COMPAT` to replace it.
+
+### Guarded recovery after cleanup
+
+`cleanup -> ordinary provision` is unsupported. Ordinary `provision` continues
+to fail closed when any retained Gate 1 record exists, including a complete
+inactive graph. A future reviewed release may use the separate
+`rotate` action to perform:
+
+`ABSENT -> provision -> ACTIVE_COMPLETE -> cleanup -> INACTIVE_COMPLETE -> rotate -> ACTIVE_COMPLETE`
+
+Rotation requires every selected lane to contain exactly its reserved inactive
+user, password identity, canonical identity, membership, and tenant. All four
+records must be inactive, the membership role must remain `analyst`, the graph
+must remain bound to the reserved tenant and actor identifiers, and no duplicate,
+cross-tenant, provider, partial, or mixed state may exist. Any other state is
+rejected before password prompts.
+
+The trusted release metadata file is not operator-entered release metadata. It
+must be provisioned by the reviewed release process, remain a regular
+non-symlink file, and not be writable by group or other users. Missing,
+malformed, mismatched, or unavailable metadata fails closed before any state
+inspection or password prompt.
+
+Rotation is additionally gated by `SENTINEL_DNA_GATE1_ROTATION=1` alongside the
+existing provisioning, production, full-release, protected-configuration, and
+database-path guards. It is operator-only and must run interactively. The command
+uses hidden `getpass` prompts for replacement passwords; passwords are never
+arguments, environment values, logs, audit metadata, results, or exceptions.
+
+On a reviewed release, select one lane with `--lane A` or `--lane B`, or select
+both by omitting `--lane`. A single-lane operation never expands to the other
+lane. Both-lane rotation is one transaction: password hashing, persistent-session
+revocation, session-epoch advancement, reactivation, and one safe
+`GATE1_SYNTHETIC_IDENTITY_ROTATED` audit event per lane commit together or roll
+back together. The rotation command prints only safe lane, tenant, actor, user,
+and result-state metadata.
+
+The reviewed release adds the additive `users.session_version` epoch with a
+default of zero. Existing signed sessions remain compatible at epoch zero;
+rotation advances the reserved user epoch and the request boundary rejects older
+signed sessions. Persistent sessions are revoked in the same transaction.
+
+The current certified release remains cleanup-terminal and does not support this
+rotation action. Do not run the rotation command until its reviewed release SHA,
+immutable image digest, operator authorization, and runtime certification have
+been independently verified.
 
 ## Privileged runtime identity bootstrap
 
@@ -145,7 +256,7 @@ $env:SENTINEL_DNA_ENV = "production"
 $env:SENTINEL_DNA_IMAGE_REVISION_FULL = $revision
 $env:SENTINEL_DNA_SECURE_COOKIES = "1"
 
-docker compose --env-file .env -f deployment/docker-compose.yml exec `
+docker compose --env-file $protectedEnv -f deployment/docker-compose.yml exec `
   -e SENTINEL_DNA_PRIVILEGED_BOOTSTRAP=1 `
   -e SENTINEL_DNA_ENV=production `
   -e SENTINEL_DNA_IMAGE_REVISION_FULL=$revision `

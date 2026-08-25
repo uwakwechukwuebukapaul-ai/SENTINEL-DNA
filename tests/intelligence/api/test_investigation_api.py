@@ -26,7 +26,13 @@ from app import create_app  # noqa: E402  # type: ignore[import-not-found]
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
+
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "investigation-api.sqlite"))
 
     app = create_app()
 

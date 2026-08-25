@@ -79,6 +79,22 @@ class Task:
     metadata: dict[str, Any] = field(default_factory=dict)
     attempt: int = 0
 
+    # V2.1 lineage fields are optional so existing synchronous callers retain
+    # the current task construction and execution contract.
+    parent_task_id: str | None = None
+    job_id: str | None = None
+    tenant_id: str | None = None
+    case_id: str | None = None
+    investigation_id: str | None = None
+    objective: str | None = None
+    required_evidence: list[str] = field(default_factory=list)
+    iteration: int = 0
+    authorization_reference: str | None = None
+    budget_cost: float = 0.0
+    available_at: datetime | None = None
+    deadline_at: datetime | None = None
+    cancelled_at: datetime | None = None
+
 
     @property
     def retries(self) -> int:
@@ -213,4 +229,17 @@ class Task:
             "execution_state": self.execution_state.value,
             "metadata": dict(self.metadata),
             "attempt": self.attempt,
+            "parent_task_id": self.parent_task_id,
+            "job_id": self.job_id,
+            "tenant_id": self.tenant_id,
+            "case_id": self.case_id,
+            "investigation_id": self.investigation_id,
+            "objective": self.objective,
+            "required_evidence": list(self.required_evidence),
+            "iteration": self.iteration,
+            "authorization_reference": self.authorization_reference,
+            "budget_cost": self.budget_cost,
+            "available_at": self.available_at.isoformat() if self.available_at else None,
+            "deadline_at": self.deadline_at.isoformat() if self.deadline_at else None,
+            "cancelled_at": self.cancelled_at.isoformat() if self.cancelled_at else None,
         }

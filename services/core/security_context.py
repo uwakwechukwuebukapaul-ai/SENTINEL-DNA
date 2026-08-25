@@ -30,6 +30,22 @@ def request_context() -> SecurityContext:
     error = None
     roles: tuple[str, ...] = ()
     if user_id and actor_id:
+        auth = current_app.container.get("auth_service")
+        if auth is not None and auth.session_user(user_id, session.get("session_version")) is None:
+            error = "authentication_required"
+            user_id = None
+            actor_id = None
+        if error:
+            context = SecurityContext(
+                tenant_id=None,
+                user_id=None,
+                roles=(),
+                correlation_id=request.headers.get("X-Correlation-ID") or str(uuid4()),
+                actor_id=None,
+                error=error,
+            )
+            g.security_context = context
+            return context
         if session_tenant and header_tenant and str(session_tenant) != str(header_tenant):
             error = "tenant_context_conflict"
         else:
