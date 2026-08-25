@@ -10,6 +10,31 @@ from services.intelligence.certification import EvidenceClosureReportGenerator, 
 from services.intelligence.certification.evidence_closure import SOURCE_NAMES
 
 
+def _initialize_git_repository(repository_root: Path) -> None:
+    subprocess.run(["git", "init"], cwd=repository_root, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.name", "deployment-test-fixture"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "deployment-test-fixture@example.invalid"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "Initialize deployment test repository"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def _postgres_evidence():
     return {
         "database_engine": "postgresql",
@@ -92,6 +117,7 @@ def test_operational_ownership_passes_only_with_complete_evidence(tmp_path):
 
 
 def test_runtime_readiness_fails_closed_without_configuration(tmp_path):
+    _initialize_git_repository(tmp_path)
     report = RuntimeReadinessValidator(repository_root=tmp_path, environ={}).run().to_dict()
 
     assert report["validation_result"] == "blocked"
