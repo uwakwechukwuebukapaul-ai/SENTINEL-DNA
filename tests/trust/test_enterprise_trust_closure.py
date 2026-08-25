@@ -32,8 +32,13 @@ def test_trust_report_preserves_certification_security_controls():
     assert report.security_hardening["memory_advisory_boundary"] is True
 
 
-def test_release_hygiene_preserves_artifacts_and_blocks_dirty_manifest():
-    report = _report()
+def test_release_hygiene_preserves_artifacts_and_blocks_dirty_manifest(monkeypatch):
+    runner = EnterpriseTrustClosureRunner(
+        generated_at="2026-08-25T00:00:00+00:00",
+        commit_sha="synthetic-commit-sha",
+    )
+    monkeypatch.setattr(runner, "_git_dirty", lambda: True)
+    report = runner.run()
 
     assert report.release_evidence_hygiene["artifact_provenance"] is True
     assert report.release_evidence_hygiene["immutable_evidence_storage"] is True
