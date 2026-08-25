@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import secrets
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,20 @@ from services.identity.canonical_authority import CanonicalAuthorityService
 
 
 TEST_REVISION = "a1" * 20
+TEST_SECRET_KEY = secrets.token_urlsafe(48)
+SHORT_SECRET = secrets.token_urlsafe(4)
+UNRELATED_PASSWORD = secrets.token_urlsafe(32)
+REAL_OWNER_PASSWORD = secrets.token_urlsafe(32)
+LIFECYCLE_PASSWORD = secrets.token_urlsafe(32)
+
+
+def _fresh_demo_passwords() -> dict[str, str]:
+    """Create ephemeral, lane-unique demo credentials for this test process."""
+    return {lane: secrets.token_urlsafe(32) for lane in ("A", "B")}
+
+
+DEMO_PASSWORDS = _fresh_demo_passwords()
+ROTATED_DEMO_PASSWORDS = _fresh_demo_passwords()
 
 
 def build_services(tmp_path, monkeypatch, audit=None):
@@ -28,7 +43,7 @@ def build_services(tmp_path, monkeypatch, audit=None):
     monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: True)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db.database_path))
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(trusted_metadata))
@@ -47,7 +62,7 @@ def test_guard_requires_explicit_production_release_authorization(monkeypatch):
     assert spec.loader is not None
     spec.loader.exec_module(module)
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-secret")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", secrets.token_urlsafe(4))
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(Path(__file__)))
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     monkeypatch.delenv("SENTINEL_DNA_GATE1_PROVISIONING", raising=False)
@@ -58,11 +73,11 @@ def test_guard_requires_explicit_production_release_authorization(monkeypatch):
 @pytest.mark.parametrize(
     ("environment", "revision", "secret", "db_path", "expected"),
     [
-        ("staging", TEST_REVISION, "test-only-secret", str(Path(__file__)), "production_environment_required"),
-        ("production", "not-a-full-revision", "test-only-secret", str(Path(__file__)), "full_release_revision_required"),
+        ("staging", TEST_REVISION, SHORT_SECRET, str(Path(__file__)), "production_environment_required"),
+        ("production", "not-a-full-revision", SHORT_SECRET, str(Path(__file__)), "full_release_revision_required"),
         ("production", TEST_REVISION, "", str(Path(__file__)), "protected_secret_configuration_required"),
-        ("production", TEST_REVISION, "test-only-secret-value-0123456789", "", "database_path_configuration_required"),
-        ("production", TEST_REVISION, "test-only-secret-value-0123456789", "/path/that/does/not/exist.sqlite", "database_path_unavailable"),
+        ("production", TEST_REVISION, TEST_SECRET_KEY, "", "database_path_configuration_required"),
+        ("production", TEST_REVISION, TEST_SECRET_KEY, "/path/that/does/not/exist.sqlite", "database_path_unavailable"),
     ],
 )
 def test_guard_fails_closed_for_environment_release_and_required_configuration(
@@ -90,12 +105,12 @@ def test_service_rechecks_authorization_outside_cli(tmp_path, monkeypatch):
     authority = CanonicalAuthorityService(db)
     service = Gate1SyntheticProvisioningService(auth, authority, AuditService(db), db, expected_revision=TEST_REVISION)
     with pytest.raises(Gate1ProvisioningError, match="explicit_gate1_authorization_required"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
 
 def test_provision_creates_verified_canonical_identities_and_is_idempotent(tmp_path, monkeypatch):
     db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    passwords = {"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"}
+    passwords = DEMO_PASSWORDS
 
     first = service.provision(passwords)
     second = service.provision(passwords)
@@ -117,14 +132,14 @@ def test_refuses_to_overwrite_real_tenant_or_user(tmp_path, monkeypatch):
     authority.tenants.create("Real Tenant", spec.tenant_id)
 
     with pytest.raises(Gate1ProvisioningError, match="synthetic_tenant_conflict_A"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
     assert auth.get_by_username(spec.username) is None
 
 
 @pytest.mark.parametrize("role", ["admin", "soc_manager"])
 def test_rotation_rejects_elevated_application_role_before_password_handling(tmp_path, monkeypatch, role):
     db, auth, _authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     service.cleanup()
     spec = synthetic_identity_specs()[0]
     with db.session() as connection:
@@ -134,18 +149,18 @@ def test_rotation_rejects_elevated_application_role_before_password_handling(tmp
 
     assert service.inspect_rotation_state(("A",))[0].state == "conflicting_state"
     with pytest.raises(Gate1ProvisioningError, match="gate1_rotation_conflicting_state_A"):
-        service.rotate_inactive({"A": "Gate1ReplacementA!456"}, lanes=("A",))
+        service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))
 
 
 def test_rotation_accepts_analyst_application_and_membership_roles(tmp_path, monkeypatch):
     _db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     service.cleanup()
     _enable_rotation(monkeypatch)
     spec = synthetic_identity_specs()[0]
     assert auth.get_by_username(spec.username).role == "analyst"
     assert authority.memberships.get(spec.tenant_id, spec.actor_id).role == "analyst"
-    assert service.rotate_inactive({"A": "Gate1ReplacementA!456"}, lanes=("A",))[0].state == "rotated"
+    assert service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))[0].state == "rotated"
 
 
 def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkeypatch):
@@ -163,7 +178,7 @@ def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkey
     db = DatabaseConnection(tmp_path / "rollback.sqlite")
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db.database_path))
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     trusted_metadata = tmp_path / "rollback-release.json"
@@ -178,7 +193,7 @@ def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkey
     service = Gate1SyntheticProvisioningService(auth, authority, FailingAudit(db), db, expected_revision=TEST_REVISION)
 
     with pytest.raises(RuntimeError, match="controlled_test_failure"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
     for spec in synthetic_identity_specs():
         assert auth.get_by_username(spec.username) is None
         assert authority.tenants.get(spec.tenant_id) is None
@@ -187,9 +202,9 @@ def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkey
 
 def test_cleanup_expires_only_marked_synthetic_identities_and_audits(tmp_path, monkeypatch):
     db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
-    unrelated = auth.register("unrelated-user", "unrelated@example.test", "UnrelatedPassword!123")
+    service.provision(DEMO_PASSWORDS)
+    service.provision(DEMO_PASSWORDS)
+    unrelated = auth.register("unrelated-user", "unrelated@example.test", UNRELATED_PASSWORD)
 
     cleaned = service.cleanup()
 
@@ -210,7 +225,7 @@ def test_cleanup_expires_only_marked_synthetic_identities_and_audits(tmp_path, m
 def test_cleanup_refuses_non_synthetic_identity_collision(tmp_path, monkeypatch):
     db, auth, authority, service = build_services(tmp_path, monkeypatch)
     spec = synthetic_identity_specs()[0]
-    real_user = auth.register(spec.username, "real-owner@example.test", "RealOwnerPassword!123")
+    real_user = auth.register(spec.username, "real-owner@example.test", REAL_OWNER_PASSWORD)
 
     with pytest.raises(Gate1ProvisioningError, match="synthetic_identity_conflict_A"):
         service.cleanup()
@@ -223,7 +238,7 @@ def test_provisioned_users_are_tenant_isolated_through_application_api(tmp_path,
 
     old_path = database.database_path
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
@@ -242,7 +257,7 @@ def test_provisioned_users_are_tenant_isolated_through_application_api(tmp_path,
         authority = app.container.require("canonical_authority")
         audit = app.container.require("audit_service")
         service = Gate1SyntheticProvisioningService(auth, authority, audit, database, expected_revision=TEST_REVISION)
-        passwords = {"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"}
+        passwords = DEMO_PASSWORDS
         service.provision(passwords)
 
         clients = {}
@@ -285,8 +300,8 @@ def _enable_rotation(monkeypatch):
 
 def test_cleanup_then_guarded_rotation_reactivates_both_lanes(tmp_path, monkeypatch):
     db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    original = {"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"}
-    replacement = {"A": "Gate1ReplacementA!456", "B": "Gate1ReplacementB!456"}
+    original = DEMO_PASSWORDS
+    replacement = ROTATED_DEMO_PASSWORDS
     service.provision(original)
     service.cleanup()
     _enable_rotation(monkeypatch)
@@ -307,11 +322,11 @@ def test_cleanup_then_guarded_rotation_reactivates_both_lanes(tmp_path, monkeypa
 
 def test_rotation_can_select_one_lane_without_touching_the_other(tmp_path, monkeypatch):
     _db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     service.cleanup()
     _enable_rotation(monkeypatch)
 
-    service.rotate_inactive({"A": "Gate1ReplacementA!456"}, lanes=("A",))
+    service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))
 
     assert auth.get_by_username(synthetic_identity_specs()[0].username).is_active
     assert not auth.get_by_username(synthetic_identity_specs()[1].username).is_active
@@ -325,7 +340,7 @@ def test_rotation_rejects_missing_state_and_requires_separate_rotation_authoriza
 
     assert service.inspect_rotation_state(("A",))[0].state == "absent"
     with pytest.raises(Gate1ProvisioningError, match="gate1_rotation_absent_A"):
-        service.rotate_inactive({"A": "Gate1ReplacementA!456"}, lanes=("A",))
+        service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))
 
     monkeypatch.delenv("SENTINEL_DNA_GATE1_ROTATION", raising=False)
     with pytest.raises(Gate1ProvisioningError, match="explicit_gate1_rotation_authorization_required"):
@@ -334,7 +349,7 @@ def test_rotation_rejects_missing_state_and_requires_separate_rotation_authoriza
 
 def test_rotation_rejects_conflicting_and_cross_tenant_graphs(tmp_path, monkeypatch):
     db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     service.cleanup()
     _enable_rotation(monkeypatch)
     spec = synthetic_identity_specs()[0]
@@ -343,7 +358,7 @@ def test_rotation_rejects_conflicting_and_cross_tenant_graphs(tmp_path, monkeypa
         connection.execute("UPDATE users SET tenant_id=? WHERE username=?", ("unexpected-tenant", spec.username))
     assert service.inspect_rotation_state(("A",))[0].state == "conflicting_state"
     with pytest.raises(Gate1ProvisioningError, match="gate1_rotation_conflicting_state_A"):
-        service.rotate_inactive({"A": "Gate1ReplacementA!456"}, lanes=("A",))
+        service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))
 
     with db.session() as connection:
         connection.execute("UPDATE users SET tenant_id=? WHERE username=?", (spec.tenant_id, spec.username))
@@ -354,10 +369,10 @@ def test_rotation_rejects_conflicting_and_cross_tenant_graphs(tmp_path, monkeypa
 
 def test_repeated_rotation_requires_another_cleanup(tmp_path, monkeypatch):
     _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     service.cleanup()
     _enable_rotation(monkeypatch)
-    replacement = {"A": "Gate1ReplacementA!456", "B": "Gate1ReplacementB!456"}
+    replacement = ROTATED_DEMO_PASSWORDS
     service.rotate_inactive(replacement)
 
     assert service.inspect_rotation_state()[0].state == "active_complete"
@@ -378,7 +393,7 @@ def test_rotation_cli_requires_separate_flag(tmp_path, monkeypatch):
     db = DatabaseConnection(tmp_path / "cli-guard.sqlite")
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db.database_path))
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     monkeypatch.delenv("SENTINEL_DNA_GATE1_ROTATION", raising=False)
@@ -388,7 +403,7 @@ def test_rotation_cli_requires_separate_flag(tmp_path, monkeypatch):
 
 def test_rotation_cli_validates_state_before_hidden_prompt(tmp_path, monkeypatch):
     db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     _enable_rotation(monkeypatch)
     module = _load_gate1_cli()
     monkeypatch.setattr(module, "_rotation_passwords", lambda _lanes: pytest.fail("password prompt reached invalid state"))
@@ -398,26 +413,26 @@ def test_rotation_cli_validates_state_before_hidden_prompt(tmp_path, monkeypatch
 
 def test_rotation_fails_closed_for_mixed_and_partial_state(tmp_path, monkeypatch):
     db, auth, authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     _enable_rotation(monkeypatch)
 
     auth.deactivate_user(auth.get_by_username(synthetic_identity_specs()[0].username).id)
     assert service.inspect_rotation_state(("A",))[0].state == "mixed_state"
     with pytest.raises(Gate1ProvisioningError, match="gate1_rotation_mixed_state_A"):
-        service.rotate_inactive({"A": "Gate1ReplacementA!456"}, lanes=("A",))
+        service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))
 
     spec = synthetic_identity_specs()[1]
     with db.session() as connection:
         connection.execute("DELETE FROM canonical_memberships WHERE tenant_id=? AND actor_id=?", (spec.tenant_id, spec.actor_id))
     assert service.inspect_rotation_state(("B",))[0].state == "partial_state"
     with pytest.raises(Gate1ProvisioningError, match="gate1_rotation_partial_state_B"):
-        service.rotate_inactive({"B": "Gate1ReplacementB!456"}, lanes=("B",))
+        service.rotate_inactive({"B": ROTATED_DEMO_PASSWORDS["B"]}, lanes=("B",))
     assert authority.tenants.get(spec.tenant_id).status == "active"
 
 
 def test_ordinary_provision_rejects_complete_inactive_state(tmp_path, monkeypatch):
     _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
-    passwords = {"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"}
+    passwords = DEMO_PASSWORDS
     service.provision(passwords)
     service.cleanup()
 
@@ -427,18 +442,18 @@ def test_ordinary_provision_rejects_complete_inactive_state(tmp_path, monkeypatc
 
 def test_rotation_revokes_persistent_sessions_and_audits_each_lane(tmp_path, monkeypatch):
     db, auth, _authority, service = build_services(tmp_path, monkeypatch)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     for spec in synthetic_identity_specs():
         auth.create_persistent_session(
             auth.get_by_username(spec.username),
-            f"session-token-{spec.lane}",
+            secrets.token_urlsafe(32),
             spec.tenant_id,
             f"session-{spec.lane}",
             "2099-01-01T00:00:00+00:00",
         )
     service.cleanup()
     _enable_rotation(monkeypatch)
-    service.rotate_inactive({"A": "Gate1ReplacementA!456", "B": "Gate1ReplacementB!456"})
+    service.rotate_inactive(ROTATED_DEMO_PASSWORDS)
 
     for spec in synthetic_identity_specs():
         user = auth.get_by_username(spec.username)
@@ -459,7 +474,7 @@ def test_rotation_audit_failure_rolls_back_every_selected_lane(tmp_path, monkeyp
     db = DatabaseConnection(tmp_path / "rotation-rollback.sqlite")
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db.database_path))
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     trusted_metadata = tmp_path / "rotation-rollback-release.json"
@@ -473,11 +488,11 @@ def test_rotation_audit_failure_rolls_back_every_selected_lane(tmp_path, monkeyp
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db, auth=auth)
     service = Gate1SyntheticProvisioningService(auth, authority, RotationAuditFailure(db), db, expected_revision=TEST_REVISION)
-    service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+    service.provision(DEMO_PASSWORDS)
     service.cleanup()
 
     with pytest.raises(RuntimeError, match="controlled_rotation_audit_failure"):
-        service.rotate_inactive({"A": "Gate1ReplacementA!456", "B": "Gate1ReplacementB!456"})
+        service.rotate_inactive(ROTATED_DEMO_PASSWORDS)
 
     assert [item.state for item in service.inspect_rotation_state()] == ["inactive_complete", "inactive_complete"]
     for spec in synthetic_identity_specs():
@@ -490,7 +505,7 @@ def test_rotation_invalidates_existing_signed_session_epoch(tmp_path, monkeypatc
 
     old_path = database.database_path
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
@@ -509,7 +524,7 @@ def test_rotation_invalidates_existing_signed_session_epoch(tmp_path, monkeypatc
         authority = app.container.require("canonical_authority")
         audit = app.container.require("audit_service")
         service = Gate1SyntheticProvisioningService(auth, authority, audit, database, expected_revision=TEST_REVISION)
-        original = {"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"}
+        original = DEMO_PASSWORDS
         service.provision(original)
         client = app.test_client()
         csrf = client.get("/api/auth/csrf").get_json()["csrf_token"]
@@ -520,7 +535,7 @@ def test_rotation_invalidates_existing_signed_session_epoch(tmp_path, monkeypatc
         ).status_code == 200
         service.cleanup()
         _enable_rotation(monkeypatch)
-        service.rotate_inactive({"A": "Gate1ReplacementA!456", "B": "Gate1ReplacementB!456"})
+        service.rotate_inactive(ROTATED_DEMO_PASSWORDS)
 
         assert client.get("/api/auth/me").status_code == 401
     finally:
@@ -533,16 +548,16 @@ def test_user_deactivation_and_reactivation_do_not_restore_signed_session(tmp_pa
 
     old_path = database.database_path
     monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "user-lifecycle.sqlite"))
     try:
         app = create_app()
         app.config.update(TESTING=True)
         auth = app.container.require("auth_service")
-        user = auth.register("lifecycle-user", "lifecycle@example.test", "LifecyclePassword!123")
+        user = auth.register("lifecycle-user", "lifecycle@example.test", LIFECYCLE_PASSWORD)
         client = app.test_client()
         csrf = client.get("/api/auth/csrf").get_json()["csrf_token"]
-        assert client.post("/api/auth/login", json={"username": user.username, "password": "LifecyclePassword!123"}, headers={"X-CSRF-Token": csrf}).status_code == 200
+        assert client.post("/api/auth/login", json={"username": user.username, "password": LIFECYCLE_PASSWORD}, headers={"X-CSRF-Token": csrf}).status_code == 200
         assert auth.deactivate_user(user.id)
         assert auth.activate_user(user.id)
         assert client.get("/api/auth/me").status_code == 401
@@ -556,14 +571,14 @@ def test_tenant_deactivation_and_reactivation_do_not_restore_signed_session(tmp_
 
     old_path = database.database_path
     monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-gate1-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "tenant-lifecycle.sqlite"))
     try:
         app = create_app()
         app.config.update(TESTING=True)
         auth = app.container.require("auth_service")
         authority = app.container.require("canonical_authority")
-        user = auth.register("tenant-lifecycle-user", "tenant-lifecycle@example.test", "LifecyclePassword!123")
+        user = auth.register("tenant-lifecycle-user", "tenant-lifecycle@example.test", LIFECYCLE_PASSWORD)
         tenant = authority.tenants.create("Lifecycle Tenant", "tenant-lifecycle")
         identity = authority.identities.create(user.email, user.username, "tenant-lifecycle-actor")
         authority.memberships.add(tenant.tenant_id, identity.actor_id, "analyst")
@@ -571,7 +586,7 @@ def test_tenant_deactivation_and_reactivation_do_not_restore_signed_session(tmp_
             connection.execute("UPDATE users SET tenant_id=?, actor_id=? WHERE id=?", (tenant.tenant_id, identity.actor_id, user.id))
         client = app.test_client()
         csrf = client.get("/api/auth/csrf").get_json()["csrf_token"]
-        assert client.post("/api/auth/login", json={"username": user.username, "password": "LifecyclePassword!123"}, headers={"X-CSRF-Token": csrf}).status_code == 200
+        assert client.post("/api/auth/login", json={"username": user.username, "password": LIFECYCLE_PASSWORD}, headers={"X-CSRF-Token": csrf}).status_code == 200
         authority.tenants.set_status(tenant.tenant_id, "inactive")
         authority.tenants.set_status(tenant.tenant_id, "active")
         assert client.get("/api/auth/me").status_code == 401
@@ -583,7 +598,7 @@ def test_release_guard_requires_trusted_revision_and_digest_metadata(tmp_path, m
     _db, _auth, _authority, service = build_services(tmp_path, monkeypatch)
     monkeypatch.delenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH")
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_required"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
     metadata = tmp_path / "wrong-release.json"
     metadata.write_text(json.dumps({"release_sha": "b2" * 20, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
@@ -591,13 +606,13 @@ def test_release_guard_requires_trusted_revision_and_digest_metadata(tmp_path, m
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_revision_mismatch"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
     metadata.chmod(0o644)
     metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "b" * 64}), encoding="utf-8")
     metadata.chmod(0o444)
     with pytest.raises(Gate1ProvisioningError, match="image_digest_mismatch"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
 
 def test_trusted_metadata_rejects_unexpected_fields_and_malformed_content(tmp_path, monkeypatch):
@@ -608,13 +623,13 @@ def test_trusted_metadata_rejects_unexpected_fields_and_malformed_content(tmp_pa
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", metadata)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_unexpected_fields"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
     metadata.chmod(0o644)
     metadata.write_text("not-json", encoding="utf-8")
     metadata.chmod(0o444)
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_unavailable"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not authoritative on Windows")
@@ -627,7 +642,7 @@ def test_trusted_metadata_rejects_writable_file(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(metadata))
     monkeypatch.setattr(gate1_module, "_metadata_is_effectively_read_only", lambda _path: False)
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_writable"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux container mount semantics are required")
@@ -674,4 +689,4 @@ def test_trusted_metadata_runtime_path_cannot_be_operator_substituted(tmp_path, 
     monkeypatch.setattr(gate1_module, "TRUSTED_METADATA_RUNTIME_PATH", expected)
     monkeypatch.setenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH", str(substitute))
     with pytest.raises(Gate1ProvisioningError, match="trusted_release_metadata_path_mismatch"):
-        service.provision({"A": "Gate1SyntheticA!123", "B": "Gate1SyntheticB!123"})
+        service.provision(DEMO_PASSWORDS)

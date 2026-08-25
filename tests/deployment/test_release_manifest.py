@@ -13,6 +13,7 @@ from deployment.scripts.release_manifest import (
     verify_manifest,
     write_manifest,
 )
+from tests.credential_helpers import random_token
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -132,7 +133,7 @@ def test_manifest_rejects_missing_required_fields(tmp_path: Path, section: str, 
 
 def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secrets(tmp_path: Path) -> None:
     digest = "sha256:" + "a" * 64
-    secret = "production-secret-must-not-escape"
+    secret = random_token()
     manifest = build_manifest(
         repository_root=REPOSITORY_ROOT,
         image_reference="deployment-app:current-release",

@@ -1,6 +1,10 @@
 import json
 
 import pytest
+from tests.credential_helpers import random_password
+
+
+PASSWORD = random_password()
 
 
 @pytest.fixture
@@ -19,7 +23,7 @@ def create_user(application, username, role):
     return application.container.require("auth_service").register(
         username,
         f"{username}@example.test",
-        "AuditReadPassword!123",
+        PASSWORD,
         role,
     )
 
@@ -28,7 +32,7 @@ def login(client, username):
     csrf = client.get("/api/auth/csrf").get_json()["csrf_token"]
     response = client.post(
         "/api/auth/login",
-        json={"username": username, "password": "AuditReadPassword!123"},
+        json={"username": username, "password": PASSWORD},
         headers={"X-CSRF-Token": csrf},
     )
     assert response.status_code == 200
@@ -75,7 +79,7 @@ def test_public_registration_cannot_self_assign_audit_permission(application):
         json={
             "username": "self-promoted-admin",
             "email": "self-promoted-admin@example.test",
-            "password": "AuditReadPassword!123",
+            "password": PASSWORD,
             "role": "admin",
         },
     )

@@ -1,0 +1,436 @@
+{
+  "analyst_effectiveness": {
+    "analyst_confidence_improvement": 0.148125,
+    "cases": [
+      {
+        "baseline_ai_confidence": 0.55,
+        "baseline_analyst_confidence": 0.725,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1200,
+        "enhanced_ai_confidence": 0.88,
+        "enhanced_analyst_confidence": 0.89,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 650,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "phishing",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.66,
+        "baseline_analyst_confidence": 0.78,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1100,
+        "enhanced_ai_confidence": 0.91,
+        "enhanced_analyst_confidence": 0.905,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 600,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "credential",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.72,
+        "baseline_analyst_confidence": 0.81,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1000,
+        "enhanced_ai_confidence": 0.94,
+        "enhanced_analyst_confidence": 0.92,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 500,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "malware",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.62,
+        "baseline_analyst_confidence": 0.76,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1300,
+        "enhanced_ai_confidence": 0.89,
+        "enhanced_analyst_confidence": 0.895,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 650,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "auth",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.58,
+        "baseline_analyst_confidence": 0.74,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1400,
+        "enhanced_ai_confidence": 0.9,
+        "enhanced_analyst_confidence": 0.9,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 700,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "lateral",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.68,
+        "baseline_analyst_confidence": 0.79,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1150,
+        "enhanced_ai_confidence": 0.93,
+        "enhanced_analyst_confidence": 0.915,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 550,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "c2",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.52,
+        "baseline_analyst_confidence": 0.71,
+        "baseline_false_escalation": true,
+        "baseline_investigation_time_ms": 1500,
+        "enhanced_ai_confidence": 0.91,
+        "enhanced_analyst_confidence": 0.905,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 600,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "benign",
+        "tenant_id": "tenant-accuracy-validation"
+      },
+      {
+        "baseline_ai_confidence": 0.55,
+        "baseline_analyst_confidence": 0.725,
+        "baseline_false_escalation": false,
+        "baseline_investigation_time_ms": 1600,
+        "enhanced_ai_confidence": 0.89,
+        "enhanced_analyst_confidence": 0.895,
+        "enhanced_false_escalation": false,
+        "enhanced_investigation_time_ms": 800,
+        "evidence_provenance_preserved": true,
+        "recommendation_accepted": true,
+        "recommendation_present": true,
+        "scenario_id": "multi-ioc",
+        "tenant_id": "tenant-accuracy-validation"
+      }
+    ],
+    "evidence_provenance_preserved": true,
+    "false_escalation_reduction": 1,
+    "false_escalations_baseline": 1,
+    "false_escalations_enhanced": 0,
+    "investigation_time_reduction_ms": 650.0,
+    "investigation_time_reduction_rate": 0.507317,
+    "recommendation_acceptance_rate": 1.0,
+    "tenant_id": "tenant-accuracy-validation"
+  },
+  "architecture_summary": {
+    "components": [
+      "tenant isolation certification",
+      "SOC analyst effectiveness benchmark",
+      "investigation scale benchmark",
+      "operational accuracy safety regression"
+    ],
+    "decision_authority": "production authorization and verdict enforcement remain outside proof evaluation",
+    "preserved_contracts": [
+      "InvestigationCoordinator",
+      "InvestigationOrchestrator",
+      "RuntimeTaskExecutor",
+      "InvestigationResult"
+    ],
+    "security_boundaries": [
+      "authorization remains authoritative",
+      "memory is advisory-only",
+      "cross-tenant reads fail closed",
+      "evidence provenance remains tenant-scoped",
+      "no response automation is executed"
+    ],
+    "validation_scope": "synthetic enterprise trust proof"
+  },
+  "generated_at": "2026-08-25T00:00:00+00:00",
+  "immutable": true,
+  "replay_digest": "d55d7a0ad87fb450232a021d815ac99002b7a18399d6194d10f64315ef2ec5b4",
+  "report_digest": "f106cee0077768aa21f6c4533de3ebef18dce0b5a3f895b5b72fb32495ac8780",
+  "report_version": "enterprise-proof-validation.v1",
+  "safety_validation": {
+    "append_only_evidence": true,
+    "authorization_unchanged": true,
+    "cross_tenant_access_denied": true,
+    "deterministic_replay_valid": true,
+    "evidence_provenance_valid": true,
+    "fail_closed_behavior_unchanged": true,
+    "investigation_result_contract_unchanged": true,
+    "memory_advisory_only": true,
+    "memory_isolation_valid": true,
+    "organizational_memory_isolation_valid": true,
+    "response_automation_unchanged": true,
+    "tenant_isolation_unchanged": true,
+    "verdict_enforcement_unchanged": true
+  },
+  "scale_benchmark": {
+    "points": [
+      {
+        "baseline_memory_kb": 132.2,
+        "baseline_p50_latency_ms": 4.9,
+        "baseline_p95_latency_ms": 5.78,
+        "enhanced_memory_kb": 145.0,
+        "enhanced_p50_latency_ms": 5.274,
+        "enhanced_p95_latency_ms": 6.174,
+        "investigation_count": 10,
+        "memory_overhead_kb": 12.8,
+        "memory_overhead_rate": 0.096823
+      },
+      {
+        "baseline_memory_kb": 170.0,
+        "baseline_p50_latency_ms": 5.08,
+        "baseline_p95_latency_ms": 5.88,
+        "enhanced_memory_kb": 190.0,
+        "enhanced_p50_latency_ms": 5.48,
+        "enhanced_p95_latency_ms": 6.31,
+        "investigation_count": 100,
+        "memory_overhead_kb": 20.0,
+        "memory_overhead_rate": 0.117647
+      },
+      {
+        "baseline_memory_kb": 548.0,
+        "baseline_p50_latency_ms": 6.88,
+        "baseline_p95_latency_ms": 7.68,
+        "enhanced_memory_kb": 640.0,
+        "enhanced_p50_latency_ms": 7.65,
+        "enhanced_p95_latency_ms": 8.47,
+        "investigation_count": 1000,
+        "memory_overhead_kb": 92.0,
+        "memory_overhead_rate": 0.167883
+      }
+    ],
+    "tenant_id": "tenant-proof-scale",
+    "timing_model": "deterministic-synthetic-v1; no wall-clock or provider calls"
+  },
+  "tenant_ids": [
+    "tenant-accuracy-validation",
+    "tenant-proof-a",
+    "tenant-proof-b",
+    "tenant-proof-scale"
+  ],
+  "tenant_isolation": {
+    "access_attempts": [
+      {
+        "allowed": true,
+        "failure_reason": "same_tenant_access_allowed",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [
+          {
+            "evidence_id": "A-E-001",
+            "source": "synthetic-siem",
+            "source_investigation_id": "PROOF-A-INV-001",
+            "tenant_id": "tenant-proof-a"
+          },
+          {
+            "evidence_id": "A-E-002",
+            "source": "synthetic-idp",
+            "source_investigation_id": "PROOF-A-INV-001",
+            "tenant_id": "tenant-proof-a"
+          }
+        ],
+        "observed_tenant_id": "tenant-proof-a",
+        "owner_tenant_id": "tenant-proof-a",
+        "requester_tenant_id": "tenant-proof-a",
+        "resource_id": "A-IM-001"
+      },
+      {
+        "allowed": true,
+        "failure_reason": "same_tenant_access_allowed",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [
+          {
+            "evidence_id": "A-E-001",
+            "source": "synthetic-siem",
+            "source_investigation_id": "PROOF-A-INV-001",
+            "tenant_id": "tenant-proof-a"
+          },
+          {
+            "evidence_id": "A-E-002",
+            "source": "synthetic-idp",
+            "source_investigation_id": "PROOF-A-INV-001",
+            "tenant_id": "tenant-proof-a"
+          }
+        ],
+        "observed_tenant_id": "tenant-proof-a",
+        "owner_tenant_id": "tenant-proof-a",
+        "requester_tenant_id": "tenant-proof-a",
+        "resource_id": "A-IM-002"
+      },
+      {
+        "allowed": true,
+        "failure_reason": "same_tenant_access_allowed",
+        "memory_layer": "organizational_memory",
+        "observed_provenance": [
+          {
+            "evidence_id": "A-E-001",
+            "source": "synthetic-siem",
+            "source_investigation_id": "PROOF-A-INV-001",
+            "tenant_id": "tenant-proof-a"
+          },
+          {
+            "evidence_id": "A-E-002",
+            "source": "synthetic-idp",
+            "source_investigation_id": "PROOF-A-INV-001",
+            "tenant_id": "tenant-proof-a"
+          }
+        ],
+        "observed_tenant_id": "tenant-proof-a",
+        "owner_tenant_id": "tenant-proof-a",
+        "requester_tenant_id": "tenant-proof-a",
+        "resource_id": "A-OM-001"
+      },
+      {
+        "allowed": false,
+        "failure_reason": "cross_tenant_access_denied",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [],
+        "observed_tenant_id": null,
+        "owner_tenant_id": "tenant-proof-b",
+        "requester_tenant_id": "tenant-proof-a",
+        "resource_id": "B-IM-001"
+      },
+      {
+        "allowed": false,
+        "failure_reason": "cross_tenant_access_denied",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [],
+        "observed_tenant_id": null,
+        "owner_tenant_id": "tenant-proof-b",
+        "requester_tenant_id": "tenant-proof-a",
+        "resource_id": "B-IM-002"
+      },
+      {
+        "allowed": false,
+        "failure_reason": "cross_tenant_access_denied",
+        "memory_layer": "organizational_memory",
+        "observed_provenance": [],
+        "observed_tenant_id": null,
+        "owner_tenant_id": "tenant-proof-b",
+        "requester_tenant_id": "tenant-proof-a",
+        "resource_id": "B-OM-001"
+      },
+      {
+        "allowed": false,
+        "failure_reason": "cross_tenant_access_denied",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [],
+        "observed_tenant_id": null,
+        "owner_tenant_id": "tenant-proof-a",
+        "requester_tenant_id": "tenant-proof-b",
+        "resource_id": "A-IM-001"
+      },
+      {
+        "allowed": false,
+        "failure_reason": "cross_tenant_access_denied",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [],
+        "observed_tenant_id": null,
+        "owner_tenant_id": "tenant-proof-a",
+        "requester_tenant_id": "tenant-proof-b",
+        "resource_id": "A-IM-002"
+      },
+      {
+        "allowed": false,
+        "failure_reason": "cross_tenant_access_denied",
+        "memory_layer": "organizational_memory",
+        "observed_provenance": [],
+        "observed_tenant_id": null,
+        "owner_tenant_id": "tenant-proof-a",
+        "requester_tenant_id": "tenant-proof-b",
+        "resource_id": "A-OM-001"
+      },
+      {
+        "allowed": true,
+        "failure_reason": "same_tenant_access_allowed",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [
+          {
+            "evidence_id": "B-E-001",
+            "source": "synthetic-siem",
+            "source_investigation_id": "PROOF-B-INV-001",
+            "tenant_id": "tenant-proof-b"
+          },
+          {
+            "evidence_id": "B-E-002",
+            "source": "synthetic-idp",
+            "source_investigation_id": "PROOF-B-INV-001",
+            "tenant_id": "tenant-proof-b"
+          }
+        ],
+        "observed_tenant_id": "tenant-proof-b",
+        "owner_tenant_id": "tenant-proof-b",
+        "requester_tenant_id": "tenant-proof-b",
+        "resource_id": "B-IM-001"
+      },
+      {
+        "allowed": true,
+        "failure_reason": "same_tenant_access_allowed",
+        "memory_layer": "investigation_memory",
+        "observed_provenance": [
+          {
+            "evidence_id": "B-E-001",
+            "source": "synthetic-siem",
+            "source_investigation_id": "PROOF-B-INV-001",
+            "tenant_id": "tenant-proof-b"
+          },
+          {
+            "evidence_id": "B-E-002",
+            "source": "synthetic-idp",
+            "source_investigation_id": "PROOF-B-INV-001",
+            "tenant_id": "tenant-proof-b"
+          }
+        ],
+        "observed_tenant_id": "tenant-proof-b",
+        "owner_tenant_id": "tenant-proof-b",
+        "requester_tenant_id": "tenant-proof-b",
+        "resource_id": "B-IM-002"
+      },
+      {
+        "allowed": true,
+        "failure_reason": "same_tenant_access_allowed",
+        "memory_layer": "organizational_memory",
+        "observed_provenance": [
+          {
+            "evidence_id": "B-E-001",
+            "source": "synthetic-siem",
+            "source_investigation_id": "PROOF-B-INV-001",
+            "tenant_id": "tenant-proof-b"
+          },
+          {
+            "evidence_id": "B-E-002",
+            "source": "synthetic-idp",
+            "source_investigation_id": "PROOF-B-INV-001",
+            "tenant_id": "tenant-proof-b"
+          }
+        ],
+        "observed_tenant_id": "tenant-proof-b",
+        "owner_tenant_id": "tenant-proof-b",
+        "requester_tenant_id": "tenant-proof-b",
+        "resource_id": "B-OM-001"
+      }
+    ],
+    "certification_result": "passed",
+    "cross_tenant_access_denied": true,
+    "evidence_provenance_valid": true,
+    "memory_isolation_valid": true,
+    "organizational_memory_isolation_valid": true,
+    "replay_digest": "8b074b864f2bc870a29b658c00c437dccb898c5d2427296dd32793a44ea35ccd",
+    "result_contract_unchanged": true,
+    "tenant_ids": [
+      "tenant-proof-a",
+      "tenant-proof-b"
+    ]
+  }
+}

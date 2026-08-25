@@ -2,9 +2,9 @@
 
 This module deliberately separates CI evidence from release authorization.  A
 successful CI result never makes deployment, image custody, or GHCR publication
-pass.  GitHub Actions resources are addressed by the authoritative numeric
-repository ID because the owner/name route can return HTTP 404 for this
-repository.
+pass.  The numeric repository ID remains the authoritative custody identity,
+while GitHub Actions resources are addressed through the canonical owner/name
+route required by that API.
 """
 
 from __future__ import annotations
@@ -148,16 +148,45 @@ class RepositoryAddress:
         return f"{prefix}/{suffix.lstrip('/')}"
 
 
+def _raise_blocked(
+    *,
+    repository: RepositoryAddress,
+    target_sha: str,
+    resource: str,
+    status: int | None,
+    check: str,
+    expected: object,
+    observed: object,
+    reason: object,
+) -> None:
+    """Raise one bounded, structured fail-closed diagnostic error."""
+
+    status_text = str(status) if status is not None else "unknown"
+    expected_text = sanitize_error(expected) if expected is not None else "<none>"
+    observed_text = sanitize_error(observed) if observed is not None else "<missing>"
+    raise ReleaseGateError(
+        "release-gate diagnostics blocked: "
+        f"repository_id={repository.repository_id}; "
+        f"repository={repository.canonical}; "
+        f"target_sha={target_sha}; "
+        f"requested_api_resource={sanitize_error(resource)}; "
+        f"http_status={status_text}; "
+        f"check={sanitize_error(check)}; "
+        f"expected={expected_text}; "
+        f"observed={observed_text}; "
+        f"reason={sanitize_error(reason)}"
+    )
+
+
 class RepositoryResourceResolver:
     """Resolve a repository resource with explicit numeric-ID preference.
 
     ``prefer_numeric=True`` first tries the numeric repository route, then
-    falls back to the owner/name route when GitHub does not expose that
-    resource by numeric ID.  GitHub's Actions and deployment endpoints use
-    owner/name routes even when the numeric repository ID is the authoritative
-    custody identity.  ``prefer_numeric=False`` preserves the inverse order
-    for callers that already use an owner/name route.  No non-404 error is
-    hidden by either mode.
+    falls back to the owner/name route on HTTP 404.  ``prefer_numeric=False``
+    preserves the inverse order for callers that already use an owner/name
+    route.  No non-404 error is hidden by either mode.  Callers for APIs that
+    require canonical owner/name addressing must use the canonical route
+    directly rather than relying on numeric fallback.
     """
 
     def __init__(self, api: GitHubApi, repository: RepositoryAddress):
@@ -217,6 +246,325 @@ class ReleaseGateResult:
         }
 
 
+@dataclass(frozen=True)
+class WorkflowRunsResponse:
+    """Normalized response envelope returned by an Actions runs provider."""
+
+    total_count: Any
+    runs: tuple["NormalizedWorkflowRun", ...]
+    api_resource: str
+
+
+@dataclass(frozen=True)
+class NormalizedWorkflowRun:
+    """Provider-neutral workflow-run evidence normalized from GitHub JSON."""
+
+    database_id: Any
+    workflow_id: Any
+    workflow_name: Any
+    run_number: Any
+    status: Any
+    conclusion: Any
+    event: Any
+    head_branch: Any
+    head_sha: Any
+    head_commit_id: Any
+    repository_id: Any
+    repository_full_name: Any
+    head_repository_id: Any
+    head_repository_full_name: Any
+    timestamp: str | None
+    api_resource: str
+    payload_format: str
+
+    def as_evidence(
+        self,
+        *,
+        validation_result: str,
+        failure_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Preserve normalized evidence without retaining unbounded raw JSON."""
+
+        return {
+            "databaseId": self.database_id,
+            "workflowId": self.workflow_id,
+            "workflow": self.workflow_name,
+            "runNumber": self.run_number,
+            "status": self.status,
+            "conclusion": self.conclusion,
+            "event": self.event,
+            "head_branch": self.head_branch,
+            "head_sha": self.head_sha,
+            "repository": {
+                "id": self.repository_id,
+                "full_name": self.repository_full_name,
+            },
+            "head_repository": {
+                "id": self.head_repository_id,
+                "full_name": self.head_repository_full_name,
+            },
+            "repository_identity": {
+                "repository_id": self.repository_id,
+                "repository_full_name": self.repository_full_name,
+                "head_repository_id": self.head_repository_id,
+                "head_repository_full_name": self.head_repository_full_name,
+            },
+            "api_resource": self.api_resource,
+            "timestamp": self.timestamp,
+            "validation_result": validation_result,
+            "failure_reason": failure_reason,
+            "payload_format": self.payload_format,
+        }
+
+
+class GitHubActionsProvider:
+    """Fetch, normalize, and validate GitHub Actions workflow evidence.
+
+    Release-gate business logic consumes ``NormalizedWorkflowRun`` objects and
+    does not depend on GitHub's nested response layout.  The legacy
+    ``head_repository_id`` shape is accepted only when the repository ID and
+    repository full name independently establish the expected custody
+    identity; a partial or conflicting nested shape remains blocked.
+    """
+
+    def __init__(
+        self,
+        api: GitHubApi,
+        repository: RepositoryAddress,
+        *,
+        target_sha: str,
+        expected_branch: str | None,
+        expected_event: str,
+    ):
+        self.api = api
+        self.repository = repository
+        self.target_sha = target_sha
+        self.expected_branch = expected_branch
+        self.expected_event = expected_event
+
+    def fetch_runs(self) -> WorkflowRunsResponse:
+        resource = "actions/runs?" + urlencode(
+            {"head_sha": self.target_sha, "per_page": 100}
+        )
+        resource = self.repository.resource(resource, numeric=False)
+        try:
+            payload = self.api.get(resource)
+        except GitHubApiError as exc:
+            self._blocked(
+                resource,
+                exc.status,
+                check="actions_api_response",
+                expected="HTTP 200 JSON with workflow_runs list",
+                observed=f"HTTP {exc.status if exc.status is not None else 'unknown'}: {exc.reason}",
+                reason="Actions workflow-runs request failed",
+            )
+
+        if not isinstance(payload, Mapping):
+            self._blocked(
+                resource,
+                None,
+                check="actions_api_response",
+                expected="JSON object with workflow_runs list",
+                observed=type(payload).__name__,
+                reason="Actions response envelope is invalid",
+            )
+        workflow_runs = payload.get("workflow_runs")
+        if not isinstance(workflow_runs, list):
+            self._blocked(
+                resource,
+                None,
+                check="workflow_runs_parsing",
+                expected="workflow_runs=list",
+                observed=type(workflow_runs).__name__,
+                reason="Actions response field is missing or invalid",
+            )
+        if not all(isinstance(run, Mapping) for run in workflow_runs):
+            self._blocked(
+                resource,
+                None,
+                check="workflow_runs_parsing",
+                expected="every workflow_runs entry is an object",
+                observed="one or more non-object entries",
+                reason="Actions response contains invalid run entries",
+            )
+        return WorkflowRunsResponse(
+            total_count=payload.get("total_count"),
+            runs=tuple(self.normalize_run(run, resource=resource) for run in workflow_runs),
+            api_resource=resource,
+        )
+
+    def normalize_run(
+        self, run: Mapping[str, Any], *, resource: str
+    ) -> NormalizedWorkflowRun:
+        """Normalize nested and legacy identity fields without validating them."""
+
+        repository = run.get("repository")
+        repository_id = repository.get("id") if isinstance(repository, Mapping) else None
+        repository_full_name = (
+            repository.get("full_name") if isinstance(repository, Mapping) else None
+        )
+        head_repository = run.get("head_repository")
+        if isinstance(head_repository, Mapping):
+            head_repository_id = head_repository.get("id")
+            head_repository_full_name = head_repository.get("full_name")
+            payload_format = "nested"
+        else:
+            head_repository_id = run.get("head_repository_id")
+            head_repository_full_name = None
+            payload_format = "legacy"
+        head_commit = run.get("head_commit")
+        timestamp = next(
+            (
+                run.get(field)
+                for field in ("updated_at", "created_at", "run_started_at")
+                if isinstance(run.get(field), str) and run.get(field)
+            ),
+            None,
+        )
+        return NormalizedWorkflowRun(
+            database_id=run.get("id"),
+            workflow_id=run.get("workflow_id"),
+            workflow_name=run.get("name"),
+            run_number=run.get("run_number"),
+            status=run.get("status"),
+            conclusion=run.get("conclusion"),
+            event=run.get("event"),
+            head_branch=run.get("head_branch"),
+            head_sha=run.get("head_sha"),
+            head_commit_id=(
+                head_commit.get("id") if isinstance(head_commit, Mapping) else None
+            ),
+            repository_id=repository_id,
+            repository_full_name=repository_full_name,
+            head_repository_id=head_repository_id,
+            head_repository_full_name=head_repository_full_name,
+            timestamp=timestamp,
+            api_resource=resource,
+            payload_format=payload_format,
+        )
+
+    def validate_identity(
+        self, run: NormalizedWorkflowRun, workflow: str
+    ) -> None:
+        """Require every custody, identity, and successful-run invariant."""
+
+        if run.head_sha != self.target_sha or run.head_commit_id != self.target_sha:
+            self._blocked(
+                run.api_resource,
+                None,
+                check="target_sha",
+                expected=f"head_sha={self.target_sha}; head_commit.id={self.target_sha}",
+                observed=(
+                    f"head_sha={run.head_sha!r}; "
+                    f"head_commit.id={run.head_commit_id!r}"
+                ),
+                reason="workflow run is not bound to the exact target SHA",
+            )
+        if run.workflow_name != workflow:
+            self._blocked(
+                run.api_resource,
+                None,
+                check="workflow_identity",
+                expected=workflow,
+                observed=f"name={run.workflow_name!r}; workflow_id={run.workflow_id!r}",
+                reason="workflow identity validation failed",
+            )
+        if run.status != "completed":
+            self._blocked(
+                run.api_resource,
+                None,
+                check="workflow_status",
+                expected="completed",
+                observed=run.status,
+                reason="workflow run is not completed",
+            )
+        if run.conclusion != "success":
+            self._blocked(
+                run.api_resource,
+                None,
+                check="workflow_conclusion",
+                expected="success",
+                observed=run.conclusion,
+                reason="workflow run did not conclude successfully",
+            )
+        if run.event != self.expected_event:
+            self._blocked(
+                run.api_resource,
+                None,
+                check="workflow_event",
+                expected=self.expected_event,
+                observed=run.event,
+                reason="workflow event validation failed",
+            )
+        if self.expected_branch is not None and run.head_branch != self.expected_branch:
+            self._blocked(
+                run.api_resource,
+                None,
+                check="workflow_branch",
+                expected=self.expected_branch,
+                observed=run.head_branch,
+                reason="workflow branch validation failed",
+            )
+        identity_observed = (
+            f"repository.id={run.repository_id!r}; "
+            f"repository.full_name={run.repository_full_name!r}; "
+            f"head_repository.id={run.head_repository_id!r}; "
+            f"head_repository.full_name={run.head_repository_full_name!r}"
+        )
+        if (
+            run.repository_id != self.repository.repository_id
+            or run.repository_full_name != self.repository.canonical
+            or run.head_repository_id != self.repository.repository_id
+            or (
+                run.payload_format == "nested"
+                and run.head_repository_full_name != self.repository.canonical
+            )
+        ):
+            self._blocked(
+                run.api_resource,
+                None,
+                check="repository_identity",
+                expected=(
+                    f"repository.id={self.repository.repository_id}; "
+                    f"repository.full_name={self.repository.canonical}; "
+                    f"head_repository.id={self.repository.repository_id}; "
+                    f"head_repository.full_name={self.repository.canonical}"
+                ),
+                observed=identity_observed,
+                reason="custody validation failed: repository ID or name mismatch",
+            )
+        if not isinstance(run.database_id, int) or isinstance(run.database_id, bool) or run.database_id <= 0:
+            self._blocked(
+                run.api_resource,
+                None,
+                check="workflow_database_id",
+                expected="positive integer",
+                observed=run.database_id,
+                reason="workflow run database ID is invalid",
+            )
+
+    def _blocked(
+        self,
+        resource: str,
+        status: int | None,
+        *,
+        check: str,
+        expected: object,
+        observed: object,
+        reason: object,
+    ) -> None:
+        _raise_blocked(
+            repository=self.repository,
+            target_sha=self.target_sha,
+            resource=resource,
+            status=status,
+            check=check,
+            expected=expected,
+            observed=observed,
+            reason=reason,
+        )
+
+
 class ReleaseGateDiagnostics:
     """Collect non-authorizing CI, deployment, and GHCR evidence."""
 
@@ -245,46 +593,42 @@ class ReleaseGateDiagnostics:
         self.expected_workflows = expected_workflows
         self.expected_event = expected_event
         self.resources = RepositoryResourceResolver(api, self.repository)
+        self.actions = GitHubActionsProvider(
+            api,
+            self.repository,
+            target_sha=target_sha,
+            expected_branch=expected_branch,
+            expected_event=expected_event,
+        )
 
     def collect(self) -> ReleaseGateResult:
-        runs_resource = "actions/runs?" + urlencode(
-            {"head_sha": self.target_sha, "per_page": 100}
-        )
-        runs_payload = self._authoritative_get(runs_resource)
-        runs = self._list_field(runs_payload, "workflow_runs", runs_resource)
-        exact_runs = [run for run in runs if run.get("head_sha") == self.target_sha]
+        runs_response = self.actions.fetch_runs()
+        exact_runs = [
+            run for run in runs_response.runs if run.head_sha == self.target_sha
+        ]
 
         evidence: list[Mapping[str, Any]] = []
         for workflow in self.expected_workflows:
-            matches = [run for run in exact_runs if run.get("name") == workflow]
+            matches = [run for run in exact_runs if run.workflow_name == workflow]
             if not matches:
                 self._blocked(
-                    self.repository.resource(runs_resource, numeric=True),
+                    runs_response.api_resource,
                     None,
-                    f"no {workflow} run was found for the exact target SHA",
+                    check="workflow_runs_matching",
+                    expected=f"workflow={workflow}; head_sha={self.target_sha}",
+                    observed=(
+                        f"matching_runs={len(matches)}; "
+                        f"available_workflows={sorted({run.workflow_name for run in exact_runs if isinstance(run.workflow_name, str)})}"
+                    ),
+                    reason=f"no {workflow} run was found for the exact target SHA",
                 )
             run = self._select_deterministic_run(
                 matches,
                 workflow,
-                self.repository.resource(runs_resource, numeric=True),
+                runs_response.api_resource,
             )
-            self._require_run_identity(
-                run,
-                workflow,
-                self.repository.resource(runs_resource, numeric=True),
-            )
-            evidence.append(
-                {
-                    "databaseId": run.get("id"),
-                    "workflow": run.get("name"),
-                    "runNumber": run.get("run_number"),
-                    "status": run.get("status"),
-                    "conclusion": run.get("conclusion"),
-                    "event": run.get("event"),
-                    "head_branch": run.get("head_branch"),
-                    "head_sha": run.get("head_sha"),
-                }
-            )
+            self.actions.validate_identity(run, workflow)
+            evidence.append(run.as_evidence(validation_result="PASS"))
 
         custody_reason = (
             "selected workflow runs are bound to the exact target SHA and "
@@ -297,7 +641,10 @@ class ReleaseGateDiagnostics:
             self._blocked(
                 deployments_resource,
                 None,
-                "deployment API returned an unexpected payload",
+                check="deployment_response",
+                expected="JSON list",
+                observed=type(deployments).__name__,
+                reason="deployment API returned an unexpected payload",
             )
         if deployments:
             deployment_reason = (
@@ -324,10 +671,10 @@ class ReleaseGateDiagnostics:
 
     def _select_deterministic_run(
         self,
-        matches: list[Mapping[str, Any]],
+        matches: list[NormalizedWorkflowRun],
         workflow: str,
         resource: str,
-    ) -> Mapping[str, Any]:
+    ) -> NormalizedWorkflowRun:
         """Select the newest exact-SHA run without hiding an invalid winner.
 
         A commit can legitimately produce more than one push run (for example,
@@ -338,64 +685,34 @@ class ReleaseGateDiagnostics:
         let a newer successful run become ambiguous.
         """
 
-        if not all(isinstance(run.get("id"), int) and run["id"] > 0 for run in matches):
-            self._blocked(resource, None, f"{workflow} run database ID is invalid")
-        return max(matches, key=lambda run: run["id"])
+        if not all(
+            isinstance(run.database_id, int)
+            and not isinstance(run.database_id, bool)
+            and run.database_id > 0
+            for run in matches
+        ):
+            self._blocked(
+                resource,
+                None,
+                check="workflow_database_id",
+                expected=f"{workflow} run has a positive integer database ID",
+                observed=[run.database_id for run in matches],
+                reason=f"{workflow} run database ID is invalid",
+            )
+        return max(matches, key=lambda run: run.database_id)
 
     def _authoritative_get(self, suffix: str):
         try:
             return self.resources.get(suffix, prefer_numeric=True)
         except GitHubApiError as exc:
-            self._blocked(exc.resource, exc.status, exc.reason)
-
-    def _list_field(
-        self, payload: Mapping[str, Any] | list[Any], field: str, resource: str
-    ) -> list[Mapping[str, Any]]:
-        if not isinstance(payload, Mapping) or not isinstance(payload.get(field), list):
-            self._blocked(resource, None, f"response field {field} is missing or invalid")
-        values = payload[field]
-        if not all(isinstance(value, Mapping) for value in values):
-            self._blocked(resource, None, f"response field {field} contains invalid entries")
-        return list(values)
-
-    def _require_run_identity(
-        self, run: Mapping[str, Any], workflow: str, resource: str
-    ) -> None:
-        if run.get("head_sha") != self.target_sha:
-            self._blocked(resource, None, f"{workflow} run SHA does not match target SHA")
-        if run.get("name") != workflow:
-            self._blocked(resource, None, f"workflow identity mismatch for {workflow}")
-        if run.get("status") != "completed":
-            self._blocked(resource, None, f"{workflow} run is not completed")
-        if run.get("conclusion") != "success":
-            self._blocked(resource, None, f"{workflow} run conclusion is not success")
-        if run.get("event") != self.expected_event:
             self._blocked(
-                resource,
-                None,
-                f"{workflow} run event {run.get('event')!r} is not {self.expected_event!r}",
+                exc.resource,
+                exc.status,
+                check="authoritative_api_response",
+                expected="successful JSON response",
+                observed=f"HTTP {exc.status if exc.status is not None else 'unknown'}: {exc.reason}",
+                reason="authoritative repository API request failed",
             )
-        if self.expected_branch is not None and run.get("head_branch") != self.expected_branch:
-            self._blocked(
-                resource,
-                None,
-                f"{workflow} run branch does not match expected branch",
-            )
-        if not isinstance(run.get("id"), int) or run["id"] <= 0:
-            self._blocked(resource, None, f"{workflow} run database ID is invalid")
-        repository = run.get("repository")
-        if not isinstance(repository, Mapping):
-            self._blocked(resource, None, f"{workflow} repository custody payload is invalid")
-        if repository.get("id") != self.repository.repository_id:
-            self._blocked(resource, None, f"{workflow} run repository ID does not match custody")
-        if repository.get("full_name") != self.repository.canonical:
-            self._blocked(resource, None, f"{workflow} run repository name does not match custody")
-        head_repository_id = run.get("head_repository_id")
-        if head_repository_id != self.repository.repository_id:
-            self._blocked(resource, None, f"{workflow} head repository ID does not match custody")
-        head_commit = run.get("head_commit")
-        if not isinstance(head_commit, Mapping) or head_commit.get("id") != self.target_sha:
-            self._blocked(resource, None, f"{workflow} head commit does not match custody")
 
     def _ghcr_status(self) -> tuple[str, str]:
         resource = "user/packages?" + urlencode(
@@ -415,15 +732,25 @@ class ReleaseGateDiagnostics:
             "package inventory was readable, but candidate image custody was not established",
         )
 
-    def _blocked(self, resource: str, status: int | None, reason: object):
-        status_text = str(status) if status is not None else "unknown"
-        raise ReleaseGateError(
-            "release-gate diagnostics blocked: "
-            f"repository_id={self.repository.repository_id}; "
-            f"repository={self.repository.canonical}; "
-            f"target_sha={self.target_sha}; "
-            f"requested_api_resource={sanitize_error(resource)}; "
-            f"http_status={status_text}; reason={sanitize_error(reason)}"
+    def _blocked(
+        self,
+        resource: str,
+        status: int | None,
+        *,
+        check: str,
+        expected: object,
+        observed: object,
+        reason: object,
+    ) -> None:
+        _raise_blocked(
+            repository=self.repository,
+            target_sha=self.target_sha,
+            resource=resource,
+            status=status,
+            check=check,
+            expected=expected,
+            observed=observed,
+            reason=reason,
         )
 
 

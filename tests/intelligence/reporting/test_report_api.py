@@ -14,6 +14,7 @@ Coverage:
 from __future__ import annotations
 
 import pytest
+from tests.credential_helpers import random_token
 from types import SimpleNamespace
 
 from flask import Flask
@@ -181,9 +182,10 @@ def _execution_app(coordinator):
 
 
 def test_unexpected_investigation_failure_returns_safe_json_500(monkeypatch):
+    secret_token = random_token()
     class Coordinator:
         def investigate(self, **kwargs):
-            raise RuntimeError("secret-token / raw-provider-response")
+            raise RuntimeError(f"{secret_token} / raw-provider-response")
 
     app = _execution_app(Coordinator())
     monkeypatch.setattr("services.api.investigations.routes.authorize_investigation", lambda *_a, **_k: (True, ""))
@@ -193,7 +195,7 @@ def test_unexpected_investigation_failure_returns_safe_json_500(monkeypatch):
     assert response.is_json
     assert response.get_json() == {"error": {"code": "INVESTIGATION_EXECUTION_FAILED", "message": "Investigation execution failed"}}
     assert "traceback" not in response.get_data(as_text=True).lower()
-    assert "secret-token" not in response.get_data(as_text=True)
+    assert secret_token not in response.get_data(as_text=True)
     assert "raw-provider-response" not in response.get_data(as_text=True)
 
 

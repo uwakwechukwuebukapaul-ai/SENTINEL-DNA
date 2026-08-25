@@ -1,6 +1,7 @@
 from services.billing.config import BillingConfiguration
 from services.billing.paystack import PaystackProviderValidator, ProviderValidationResult
 from services.billing.readiness import evaluate_paystack_operations
+from tests.credential_helpers import random_secret
 
 
 class Response:
@@ -15,7 +16,7 @@ class Transport:
 
 class Provider:
     base_url = "https://api.paystack.co"
-    secret = "deployment-only"
+    secret = random_secret()
     timeout_seconds = 5
     transport = Transport()
 

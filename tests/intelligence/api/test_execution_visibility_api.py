@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from flask import Flask
+from tests.credential_helpers import random_secret
 
 from services.api.investigations.routes import investigations_api
 
@@ -36,7 +37,7 @@ class FakeContainer:
 
 def make_app():
     app = Flask(__name__)
-    app.secret_key = "test-secret"
+    app.secret_key = random_secret()
     app.container = FakeContainer()
     app.register_blueprint(investigations_api)
     return app

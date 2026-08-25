@@ -1,0 +1,153 @@
+{
+  "commit_sha": "e761308101af93ed8ea41a7eef9d2bb922540e89",
+  "deployment_readiness": {
+    "backup_restore_verified": false,
+    "database_migrations_present": true,
+    "deployment_executed": false,
+    "external_integrations_enabled": false,
+    "monitoring_requirements_verified": false,
+    "operational_ownership_verified": false,
+    "postgresql_migration_rehearsal_completed": false,
+    "production_configuration_requirements_validated": true
+  },
+  "evidence_references": [
+    "artifacts\\enterprise-certification-refresh-2026-08-25.json",
+    "enterprise-certification.replay_digest",
+    "enterprise-certification.validation_digest",
+    "auth_service.otp_secret_required",
+    "config.runtime.production_validation"
+  ],
+  "findings": [
+    {
+      "category": "security",
+      "description": "OTP secret fallbacks are removed, production routes use configured application secrets, and certification security controls pass.",
+      "evidence_references": [
+        "artifacts\\enterprise-certification-refresh-2026-08-25.json",
+        "enterprise-certification.replay_digest",
+        "enterprise-certification.validation_digest",
+        "auth_service.otp_secret_required",
+        "config.runtime.production_validation"
+      ],
+      "finding_id": "TRUST-SECURITY-CONTROLS",
+      "remediation": null,
+      "severity": "info",
+      "status": "passed",
+      "title": "Credential and security boundaries hardened"
+    },
+    {
+      "category": "release_hygiene",
+      "description": "The release manifest gate refuses to build from a dirty repository.",
+      "evidence_references": [
+        "git.status.porcelain"
+      ],
+      "finding_id": "TRUST-BLOCKER-CLEAN-WORKTREE",
+      "remediation": "Commit or isolate all intended changes and rerun release-manifest validation.",
+      "severity": "high",
+      "status": "blocked",
+      "title": "Release manifest requires a clean worktree"
+    },
+    {
+      "category": "deployment_readiness",
+      "description": "SQLite/synthetic validation does not prove PostgreSQL migration behavior.",
+      "evidence_references": [
+        "database/migrations/007_investigation_memory.py",
+        "database/migrations/008_organizational_cyber_memory.py"
+      ],
+      "finding_id": "TRUST-BLOCKER-POSTGRES-REHEARSAL",
+      "remediation": "Run a controlled PostgreSQL migration and rollback rehearsal outside this evidence-only task.",
+      "severity": "high",
+      "status": "blocked",
+      "title": "PostgreSQL migration rehearsal is not evidenced"
+    },
+    {
+      "category": "deployment_readiness",
+      "description": "No production-like backup/restore rehearsal was executed.",
+      "evidence_references": [
+        "deployment.backup_restore"
+      ],
+      "finding_id": "TRUST-BLOCKER-BACKUP-RESTORE",
+      "remediation": "Complete and sign a backup/restore drill before deployment approval.",
+      "severity": "high",
+      "status": "blocked",
+      "title": "Backup and restore evidence is missing"
+    },
+    {
+      "category": "deployment_readiness",
+      "description": "The repository does not provide signed production monitoring and ownership acceptance evidence.",
+      "evidence_references": [
+        "deployment.monitoring",
+        "deployment.ownership"
+      ],
+      "finding_id": "TRUST-WARN-OPERATIONS",
+      "remediation": "Obtain operations sign-off, alert routing, on-call ownership, and runbook acceptance.",
+      "severity": "medium",
+      "status": "warning",
+      "title": "Monitoring and operational ownership are not evidenced"
+    },
+    {
+      "category": "credential_security",
+      "description": "Local configuration references were reviewed without exposing values; secret-store/provider revocation evidence is external to this workspace.",
+      "evidence_references": [
+        "configuration.secret_references"
+      ],
+      "finding_id": "TRUST-WARN-CREDENTIAL-ATTESTATION",
+      "remediation": "Attach secret-manager rotation and revocation attestation before production sign-off.",
+      "severity": "medium",
+      "status": "warning",
+      "title": "Provider-side credential revocation is not locally attestable"
+    }
+  ],
+  "immutable": true,
+  "previous_certification": {
+    "available": true,
+    "failed_controls": [],
+    "path": "artifacts\\enterprise-certification-refresh-2026-08-25.json",
+    "replay_digest": "fe0f9fcf4891a1af908888c5c7f33b0c47310f7bfe4a61f3e5b31d887031a561",
+    "report_digest": "813ac265ec9410e4311062df5ffe0b138d8b319311c0aa144c112012c14b93f1",
+    "validation_digest": "c5f9f48058b3a7f0ab3ed39ca058e41a992565e70af286dd912f3a830d832167"
+  },
+  "production_blockers": [
+    "TRUST-BLOCKER-CLEAN-WORKTREE",
+    "TRUST-BLOCKER-POSTGRES-REHEARSAL",
+    "TRUST-BLOCKER-BACKUP-RESTORE"
+  ],
+  "production_ready": false,
+  "recommended_release_gates": [
+    "clean worktree and successful release-manifest verification",
+    "secret-store rotation/revocation attestation",
+    "PostgreSQL migration and rollback rehearsal",
+    "backup/restore drill with signed evidence",
+    "monitoring, alert routing, and operational ownership sign-off"
+  ],
+  "release_evidence_hygiene": {
+    "artifact_provenance": true,
+    "clean_git_state_required": false,
+    "immutable_evidence_storage": true,
+    "release_manifest_correctness": false,
+    "replay_digest_preservation": true
+  },
+  "remaining_risks": [
+    "Release manifest requires a clean worktree",
+    "PostgreSQL migration rehearsal is not evidenced",
+    "Backup and restore evidence is missing",
+    "Monitoring and operational ownership are not evidenced",
+    "Provider-side credential revocation is not locally attestable"
+  ],
+  "replay_digest": "952eb438cddb9c4c419339a2ebc2edd50a73e2f67ce43d427cc9431386a5411c",
+  "report_digest": "aa9e25b06692d15a583379d8ee6323eb284a85c266e135d6d79903e55ca40ca6",
+  "report_version": "sentinel-dna-enterprise-trust-closure.v1",
+  "security_hardening": {
+    "append_only_evidence": true,
+    "audit_integrity": true,
+    "authorization_boundaries": true,
+    "fail_closed_behavior": true,
+    "memory_advisory_boundary": true,
+    "otp_issue_secret_required": true,
+    "otp_verify_secret_required": true,
+    "production_config_fail_closed": true,
+    "production_otp_routes_use_configured_secret": true,
+    "provenance_tracking": true,
+    "tenant_isolation": true
+  },
+  "timestamp": "2026-08-25T00:00:00+00:00"
+}

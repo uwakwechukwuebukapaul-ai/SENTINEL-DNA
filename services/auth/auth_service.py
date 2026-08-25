@@ -276,7 +276,7 @@ class AuthService:
         )
         return decision.allowed
 
-    def issue_otp(self, destination, purpose, *, user_id=None, secret="development-only-secret", provider_request_id=None):
+    def issue_otp(self, destination, purpose, *, user_id=None, secret, provider_request_id=None):
         with self.db.session() as connection:
             recent = connection.execute("SELECT created_at FROM otp_challenges WHERE destination=? AND purpose=? ORDER BY created_at DESC LIMIT 1", (destination, purpose)).fetchone()
             if recent and datetime.fromisoformat(recent["created_at"]) + __import__('datetime').timedelta(seconds=OTP_COOLDOWN_SECONDS) > utcnow(): raise ValueError("otp_cooldown")
@@ -285,7 +285,7 @@ class AuthService:
             connection.execute("INSERT INTO otp_challenges(id,user_id,destination,purpose,code_hash,expires_at,attempts,max_attempts,created_at,provider_request_id) VALUES(?,?,?,?,?,?,?,?,?,?)", (challenge_id,user_id,destination,purpose,code_hash(code, secret),expires_at(),0, OTP_MAX_ATTEMPTS,now,provider_request_id))
         return challenge_id, code
 
-    def verify_otp(self, challenge_id, code, *, secret="development-only-secret"):
+    def verify_otp(self, challenge_id, code, *, secret):
         with self.db.session() as connection:
             row = connection.execute("SELECT * FROM otp_challenges WHERE id=?", (challenge_id,)).fetchone()
             if not row or row["consumed_at"] or datetime.fromisoformat(row["expires_at"]) <= utcnow() or row["attempts"] >= row["max_attempts"]: return None

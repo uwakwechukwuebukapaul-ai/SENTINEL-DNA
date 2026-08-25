@@ -2,6 +2,7 @@ import os
 import pytest
 
 from app import create_app
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture()
@@ -26,13 +27,14 @@ def client(tmp_path, monkeypatch):
 def test_auth_session_and_csrf(client):
 
     username = "security-test-user"
+    password = random_password()
 
     response = client.post(
         "/api/auth/register",
         json={
             "username": username,
             "email": f"{username}@example.test",
-            "password": "StrongPassword123!",
+            "password": password,
         },
     )
 
@@ -42,7 +44,7 @@ def test_auth_session_and_csrf(client):
         "/api/auth/login",
         json={
             "username": username,
-            "password": "StrongPassword123!",
+            "password": password,
         },
     )
 

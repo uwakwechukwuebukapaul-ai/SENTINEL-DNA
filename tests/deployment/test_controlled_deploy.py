@@ -7,6 +7,7 @@ import sys
 import types
 
 import pytest
+from tests.credential_helpers import random_password, random_secret
 
 import deployment.scripts.controlled_deploy as controlled_deploy
 from deployment.scripts.controlled_deploy import (
@@ -105,8 +106,8 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         "\n".join(
             (
                 "SENTINEL_DNA_ENV=production",
-                "SENTINEL_DNA_SECRET_KEY=" + ("S" * 48),
-                "POSTGRES_PASSWORD=" + ("P" * 32),
+                "SENTINEL_DNA_SECRET_KEY=" + random_secret(),
+                "POSTGRES_PASSWORD=" + random_password(),
                 f"SENTINEL_DNA_IMAGE_TAG={RELEASE_SHA}",
                 f"SENTINEL_DNA_IMAGE_REVISION={RELEASE_REVISION}",
                 f"SENTINEL_DNA_IMAGE_REVISION_FULL={RELEASE_SHA}",

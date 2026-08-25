@@ -74,7 +74,8 @@ from services.intelligence.repository.report_repository import InvestigationRepo
 from database.connection import database
 from services.observability import ObservabilityService
 from services.intelligence.reasoning import EvidenceReasoner
-from services.intelligence.memory import MemoryService
+from services.intelligence.memory import InvestigationMemoryRepository, MemoryService
+from services.intelligence.memory import OrganizationalMemoryRepository, OrganizationalMemoryService
 from services.intelligence.investigation.analyst_feedback import AnalystFeedback
 from services.intelligence.investigation.analyst_feedback_service import AnalystFeedbackService
 from services.intelligence.investigation.read_model import InvestigationReadModelBuilder
@@ -91,6 +92,7 @@ from services.intelligence.investigation.evidence import EvidenceIntelligenceEng
 from services.intelligence.reporting.investigation_projection import InvestigationProjectionBuilder
 from services.intelligence.repository.execution_repository import ExecutionEnvelope, ExecutionRepository
 from services.intelligence.reporting.execution_projection import ExecutionProjectionBuilder
+from services.intelligence.telemetry import InvestigationPerformanceTelemetry, instrument_investigation
 import time
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -174,6 +176,7 @@ class InvestigationCoordinator:
         threat_intelligence_gateway: Any = None,
         provider_neutral_fusion_engine: Any = None,
         execution_repository: Any = None,
+        memory_service: MemoryService | None = None,
     ) -> None:
 
         self.registry = registry
@@ -195,7 +198,13 @@ class InvestigationCoordinator:
         self.evidence_reasoner = EvidenceReasoner(
             getattr(runtime, "ai_runtime", None) or getattr(self.orchestrator, "ai_runtime", None)
         )
-        self.memory_service = MemoryService()
+        self.memory_service = memory_service or MemoryService(
+            InvestigationMemoryRepository(database)
+        )
+        self.organizational_memory = OrganizationalMemoryService(
+            OrganizationalMemoryRepository(database),
+            investigation_memory=self.memory_service,
+        )
         self.decision_engine = DecisionEngine()
         self.copilot = InvestigationCopilot(getattr(self.orchestrator, "ai_runtime", None))
         self.narrative_engine = InvestigationNarrativeEngine(getattr(self.orchestrator, "ai_runtime", None))
@@ -213,7 +222,10 @@ class InvestigationCoordinator:
         if self.runtime is not None and callable(getattr(self.runtime, "register", None)) and not self.runtime.available("evidence_collection"):
             self.runtime.register("evidence_collection", self._execute_evidence_collection)
         self.feedback_repository = InvestigationFeedbackRepository(database)
-        self.feedback_service = AnalystFeedbackService(self.feedback_repository, AuditService(database))
+        self.memory_service.feedback_repository = self.feedback_repository
+        self.audit_service = AuditService(database)
+        self.performance_telemetry = InvestigationPerformanceTelemetry(self.audit_service)
+        self.feedback_service = AnalystFeedbackService(self.feedback_repository, self.audit_service)
         self.feedback_analytics = FeedbackAnalyticsService(self.feedback_repository)
         self.investigation_quality_repository = InvestigationQualityRepository(database)
         self.investigation_read_model_builder = InvestigationReadModelBuilder(
@@ -684,6 +696,7 @@ class InvestigationCoordinator:
         intelligence_metadata: dict[str, Any] | None = None,
         correlation_id: str | None = None,
         owned_evidence: Optional[list[dict[str, Any]]] = None,
+        performance_telemetry: Any = None,
     ) -> InvestigationResult:
         intelligence: dict[str, dict[str, Any]] = {}
         findings: list[Any] = []
@@ -719,11 +732,15 @@ class InvestigationCoordinator:
             or len(engine_analysis.get("iocs", []) or [])
         )
         engine_mitre = engine_analysis.get("mitre", []) or []
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("mitre_mapping")
         adapter_mitre = self.mitre_adapter.execute(case_id, alert).get("techniques", [])
         mitre = {
             "case_id": case_id,
             "techniques": list(dict.fromkeys(list(engine_mitre) + list(adapter_mitre))),
         }
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("mitre_mapping")
         if engine_analysis.get("risk_score") is not None:
             score = float(engine_analysis["risk_score"])
             risk = {
@@ -787,12 +804,16 @@ class InvestigationCoordinator:
                 self.intelligence_repository.save(case_id, normalized_intelligence)
         else:
             self.intelligence_repository.save(case_id, normalized_intelligence)
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("report_generation")
         report = self.report_generator.generate(
             case_id,
             normalized_intelligence,
             alert,
             normalized_intelligence.timeline,
         )
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("report_generation")
         report.tenant_context = dict(tenant_context or {}) if scoped_tenant_id else None
         report.metadata = {**(report.metadata or {}), **normalized_intelligence.metadata}
         if scoped_tenant_id:
@@ -818,6 +839,8 @@ class InvestigationCoordinator:
                 for item in normalized_artifacts
                 for indicator in item.get("indicators", []) or []
             ]
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("reasoning")
         reasoning_report = self.evidence_reasoner.reason(
             self.create_context(
                 investigation_id=case_id,
@@ -831,6 +854,8 @@ class InvestigationCoordinator:
             ),
             plan,
         )
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("reasoning")
         for finding in reasoning_report.findings:
             normalized_finding = finding.to_dict() if hasattr(finding, "to_dict") else dict(finding)
             if normalized_finding not in findings:
@@ -845,6 +870,52 @@ class InvestigationCoordinator:
                 evidence_for_reasoning, investigation_iocs, None)
         except Exception:
             pass
+        memory_learning: dict[str, Any] = {
+            "status": "disabled",
+            "reason": "tenant_context_required_for_memory_retrieval",
+            "advisory_only": True,
+            "deterministic": True,
+        }
+        if scoped_tenant_id:
+            if performance_telemetry is not None:
+                performance_telemetry.begin_stage("memory_retrieval")
+            try:
+                memory_learning = self.memory_service.build_learning_context(
+                    str(scoped_tenant_id),
+                    case_id=case_id,
+                    alert=alert,
+                    artifacts=normalized_artifacts,
+                )
+                memory_learning["status"] = "available"
+            except Exception as exc:
+                # Learning is advisory; a memory failure cannot alter the
+                # investigation verdict or authorize a response.
+                memory_learning = {
+                    "status": "unavailable",
+                    "reason": "historical_memory_unavailable",
+                    "error_type": type(exc).__name__,
+                    "advisory_only": True,
+                    "deterministic": True,
+                    "provenance": {"tenant_id": str(scoped_tenant_id), "case_id": case_id},
+                }
+            try:
+                memory_learning["organizational_memory"] = self.organizational_memory.retrieve_advisory_context(
+                    str(scoped_tenant_id),
+                    case_id=case_id,
+                    alert=alert,
+                    artifacts=normalized_artifacts,
+                )
+            except Exception as exc:
+                memory_learning["organizational_memory"] = {
+                    "status": "unavailable",
+                    "reason": "organizational_memory_unavailable",
+                    "error_type": type(exc).__name__,
+                    "advisory_only": True,
+                    "deterministic": True,
+                    "provenance": {"tenant_id": str(scoped_tenant_id), "case_id": case_id},
+                }
+            if performance_telemetry is not None:
+                performance_telemetry.end_stage("memory_retrieval")
         result = InvestigationResult(
             success=True,
             status="completed",
@@ -869,6 +940,7 @@ class InvestigationCoordinator:
                 "report": report.to_dict(),
                 "agents": intelligence,
                 "workflow": workflow,
+                "memory_learning": memory_learning,
             },
             reasoning_report=reasoning_report,
             threat_intelligence_report=threat_report,
@@ -883,14 +955,50 @@ class InvestigationCoordinator:
             memory = self.memory_service.store_investigation_memory(
                 self.create_context(case_id, normalized_artifacts, evidence=normalized_artifacts,
                                     iocs=investigation_iocs,
-                                    timeline=list(normalized_intelligence.timeline or [])),
+                                    timeline=list(normalized_intelligence.timeline or []),
+                                    tenant_id=scoped_tenant_id,
+                                    intelligence_provenance=memory_learning.get("provenance", {})),
                 reasoning_report,
                 result,
+                tenant_id=scoped_tenant_id,
             )
             result.memory_reference = memory.memory_id
+            if memory_learning.get("status") == "available":
+                memory_learning = self.memory_service.finalize_learning_context(
+                    str(scoped_tenant_id), result, memory_learning
+                )
+                result.intelligence["memory_learning"] = memory_learning
         except Exception:
             # Memory is post-completion enrichment and must never block execution.
             result.metadata["memory_storage_error"] = True
+        try:
+            organizational_consolidation = self.organizational_memory.consolidate_completed_investigation(
+                tenant_id=str(scoped_tenant_id),
+                investigation_id=str(result.investigation_id or case_id),
+                validated_findings=findings,
+                mitre_mappings=mitre.get("techniques", []),
+                ioc_relationships=engine_analysis.get("ioc_relationships", []) or [
+                    {"value": item.get("value"), "type": item.get("type")}
+                    for item in investigation_iocs
+                    if isinstance(item, dict) and item.get("value")
+                ],
+                created_by=(tenant_context or {}).get("actor_id"),
+            ) if scoped_tenant_id else None
+            result.metadata["organizational_memory"] = (
+                organizational_consolidation.to_dict() if organizational_consolidation else {
+                    "status": "disabled",
+                    "reason": "tenant_context_required_for_organizational_memory",
+                    "advisory_only": True,
+                }
+            )
+        except Exception as exc:
+            result.metadata["organizational_memory"] = {
+                "status": "unavailable",
+                "reason": "organizational_memory_consolidation_unavailable",
+                "error_type": type(exc).__name__,
+                "advisory_only": True,
+                "deterministic": True,
+            }
         result.decision_report = self.decision_engine.decide(
             result, reasoning_report, result.memory_reference
         )
@@ -910,6 +1018,7 @@ class InvestigationCoordinator:
             "evidence_ids": [item.get("evidence_id") for item in normalized_artifacts if item.get("evidence_id")],
             "tenant_id": scoped_tenant_id,
         }
+        result.metadata["memory_learning"] = memory_learning
         quality_assessment = None
         try:
             quality_assessment = InvestigationQualityService(tenant_id=scoped_tenant_id, repository=self.investigation_quality_repository).assess_investigation(str(result.investigation_id or case_id), result)
@@ -937,7 +1046,11 @@ class InvestigationCoordinator:
                 result, reasoning_report, result.decision_report, result.copilot_summary, result.memory_reference)
         except Exception:
             result.metadata["narrative_error"] = True
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("report_generation")
         analyst_report = self.report_generator.generate_from_result(result)
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("report_generation")
         if scoped_tenant_id:
             save_for_tenant = getattr(self.report_repository, "save_for_tenant", None)
             if callable(save_for_tenant):
@@ -1181,6 +1294,45 @@ class InvestigationCoordinator:
             payload=payload,
             report=report,
         )
+        try:
+            evidence_references = []
+            report_evidence = report.get("evidence") if isinstance(report, dict) else None
+            if isinstance(report_evidence, list):
+                evidence_references = [
+                    str(item.get("evidence_id"))
+                    for item in report_evidence
+                    if isinstance(item, dict) and item.get("evidence_id")
+                ]
+            memory_feedback = self.memory_service.record_analyst_feedback(
+                tenant_id=str(tenant_id),
+                investigation_id=investigation_id,
+                analyst_id=str(analyst_id),
+                verdict=feedback.decision,
+                feedback_id=feedback.feedback_id,
+                reason=feedback.reason,
+                evidence_references=evidence_references,
+                provenance={
+                    "feedback_id": feedback.feedback_id,
+                    "case_id": str(case_id),
+                    "source": "investigation_feedback",
+                },
+            )
+            self.organizational_memory.consolidate_feedback(
+                tenant_id=str(tenant_id),
+                investigation_id=investigation_id,
+                feedback=memory_feedback,
+                created_by=str(analyst_id),
+            )
+        except Exception:
+            # The canonical feedback repository and audit event remain the
+            # source of truth; memory enrichment cannot make submission fail.
+            ObservabilityService().event(
+                "investigation_memory_feedback_unavailable",
+                investigation_id=investigation_id,
+                case_id=str(case_id),
+                tenant_id=str(tenant_id),
+                status="unavailable",
+            )
         ObservabilityService().event(
             "investigation_feedback_recorded",
             investigation_id=investigation_id,
@@ -1211,6 +1363,7 @@ class InvestigationCoordinator:
         return self.feedback_analytics.evidence_linked_quality(tenant_id, report, records, **filters)
 
 
+    @instrument_investigation
     def investigate(
         self,
         case_id: str,
@@ -1221,6 +1374,7 @@ class InvestigationCoordinator:
         timeline: Optional[list[dict[str, Any]]] = None,
         **kwargs: Any,
     ) -> InvestigationResult:
+        performance_telemetry = kwargs.pop("_performance_telemetry", None)
         started_at = time.perf_counter()
         observer = ObservabilityService()
         correlation_id = kwargs.get("correlation_id")
@@ -1257,9 +1411,13 @@ class InvestigationCoordinator:
                 if not any(item.get(key) for key in ("evidence_id", "artifact_id", "id", "reference")):
                     raise PermissionError("evidence reference is required")
                 owned_evidence.append(dict(item))
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("evidence_retrieval")
         normalized_artifacts, evidence_metadata = self._normalize_evidence(
             case_id, alert_data, artifacts, evidence, tenant_id
         )
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("evidence_retrieval")
         normalized_iocs = list(iocs or [])
         integrity_digests = {
             str(item.get("integrity", {}).get("digest", "")).lower()
@@ -1332,6 +1490,8 @@ class InvestigationCoordinator:
             evidence=normalized_artifacts,
             create=True,
         )
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("ioc_enrichment")
         if self.threat_intelligence_gateway is not None and normalized_iocs:
             if not tenant_id or not actor_id:
                 observer.event(
@@ -1404,11 +1564,15 @@ class InvestigationCoordinator:
                 )
                 payload = {"ioc": item, "tenant_id": tenant_id, **normalized_lookup}
                 context.add_evidence(payload, tenant_id)
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("ioc_enrichment")
 
         orchestrator_kwargs = dict(kwargs)
         orchestrator_kwargs.pop("tenant_id", None)
         orchestrator_kwargs.pop("actor_id", None)
         orchestrator_kwargs["context"] = context
+        if performance_telemetry is not None:
+            performance_telemetry.begin_stage("orchestrator")
         try:
             workflow = self.orchestrator.investigate(
                 case_id=case_id,
@@ -1426,6 +1590,8 @@ class InvestigationCoordinator:
             self._transition_execution(execution, "FAILED", actor_id=actor_id)
             self._persist_execution(execution, tenant_id=tenant_id, actor_id=actor_id, investigation_id=investigation_id, alert=alert_data, evidence=normalized_artifacts)
             raise
+        if performance_telemetry is not None:
+            performance_telemetry.end_stage("orchestrator")
 
 
         execution["workflow"] = workflow
@@ -1628,6 +1794,7 @@ class InvestigationCoordinator:
                 intelligence_metadata=intelligence_metadata,
                 correlation_id=correlation_id,
                 owned_evidence=owned_evidence,
+                performance_telemetry=performance_telemetry,
             )
             observer.event(
                 "INTELLIGENCE_GENERATED",

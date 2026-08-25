@@ -13,9 +13,12 @@ from services.auth.privileged_provisioning import (
     PrivilegedProvisioningError,
 )
 from services.identity.canonical_authority import CanonicalAuthorityService
+from tests.credential_helpers import random_password, random_secret
 
 
-PASSWORD = "StrongBootstrapPassword!123"
+PASSWORD = random_password()
+MISMATCH_PASSWORD = random_password()
+TEST_SECRET_KEY = random_secret()
 TEST_REVISION = "d6" * 20
 
 
@@ -113,7 +116,7 @@ def test_rejects_password_mismatch_and_duplicate_username(tmp_path):
         "tenant_id": tenant.tenant_id,
         "role": "admin",
         "password": PASSWORD,
-        "password_confirmation": "DifferentStrongPassword!123",
+        "password_confirmation": MISMATCH_PASSWORD,
     }
     with pytest.raises(PrivilegedProvisioningError, match="password_confirmation_mismatch"):
         service.provision(**values)
@@ -135,7 +138,7 @@ def test_cli_requires_guard_and_never_prints_password(tmp_path, monkeypatch, cap
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-bootstrap-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "cli.sqlite"))
     AuthService(DatabaseConnection(tmp_path / "cli.sqlite"))
     monkeypatch.setattr(module, "input", lambda _: "n", raising=False)
@@ -175,7 +178,7 @@ def test_cli_success_does_not_print_password_or_hash(tmp_path, monkeypatch, caps
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_IMAGE_REVISION_FULL", TEST_REVISION)
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", "test-only-bootstrap-secret-value-0123456789")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db_path))
     monkeypatch.setattr(module, "input", lambda _: "y", raising=False)
     monkeypatch.setattr(module.getpass, "getpass", lambda _: PASSWORD)

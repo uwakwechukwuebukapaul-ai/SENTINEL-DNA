@@ -4,9 +4,12 @@ from pathlib import Path
 import pytest
 
 from config.runtime import RuntimeConfig
+from tests.credential_helpers import random_secret
 
 
-def _set_production(monkeypatch, tmp_path, secret="s" * 40):
+def _set_production(monkeypatch, tmp_path, secret=None):
+    if secret is None:
+        secret = random_secret()
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", secret)
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
@@ -78,7 +81,7 @@ def test_production_rejects_unusable_database_location(monkeypatch, tmp_path):
 
 
 def test_configuration_errors_do_not_expose_secret(monkeypatch, tmp_path):
-    secret = "production-secret-that-must-not-appear"
+    secret = random_secret()
     _set_production(monkeypatch, tmp_path, secret=secret)
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "0")
 

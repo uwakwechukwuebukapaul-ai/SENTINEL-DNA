@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+import secrets
 
 
 _VALID_ENVIRONMENTS = {"development", "testing", "test", "staging", "production"}
@@ -26,10 +27,14 @@ class RuntimeConfig:
         debug = environment == "development" or (
             os.getenv("FLASK_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
         )
+        configured_secret = os.getenv("SENTINEL_DNA_SECRET_KEY")
+        secret_key = configured_secret if configured_secret is not None else (
+            "" if environment == "production" else secrets.token_urlsafe(48)
+        )
         return cls(
             environment,
             os.getenv("SENTINEL_DNA_DB_PATH", str(Path("soc.db"))),
-            os.getenv("SENTINEL_DNA_SECRET_KEY", "development-only-secret"),
+            secret_key,
             os.getenv("SENTINEL_DNA_SECURE_COOKIES", "0") == "1",
             debug,
         )

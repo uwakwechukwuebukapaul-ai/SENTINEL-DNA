@@ -1,4 +1,8 @@
 import pytest
+from tests.credential_helpers import random_password
+
+
+PASSWORD = random_password()
 
 
 @pytest.fixture
@@ -15,11 +19,11 @@ def application(tmp_path, monkeypatch):
 def login(client):
     assert client.post(
         "/api/auth/register",
-        json={"username": "logout-navigation", "email": "logout-navigation@example.test", "password": "CorrectHorseBattery1!"},
+        json={"username": "logout-navigation", "email": "logout-navigation@example.test", "password": PASSWORD},
     ).status_code == 201
     assert client.post(
         "/api/auth/login",
-        json={"username": "logout-navigation", "password": "CorrectHorseBattery1!"},
+        json={"username": "logout-navigation", "password": PASSWORD},
     ).status_code == 200
 
 
@@ -56,5 +60,5 @@ def test_browser_logout_requires_csrf_redirects_and_invalidates_session(applicat
 
     assert client.post(
         "/api/auth/login",
-        json={"username": "logout-navigation", "password": "CorrectHorseBattery1!"},
+        json={"username": "logout-navigation", "password": PASSWORD},
     ).status_code == 200

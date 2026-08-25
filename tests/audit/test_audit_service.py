@@ -5,10 +5,13 @@ import pytest
 from database.connection import DatabaseConnection
 from database.errors import DatabaseError
 from services.audit.service import AuditService
+from tests.credential_helpers import random_password, random_token
 
 
 def test_audit_events_are_tenant_aware_redacted_and_append_only(tmp_path):
     service = AuditService(DatabaseConnection(tmp_path / "audit.db"))
+    api_token = random_token()
+    password = random_password()
     event_id = service.record(
         "INVESTIGATION_COMPLETED",
         tenant_id="tenant-a",
@@ -20,7 +23,7 @@ def test_audit_events_are_tenant_aware_redacted_and_append_only(tmp_path):
         operation="complete",
         outcome="success",
         latency_ms=12.5,
-        details={"safe": "value", "api_token": "must-not-persist", "nested": {"password": "hidden"}},
+        details={"safe": "value", "api_token": api_token, "nested": {"password": password}},
     )
 
     row = service.get_for_tenant(event_id, "tenant-a")

@@ -15,6 +15,7 @@ from services.intelligence.runtime.investigation_lifecycle import (
     validate_transition,
 )
 from services.intelligence.runtime.task import Task
+from tests.credential_helpers import random_password
 
 
 def repository(tmp_path):
@@ -147,17 +148,18 @@ def test_cancellation_is_tenant_scoped_and_persisted(tmp_path):
 
 def test_audit_redacts_secret_like_metadata_and_preserves_sequence(tmp_path):
     repo = repository(tmp_path)
+    password = random_password()
     repo.create_job(job())
     repo.record_audit_event(
         tenant_id="tenant-a", job_id="JOB-1", event_type="TEST_SAFE_EVENT",
         actor_id="actor-a", case_id="CASE-1", investigation_id="INV-1",
-        execution_id="EXE-1", metadata={"password": "must-not-persist", "safe": "ok"},
+        execution_id="EXE-1", metadata={"password": password, "safe": "ok"},
     )
     events = repo.audit_service.list_for_tenant("tenant-a", limit=20)
     event = next(item for item in events if item["event_type"] == "TEST_SAFE_EVENT")
     assert event["sequence_number"] == 2
     assert event["details"]["password"] == "[REDACTED]"
-    assert "must-not-persist" not in str(event)
+    assert password not in str(event)
 
 
 def test_audit_identity_mismatch_fails_closed(tmp_path):

@@ -12,9 +12,11 @@ from services.intelligence.runtime.execution_context import ExecutionContext
 from services.intelligence.runtime.runtime_task_executor import RuntimeTaskExecutor
 from services.intelligence.runtime.task import Task
 from services.observability import ObservabilityService
+from tests.credential_helpers import random_secret
 
 
-def _production_env(monkeypatch, tmp_path, secret="S" * 48):
+def _production_env(monkeypatch, tmp_path, secret=None):
+    secret = secret or random_secret()
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", secret)
@@ -80,30 +82,33 @@ def test_report_persists_across_repository_recreation(tmp_path):
 
 def test_observability_redacts_sensitive_nested_metadata(caplog):
     observer = ObservabilityService(logging.getLogger("runtime-hardening-test"))
+    secret_token = random_secret()
+    provider_secret = random_secret()
     with caplog.at_level(logging.INFO, logger="runtime-hardening-test"):
         observer.event(
             "diagnostic",
             case_id="CASE-1",
             correlation_id="corr-1",
-            metadata={"api_key": "secret-token", "safe": "ok"},
-            raw_provider_response="provider-secret",
+            metadata={"api_key": secret_token, "safe": "ok"},
+            raw_provider_response=provider_secret,
             evidence_payload={"body": "private evidence"},
         )
     output = " ".join(record.getMessage() for record in caplog.records)
-    assert "secret-token" not in output
-    assert "provider-secret" not in output
+    assert secret_token not in output
+    assert provider_secret not in output
     assert "private evidence" not in output
     assert "corr-1" in output
 
 
 def test_observability_measure_does_not_log_exception_text(caplog):
     observer = ObservabilityService(logging.getLogger("runtime-measure-test"))
+    secret_token = random_secret()
     with caplog.at_level(logging.ERROR, logger="runtime-measure-test"):
-        with pytest.raises(RuntimeError, match="secret-token"):
+        with pytest.raises(RuntimeError, match=secret_token):
             with observer.measure("operation"):
-                raise RuntimeError("secret-token")
+                raise RuntimeError(secret_token)
     output = " ".join(record.getMessage() for record in caplog.records)
-    assert "secret-token" not in output
+    assert secret_token not in output
     assert "RuntimeError" in output
 
 

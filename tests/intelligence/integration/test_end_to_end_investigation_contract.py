@@ -7,6 +7,7 @@ import pytest
 flask = pytest.importorskip("flask")
 
 from app import create_app  # noqa: E402
+from tests.credential_helpers import random_password
 
 
 CASE_ID = "E2E-FAILED-AUTH-001"
@@ -49,7 +50,7 @@ def client(tmp_path, monkeypatch):
     client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
     username = f"contract-{uuid.uuid4().hex[:12]}"
     email = f"{username}@example.test"
-    password = "CorrectHorseBattery1!"
+    password = random_password()
     assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
     assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
     try:

@@ -10,6 +10,11 @@ from services.identity.authentication import (
 )
 from services.identity.canonical_authority import CanonicalAuthorityService
 from services.identity.request_context import CanonicalRequestContextService
+from tests.credential_helpers import random_token
+
+
+AUTH_TOKEN = random_token()
+CREDENTIAL_ID = random_token()
 
 
 def boundary(tmp_path):
@@ -22,7 +27,7 @@ def boundary(tmp_path):
 
 def test_valid_principal_produces_canonical_request_context(tmp_path):
     service, _ = boundary(tmp_path)
-    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", "future_token", "credential-1")
+    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", AUTH_TOKEN, CREDENTIAL_ID)
     context = service.compose(principal)
     assert context.tenant_id == "tenant-a"
     assert context.actor_id == "actor-a"
@@ -39,13 +44,13 @@ def test_invalid_principal_fails_closed(tmp_path, principal):
 @pytest.mark.parametrize("tenant_id,actor_id", [("", "actor-a"), ("tenant-a", ""), ("unknown", "actor-a"), ("tenant-a", "unknown")])
 def test_invalid_canonical_subject_fails_closed(tmp_path, tenant_id, actor_id):
     service, _ = boundary(tmp_path)
-    principal = CanonicalAuthenticationPrincipal(tenant_id, actor_id, "future_token", "credential-1")
+    principal = CanonicalAuthenticationPrincipal(tenant_id, actor_id, AUTH_TOKEN, CREDENTIAL_ID)
     with pytest.raises(CanonicalAuthenticationError): service.compose(principal)
 
 
 def test_principal_has_no_caller_authority_or_role_fields(tmp_path):
     service, _ = boundary(tmp_path)
-    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", "future_token", "credential-1")
+    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", AUTH_TOKEN, CREDENTIAL_ID)
     assert not hasattr(principal, "role")
     assert not hasattr(principal, "authority")
     assert service.compose(principal).role == "admin"
@@ -54,15 +59,14 @@ def test_principal_has_no_caller_authority_or_role_fields(tmp_path):
 def test_inactive_authority_does_not_fall_back_to_legacy_identity(tmp_path):
     service, authority = boundary(tmp_path)
     authority.tenants.set_status("tenant-a", "inactive")
-    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", "future_token", "credential-1")
+    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", AUTH_TOKEN, CREDENTIAL_ID)
     with pytest.raises(CanonicalAuthenticationError, match="canonical_authentication_denied"):
         service.compose(principal)
 
 
 def test_each_composition_is_request_scoped(tmp_path):
     service, _ = boundary(tmp_path)
-    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", "future_token", "credential-1")
+    principal = CanonicalAuthenticationPrincipal("tenant-a", "actor-a", AUTH_TOKEN, CREDENTIAL_ID)
     first, second = service.compose(principal), service.compose(principal)
     assert first is not second
     assert first.request_id != second.request_id
-

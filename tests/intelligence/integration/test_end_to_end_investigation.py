@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 
 from app import create_app
+from tests.credential_helpers import random_password
 
 
 def create_client(monkeypatch, db_path):
@@ -33,8 +34,9 @@ def create_client(monkeypatch, db_path):
     app.testing = True
 
     client = app.test_client()
-    client.post("/api/auth/register", json={"username": "e2e-investigator", "email": "e2e-investigator@example.test", "password": "CorrectHorseBattery1!"})
-    client.post("/api/auth/login", json={"username": "e2e-investigator", "password": "CorrectHorseBattery1!"})
+    password = random_password()
+    client.post("/api/auth/register", json={"username": "e2e-investigator", "email": "e2e-investigator@example.test", "password": password})
+    client.post("/api/auth/login", json={"username": "e2e-investigator", "password": password})
     return client
 
 

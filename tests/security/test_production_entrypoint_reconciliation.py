@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import pytest
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture
@@ -16,8 +17,9 @@ def application(tmp_path, monkeypatch):
 
 
 def register_and_login(client, username="reconciliation-user", email="reconciliation@example.test"):
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!", "role": "admin", "tenant_id": "attacker"}).status_code == 201
-    response = client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}, headers={"X-CSRF-Token": client.get("/api/auth/csrf").get_json()["csrf_token"]})
+    password = random_password()
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password, "role": "admin", "tenant_id": "attacker"}).status_code == 201
+    response = client.post("/api/auth/login", json={"username": username, "password": password}, headers={"X-CSRF-Token": client.get("/api/auth/csrf").get_json()["csrf_token"]})
     assert response.status_code == 200
 
 

@@ -1,0 +1,745 @@
+{
+  "executions": [
+    {
+      "advisory_verdict": "malicious",
+      "alert": {
+        "alert_id": "PILOT-A-ALERT-001",
+        "authorization_status": "blocked_by_policy",
+        "case_id": "PILOT-A-CASE-001",
+        "evidence_ids": [
+          "P-E1",
+          "P-E2"
+        ],
+        "evidence_sources": [
+          "synthetic-email-gateway",
+          "synthetic-idp"
+        ],
+        "expected_verdict": "malicious",
+        "fail_closed": true,
+        "failure_mode": null,
+        "investigation_id": "PILOT-A-INV-001",
+        "scenario_type": "phishing_compromise",
+        "tenant_id": "tenant-pilot-a",
+        "title": "Synthetic credential lure with identity-provider follow-up"
+      },
+      "audit_hash": "11c7a434cf71b512b413bd77935ddf7b9027c3d2911880ed5cc368f4ee810c50",
+      "authorization_status": "blocked_by_policy",
+      "completed": true,
+      "enforced_verdict": "review_required",
+      "evidence": [
+        {
+          "evidence_id": "P-E2",
+          "investigation_id": "PILOT-A-INV-001",
+          "provenance_hash": "59e0d5a59a54a0de5290b59c089bb871f69a48d314067d41f5ee4afe00bdcef7",
+          "source": "synthetic-email-gateway",
+          "tenant_id": "tenant-pilot-a"
+        }
+      ],
+      "fail_closed": true,
+      "failure_reason": null,
+      "feedback": {
+        "accepted_recommendation": true,
+        "analyst_confidence": 0.9,
+        "analyst_id": "pilot-analyst-tenant-pilot-a",
+        "investigation_id": "PILOT-A-INV-001",
+        "reason": "synthetic pilot analyst review captured; recommendation remains advisory",
+        "tenant_id": "tenant-pilot-a"
+      },
+      "investigation_memory_items": 1,
+      "memory_context_improved": true,
+      "organizational_memory_items": 1,
+      "provenance_chain": [
+        {
+          "audit_hash": "bbeb4c3cab3ef0d95682dffd7e6561f14cf9f5d94da15b2b03efd87357ed350e",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "alert_id": "PILOT-A-ALERT-001",
+            "scenario_type": "phishing_compromise"
+          },
+          "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "stage": "alert_ingestion",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "7f5cbcd99d8f3b40a71103abd7dec8b467c8b16b428fe62c3f29094e4f4a49dd",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "authorization_status": "blocked_by_policy",
+            "contract": "InvestigationCoordinator"
+          },
+          "previous_hash": "bbeb4c3cab3ef0d95682dffd7e6561f14cf9f5d94da15b2b03efd87357ed350e",
+          "stage": "coordinator",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "045a911f331e246e801fd7ec13eec4ecc62cdfa24c341c9501ec5e85622870c4",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "contract": "InvestigationOrchestrator"
+          },
+          "previous_hash": "7f5cbcd99d8f3b40a71103abd7dec8b467c8b16b428fe62c3f29094e4f4a49dd",
+          "stage": "orchestrator",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "18a410988a3d111b711c765a5d73fef50ab3e1bf17fc295eb22a1d185ccf81d5",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "evidence_ids": [
+              "P-E1",
+              "P-E2"
+            ]
+          },
+          "previous_hash": "045a911f331e246e801fd7ec13eec4ecc62cdfa24c341c9501ec5e85622870c4",
+          "stage": "evidence_retrieval",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "aac612b1f50d71d3bcfb9708efac19beda0524c7b3d779204fa98624ccb1074e",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "tenant_id": "tenant-pilot-a"
+          },
+          "previous_hash": "18a410988a3d111b711c765a5d73fef50ab3e1bf17fc295eb22a1d185ccf81d5",
+          "stage": "ioc_enrichment",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "1c78fc046007c3b0032677aabae255aed14bea14ffd6bcdec5b8218039061a5b",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "technique_count": 1
+          },
+          "previous_hash": "aac612b1f50d71d3bcfb9708efac19beda0524c7b3d779204fa98624ccb1074e",
+          "stage": "mitre_mapping",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "484ac2fb3f32c7fb7ed0f613592961618c7f4cee64f01b4d08dba5a86dab4692",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "items": 1
+          },
+          "previous_hash": "1c78fc046007c3b0032677aabae255aed14bea14ffd6bcdec5b8218039061a5b",
+          "stage": "memory_retrieval",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "78c8351917305cc3c802c53d29dad62afe2cf9231e66b21170dcd0c846930e8a",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "items": 1
+          },
+          "previous_hash": "484ac2fb3f32c7fb7ed0f613592961618c7f4cee64f01b4d08dba5a86dab4692",
+          "stage": "organizational_memory_retrieval",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "145d4a94c008828c4dfbab6bc8395b3c3322fc09c330055015a484bbc9aed4d7",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "advisory_only": true
+          },
+          "previous_hash": "78c8351917305cc3c802c53d29dad62afe2cf9231e66b21170dcd0c846930e8a",
+          "stage": "reasoning",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "23ad5a28ef4817c6250d1c3e015b8d65035282435dd50be754af81660b10d5d0",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "accepted": true,
+            "analyst_id": "pilot-analyst-tenant-pilot-a"
+          },
+          "previous_hash": "145d4a94c008828c4dfbab6bc8395b3c3322fc09c330055015a484bbc9aed4d7",
+          "stage": "feedback_capture",
+          "tenant_id": "tenant-pilot-a"
+        },
+        {
+          "audit_hash": "11c7a434cf71b512b413bd77935ddf7b9027c3d2911880ed5cc368f4ee810c50",
+          "investigation_id": "PILOT-A-INV-001",
+          "payload": {
+            "result_schema_unchanged": true
+          },
+          "previous_hash": "23ad5a28ef4817c6250d1c3e015b8d65035282435dd50be754af81660b10d5d0",
+          "stage": "report_generation",
+          "tenant_id": "tenant-pilot-a"
+        }
+      ],
+      "result_schema_unchanged": true,
+      "stage_timings": {
+        "values_ms": {
+          "alert_ingestion": 1.2,
+          "coordinator": 0.8,
+          "evidence_retrieval": 2.4,
+          "ioc_enrichment": 1.1,
+          "memory_retrieval": 0.6,
+          "mitre_mapping": 0.9,
+          "orchestrator": 0.7,
+          "organizational_memory_retrieval": 0.8,
+          "reasoning": 1.4,
+          "report_generation": 1.0
+        }
+      },
+      "successful": true
+    },
+    {
+      "advisory_verdict": "malicious",
+      "alert": {
+        "alert_id": "PILOT-B-ALERT-001",
+        "authorization_status": "blocked_by_policy",
+        "case_id": "PILOT-B-CASE-001",
+        "evidence_ids": [
+          "C-E1",
+          "C-E2"
+        ],
+        "evidence_sources": [
+          "synthetic-idp",
+          "synthetic-endpoint"
+        ],
+        "expected_verdict": "malicious",
+        "fail_closed": true,
+        "failure_mode": null,
+        "investigation_id": "PILOT-B-INV-001",
+        "scenario_type": "credential_theft",
+        "tenant_id": "tenant-pilot-b",
+        "title": "Synthetic credential access indicators"
+      },
+      "audit_hash": "2b27d99268a25aa469d38d056dffd77f20d22920815039a1d0d81a076b0d6e3c",
+      "authorization_status": "blocked_by_policy",
+      "completed": true,
+      "enforced_verdict": "review_required",
+      "evidence": [
+        {
+          "evidence_id": "C-E2",
+          "investigation_id": "PILOT-B-INV-001",
+          "provenance_hash": "78e004c3cfb2b07251bc5cb387c3ab08c3d6e89fc3dfe1526378232ed4d1a3ee",
+          "source": "synthetic-idp",
+          "tenant_id": "tenant-pilot-b"
+        }
+      ],
+      "fail_closed": true,
+      "failure_reason": null,
+      "feedback": {
+        "accepted_recommendation": true,
+        "analyst_confidence": 0.9,
+        "analyst_id": "pilot-analyst-tenant-pilot-b",
+        "investigation_id": "PILOT-B-INV-001",
+        "reason": "synthetic pilot analyst review captured; recommendation remains advisory",
+        "tenant_id": "tenant-pilot-b"
+      },
+      "investigation_memory_items": 1,
+      "memory_context_improved": true,
+      "organizational_memory_items": 1,
+      "provenance_chain": [
+        {
+          "audit_hash": "0b5e44b56fd3d868493380b888badb56fd2530bb4db8c3d1f6df348486296422",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "alert_id": "PILOT-B-ALERT-001",
+            "scenario_type": "credential_theft"
+          },
+          "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "stage": "alert_ingestion",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "e6022c3d020ab47f27d46775e0ecb4928c2c61b3f80f9b02c9d02378aa42050e",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "authorization_status": "blocked_by_policy",
+            "contract": "InvestigationCoordinator"
+          },
+          "previous_hash": "0b5e44b56fd3d868493380b888badb56fd2530bb4db8c3d1f6df348486296422",
+          "stage": "coordinator",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "a25fa96f1880f2c95a03532cd2200a5e656796717e2c6aef2db5ed6104c256dc",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "contract": "InvestigationOrchestrator"
+          },
+          "previous_hash": "e6022c3d020ab47f27d46775e0ecb4928c2c61b3f80f9b02c9d02378aa42050e",
+          "stage": "orchestrator",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "ec43969fe42115be9ef9280d5433d101d1b7579b1fe9df8af5e47c43b34adc7c",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "evidence_ids": [
+              "C-E1",
+              "C-E2"
+            ]
+          },
+          "previous_hash": "a25fa96f1880f2c95a03532cd2200a5e656796717e2c6aef2db5ed6104c256dc",
+          "stage": "evidence_retrieval",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "a2798659649fe73ca2a9c5e1b103b14d32548bc9c74041f6ea6fdd697d5dd4c2",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "tenant_id": "tenant-pilot-b"
+          },
+          "previous_hash": "ec43969fe42115be9ef9280d5433d101d1b7579b1fe9df8af5e47c43b34adc7c",
+          "stage": "ioc_enrichment",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "2f59c4c994ffb9f1262d5473b38e6fa2b872aa54afcc706c29ef8fa5b98ba3b0",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "technique_count": 1
+          },
+          "previous_hash": "a2798659649fe73ca2a9c5e1b103b14d32548bc9c74041f6ea6fdd697d5dd4c2",
+          "stage": "mitre_mapping",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "977f2fb31a11f53dc4f7038d6b942d299a5f072b6db65bd16e9d070da4e9a842",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "items": 1
+          },
+          "previous_hash": "2f59c4c994ffb9f1262d5473b38e6fa2b872aa54afcc706c29ef8fa5b98ba3b0",
+          "stage": "memory_retrieval",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "7841de7ea94ae80b88c43c30c92a87d3c26a9c80dca759298dc2f7664fb223f7",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "items": 1
+          },
+          "previous_hash": "977f2fb31a11f53dc4f7038d6b942d299a5f072b6db65bd16e9d070da4e9a842",
+          "stage": "organizational_memory_retrieval",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "a43ed1d7a9e727300e5344e23683c7c91cdecdefbf8b268ea7cdc99ed960f924",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "advisory_only": true
+          },
+          "previous_hash": "7841de7ea94ae80b88c43c30c92a87d3c26a9c80dca759298dc2f7664fb223f7",
+          "stage": "reasoning",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "5fce3c5da831aef4cf40b34a803f037ab8a1a37657e57a605c65c68ff4f926ff",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "accepted": true,
+            "analyst_id": "pilot-analyst-tenant-pilot-b"
+          },
+          "previous_hash": "a43ed1d7a9e727300e5344e23683c7c91cdecdefbf8b268ea7cdc99ed960f924",
+          "stage": "feedback_capture",
+          "tenant_id": "tenant-pilot-b"
+        },
+        {
+          "audit_hash": "2b27d99268a25aa469d38d056dffd77f20d22920815039a1d0d81a076b0d6e3c",
+          "investigation_id": "PILOT-B-INV-001",
+          "payload": {
+            "result_schema_unchanged": true
+          },
+          "previous_hash": "5fce3c5da831aef4cf40b34a803f037ab8a1a37657e57a605c65c68ff4f926ff",
+          "stage": "report_generation",
+          "tenant_id": "tenant-pilot-b"
+        }
+      ],
+      "result_schema_unchanged": true,
+      "stage_timings": {
+        "values_ms": {
+          "alert_ingestion": 1.3,
+          "coordinator": 0.9,
+          "evidence_retrieval": 2.5,
+          "ioc_enrichment": 1.2,
+          "memory_retrieval": 0.7,
+          "mitre_mapping": 1.0,
+          "orchestrator": 0.8,
+          "organizational_memory_retrieval": 0.9,
+          "reasoning": 1.5,
+          "report_generation": 1.1
+        }
+      },
+      "successful": true
+    },
+    {
+      "advisory_verdict": "benign",
+      "alert": {
+        "alert_id": "PILOT-C-ALERT-001",
+        "authorization_status": "blocked_by_policy",
+        "case_id": "PILOT-C-CASE-001",
+        "evidence_ids": [
+          "B-E1"
+        ],
+        "evidence_sources": [
+          "synthetic-siem"
+        ],
+        "expected_verdict": "benign",
+        "fail_closed": true,
+        "failure_mode": null,
+        "investigation_id": "PILOT-C-INV-001",
+        "scenario_type": "benign_false_positive",
+        "tenant_id": "tenant-pilot-c",
+        "title": "Synthetic benign administrative activity"
+      },
+      "audit_hash": "3d15e77af416acf3d6f6d61d7e5cace1db79259c722d51888716b69ac725d8a5",
+      "authorization_status": "blocked_by_policy",
+      "completed": true,
+      "enforced_verdict": "review_required",
+      "evidence": [
+        {
+          "evidence_id": "B-E1",
+          "investigation_id": "PILOT-C-INV-001",
+          "provenance_hash": "b0512a002b81500ea6027dea14700e7e24b3177b6bed2806c1985bbbcc5b509c",
+          "source": "synthetic-siem",
+          "tenant_id": "tenant-pilot-c"
+        }
+      ],
+      "fail_closed": true,
+      "failure_reason": null,
+      "feedback": {
+        "accepted_recommendation": true,
+        "analyst_confidence": 0.9,
+        "analyst_id": "pilot-analyst-tenant-pilot-c",
+        "investigation_id": "PILOT-C-INV-001",
+        "reason": "synthetic pilot analyst review captured; recommendation remains advisory",
+        "tenant_id": "tenant-pilot-c"
+      },
+      "investigation_memory_items": 1,
+      "memory_context_improved": true,
+      "organizational_memory_items": 1,
+      "provenance_chain": [
+        {
+          "audit_hash": "b477be1c394b40b50e81dfefce9bf1060d34ea0b8ef5f597908d527cff9eb190",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "alert_id": "PILOT-C-ALERT-001",
+            "scenario_type": "benign_false_positive"
+          },
+          "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "stage": "alert_ingestion",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "1ff7696ab4db5a108485e61f4b1d5cb91565d2303cdc9650050d406fb8c53447",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "authorization_status": "blocked_by_policy",
+            "contract": "InvestigationCoordinator"
+          },
+          "previous_hash": "b477be1c394b40b50e81dfefce9bf1060d34ea0b8ef5f597908d527cff9eb190",
+          "stage": "coordinator",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "8355a075e1ad73d9dc9f5d31c120c0ea780482b8741d02877fc0527110218b11",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "contract": "InvestigationOrchestrator"
+          },
+          "previous_hash": "1ff7696ab4db5a108485e61f4b1d5cb91565d2303cdc9650050d406fb8c53447",
+          "stage": "orchestrator",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "11ad23c008cf408d0c469a860da54e8393999fc3e24e960e6962e47d8dbce4c5",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "evidence_ids": [
+              "B-E1"
+            ]
+          },
+          "previous_hash": "8355a075e1ad73d9dc9f5d31c120c0ea780482b8741d02877fc0527110218b11",
+          "stage": "evidence_retrieval",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "a6672a317d40466c15a9170e9c4a24620cc2d9ab8310fad985dfdad666e79d2a",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "tenant_id": "tenant-pilot-c"
+          },
+          "previous_hash": "11ad23c008cf408d0c469a860da54e8393999fc3e24e960e6962e47d8dbce4c5",
+          "stage": "ioc_enrichment",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "16543875a1aa44b726e00286b1b2580e15ee151bdc3c78784e7473377ead711e",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "technique_count": 0
+          },
+          "previous_hash": "a6672a317d40466c15a9170e9c4a24620cc2d9ab8310fad985dfdad666e79d2a",
+          "stage": "mitre_mapping",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "48ffb4c290b1275c79e3ba65c7b8298b4e4aca3820a4d920b03d53a84adba2fa",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "items": 1
+          },
+          "previous_hash": "16543875a1aa44b726e00286b1b2580e15ee151bdc3c78784e7473377ead711e",
+          "stage": "memory_retrieval",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "60c0b9c7734e2cc48b197e51309b4cbe9d2afe913bcd158b1c1dbc79a1114a32",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "items": 1
+          },
+          "previous_hash": "48ffb4c290b1275c79e3ba65c7b8298b4e4aca3820a4d920b03d53a84adba2fa",
+          "stage": "organizational_memory_retrieval",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "ffa9926caed10db29b7e633d1d0e9c019524bcecf818b6c5a67545971ed285a4",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "advisory_only": true
+          },
+          "previous_hash": "60c0b9c7734e2cc48b197e51309b4cbe9d2afe913bcd158b1c1dbc79a1114a32",
+          "stage": "reasoning",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "94b78a398e44d522f2d15da654a299359c4c8756216604d5286bdc8fac500095",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "accepted": true,
+            "analyst_id": "pilot-analyst-tenant-pilot-c"
+          },
+          "previous_hash": "ffa9926caed10db29b7e633d1d0e9c019524bcecf818b6c5a67545971ed285a4",
+          "stage": "feedback_capture",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "3d15e77af416acf3d6f6d61d7e5cace1db79259c722d51888716b69ac725d8a5",
+          "investigation_id": "PILOT-C-INV-001",
+          "payload": {
+            "result_schema_unchanged": true
+          },
+          "previous_hash": "94b78a398e44d522f2d15da654a299359c4c8756216604d5286bdc8fac500095",
+          "stage": "report_generation",
+          "tenant_id": "tenant-pilot-c"
+        }
+      ],
+      "result_schema_unchanged": true,
+      "stage_timings": {
+        "values_ms": {
+          "alert_ingestion": 1.4,
+          "coordinator": 1.0,
+          "evidence_retrieval": 2.6,
+          "ioc_enrichment": 1.3,
+          "memory_retrieval": 0.8,
+          "mitre_mapping": 1.1,
+          "orchestrator": 0.9,
+          "organizational_memory_retrieval": 1.0,
+          "reasoning": 1.6,
+          "report_generation": 1.2
+        }
+      },
+      "successful": true
+    },
+    {
+      "advisory_verdict": null,
+      "alert": {
+        "alert_id": "PILOT-C-ALERT-002",
+        "authorization_status": "blocked_by_policy",
+        "case_id": "PILOT-C-CASE-002",
+        "evidence_ids": [
+          "M-E1",
+          "M-E2"
+        ],
+        "evidence_sources": [
+          "synthetic-endpoint",
+          "synthetic-sandbox"
+        ],
+        "expected_verdict": "malicious",
+        "fail_closed": true,
+        "failure_mode": "synthetic_evidence_provider_timeout",
+        "investigation_id": "PILOT-C-INV-002",
+        "scenario_type": "malware_execution",
+        "tenant_id": "tenant-pilot-c",
+        "title": "Synthetic evidence-provider timeout control"
+      },
+      "audit_hash": "b1804a92066cff5f9c3da3887b90532ffbc495c8c09296f5a7d06c9231acb69f",
+      "authorization_status": "blocked_by_policy",
+      "completed": true,
+      "enforced_verdict": null,
+      "evidence": [],
+      "fail_closed": true,
+      "failure_reason": "synthetic_evidence_provider_timeout",
+      "feedback": null,
+      "investigation_memory_items": 0,
+      "memory_context_improved": false,
+      "organizational_memory_items": 0,
+      "provenance_chain": [
+        {
+          "audit_hash": "460370a5252ce2373b92a412d4bbcbad1fb2a28cd3414f43b1ae5b511f34f01e",
+          "investigation_id": "PILOT-C-INV-002",
+          "payload": {
+            "alert_id": "PILOT-C-ALERT-002",
+            "scenario_type": "malware_execution"
+          },
+          "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "stage": "alert_ingestion",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "59ad4e321029de0869286b801cf01fad718cc2a21cf39a5ac4b48962a766673e",
+          "investigation_id": "PILOT-C-INV-002",
+          "payload": {
+            "authorization_status": "blocked_by_policy",
+            "contract": "InvestigationCoordinator"
+          },
+          "previous_hash": "460370a5252ce2373b92a412d4bbcbad1fb2a28cd3414f43b1ae5b511f34f01e",
+          "stage": "coordinator",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "b801f89c022f541d09e6998bb066dc2e0479b814863ccf65dec5dc22719327db",
+          "investigation_id": "PILOT-C-INV-002",
+          "payload": {
+            "contract": "InvestigationOrchestrator"
+          },
+          "previous_hash": "59ad4e321029de0869286b801cf01fad718cc2a21cf39a5ac4b48962a766673e",
+          "stage": "orchestrator",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "1ca1d8fe33a8011d83cb49a4a2baca34dab7e031429a227fb1d6f7787723c807",
+          "investigation_id": "PILOT-C-INV-002",
+          "payload": {
+            "evidence_ids": [
+              "M-E1",
+              "M-E2"
+            ]
+          },
+          "previous_hash": "b801f89c022f541d09e6998bb066dc2e0479b814863ccf65dec5dc22719327db",
+          "stage": "evidence_retrieval",
+          "tenant_id": "tenant-pilot-c"
+        },
+        {
+          "audit_hash": "b1804a92066cff5f9c3da3887b90532ffbc495c8c09296f5a7d06c9231acb69f",
+          "investigation_id": "PILOT-C-INV-002",
+          "payload": {
+            "reason": "synthetic_evidence_provider_timeout"
+          },
+          "previous_hash": "1ca1d8fe33a8011d83cb49a4a2baca34dab7e031429a227fb1d6f7787723c807",
+          "stage": "execution_failed",
+          "tenant_id": "tenant-pilot-c"
+        }
+      ],
+      "result_schema_unchanged": true,
+      "stage_timings": {
+        "values_ms": {
+          "alert_ingestion": 1.2,
+          "coordinator": 0.8,
+          "evidence_retrieval": 2.4,
+          "ioc_enrichment": 1.1,
+          "memory_retrieval": 0.0,
+          "mitre_mapping": 0.9,
+          "orchestrator": 0.7,
+          "organizational_memory_retrieval": 0.0,
+          "reasoning": 0.0,
+          "report_generation": 0.0
+        }
+      },
+      "successful": false
+    }
+  ],
+  "generated_at": "2026-08-25T00:00:00+00:00",
+  "immutable": true,
+  "metrics": {
+    "analyst_feedback_captured": 3,
+    "evidence_retrieval_timing_ms": 2.475,
+    "failed_investigations": 1,
+    "investigation_memory_items": 3,
+    "investigations_completed": 4,
+    "ioc_enrichment_timing_ms": 1.175,
+    "mean_investigation_latency_ms": 10.7,
+    "memory_context_reuse_rate": 1.0,
+    "memory_retrieval_timing_ms": 0.525,
+    "mitre_mapping_timing_ms": 0.975,
+    "organizational_memory_items": 3,
+    "p50_investigation_latency_ms": 10.9,
+    "p95_investigation_latency_ms": 12.9,
+    "report_generation_timing_ms": 0.825,
+    "stage_mean_timings_ms": {
+      "alert_ingestion": 1.275,
+      "coordinator": 0.875,
+      "evidence_retrieval": 2.475,
+      "ioc_enrichment": 1.175,
+      "memory_retrieval": 0.525,
+      "mitre_mapping": 0.975,
+      "orchestrator": 0.775,
+      "organizational_memory_retrieval": 0.675,
+      "reasoning": 1.125,
+      "report_generation": 0.825
+    },
+    "successful_investigations": 3
+  },
+  "provenance_chain": [
+    {
+      "audit_hash": "e1cc047a3416d101efa4e7c3a36a9ad2339cae3322bae86f5d635fbb651c9bfb",
+      "execution_audit_hash": "11c7a434cf71b512b413bd77935ddf7b9027c3d2911880ed5cc368f4ee810c50",
+      "investigation_id": "PILOT-A-INV-001",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "record_type": "pilot_execution",
+      "tenant_id": "tenant-pilot-a"
+    },
+    {
+      "audit_hash": "66ae575416e135d5decbadc84a0331daa0dc4fcb26d8014d0a74a33ae236d013",
+      "execution_audit_hash": "2b27d99268a25aa469d38d056dffd77f20d22920815039a1d0d81a076b0d6e3c",
+      "investigation_id": "PILOT-B-INV-001",
+      "previous_hash": "e1cc047a3416d101efa4e7c3a36a9ad2339cae3322bae86f5d635fbb651c9bfb",
+      "record_type": "pilot_execution",
+      "tenant_id": "tenant-pilot-b"
+    },
+    {
+      "audit_hash": "812b87d38ae9a7f115d2565ab967c1d5e353ffb76af5b79e61a32dbe9e2ff67c",
+      "execution_audit_hash": "3d15e77af416acf3d6f6d61d7e5cace1db79259c722d51888716b69ac725d8a5",
+      "investigation_id": "PILOT-C-INV-001",
+      "previous_hash": "66ae575416e135d5decbadc84a0331daa0dc4fcb26d8014d0a74a33ae236d013",
+      "record_type": "pilot_execution",
+      "tenant_id": "tenant-pilot-c"
+    },
+    {
+      "audit_hash": "eeb266900984f6ce3e534eaa9a8ee8f6c2b3fd6dcb4b248da5886729267e8667",
+      "execution_audit_hash": "b1804a92066cff5f9c3da3887b90532ffbc495c8c09296f5a7d06c9231acb69f",
+      "investigation_id": "PILOT-C-INV-002",
+      "previous_hash": "812b87d38ae9a7f115d2565ab967c1d5e353ffb76af5b79e61a32dbe9e2ff67c",
+      "record_type": "pilot_execution",
+      "tenant_id": "tenant-pilot-c"
+    }
+  ],
+  "replay_digest": "7e0372b76ea6149add665e58d0106e1edbdcfda6278d1338ce31c41c2fe0eeac",
+  "report_digest": "8861907165b42da3272b5f0e89ce73d502811918c7c340fafc0fe59b5148228b",
+  "report_version": "operational-pilot-validation.v1",
+  "safety_validation": {
+    "analyst_feedback_captured": true,
+    "append_only_audit_evidence": true,
+    "authorization_unchanged": true,
+    "deterministic_replay_valid": true,
+    "evidence_provenance_valid": true,
+    "fail_closed_behavior_unchanged": true,
+    "investigation_result_contract_unchanged": true,
+    "memory_advisory_only": true,
+    "memory_improves_investigation_context": true,
+    "no_autonomous_response_actions": true,
+    "no_tenant_leakage": true,
+    "tenant_isolation_unchanged": true,
+    "verdict_enforcement_unchanged": true
+  },
+  "tenant_ids": [
+    "tenant-pilot-a",
+    "tenant-pilot-b",
+    "tenant-pilot-c"
+  ]
+}

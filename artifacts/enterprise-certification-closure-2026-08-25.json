@@ -1,0 +1,686 @@
+{
+  "commit_sha": "e761308101af93ed8ea41a7eef9d2bb922540e89",
+  "controls": [
+    {
+      "control_id": "SEC-TENANT-ISOLATION",
+      "domain": "security",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Tenant isolation",
+      "passed": true,
+      "rationale": "All validation layers preserve tenant-scoped evidence and memory custody.",
+      "required": true
+    },
+    {
+      "control_id": "SEC-AUTHORIZATION",
+      "domain": "security",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Authorization boundaries",
+      "passed": true,
+      "rationale": "Memory and pilot evidence do not alter authorization status.",
+      "required": true
+    },
+    {
+      "control_id": "SEC-FAIL-CLOSED",
+      "domain": "security",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Fail-closed behavior",
+      "passed": true,
+      "rationale": "Blocked and failed paths remain fail-closed.",
+      "required": true
+    },
+    {
+      "control_id": "SEC-AUDIT-INTEGRITY",
+      "domain": "security",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "name": "Audit integrity",
+      "passed": true,
+      "rationale": "Source audit trails, hash chains, and telemetry audit paths are present.",
+      "required": true
+    },
+    {
+      "control_id": "SEC-APPEND-ONLY",
+      "domain": "security",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Append-only evidence",
+      "passed": true,
+      "rationale": "Validation artifact writers and audit evidence remain append-only.",
+      "required": true
+    },
+    {
+      "control_id": "AI-VERDICT-CONSISTENCY",
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Verdict consistency",
+      "passed": true,
+      "rationale": "Advisory memory does not change enforced verdicts.",
+      "required": true
+    },
+    {
+      "control_id": "AI-EVIDENCE-PROVENANCE",
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Evidence provenance",
+      "passed": true,
+      "rationale": "Evidence remains linked to its tenant and source investigation.",
+      "required": true
+    },
+    {
+      "control_id": "AI-CONFIDENCE-CALIBRATION",
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY"
+      ],
+      "name": "Confidence calibration",
+      "passed": true,
+      "rationale": "Organizational memory does not reduce calibrated confidence quality.",
+      "required": true
+    },
+    {
+      "control_id": "AI-MEMORY-ADVISORY",
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "name": "Memory advisory boundary",
+      "passed": true,
+      "rationale": "Memory is advisory-only in every evidence source.",
+      "required": true
+    },
+    {
+      "control_id": "PERF-LATENCY",
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "name": "Latency measurements",
+      "passed": true,
+      "rationale": "Pilot and telemetry layers provide latency measurements.",
+      "required": true
+    },
+    {
+      "control_id": "PERF-SCALE",
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-ENTERPRISE_PROOF"
+      ],
+      "name": "Scale benchmarks",
+      "passed": true,
+      "rationale": "Enterprise proof includes the required 10/100/1000 scale points.",
+      "required": true
+    },
+    {
+      "control_id": "PERF-MEMORY-OVERHEAD",
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-ENTERPRISE_PROOF"
+      ],
+      "name": "Memory overhead",
+      "passed": true,
+      "rationale": "Scale evidence records memory overhead without hiding cost.",
+      "required": true
+    },
+    {
+      "control_id": "OPS-REPLAY-STABILITY",
+      "domain": "operational",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "name": "Replay stability",
+      "passed": true,
+      "rationale": "Every source supplies a passing stable replay digest.",
+      "required": true
+    },
+    {
+      "control_id": "OPS-DETERMINISTIC-EXECUTION",
+      "domain": "operational",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "name": "Deterministic execution",
+      "passed": true,
+      "rationale": "Stable fixture inputs and replay digests are preserved; observed timing is excluded.",
+      "required": true
+    },
+    {
+      "control_id": "OPS-REPORT-INTEGRITY",
+      "domain": "operational",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "name": "Report integrity",
+      "passed": true,
+      "rationale": "Source report references and certification evidence digests are present.",
+      "required": true
+    }
+  ],
+  "environment_metadata": {
+    "execution_mode": "synthetic_offline_evidence_packaging",
+    "external_integrations": false,
+    "platform": "Windows-11-10.0.26220-SP0",
+    "production_deployment": false,
+    "python_implementation": "CPython",
+    "python_version": "3.14.6",
+    "source_count": 6
+  },
+  "evidence": [
+    {
+      "evidence_digest": "7fb4ea805660bb712ab9d43e1f3bbe95b35dcdec77cb674c22c6e2a38995935c",
+      "evidence_id": "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+      "references": [
+        "investigation_memory:report_digest:0523c14946184aa9320a50ad07d694f79543f5beecbc6f3f14cdf6d06eecee08",
+        "investigation_memory:replay_digest:2b8f8261a712a6d11f5fcaedb9d99deeecb0c3dc332e10ad1d7bc490a86a8a15"
+      ],
+      "source": "investigation_memory",
+      "source_replay_digest": "2b8f8261a712a6d11f5fcaedb9d99deeecb0c3dc332e10ad1d7bc490a86a8a15",
+      "source_report_digest": "0523c14946184aa9320a50ad07d694f79543f5beecbc6f3f14cdf6d06eecee08",
+      "source_report_version": "operational-cyber-memory-validation.v1",
+      "status": "passed",
+      "summary": {
+        "control_invariants": {
+          "authorization_unchanged": true,
+          "evidence_provenance_preserved": true,
+          "fail_closed_unchanged": true,
+          "memory_advisory_only": true,
+          "result_schema_unchanged": true,
+          "tenant_isolation_preserved": true,
+          "verdict_unchanged": true
+        },
+        "error": null,
+        "status": "passed",
+        "validation_result": "passed"
+      }
+    },
+    {
+      "evidence_digest": "e84116b5dcb24c8247edc9dfeb35a05bc52efaf2220030f3ec3eacf1d7832a6e",
+      "evidence_id": "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+      "references": [
+        "organizational_cyber_memory:report_digest:af8a515c1745511f867f2310090eb5a5e9c78a2babf4902fcff831eceb5c5204",
+        "organizational_cyber_memory:replay_digest:05a597c90ad11cdce5642a73a74f60a53e11ef5a500ed87ced63443405ab6bae"
+      ],
+      "source": "organizational_cyber_memory",
+      "source_replay_digest": "05a597c90ad11cdce5642a73a74f60a53e11ef5a500ed87ced63443405ab6bae",
+      "source_report_digest": "af8a515c1745511f867f2310090eb5a5e9c78a2babf4902fcff831eceb5c5204",
+      "source_report_version": "organizational-memory-validation.v1",
+      "status": "passed",
+      "summary": {
+        "control_invariants": {
+          "authorization_unchanged": true,
+          "evidence_provenance_preserved": true,
+          "memory_advisory_only": true,
+          "result_schema_unchanged": true,
+          "tenant_isolation_preserved": true,
+          "verdict_unchanged": true
+        },
+        "error": null,
+        "status": "passed",
+        "validation_result": "passed"
+      }
+    },
+    {
+      "evidence_digest": "ffd00dcae224d9d87c4f0f4f0790c5629fa561cb0b64a7a0827b46126d00183a",
+      "evidence_id": "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+      "references": [
+        "operational_accuracy:report_digest:00b92c480dbf85813bb4892a96118e75a72c121d0acd57448e3b4f36e239297e",
+        "operational_accuracy:replay_digest:225933764a30fde35cfd144d6e5c4960319c9fb8375fc49ee11dd51bcb5f9165"
+      ],
+      "source": "operational_accuracy",
+      "source_replay_digest": "225933764a30fde35cfd144d6e5c4960319c9fb8375fc49ee11dd51bcb5f9165",
+      "source_report_digest": "00b92c480dbf85813bb4892a96118e75a72c121d0acd57448e3b4f36e239297e",
+      "source_report_version": "operational-accuracy-validation.v1",
+      "status": "passed",
+      "summary": {
+        "aggregate_metrics": {
+          "baseline": {
+            "analyst_review_time_ms": 1281.25,
+            "confidence_calibration": 0.71,
+            "evidence_citation_coverage": 0.479167,
+            "evidence_relevance": 0.479167,
+            "execution_latency_ms": 1.0,
+            "false_negative_count": 0.375,
+            "false_positive_count": 0.125,
+            "ioc_relationship_accuracy": 0.125,
+            "knowledge_reuse_rate": 0.0,
+            "mitre_mapping_accuracy": 0.3125,
+            "provenance_coverage": 0.354167,
+            "reasoning_completeness": 0.44125,
+            "repeated_investigation_reuse": 0.0,
+            "uncertainty_score": 0.5225,
+            "verdict_agreement": 0.5
+          },
+          "organizational_memory": {
+            "analyst_review_time_ms": 631.25,
+            "confidence_calibration": 0.98375,
+            "evidence_citation_coverage": 0.645833,
+            "evidence_relevance": 0.645833,
+            "execution_latency_ms": 1.8,
+            "false_negative_count": 0.0,
+            "false_positive_count": 0.0,
+            "ioc_relationship_accuracy": 1.0,
+            "knowledge_reuse_rate": 0.765,
+            "mitre_mapping_accuracy": 0.8125,
+            "provenance_coverage": 0.645833,
+            "reasoning_completeness": 0.93,
+            "repeated_investigation_reuse": 2.0,
+            "uncertainty_score": 0.16125,
+            "verdict_agreement": 1.0
+          }
+        },
+        "error": null,
+        "memory_benefit_score": 0.438875,
+        "safety_validation": {
+          "authorization_unchanged": true,
+          "fail_closed_behavior_unchanged": true,
+          "fail_closed_unchanged": true,
+          "investigation_result_contract_unchanged": true,
+          "memory_advisory_only": true,
+          "tenant_isolation_unchanged": true,
+          "tenant_scoped_dataset": true,
+          "verdict_enforcement_unchanged": true
+        },
+        "status": "passed"
+      }
+    },
+    {
+      "evidence_digest": "9e6ccc4f994ae07917ddc77973cbbb3106fa092d7d934295ef6f0c193810a692",
+      "evidence_id": "CERT-EVIDENCE-ENTERPRISE_PROOF",
+      "references": [
+        "enterprise_proof:report_digest:f106cee0077768aa21f6c4533de3ebef18dce0b5a3f895b5b72fb32495ac8780",
+        "enterprise_proof:replay_digest:d55d7a0ad87fb450232a021d815ac99002b7a18399d6194d10f64315ef2ec5b4"
+      ],
+      "source": "enterprise_proof",
+      "source_replay_digest": "d55d7a0ad87fb450232a021d815ac99002b7a18399d6194d10f64315ef2ec5b4",
+      "source_report_digest": "f106cee0077768aa21f6c4533de3ebef18dce0b5a3f895b5b72fb32495ac8780",
+      "source_report_version": "enterprise-proof-validation.v1",
+      "status": "passed",
+      "summary": {
+        "error": null,
+        "safety_validation": {
+          "append_only_evidence": true,
+          "authorization_unchanged": true,
+          "cross_tenant_access_denied": true,
+          "deterministic_replay_valid": true,
+          "evidence_provenance_valid": true,
+          "fail_closed_behavior_unchanged": true,
+          "investigation_result_contract_unchanged": true,
+          "memory_advisory_only": true,
+          "memory_isolation_valid": true,
+          "organizational_memory_isolation_valid": true,
+          "response_automation_unchanged": true,
+          "tenant_isolation_unchanged": true,
+          "verdict_enforcement_unchanged": true
+        },
+        "status": "passed"
+      }
+    },
+    {
+      "evidence_digest": "5f3d59b6539529ae6d6bf55704cd50a98b6a6a13a0749f1dd57b46564ea5d658",
+      "evidence_id": "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+      "references": [
+        "controlled_operational_pilot:report_digest:8861907165b42da3272b5f0e89ce73d502811918c7c340fafc0fe59b5148228b",
+        "controlled_operational_pilot:replay_digest:7e0372b76ea6149add665e58d0106e1edbdcfda6278d1338ce31c41c2fe0eeac"
+      ],
+      "source": "controlled_operational_pilot",
+      "source_replay_digest": "7e0372b76ea6149add665e58d0106e1edbdcfda6278d1338ce31c41c2fe0eeac",
+      "source_report_digest": "8861907165b42da3272b5f0e89ce73d502811918c7c340fafc0fe59b5148228b",
+      "source_report_version": "operational-pilot-validation.v1",
+      "status": "passed",
+      "summary": {
+        "error": null,
+        "metrics": {
+          "analyst_feedback_captured": 3,
+          "evidence_retrieval_timing_ms": 2.475,
+          "failed_investigations": 1,
+          "investigation_memory_items": 3,
+          "investigations_completed": 4,
+          "ioc_enrichment_timing_ms": 1.175,
+          "mean_investigation_latency_ms": 10.7,
+          "memory_context_reuse_rate": 1.0,
+          "memory_retrieval_timing_ms": 0.525,
+          "mitre_mapping_timing_ms": 0.975,
+          "organizational_memory_items": 3,
+          "p50_investigation_latency_ms": 10.9,
+          "p95_investigation_latency_ms": 12.9,
+          "report_generation_timing_ms": 0.825,
+          "stage_mean_timings_ms": {
+            "alert_ingestion": 1.275,
+            "coordinator": 0.875,
+            "evidence_retrieval": 2.475,
+            "ioc_enrichment": 1.175,
+            "memory_retrieval": 0.525,
+            "mitre_mapping": 0.975,
+            "orchestrator": 0.775,
+            "organizational_memory_retrieval": 0.675,
+            "reasoning": 1.125,
+            "report_generation": 0.825
+          },
+          "successful_investigations": 3
+        },
+        "safety_validation": {
+          "analyst_feedback_captured": true,
+          "append_only_audit_evidence": true,
+          "authorization_unchanged": true,
+          "deterministic_replay_valid": true,
+          "evidence_provenance_valid": true,
+          "fail_closed_behavior_unchanged": true,
+          "investigation_result_contract_unchanged": true,
+          "memory_advisory_only": true,
+          "memory_improves_investigation_context": true,
+          "no_autonomous_response_actions": true,
+          "no_tenant_leakage": true,
+          "tenant_isolation_unchanged": true,
+          "verdict_enforcement_unchanged": true
+        },
+        "status": "passed"
+      }
+    },
+    {
+      "evidence_digest": "6e67765bd5a33afc296769467747dedfedf395c90559ef71f28a4d503239b383",
+      "evidence_id": "CERT-EVIDENCE-PERFORMANCE_TELEMETRY",
+      "references": [
+        "performance_telemetry:report_digest:fa136c19d5b6b47a7b57273dd5da8d2312e987c64029c311155a28f7daa11c2b",
+        "performance_telemetry:replay_digest:dd7076b754cbd0d648000b897a0dd9600ef133ddb6679a24258ce8a53c80025b"
+      ],
+      "source": "performance_telemetry",
+      "source_replay_digest": "dd7076b754cbd0d648000b897a0dd9600ef133ddb6679a24258ce8a53c80025b",
+      "source_report_digest": "fa136c19d5b6b47a7b57273dd5da8d2312e987c64029c311155a28f7daa11c2b",
+      "source_report_version": "investigation-performance-benchmark.v1",
+      "status": "passed",
+      "summary": {
+        "component_statistics": {
+          "coordinator": {
+            "max_ms": 5.7106,
+            "p50_ms": 4.5554,
+            "p95_ms": 5.7106
+          },
+          "evidence_retrieval": {
+            "max_ms": 0.7415,
+            "p50_ms": 0.5843,
+            "p95_ms": 0.7415
+          },
+          "ioc_enrichment": {
+            "max_ms": 0.8661,
+            "p50_ms": 0.5771,
+            "p95_ms": 0.8661
+          },
+          "memory_retrieval": {
+            "max_ms": 0.866,
+            "p50_ms": 0.6465,
+            "p95_ms": 0.866
+          },
+          "mitre_mapping": {
+            "max_ms": 0.7266,
+            "p50_ms": 0.5734,
+            "p95_ms": 0.7266
+          },
+          "orchestrator": {
+            "max_ms": 0.733,
+            "p50_ms": 0.6059,
+            "p95_ms": 0.733
+          },
+          "reasoning": {
+            "max_ms": 1.1581,
+            "p50_ms": 0.6258,
+            "p95_ms": 1.1581
+          },
+          "report_generation": {
+            "max_ms": 0.8544,
+            "p50_ms": 0.7199,
+            "p95_ms": 0.8544
+          }
+        },
+        "control_checks": {
+          "all_components_attributed": true,
+          "audit_path_unchanged": true,
+          "authorization_unchanged": true,
+          "decisions_unchanged": true,
+          "tenant_scoped_fixture": true
+        },
+        "error": null,
+        "status": "passed"
+      }
+    }
+  ],
+  "evidence_references": [
+    "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+    "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+    "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+    "CERT-EVIDENCE-ENTERPRISE_PROOF",
+    "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+    "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+  ],
+  "failed_controls": [],
+  "findings": [
+    {
+      "description": "Unified validation evidence supports the current synthetic enterprise readiness scope.",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "finding_id": "FINDING-ALL-REQUIRED-CONTROLS",
+      "remediation": null,
+      "severity": "info",
+      "status": "passed",
+      "title": "All required enterprise controls passed"
+    },
+    {
+      "description": "synthetic_validation_only_no_production_deployment_or_external_integrations",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "finding_id": "FINDING-WARNING-01",
+      "remediation": null,
+      "severity": "low",
+      "status": "warning",
+      "title": "Certification scope warning"
+    },
+    {
+      "description": "performance_telemetry_timings_are_host_observed_and_excluded_from_replay_identity",
+      "evidence_ids": [
+        "CERT-EVIDENCE-INVESTIGATION_MEMORY",
+        "CERT-EVIDENCE-ORGANIZATIONAL_CYBER_MEMORY",
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY",
+        "CERT-EVIDENCE-ENTERPRISE_PROOF",
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT",
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "finding_id": "FINDING-WARNING-02",
+      "remediation": null,
+      "severity": "low",
+      "status": "warning",
+      "title": "Certification scope warning"
+    }
+  ],
+  "immutable": true,
+  "metrics": [
+    {
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY"
+      ],
+      "interpretation": "Higher is better.",
+      "metric_id": "METRIC-ACCURACY-VERDICT",
+      "name": "Organizational verdict agreement",
+      "unit": "ratio",
+      "value": 1.0
+    },
+    {
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY"
+      ],
+      "interpretation": "Higher is better.",
+      "metric_id": "METRIC-ACCURACY-CONFIDENCE",
+      "name": "Confidence calibration",
+      "unit": "score",
+      "value": 0.98375
+    },
+    {
+      "domain": "ai_investigation",
+      "evidence_ids": [
+        "CERT-EVIDENCE-OPERATIONAL_ACCURACY"
+      ],
+      "interpretation": "Positive score indicates advisory memory benefit.",
+      "metric_id": "METRIC-MEMORY-BENEFIT",
+      "name": "Memory benefit score",
+      "unit": "score",
+      "value": 0.438875
+    },
+    {
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "interpretation": "Synthetic deterministic timing.",
+      "metric_id": "METRIC-PILOT-MEAN-LATENCY",
+      "name": "Pilot mean investigation latency",
+      "unit": "ms",
+      "value": 10.7
+    },
+    {
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "interpretation": "Synthetic deterministic timing.",
+      "metric_id": "METRIC-PILOT-P50-LATENCY",
+      "name": "Pilot p50 investigation latency",
+      "unit": "ms",
+      "value": 10.9
+    },
+    {
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-CONTROLLED_OPERATIONAL_PILOT"
+      ],
+      "interpretation": "Synthetic deterministic timing.",
+      "metric_id": "METRIC-PILOT-P95-LATENCY",
+      "name": "Pilot p95 investigation latency",
+      "unit": "ms",
+      "value": 12.9
+    },
+    {
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-ENTERPRISE_PROOF"
+      ],
+      "interpretation": "Synthetic scale estimate.",
+      "metric_id": "METRIC-SCALE-P95-1000",
+      "name": "1000-investigation enhanced p95 latency",
+      "unit": "ms",
+      "value": 8.47
+    },
+    {
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-ENTERPRISE_PROOF"
+      ],
+      "interpretation": "Synthetic scale estimate.",
+      "metric_id": "METRIC-SCALE-MEMORY-1000",
+      "name": "1000-investigation memory overhead",
+      "unit": "ratio",
+      "value": 0.167883
+    },
+    {
+      "domain": "performance",
+      "evidence_ids": [
+        "CERT-EVIDENCE-PERFORMANCE_TELEMETRY"
+      ],
+      "interpretation": "Host-observed telemetry; not part of replay identity.",
+      "metric_id": "METRIC-TELEMETRY-COORDINATOR-P50",
+      "name": "Telemetry coordinator p50",
+      "unit": "ms",
+      "value": 4.5554
+    }
+  ],
+  "passed_controls": [
+    "SEC-TENANT-ISOLATION",
+    "SEC-AUTHORIZATION",
+    "SEC-FAIL-CLOSED",
+    "SEC-AUDIT-INTEGRITY",
+    "SEC-APPEND-ONLY",
+    "AI-VERDICT-CONSISTENCY",
+    "AI-EVIDENCE-PROVENANCE",
+    "AI-CONFIDENCE-CALIBRATION",
+    "AI-MEMORY-ADVISORY",
+    "PERF-LATENCY",
+    "PERF-SCALE",
+    "PERF-MEMORY-OVERHEAD",
+    "OPS-REPLAY-STABILITY",
+    "OPS-DETERMINISTIC-EXECUTION",
+    "OPS-REPORT-INTEGRITY"
+  ],
+  "replay_digest": "fe0f9fcf4891a1af908888c5c7f33b0c47310f7bfe4a61f3e5b31d887031a561",
+  "report_digest": "70d6375598c9c6463998b40e5d4596b483acd48a10a5e38d9d15e3826a108ad7",
+  "report_version": "sentinel-dna-enterprise-certification.v1",
+  "timestamp": "2026-08-25T00:00:00+00:00",
+  "validation_digest": "c5f9f48058b3a7f0ab3ed39ca058e41a992565e70af286dd912f3a830d832167",
+  "warnings": [
+    "synthetic_validation_only_no_production_deployment_or_external_integrations",
+    "performance_telemetry_timings_are_host_observed_and_excluded_from_replay_identity"
+  ]
+}

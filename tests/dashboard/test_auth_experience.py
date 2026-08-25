@@ -1,9 +1,14 @@
 import pytest
+from tests.credential_helpers import random_password
 
 import dashboard.app as dashboard_app
 from database.connection import DatabaseConnection
 from database.connection import database
 from services.auth.auth_service import AuthService
+
+
+BROWSER_PASSWORD = random_password()
+SIGNUP_PASSWORD = random_password()
 
 
 class AuditStub:
@@ -38,7 +43,7 @@ def register_user(client):
     response = client.post("/api/auth/register", json={
         "username": "analyst-browser",
         "email": "analyst-browser@example.test",
-        "password": "StrongBrowserPassword123!",
+        "password": BROWSER_PASSWORD,
         "role": "analyst",
     })
     assert response.status_code == 201
@@ -48,7 +53,7 @@ def login_user(client):
     register_user(client)
     response = client.post("/api/auth/login", json={
         "username": "analyst-browser",
-        "password": "StrongBrowserPassword123!",
+        "password": BROWSER_PASSWORD,
     })
     assert response.status_code == 200
     return response
@@ -76,7 +81,7 @@ def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):
     payload = {
         "username": "new-analyst",
         "email": "new-analyst@example.test",
-        "password": "StrongSignupPassword123!",
+        "password": SIGNUP_PASSWORD,
     }
 
     created = auth_client.post("/api/auth/register", json=payload)
@@ -94,7 +99,7 @@ def test_login_works_after_signup_and_dashboard_stays_protected(auth_client):
     payload = {
         "username": "signup-login-analyst",
         "email": "signup-login@example.test",
-        "password": "StrongSignupPassword123!",
+        "password": SIGNUP_PASSWORD,
     }
 
     assert auth_client.get("/").status_code == 401
@@ -162,7 +167,7 @@ def test_failed_login_does_not_create_authenticated_session(auth_client):
 
     response = auth_client.post("/api/auth/login", json={
         "username": "analyst-browser",
-        "password": "wrong-password",
+        "password": random_password(),
     })
 
     assert response.status_code == 401

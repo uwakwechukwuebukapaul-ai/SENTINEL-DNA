@@ -3,6 +3,7 @@ import uuid
 import pytest
 
 from app import create_app
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture
@@ -17,7 +18,7 @@ def authenticated_client(tmp_path, monkeypatch):
     client = app.test_client()
     client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
     username = f"intake-{uuid.uuid4().hex[:10]}"
-    password = "CorrectHorseBattery1!"
+    password = random_password()
     assert client.post(
         "/api/auth/register",
         json={"username": username, "email": f"{username}@example.test", "password": password},

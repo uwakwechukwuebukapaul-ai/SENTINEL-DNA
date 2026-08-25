@@ -4,10 +4,13 @@ import yaml
 
 from deployment.scripts.release_metadata import derive_release_metadata, format_metadata
 from deployment.scripts.validate_deployment_config import validate_configuration
+from tests.credential_helpers import random_password, random_secret
 
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "deployment-contract.yml"
+TEST_SECRET = random_secret()
+TEST_POSTGRES_PASSWORD = random_password()
 
 
 def _workflow() -> dict:
@@ -101,8 +104,8 @@ def test_deployment_validation_requires_exact_trusted_release_artifact(tmp_path)
         **metadata,
         "SENTINEL_DNA_ENV": "production",
         "SENTINEL_DNA_SECURE_COOKIES": "1",
-        "SENTINEL_DNA_SECRET_KEY": "test-only-secret-value-0123456789-abcdef",
-        "POSTGRES_PASSWORD": "test-only-postgres-value-0123456789",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
         "SENTINEL_DNA_IMAGE_DIGEST": digest,
         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(manifest),
     }
@@ -115,8 +118,8 @@ def test_deployment_validation_rejects_missing_trusted_release_artifact(tmp_path
         **metadata,
         "SENTINEL_DNA_ENV": "production",
         "SENTINEL_DNA_SECURE_COOKIES": "1",
-        "SENTINEL_DNA_SECRET_KEY": "test-only-secret-value-0123456789-abcdef",
-        "POSTGRES_PASSWORD": "test-only-postgres-value-0123456789",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
         "SENTINEL_DNA_IMAGE_DIGEST": "sha256:" + "a" * 64,
         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(tmp_path / "missing.json"),
     }

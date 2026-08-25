@@ -9,6 +9,7 @@ from services.intelligence.runtime.investigation_intake import (
     InvestigationIntake,
 )
 from services.intelligence.runtime.investigation_lifecycle import InvestigationLifecycleState
+from tests.credential_helpers import random_password
 
 
 def repository(tmp_path):
@@ -27,6 +28,7 @@ def context(tenant="tenant-a", actor="actor-a", roles=("analyst",), correlation=
 
 
 def alert(event_id="event-1", case_id="CASE-1", **changes):
+    password = random_password()
     value = {
         "case_id": case_id,
         "source": "api",
@@ -35,7 +37,7 @@ def alert(event_id="event-1", case_id="CASE-1", **changes):
             "event_type": "failed_login",
             "severity": "high",
             "description": "Repeated authentication failures",
-            "password": "must-never-persist",
+            "password": password,
         },
     }
     value.update(changes)

@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture
@@ -15,8 +16,9 @@ def application(tmp_path, monkeypatch):
 
 
 def login(client, username="workflow-user", email="workflow@example.test"):
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!"}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}).status_code == 200
+    password = random_password()
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
 
 
 def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):

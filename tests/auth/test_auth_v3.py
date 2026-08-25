@@ -7,6 +7,12 @@ from services.auth.providers import TestEmailProvider, TestSMSProvider, email_pr
 from services.auth.oauth import GoogleOIDC
 from services.auth.oauth import GoogleClaims
 from services.auth.rate_limit import RedisRateLimitBackend
+from tests.credential_helpers import random_password, random_secret
+
+
+PASSWORD = random_password()
+NEW_PASSWORD = random_password()
+ANOTHER_PASSWORD = random_password()
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
@@ -28,7 +34,7 @@ def test_v3_signup_phone_dob_and_analyst_binding(app):
     challenge = send.get_json()["challenge_id"]
     code = app.config["SMS_PROVIDER"].messages[-1]["code"]
     assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
-    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":"StrongPassword123!","country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
+    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
     assert created.status_code == 201 and created.get_json()["role"] == "analyst"
     assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
 
@@ -37,7 +43,7 @@ def test_v3_csrf_and_dob_rejection(app):
     assert client.post("/api/auth/register", data={}).status_code == 403
     csrf = token(client)
     for dob in (date.today().isoformat(), (date.today() + timedelta(days=1)).isoformat(), "2024-02-30"):
-        response = client.post("/api/auth/register", json={"username":"underage-user","email":f"{dob}@example.test","password":"StrongPassword123!","date_of_birth":dob,"country":"NG","phone":"08031234567"}, headers={"X-CSRF-Token":csrf})
+        response = client.post("/api/auth/register", json={"username":"underage-user","email":f"{dob}@example.test","password":PASSWORD,"date_of_birth":dob,"country":"NG","phone":"08031234567"}, headers={"X-CSRF-Token":csrf})
         assert response.status_code == 400
 
 def test_v3_email_otp_is_generic_and_single_use(app):
@@ -45,7 +51,7 @@ def test_v3_email_otp_is_generic_and_single_use(app):
     assert client.post("/api/auth/email/send-code", json={"email":"unknown@example.test"}, headers={"X-CSRF-Token":csrf}).status_code == 202
 
 def test_v3_email_otp_authentication_and_replay_protection(app):
-    client = app.test_client(); assert client.post("/api/auth/register", json={"username":"email-user","email":"email-user@example.test","password":"StrongPassword123!"}).status_code == 201
+    client = app.test_client(); assert client.post("/api/auth/register", json={"username":"email-user","email":"email-user@example.test","password":PASSWORD}).status_code == 201
     csrf = token(client); response = client.post("/api/auth/email/send-code", json={"email":"email-user@example.test"}, headers={"X-CSRF-Token":csrf})
     assert response.status_code == 202
     challenge = app.container.require("auth_service").db.connect().execute("SELECT id FROM otp_challenges ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
@@ -55,7 +61,7 @@ def test_v3_email_otp_authentication_and_replay_protection(app):
 
 def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):
-        GoogleOIDC("client", "secret", "http://127.0.0.1/callback").complete("code", "attacker-state", "expected-state", "nonce", "nonce")
+        GoogleOIDC("client", random_secret(), "http://127.0.0.1/callback").complete("code", "attacker-state", "expected-state", "nonce", "nonce")
 
 def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
@@ -65,16 +71,16 @@ def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
 
 def test_v3_password_recovery_is_single_use_and_revokes_sessions(app):
     client = app.test_client(); csrf = token(client)
-    assert client.post("/api/auth/register", json={"username":"recovery-user","email":"recovery@example.test","password":"StrongPassword123!"}).status_code == 201
-    assert client.post("/api/auth/login", json={"username":"recovery@example.test","password":"StrongPassword123!","remember_me":True}, headers={"X-CSRF-Token":csrf}).status_code == 200
+    assert client.post("/api/auth/register", json={"username":"recovery-user","email":"recovery@example.test","password":PASSWORD}).status_code == 201
+    assert client.post("/api/auth/login", json={"username":"recovery@example.test","password":PASSWORD,"remember_me":True}, headers={"X-CSRF-Token":csrf}).status_code == 200
     assert client.post("/api/auth/password-reset/request", json={"email":"recovery@example.test"}, headers={"X-CSRF-Token":csrf}).status_code == 202
     code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
     challenge = app.container.require("auth_service").db.connect().execute("SELECT id FROM otp_challenges WHERE purpose='password_reset' ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
-    assert client.post("/api/auth/password-reset/confirm", json={"challenge_id":challenge,"code":code,"password":"NewStrongPassword123!"}, headers={"X-CSRF-Token":csrf}).status_code == 200
+    assert client.post("/api/auth/password-reset/confirm", json={"challenge_id":challenge,"code":code,"password":NEW_PASSWORD}, headers={"X-CSRF-Token":csrf}).status_code == 200
     assert client.get("/profile").status_code == 401
-    assert app.container.require("auth_service").authenticate("recovery@example.test", "StrongPassword123!") is None
-    assert app.container.require("auth_service").authenticate("recovery@example.test", "NewStrongPassword123!") is not None
-    assert client.post("/api/auth/password-reset/confirm", json={"challenge_id":challenge,"code":code,"password":"AnotherStrongPassword123!"}, headers={"X-CSRF-Token":token(client)}).status_code == 400
+    assert app.container.require("auth_service").authenticate("recovery@example.test", PASSWORD) is None
+    assert app.container.require("auth_service").authenticate("recovery@example.test", NEW_PASSWORD) is not None
+    assert client.post("/api/auth/password-reset/confirm", json={"challenge_id":challenge,"code":code,"password":ANOTHER_PASSWORD}, headers={"X-CSRF-Token":token(client)}).status_code == 400
 
 def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
     class StubGoogle:
@@ -91,8 +97,8 @@ def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
 
 def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
     client = app.test_client(); csrf = token(client)
-    assert client.post("/api/auth/register", json={"username":"cookie-user","email":"cookie@example.test","password":"StrongPassword123!"}).status_code == 201
-    response = client.post("/api/auth/login", json={"username":"cookie@example.test","password":"StrongPassword123!","remember_me":True}, headers={"X-CSRF-Token":csrf})
+    assert client.post("/api/auth/register", json={"username":"cookie-user","email":"cookie@example.test","password":PASSWORD}).status_code == 201
+    response = client.post("/api/auth/login", json={"username":"cookie@example.test","password":PASSWORD,"remember_me":True}, headers={"X-CSRF-Token":csrf})
     assert response.status_code == 200
     cookies = response.headers.getlist("Set-Cookie")
     remember = next(value for value in cookies if value.startswith("sentinel_remember="))
@@ -103,8 +109,8 @@ def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
 
 def test_v3_remember_me_restoration_rotates_and_revokes_old_token(app):
     client = app.test_client(); csrf = token(client)
-    assert client.post("/api/auth/register", json={"username":"rotation-user","email":"rotation@example.test","password":"StrongPassword123!"}).status_code == 201
-    response = client.post("/api/auth/login", json={"username":"rotation@example.test","password":"StrongPassword123!","remember_me":True}, headers={"X-CSRF-Token":csrf})
+    assert client.post("/api/auth/register", json={"username":"rotation-user","email":"rotation@example.test","password":PASSWORD}).status_code == 201
+    response = client.post("/api/auth/login", json={"username":"rotation@example.test","password":PASSWORD,"remember_me":True}, headers={"X-CSRF-Token":csrf})
     old_cookie = next(value for value in response.headers.getlist("Set-Cookie") if value.startswith("sentinel_remember=")).split(";", 1)[0]
     old_sid = old_cookie.split("=", 1)[1].split(".", 1)[0]
     restored_client = app.test_client()
