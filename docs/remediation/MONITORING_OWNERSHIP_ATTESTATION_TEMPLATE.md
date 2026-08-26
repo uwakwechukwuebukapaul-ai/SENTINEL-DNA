@@ -3,13 +3,36 @@
 Template only. No monitoring, alerting, escalation, or ownership attestation
 is claimed by the PostgreSQL rehearsal evidence.
 
+## Repository/remediation custody
+
+- Repository: `SENTINEL-DNA`
+- Branch: `remediation/postgresql-production-readiness`
+- Current remediation HEAD: `625ad80ccf55237fa112c578a78064d87915d9675`
+- Protected RC1 tag: `v1.0.0-rc1`
+- Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
+- Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
+- Documentation author/maintainer: `Uwakwe chukwuebuka paul`
+- Custody attestation: `NOT ATTESTED`
+
+This section records repository identity only. It does not establish product
+ownership, production operational ownership, or release approval.
+
+## Product ownership
+
+- Product/service identity: `UNKNOWN — operational owner input required`
+- Product owner identity (repository owner reference only): `Uwakwe chukwuebuka paul`
+- Product ownership scope and attestation: `NOT ATTESTED — repository ownership metadata does not establish production operational ownership`
+- Product ownership evidence: `Repository owner metadata only; independent product ownership evidence not provided`
+
+This section records product ownership only. Production operational ownership
+and independent approval are separate requirements below.
+
 ## Service record
 
 - Service/system: `UNKNOWN — operational owner input required`
 - Environment: `DISPOSABLE REHEARSAL ONLY; production ownership UNKNOWN`
 - PostgreSQL instance or logical service: `UNKNOWN — not attested`
 - Data classification: `UNKNOWN — classification attestation required`
-- Remediation HEAD: `6684dada68363e81fd3f3b405320f2f8f595fef7`
 - Attestation period: `NOT ATTESTED`
 
 ## Monitoring coverage
@@ -24,7 +47,12 @@ is claimed by the PostgreSQL rehearsal evidence.
 - Dashboard or query references: `UNKNOWN — not provided`
 - Alert test evidence references: `NONE — attestation not completed`
 
-## Ownership and response
+## Production operational ownership
+
+The fields below concern production operations. They do not establish product
+ownership or independent approval.
+
+### Ownership and response
 
 - Service owner: `UNKNOWN — not attested`
 - Database owner: `UNKNOWN — not attested`
@@ -40,7 +68,12 @@ is claimed by the PostgreSQL rehearsal evidence.
 - Escalation path: `UNKNOWN — not attested`
 - Review date: `NOT REVIEWED`
 
-## Attestation
+## Independent approval
+
+Independent approval is separate from repository custody, product ownership,
+and production operational ownership.
+
+### Attestation
 
 Attestation status: `NOT COMPLETED — no operational ownership is claimed.`
 

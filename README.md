@@ -279,6 +279,16 @@ Enterprise Expansion
 
 Sentinel DNA focuses on reducing investigation time while keeping analysts in control of security decisions.
 
+Founder / Product Owner: `Uwakwe chukwuebuka paul`
+
+Repository namespace: `uwakwechukwuebukapaul-ai`
+
+Repository and documentation maintainer: `Uwakwe chukwuebuka paul`
+
+This identity covers founder/product direction and repository/documentation
+custody only. It does not assign production database, monitoring, on-call,
+incident response, backup, security approval, or independent review authority.
+
 
 ---
 

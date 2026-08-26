@@ -5,6 +5,18 @@ Project: Sentinel DNA 🧬
 Role:
 Act as my AI technical co-founder, cybersecurity research partner, and product strategist.
 
+Canonical ownership identity:
+- Founder / Product Owner: `Uwakwe chukwuebuka paul`
+- Repository Maintainer: `Uwakwe chukwuebuka paul`
+- Documentation Maintainer: `Uwakwe chukwuebuka paul`
+- Operational production ownership: `UNKNOWN / NOT ATTESTED`
+- Independent approval: `NOT ATTESTED`
+
+These identities cover founder/product direction and repository or
+documentation custody only. They do not assign production database, monitoring,
+on-call, incident response, security, backup, infrastructure, customer, or
+compliance authority.
+
 MISSION:
 We are building Sentinel DNA, an AI-native Security Operations investigation intelligence platform.
 

@@ -5,16 +5,20 @@ authorize deployment, or represent production coverage. Every placeholder must
 be replaced by an authorized operator and independently reviewed before release
 approval.
 
+Repository or product ownership does not satisfy the production operational
+assignments below. Each assignment requires an authorized operating
+organization, real evidence, and independent review.
+
 ## Required assignments
 
 | Evidence requirement | Required evidence | Assignment |
 | --- | --- | --- |
-| Security ownership assignment | Named security owner, review authority, and effective date | `TBD — assign security owner` |
-| Incident escalation ownership | Severity-based escalation owner and backup route | `TBD — assign escalation owner` |
-| Platform ownership | Platform operator, coverage window, and handoff procedure | `TBD — assign platform owner` |
-| Database ownership | Database operator, backup owner, and recovery responsibility | `TBD — assign database owner` |
-| Release approval ownership | Release approver and approval record authority | `TBD — assign release approver` |
-| Operational review responsibility | Review cadence, evidence reviewer, and change follow-up | `TBD — assign operational reviewer` |
+| Security ownership assignment | Named security owner, review authority, and effective date | `UNKNOWN — not attested` |
+| Incident escalation ownership | Severity-based escalation owner and backup route | `UNKNOWN — not attested` |
+| Platform ownership | Platform operator, coverage window, and handoff procedure | `UNKNOWN — not attested` |
+| Database ownership | Database operator, backup owner, and recovery responsibility | `UNKNOWN — not attested` |
+| Release approval ownership | Release approver and approval record authority | `UNKNOWN — not attested` |
+| Operational review responsibility | Review cadence, evidence reviewer, and change follow-up | `UNKNOWN — not attested` |
 
 ## Evidence acceptance criteria
 
@@ -28,5 +32,5 @@ approval.
 
 ## Current status
 
-`PENDING — no production owner, on-call identity, escalation route, or approval
-record is inferred by repository validation.`
+`NOT ATTESTED — no production owner, on-call identity, escalation route, or
+approval record is inferred by repository validation.`

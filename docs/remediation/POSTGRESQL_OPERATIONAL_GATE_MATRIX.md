@@ -1,9 +1,15 @@
 # PostgreSQL operational evidence gate matrix
 
 Status snapshot for remediation HEAD
-`6684dada68363e81fd3f3b405320f2f8f595fef7`. This matrix is not a release
-approval. The supplied custody reference `6901b3cce61c0cf349d3c67230aaced26b0936d4`
-does not match the checked-out branch HEAD and requires reconciliation.
+`625ad80ccf55237fa112c578a78064d87915d9675`. This matrix is not a release
+approval. Repository/remediation custody, product ownership, production
+operational ownership, and independent approval remain separate controls.
+
+Repository/product owner reference: `Uwakwe chukwuebuka paul`
+(`uwakwechukwuebukapaul-ai` repository owner metadata). This identity records
+repository/product documentation responsibility only; it is not a production
+database, monitoring, on-call, escalation, security, or independent approval
+attestation.
 
 | Gate | Status | Evidence or blocker |
 | --- | --- | --- |
@@ -15,7 +21,7 @@ does not match the checked-out branch HEAD and requires reconciliation.
 | Credential rotation/revocation | PASS (bounded rehearsal scope) | `ALTER USER` successful; old password rejected; rotated credential accepted |
 | Monitoring and ownership | BLOCKED | Operational owners, alert routing, and attestations explicitly unknown |
 | Stale evidence reconciliation | PASS | Outdated blocked-state references reconciled; remaining blockers are intentional |
-| Remediation custody | BLOCKED | Worktree is clean, but the checked-out HEAD differs from the supplied custody reference; final custody reconciliation remains outstanding |
+| Remediation custody | BLOCKED | Current HEAD is documented above; pending documentation changes remain in the worktree and final custody reconciliation is outstanding |
 
 Production readiness remains blocked until every partial or blocked gate has
 independent external evidence and custody review.

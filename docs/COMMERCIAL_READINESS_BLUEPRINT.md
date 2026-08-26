@@ -8,6 +8,19 @@ changes, image publication, or Gate 1. Commercialization must be additive to
 the frozen release and must preserve the existing release and deployment
 controls.
 
+## Ownership and governance boundary
+
+- Founder / Product Owner: `Uwakwe chukwuebuka paul`
+- Repository namespace: `uwakwechukwuebukapaul-ai`
+- Repository/documentation maintainer: `Uwakwe chukwuebuka paul`
+- Production operational ownership: `UNKNOWN — not attested`
+- Independent approval: `NOT ATTESTED`
+
+The named identity applies to founder/product direction and repository or
+documentation custody. It does not assign database operations, monitoring,
+SOC operations, incident response, backup ownership, security approval, or
+independent review.
+
 Current release identity:
 
 | Artifact | Certified identity |

@@ -29,6 +29,22 @@ Regression success is engineering evidence only. It is not production
 authorization, deployment authorization, rollout authorization, or the V2.2
 trigger.
 
+## 0. Founder/Product Ownership and Authority Boundaries
+
+- Founder / Product Owner: `Uwakwe chukwuebuka paul`
+- Repository namespace: `uwakwechukwuebukapaul-ai`
+- Repository Maintainer: `Uwakwe chukwuebuka paul`
+- Documentation author/maintainer: `Uwakwe chukwuebuka paul`
+- Role scope: `Founder / Product Owner / Repository Maintainer`
+
+These identities establish founder-level product direction and repository or
+documentation custody only. They do not establish production database,
+monitoring, SOC, incident response, backup, security approval, or independent
+review ownership.
+
+- Production operational ownership: `UNKNOWN — not attested`
+- Independent approval: `NOT ATTESTED`
+
 ## 1. Product Identity
 
 Sentinel DNA is a **commercial-grade Enterprise AI SOC Investigation Platform**.
