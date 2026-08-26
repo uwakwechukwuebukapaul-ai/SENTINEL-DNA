@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import wraps
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
-from services.core.security_context import request_context
+from services.core.security_context import authorize_investigation, request_context
 from services.intelligence.reporting.ai_investigator_report import AIInvestigatorReportService
 from services.intelligence.reporting.investigation_projection import InvestigationProjectionBuilder
 
@@ -127,6 +127,11 @@ def start_investigation(investigation_id):
     demo_service = current_app.container.get("analyst_demo_scenario")
     if current_app.config.get("DEMO_DATA_ENABLED") and demo_service and str(investigation_id) == demo_service.case_id_for_tenant(principal["tenant_id"]):
         demo_input = demo_service.investigation_input_for_tenant(principal["tenant_id"])
+        allowed, error = authorize_investigation(
+            {"metadata": demo_input["alert"].get("metadata") or {}}, write=True
+        )
+        if not allowed:
+            return jsonify({"error": error}), 403
         current_app.container.require("investigation_coordinator").investigate(
             case_id=demo_input["case_id"],
             alert=demo_input["alert"],
@@ -137,12 +142,41 @@ def start_investigation(investigation_id):
             actor_id=principal["analyst"]["actor_id"],
             correlation_id=request_context().correlation_id,
         )
+        _record_pilot_investigation_audit(
+            principal["tenant_id"], principal["analyst"]["actor_id"],
+            investigation_id, demo_input["alert"].get("metadata") or {}, request_context(),
+        )
         return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id))
     report = detail.get("report") or {}
     intelligence = detail.get("intelligence") or {}
+    metadata = report.get("metadata") or intelligence.get("metadata") or {}
+    allowed, error = authorize_investigation({"metadata": metadata}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 403
     evidence_summary = intelligence.get("evidence_summary") if isinstance(intelligence.get("evidence_summary"), dict) else {}
     evidence = report.get("evidence") or intelligence.get("evidence") or evidence_summary.get("items") or []
     iocs = report.get("iocs") or intelligence.get("iocs") or []
     timeline = report.get("timeline") or intelligence.get("timeline") or []
-    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity"), "metadata": report.get("metadata") or intelligence.get("metadata") or {}}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
+    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity"), "metadata": metadata}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
+    _record_pilot_investigation_audit(
+        principal["tenant_id"], principal["analyst"]["actor_id"],
+        investigation_id, metadata, request_context(),
+    )
     return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id))
+
+
+def _record_pilot_investigation_audit(tenant_id, actor_id, case_id, metadata, context):
+    if not context.pilot_authorization_id:
+        return
+    current_app.container.require("audit_service").record(
+        "PILOT_INVESTIGATION_EXECUTED",
+        case_id=case_id,
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        correlation_id=context.correlation_id,
+        resource_type="pilot_authorization",
+        resource_id=context.pilot_authorization_id,
+        operation="investigate",
+        outcome="success",
+        details={"scenario_id": metadata.get("scenario_id") or metadata.get("scenario")},
+    )

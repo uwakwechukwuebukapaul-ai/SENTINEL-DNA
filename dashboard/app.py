@@ -93,7 +93,7 @@ from services.customer_success.routes import customer_success_api
 from services.product_analytics.routes import product_analytics_api
 
 from services.pilot_reports.routes import pilot_reports_api
-from services.pilot_management.routes import pilot_management_api
+from services.pilot_management.routes import pilot_management_api, pilot_provisioning_api, pilot_authorization_api
 
 from services.support.routes import support_api
 from services.exercises.routes import exercise_api
@@ -194,6 +194,10 @@ app.config.update(
 
 app.config["JSON_SORT_KEYS"] = False
 
+app.config["PILOT_ACCESS_REQUIRED"] = (
+    os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"
+)
+
 app.config["OBSERVABILITY"] = ObservabilityService()
 
 app.config["HUNT_DB_PATH"] = str(DB_PATH)
@@ -271,6 +275,8 @@ app.register_blueprint(
 app.register_blueprint(
     pilot_management_api
 )
+app.register_blueprint(pilot_authorization_api)
+app.register_blueprint(pilot_provisioning_api)
 
 app.register_blueprint(
     support_api

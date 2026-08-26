@@ -90,6 +90,8 @@ def enforce_current_session():
 
 @auth_api.post("/register")
 def register():
+    if current_app.config.get("PILOT_ACCESS_REQUIRED", False):
+        return jsonify({"error": "registration_unavailable"}), 403
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     data = request.get_json(silent=True) or {}
     if not _allowed("signup", 12, 3600): return jsonify({"error": "registration_unavailable"}), 429

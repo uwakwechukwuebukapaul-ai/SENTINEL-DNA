@@ -28,8 +28,10 @@ class AuthService:
                 role TEXT NOT NULL DEFAULT 'analyst', created_at TEXT NOT NULL,
                 last_login TEXT, is_active INTEGER NOT NULL DEFAULT 1)""")
             columns = table_columns(connection, self.db.backend_name, "users")
-            for name in ("phone_number", "phone_verified_at", "tenant_id", "actor_id", "date_of_birth", "email_verified_at"):
+            for name in ("phone_number", "phone_verified_at", "tenant_id", "actor_id", "date_of_birth", "email_verified_at", "expires_at", "audit_correlation_id"):
                 if name not in columns: connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            if "revocation_status" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
             connection.execute("""CREATE TABLE IF NOT EXISTS auth_identities (
@@ -60,7 +62,7 @@ class AuthService:
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
-    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, connection=None) -> User:
+    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, connection=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
             raise ValueError("invalid_user_registration")
         normalized_role = str(role or "analyst").strip().lower()
@@ -71,9 +73,9 @@ class AuthService:
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             row = connection.execute(
-                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0),
+                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0),
             ).fetchone()
             user_id = row["id"]
             connection.execute(
@@ -91,7 +93,7 @@ class AuthService:
 
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
-            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1", (username, username.strip().lower())).fetchone()
+            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active'", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
             if not row or not verify_password(row["password_hash"], password):
                 return None
             now = datetime.now(timezone.utc).isoformat()
@@ -120,6 +122,20 @@ class AuthService:
                 revoke(owned_connection)
             return
         revoke(connection)
+
+    def invalidate_user_sessions(self, user_id, connection=None):
+        """Invalidate signed and persistent sessions for one user."""
+        def invalidate(owned_connection):
+            owned_connection.execute(
+                "UPDATE users SET session_version=COALESCE(session_version, 0)+1 WHERE id=?",
+                (user_id,),
+            )
+            self.revoke_all_sessions(user_id, connection=owned_connection)
+        if connection is None:
+            with self.db.session() as owned_connection:
+                invalidate(owned_connection)
+            return
+        invalidate(connection)
 
     def invalidate_tenant_sessions(self, tenant_id, connection=None):
         """Invalidate every authentication session bound to a tenant."""
@@ -218,7 +234,7 @@ class AuthService:
         """Deactivate one user and revoke its persistent sessions."""
         def deactivate(owned_connection):
             cursor = owned_connection.execute(
-                "UPDATE users SET is_active=0, session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=1",
+                "UPDATE users SET is_active=0, revocation_status='revoked', session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=1",
                 (user_id,),
             )
             self.revoke_all_sessions(user_id, connection=owned_connection)
@@ -232,7 +248,7 @@ class AuthService:
         """Activate one previously inactive user within the caller's transaction."""
         def activate(owned_connection):
             cursor = owned_connection.execute(
-                "UPDATE users SET is_active=1, session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=0",
+                "UPDATE users SET is_active=1, revocation_status='active', session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=0",
                 (user_id,),
             )
             self.revoke_all_sessions(user_id, connection=owned_connection)
@@ -312,8 +328,14 @@ class AuthService:
     def session_user(self, user_id: int | None, session_version: int | None = None) -> User | None:
         """Return an active user only when the signed session epoch is current."""
         user = self.get_by_id(user_id)
-        if not user or not user.is_active:
+        if not user or not user.is_active or user.revocation_status != "active":
             return None
+        if user.expires_at:
+            try:
+                if datetime.fromisoformat(user.expires_at) <= datetime.now(timezone.utc):
+                    return None
+            except ValueError:
+                return None
         try:
             presented = 0 if session_version is None else int(session_version)
         except (TypeError, ValueError):
@@ -322,4 +344,11 @@ class AuthService:
 
     @staticmethod
     def _user(row: Any) -> User:
-        return User(row["id"], row["username"], row["email"], row["password_hash"], row["role"], row["created_at"], row["last_login"], bool(row["is_active"]), row["phone_number"], row["phone_verified_at"], row["tenant_id"], row["actor_id"], row["date_of_birth"], row["email_verified_at"], int(row["session_version"] or 0))
+        return User(
+            row["id"], row["username"], row["email"], row["password_hash"],
+            row["role"], row["created_at"], row["last_login"], bool(row["is_active"]),
+            row["phone_number"], row["phone_verified_at"], row["tenant_id"],
+            row["actor_id"], row["date_of_birth"], row["email_verified_at"],
+            int(row["session_version"] or 0), row["expires_at"],
+            str(row["revocation_status"] or "active"), row["audit_correlation_id"],
+        )

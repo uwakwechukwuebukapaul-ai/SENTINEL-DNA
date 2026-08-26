@@ -14,6 +14,7 @@ class SecurityContext:
     roles: tuple[str, ...]
     correlation_id: str
     actor_id: str | None = None
+    pilot_authorization_id: str | None = None
     error: str | None = None
 
 
@@ -29,6 +30,7 @@ def request_context() -> SecurityContext:
     tenant_id = None
     error = None
     roles: tuple[str, ...] = ()
+    pilot_authorization_id = None
     if user_id and actor_id:
         auth = current_app.container.get("auth_service")
         if auth is not None and auth.session_user(user_id, session.get("session_version")) is None:
@@ -42,6 +44,7 @@ def request_context() -> SecurityContext:
                 roles=(),
                 correlation_id=request.headers.get("X-Correlation-ID") or str(uuid4()),
                 actor_id=None,
+                pilot_authorization_id=None,
                 error=error,
             )
             g.security_context = context
@@ -73,6 +76,15 @@ def request_context() -> SecurityContext:
                         error = "tenant_membership_required"
             except (LookupError, PermissionError, ValueError):
                 error = "tenant_access_denied"
+        if not error and tenant_id and "analyst" in roles:
+            pilot_service = current_app.container.get("pilot_authorization_service")
+            if pilot_service is not None:
+                authorization = pilot_service.active_for(str(actor_id), str(tenant_id))
+                pilot_authorization_id = authorization.authorization_id if authorization else None
+                if current_app.config.get("PILOT_ACCESS_REQUIRED", False) and authorization is None:
+                    error = "pilot_authorization_required"
+                    tenant_id = None
+                    roles = ()
     elif user_id:
         error = "canonical_identity_required"
     context = SecurityContext(
@@ -81,6 +93,7 @@ def request_context() -> SecurityContext:
         roles=roles,
         correlation_id=request.headers.get("X-Correlation-ID") or str(uuid4()),
         actor_id=str(actor_id) if actor_id else None,
+        pilot_authorization_id=pilot_authorization_id,
         error=error,
     )
     g.security_context = context
@@ -105,6 +118,31 @@ def authorize_investigation(payload: dict | None = None, write: bool = False) ->
     owner = metadata.get("tenant_id") or metadata.get("organization_id")
     if owner and owner != context.tenant_id:
         return False, "investigation_not_found"
+    if write and current_app.config.get("PILOT_ACCESS_REQUIRED", False) and "analyst" in context.roles:
+        pilot_service = current_app.container.get("pilot_authorization_service")
+        scenario = metadata.get("scenario_id") or metadata.get("scenario")
+        synthetic = metadata.get("synthetic")
+        customer_data = metadata.get("customer_data")
+        production = metadata.get("production") or metadata.get("production_impact")
+        if not scenario:
+            alert = (payload or {}).get("alert") or {}
+            alert_metadata = alert.get("metadata") if isinstance(alert, dict) else {}
+            scenario = (alert_metadata or {}).get("scenario_id") or (alert_metadata or {}).get("scenario")
+            synthetic = (alert_metadata or {}).get("synthetic", synthetic)
+            customer_data = (alert_metadata or {}).get("customer_data", customer_data)
+            production = (alert_metadata or {}).get("production", production)
+        if pilot_service is None or not context.pilot_authorization_id:
+            return False, "pilot_authorization_required"
+        if not scenario:
+            return False, "pilot_scenario_required"
+        if synthetic is not True or customer_data is True or production is True:
+            return False, "pilot_synthetic_data_required"
+        if not pilot_service.is_scenario_allowed(
+            context.pilot_authorization_id,
+            str(scenario),
+            tenant_id=context.tenant_id,
+        ):
+            return False, "pilot_scenario_not_approved"
     return True, ""
 
 
