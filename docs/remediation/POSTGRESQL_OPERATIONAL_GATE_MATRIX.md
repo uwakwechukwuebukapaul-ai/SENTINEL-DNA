@@ -1,8 +1,9 @@
 # PostgreSQL operational evidence gate matrix
 
 Status snapshot for remediation HEAD
-`94e3da4f4fa3952981fb68e9d0d3205ec6aa6a7c`. This matrix is not a release
-approval.
+`6684dada68363e81fd3f3b405320f2f8f595fef7`. This matrix is not a release
+approval. The supplied custody reference `6901b3cce61c0cf349d3c67230aaced26b0936d4`
+does not match the checked-out branch HEAD and requires reconciliation.
 
 | Gate | Status | Evidence or blocker |
 | --- | --- | --- |
@@ -14,7 +15,7 @@ approval.
 | Credential rotation/revocation | PASS (bounded rehearsal scope) | `ALTER USER` successful; old password rejected; rotated credential accepted |
 | Monitoring and ownership | BLOCKED | Operational owners, alert routing, and attestations explicitly unknown |
 | Stale evidence reconciliation | PASS | Outdated blocked-state references reconciled; remaining blockers are intentional |
-| Remediation custody | BLOCKED | Worktree remains dirty; final writable Git custody/independent review outstanding |
+| Remediation custody | BLOCKED | Worktree is clean, but the checked-out HEAD differs from the supplied custody reference; final custody reconciliation remains outstanding |
 
 Production readiness remains blocked until every partial or blocked gate has
 independent external evidence and custody review.

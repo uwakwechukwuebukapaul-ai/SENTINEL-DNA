@@ -9,7 +9,7 @@ is claimed by the PostgreSQL rehearsal evidence.
 - Environment: `DISPOSABLE REHEARSAL ONLY; production ownership UNKNOWN`
 - PostgreSQL instance or logical service: `UNKNOWN — not attested`
 - Data classification: `UNKNOWN — classification attestation required`
-- Remediation HEAD: `94e3da4f4fa3952981fb68e9d0d3205ec6aa6a7c`
+- Remediation HEAD: `6684dada68363e81fd3f3b405320f2f8f595fef7`
 - Attestation period: `NOT ATTESTED`
 
 ## Monitoring coverage
@@ -26,15 +26,19 @@ is claimed by the PostgreSQL rehearsal evidence.
 
 ## Ownership and response
 
-- Primary service owner: `UNKNOWN — not attested`
+- Service owner: `UNKNOWN — not attested`
 - Database owner: `UNKNOWN — not attested`
+- Security owner: `UNKNOWN — not attested`
+- Incident escalation owner: `UNKNOWN — not attested`
 - On-call team and rotation: `UNKNOWN — not attested`
-- Backup/recovery owner: `UNKNOWN — not attested`
+- Backup ownership: `UNKNOWN — not attested`
+- Monitoring responsibility: `UNKNOWN — not attested`
+- Alert response responsibility: `UNKNOWN — not attested`
 - Security escalation owner: `UNKNOWN — not attested`
 - Incident severity mapping: `UNKNOWN — not attested`
 - Response-time objective: `UNKNOWN — not attested`
 - Escalation path: `UNKNOWN — not attested`
-- Last reviewed date: `NOT REVIEWED`
+- Review date: `NOT REVIEWED`
 
 ## Attestation
 
@@ -47,6 +51,7 @@ I attest that the monitoring signals, alert routing, ownership, and escalation
 paths above were independently verified for the stated environment and period.
 
 - Attestor name/role: `UNKNOWN — not attested`
+- Approver identity: `UNKNOWN — not attested`
 - Attestor signature or approved ticket: `NOT PROVIDED`
 - Independent reviewer: `UNKNOWN — not attested`
 - Review date (UTC): `NOT REVIEWED`
