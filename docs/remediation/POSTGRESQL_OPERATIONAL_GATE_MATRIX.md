@@ -1,7 +1,7 @@
 # PostgreSQL operational evidence gate matrix
 
 Status snapshot for remediation HEAD
-`625ad80ccf55237fa112c578a78064d87915d9675`. This matrix is not a release
+`dc1e0c045eddeb5a2d642addb46d671522db7217`. This matrix is not a release
 approval. Repository/remediation custody, product ownership, production
 operational ownership, and independent approval remain separate controls.
 
