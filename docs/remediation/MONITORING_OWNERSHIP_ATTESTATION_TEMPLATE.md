@@ -7,7 +7,7 @@ is claimed by the PostgreSQL rehearsal evidence.
 
 - Repository: `SENTINEL-DNA`
 - Branch: `remediation/postgresql-production-readiness`
-- Current remediation HEAD: `a21649b8b5a9dcca111391e8636e40133183bf40`
+- Current remediation HEAD: `1954396f79677f0c79eaf97c556e05eb43195f5f`
 - Protected RC1 tag: `v1.0.0-rc1`
 - Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
 - Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
@@ -49,9 +49,12 @@ evidence of completion and must remain unresolved until externally recorded.
 - [ ] Availability/readiness signal and threshold recorded
 - [ ] Connection, error, storage, recovery, and audit alert conditions recorded
 - [ ] Expected alert recipient and escalation path confirmed for the pilot
-- [ ] Alert delivery and acknowledgement observed
-- [ ] Escalation response observed
-- [ ] Dashboard/query references recorded
+- [ ] Synthetic pilot alert generated from a documented test trigger
+- [ ] Alert identifier and generation timestamp (UTC) recorded
+- [ ] Alert receipt by the pilot recipient observed and receipt timestamp (UTC) recorded
+- [ ] Alert acknowledgement observed and acknowledgement timestamp (UTC) recorded
+- [ ] Escalation simulation observed and escalation timestamp (UTC) recorded
+- [ ] Dashboard/query verification performed and timestamp (UTC) recorded
 - [ ] External evidence path and deterministic digest recorded
 - [ ] Evidence reviewed for secrets and customer-data exclusion
 
@@ -64,15 +67,44 @@ evidence of completion and must remain unresolved until externally recorded.
 - Test identifier: `UNKNOWN`
 - Alert signal and threshold: `UNKNOWN`
 - Trigger method and time (UTC): `UNKNOWN`
+- Alert generation result: `NOT PROVIDED`
+- Alert generation timestamp (UTC): `UNKNOWN`
 - Expected recipient: `Uwakwe chukwuebuka paul`
-- Delivery result: `NOT PROVIDED`
+- Alert receipt result: `NOT PROVIDED`
+- Alert receipt timestamp (UTC): `UNKNOWN`
 - Acknowledgement result: `NOT PROVIDED`
-- Escalation result: `NOT PROVIDED`
+- Acknowledgement timestamp (UTC): `UNKNOWN`
+- Escalation simulation result: `NOT PROVIDED`
+- Escalation timestamp (UTC): `UNKNOWN`
+- Dashboard/query verification result: `NOT PROVIDED`
+- Dashboard/query verification timestamp (UTC): `UNKNOWN`
 - Evidence path: `NOT PROVIDED`
 - Evidence digest: `NOT PROVIDED`
 - Customer-data exclusion: `NOT ATTESTED`
 - Secret exclusion: `NOT ATTESTED`
 - Independent reviewer: `UNKNOWN — not attested`
+
+## External evidence package structure
+
+Store the package outside the repository. The following artifacts are required
+for an executed pilot run; all are currently `NOT PROVIDED`:
+
+- `manifest.json`: remediation HEAD, pilot scope, validation window (UTC), and
+  artifact inventory
+- `alert-generation.json`: event identifier, alert source, generation result,
+  and generation timestamp (UTC)
+- `alert-receipt.json`: event identifier, recipient, receipt result, and receipt
+  timestamp (UTC)
+- `alert-acknowledgement.json`: event identifier, acknowledgement record, and
+  acknowledgement timestamp (UTC)
+- `escalation.json`: event identifier, escalation route, result, and escalation
+  timestamp (UTC)
+- `dashboard-query.json`: event identifier, dashboard/query reference,
+  verification result, and verification timestamp (UTC)
+- `checksums.sha256`: SHA-256 digest entries for every package artifact
+
+The package must contain non-secret pilot records only. It must not contain
+credentials, customer data, production URLs, or enterprise SLA claims.
 
 ## Service record
 

@@ -21,6 +21,30 @@ assign enterprise production operations:
 - Response objective: `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
 - Alert validation evidence: `NOT PROVIDED`
 
+Pilot evidence must be captured externally for each validation run:
+
+- Alert generation from a documented synthetic trigger.
+- Alert receipt by the named pilot recipient.
+- Alert acknowledgement.
+- Escalation simulation and observed response.
+- Dashboard/query verification.
+- UTC timestamps for generation, receipt, acknowledgement, escalation, and
+  dashboard/query verification.
+
+No item above is evidenced by this template; each remains `NOT PROVIDED` until
+the pilot run is actually performed and independently reviewable.
+
+The external evidence package must contain, at minimum:
+
+- a manifest with remediation HEAD, pilot scope, and UTC validation window;
+- separate records for alert generation, receipt, acknowledgement, and
+  escalation simulation;
+- a dashboard/query verification record;
+- event identifiers and UTC timestamps in each applicable record; and
+- a `checksums.sha256` file covering every non-secret package artifact.
+
+Package status: `NOT PROVIDED`.
+
 Enterprise production assignments remain unresolved in the table below.
 
 ## Required assignments

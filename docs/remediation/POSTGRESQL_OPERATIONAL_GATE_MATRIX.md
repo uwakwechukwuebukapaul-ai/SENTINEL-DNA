@@ -1,7 +1,7 @@
 # PostgreSQL operational evidence gate matrix
 
 Status snapshot for remediation HEAD
-`a21649b8b5a9dcca111391e8636e40133183bf40`. This matrix is not a release
+`1954396f79677f0c79eaf97c556e05eb43195f5f`. This matrix is not a release
 approval. Repository/remediation custody, product ownership, production
 operational ownership, and independent approval remain separate controls.
 
@@ -31,7 +31,7 @@ independent approval.
 | Transaction rollback/failed migration rollback | PASS | Covered by the external rehearsal report |
 | Production-like backup/restore | PASS (bounded rehearsal scope) | `pg_dump`/`pg_restore` successful; dump `C:\Temp\sentinel-dna-rehearsal.dump`; SHA-256 `BC6932E9194F38526EC75982F681D253C0764B951A9A8B4D4CA3B5C3FB1FE4D4`; restore target `sentinel_restore_test`; `schema_migrations` count `1` |
 | Credential rotation/revocation | PASS (bounded rehearsal scope) | `ALTER USER` successful; old password rejected; rotated credential accepted |
-| Monitoring and ownership | BLOCKED | Founder-operated pilot assignments and a validation template are documented; alert validation evidence, enterprise operational ownership, and independent attestation remain unknown |
+| Monitoring and ownership | BLOCKED | Founder-operated pilot assignments, validation procedure, package structure, and evidence template are documented; alert execution evidence, enterprise operational ownership, and independent attestation remain unknown |
 | Stale evidence reconciliation | PASS | Outdated blocked-state references reconciled; remaining blockers are intentional |
 | Remediation custody | BLOCKED | Current HEAD is documented above; pending documentation-only changes remain in the worktree and final custody reconciliation is outstanding |
 
