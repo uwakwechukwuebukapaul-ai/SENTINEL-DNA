@@ -112,6 +112,25 @@ def test_deployment_validation_requires_exact_trusted_release_artifact(tmp_path)
     assert validate_configuration(environ=environment, repository_root=ROOT) == []
 
 
+def test_controlled_production_validation_requires_postgresql_url():
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+    }
+
+    errors = validate_configuration(
+        environ=environment,
+        repository_root=ROOT,
+        require_postgresql=True,
+    )
+
+    assert "DATABASE_URL:missing" in errors
+
+
 def test_deployment_validation_rejects_missing_trusted_release_artifact(tmp_path):
     metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
     environment = {

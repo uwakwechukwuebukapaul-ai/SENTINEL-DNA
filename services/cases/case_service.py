@@ -70,8 +70,12 @@ class CaseService:
     def add_note(self, case_id: str, user_id: int, note: str) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         with self.db.session() as connection:
-            cursor = connection.execute("INSERT INTO analyst_notes(case_id,user_id,note,created_at,updated_at) VALUES(?,?,?,?,?)", (case_id, user_id, note, now, now))
-            row = connection.execute("SELECT * FROM analyst_notes WHERE id=?", (cursor.lastrowid,)).fetchone()
+            row = connection.execute(
+                "INSERT INTO analyst_notes(case_id,user_id,note,created_at,updated_at) "
+                "VALUES(?,?,?,?,?) "
+                "RETURNING *",
+                (case_id, user_id, note, now, now),
+            ).fetchone()
         self.audit.record("NOTE_CREATED", case_id, user_id)
         return dict(row)
 

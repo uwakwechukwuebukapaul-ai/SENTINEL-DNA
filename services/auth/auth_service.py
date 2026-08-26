@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from database.connection import DatabaseConnection, database
+from database.portability import table_columns
 from .models import User
 from .security import hash_password, verify_password
 from .age import validate_minimum_age
@@ -26,7 +27,7 @@ class AuthService:
                 email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'analyst', created_at TEXT NOT NULL,
                 last_login TEXT, is_active INTEGER NOT NULL DEFAULT 1)""")
-            columns = {row[1] for row in connection.execute("PRAGMA table_info(users)")}
+            columns = table_columns(connection, self.db.backend_name, "users")
             for name in ("phone_number", "phone_verified_at", "tenant_id", "actor_id", "date_of_birth", "email_verified_at"):
                 if name not in columns: connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
             if "session_version" not in columns:
@@ -46,7 +47,7 @@ class AuthService:
                 id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT UNIQUE NOT NULL,
                 tenant_id TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
                 revoked_at TEXT, last_used_at TEXT)""")
-            session_columns = {row[1] for row in connection.execute("PRAGMA table_info(persistent_sessions)")}
+            session_columns = table_columns(connection, self.db.backend_name, "persistent_sessions")
             for name in ("user_agent", "ip_address", "auth_method"):
                 if name not in session_columns: connection.execute(f"ALTER TABLE persistent_sessions ADD COLUMN {name} TEXT")
             connection.execute("""CREATE TABLE IF NOT EXISTS auth_events (
@@ -69,13 +70,15 @@ class AuthService:
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
-            cursor = connection.execute(
-                "INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            row = connection.execute(
+                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
                 (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0),
-            )
-            user_id = cursor.lastrowid
+            ).fetchone()
+            user_id = row["id"]
             connection.execute(
-                "INSERT OR IGNORE INTO auth_identities(user_id,provider,provider_subject,normalized_identifier,verified_at,created_at,last_used_at) VALUES(?,?,?,?,?,?,?)",
+                """INSERT INTO auth_identities(user_id,provider,provider_subject,normalized_identifier,verified_at,created_at,last_used_at)
+                   VALUES(?,?,?,?,?,?,?) ON CONFLICT (provider, provider_subject) DO NOTHING""",
                 (user_id, "password", str(user_id), email.strip().lower(), None, now, now),
             )
             return user_id

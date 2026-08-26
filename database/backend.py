@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import re
 from typing import Any, Iterator, Literal, Mapping, Protocol
 from urllib.parse import urlparse
 
@@ -105,7 +106,11 @@ class SQLiteBackend:
         configured = database_path
         if configured is None:
             configured = os.getenv("SENTINEL_DNA_DB_PATH", PROJECT_ROOT / "soc.db")
-        self.database_path = str(Path(configured).expanduser().resolve())
+        self.database_path = (
+            ":memory:"
+            if str(configured) == ":memory:"
+            else str(Path(configured).expanduser().resolve())
+        )
         self.busy_timeout_ms = max(0, int(busy_timeout_ms))
 
     def connect(self) -> Any:
@@ -146,6 +151,51 @@ class SQLiteBackend:
             connection.close()
 
 
+def _adapt_postgresql_sql(statement: str) -> str:
+    """Adapt the legacy repository placeholder subset for psycopg 3."""
+
+    statement = re.sub(r"\bBEGIN\s+IMMEDIATE\b", "BEGIN", statement, flags=re.IGNORECASE)
+    return statement.replace("?", "%s")
+
+
+class _PostgreSQLCursorAdapter:
+    """Keep legacy cursor call sites on the backend SQL boundary."""
+
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+
+    def execute(self, statement: str, params: Any = ()) -> Any:
+        statement = _adapt_postgresql_sql(statement)
+        return self._cursor.execute(statement, params) if params else self._cursor.execute(statement)
+
+    def executemany(self, statement: str, params: Any) -> Any:
+        return self._cursor.executemany(_adapt_postgresql_sql(statement), params)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._cursor, name)
+
+
+class _PostgreSQLConnectionAdapter:
+    """Expose a small compatibility surface over a psycopg connection."""
+
+    def __init__(self, connection: Any) -> None:
+        self._connection = connection
+        self.backend_name = "postgresql"
+
+    def execute(self, statement: str, params: Any = ()) -> Any:
+        statement = _adapt_postgresql_sql(statement)
+        return self._connection.execute(statement, params) if params else self._connection.execute(statement)
+
+    def executemany(self, statement: str, params: Any) -> Any:
+        return self._connection.executemany(_adapt_postgresql_sql(statement), params)
+
+    def cursor(self, *args: Any, **kwargs: Any) -> _PostgreSQLCursorAdapter:
+        return _PostgreSQLCursorAdapter(self._connection.cursor(*args, **kwargs))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connection, name)
+
+
 class PostgreSQLBackend:
     """PostgreSQL backend using psycopg 3 with lazy driver loading."""
 
@@ -166,12 +216,13 @@ class PostgreSQLBackend:
             ) from exc
 
         try:
-            return psycopg.connect(
+            connection = psycopg.connect(
                 self.database_url,
                 connect_timeout=self.connect_timeout,
                 row_factory=dict_row,
                 autocommit=False,
             )
+            return _PostgreSQLConnectionAdapter(connection)
         except psycopg.Error as exc:
             # Do not include the URL: it may contain credentials.
             raise DatabaseError("PostgreSQL connection failed") from exc

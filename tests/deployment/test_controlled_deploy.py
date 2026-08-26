@@ -116,6 +116,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
                 f"SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE={metadata_file}",
                 f"SENTINEL_DNA_TLS_DIR={tls_dir}",
                 "SENTINEL_DNA_SECURE_COOKIES=1",
+                "DATABASE_URL=postgresql://sentinel:test@postgres.example:5432/sentinel_dna",
             )
         ),
         encoding="utf-8",

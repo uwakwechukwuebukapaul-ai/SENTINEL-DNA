@@ -2,8 +2,8 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 from flask import Blueprint, current_app, g, jsonify, redirect, request, session, url_for
-from sqlite3 import IntegrityError
 from database.errors import DatabaseError
+from database.portability import integrity_error
 from .age import validate_minimum_age
 from .oauth import GoogleOIDC
 from .phone import country_options, normalize_phone
@@ -111,8 +111,9 @@ def register():
             if not verified or not email_verified: raise ValueError("verification_required")
             email_verified_at = datetime.now(timezone.utc).isoformat()
         user = _service().register(data.get("username", ""), data.get("email", ""), data.get("password", ""), "analyst", phone_number=phone, date_of_birth=dob, email_verified_at=email_verified_at)
-    except (IntegrityError, DatabaseError): return jsonify({"error": "registration_unavailable"}), 409
-    except Exception:
+    except DatabaseError: return jsonify({"error": "registration_unavailable"}), 409
+    except Exception as exc:
+        if integrity_error(exc): return jsonify({"error": "registration_unavailable"}), 409
         _audit("signup_failed", method="password", outcome="failure", reason="invalid_registration")
         return jsonify({"error": "invalid_registration"}), 400
     try: _bind(user)

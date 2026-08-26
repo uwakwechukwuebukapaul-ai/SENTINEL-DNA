@@ -4,9 +4,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
-import sqlite3
 from pathlib import Path
 from typing import Any
+
+from database.backend import DatabaseBackend
+from database.connection import DatabaseConnection
+from database.portability import append_only_statements, execute_script
 
 from .organizational_models import ORGANIZATIONAL_MEMORY_TYPES, OrganizationalMemoryRecord
 
@@ -22,14 +25,15 @@ def _json(value: Any) -> str:
 class OrganizationalMemoryRepository:
     """SQLite boundary with mandatory tenant predicates and immutable records."""
 
-    def __init__(self, database: str | Path = ":memory:") -> None:
-        self.database = str(getattr(database, "database_path", database))
-        self._connection = sqlite3.connect(self.database)
-        self._connection.row_factory = sqlite3.Row
+    def __init__(self, database: str | Path | DatabaseBackend = ":memory:") -> None:
+        self.db = database if hasattr(database, "connect") else DatabaseConnection(database)
+        self.database = str(getattr(self.db, "database_path", database))
+        self._connection = self.db.connect()
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        self._connection.executescript(
+        execute_script(
+            self._connection,
             """
             CREATE TABLE IF NOT EXISTS organizational_memory (
                 record_id TEXT PRIMARY KEY,
@@ -62,20 +66,20 @@ class OrganizationalMemoryRepository:
             );
             CREATE INDEX IF NOT EXISTS idx_org_memory_audit_tenant
                 ON organizational_memory_audit(tenant_id, created_at, audit_id);
-            CREATE TRIGGER IF NOT EXISTS organizational_memory_append_only_update
-            BEFORE UPDATE ON organizational_memory
-            BEGIN SELECT RAISE(ABORT, 'organizational_memory_is_append_only'); END;
-            CREATE TRIGGER IF NOT EXISTS organizational_memory_append_only_delete
-            BEFORE DELETE ON organizational_memory
-            BEGIN SELECT RAISE(ABORT, 'organizational_memory_is_append_only'); END;
-            CREATE TRIGGER IF NOT EXISTS organizational_memory_audit_append_only_update
-            BEFORE UPDATE ON organizational_memory_audit
-            BEGIN SELECT RAISE(ABORT, 'organizational_memory_audit_is_append_only'); END;
-            CREATE TRIGGER IF NOT EXISTS organizational_memory_audit_append_only_delete
-            BEFORE DELETE ON organizational_memory_audit
-            BEGIN SELECT RAISE(ABORT, 'organizational_memory_audit_is_append_only'); END;
             """
         )
+        for statement in append_only_statements(
+            self.db.backend_name,
+            table_name="organizational_memory",
+            trigger_prefix="organizational_memory_append_only",
+            error_message="organizational_memory_is_append_only",
+        ) + append_only_statements(
+            self.db.backend_name,
+            table_name="organizational_memory_audit",
+            trigger_prefix="organizational_memory_audit_append_only",
+            error_message="organizational_memory_audit_is_append_only",
+        ):
+            self._connection.execute(statement)
         self._connection.commit()
 
     @staticmethod
@@ -107,9 +111,10 @@ class OrganizationalMemoryRepository:
             f"{tenant_id}|{resource_type}|{resource_id}|{event_type}|{event_hash}".encode("utf-8")
         ).hexdigest()[:32]
         self._connection.execute(
-            """INSERT OR IGNORE INTO organizational_memory_audit
+            """INSERT INTO organizational_memory_audit
                (audit_id, tenant_id, resource_type, resource_id, event_type, payload, event_hash, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (audit_id) DO NOTHING""",
             (audit_id, tenant_id, resource_type, resource_id, event_type, _json(payload), event_hash, created_at),
         )
         return event_hash
@@ -127,11 +132,12 @@ class OrganizationalMemoryRepository:
         data["audit_hash"] = audit_hash
         created_at = str(data.get("created_at") or _now())
         self._connection.execute(
-            """INSERT OR IGNORE INTO organizational_memory
+            """INSERT INTO organizational_memory
             (record_id, tenant_id, memory_type, source_investigation_id, created_by,
              confidence, observed_at, created_at, why_stored, evidence_provenance,
              payload_json, audit_hash, advisory_only)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (record_id) DO NOTHING""",
             (
                 record_id, tenant_id, memory_type, str(data.get("source_investigation_id") or ""),
                 data.get("created_by"), float(data.get("confidence") or 0.0),
@@ -151,7 +157,7 @@ class OrganizationalMemoryRepository:
         self._connection.commit()
         return self.get(tenant_id, record_id) or record
 
-    def _from_row(self, row: sqlite3.Row) -> OrganizationalMemoryRecord:
+    def _from_row(self, row: Any) -> OrganizationalMemoryRecord:
         data = json.loads(row["payload_json"] or "{}")
         memory_type = str(row["memory_type"])
         data.pop("memory_type", None)

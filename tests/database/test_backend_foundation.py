@@ -73,6 +73,17 @@ def test_legacy_database_connection_with_explicit_path_is_sqlite(tmp_path):
     assert isinstance(backend, SQLiteBackend)
 
 
+def test_explicit_sqlite_path_remains_compatible_in_production_shaped_environment(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    backend = DatabaseConnection(tmp_path / "compatibility.sqlite")
+
+    assert isinstance(backend, SQLiteBackend)
+
+
 def test_postgresql_missing_driver_fails_without_network(monkeypatch):
     monkeypatch.setitem(sys.modules, "psycopg", None)
     with pytest.raises(DatabaseError, match="PostgreSQL driver is unavailable"):
@@ -119,6 +130,47 @@ def test_postgresql_session_commits_and_closes(monkeypatch):
     assert connections[-1].commits == 1
     assert connections[-1].rollbacks == 0
     assert connections[-1].closed is True
+
+
+def test_postgresql_adapter_translates_legacy_repository_sql(monkeypatch):
+    class FakeConnection:
+        def __init__(self):
+            self.statements = []
+            self.closed = False
+
+        def execute(self, statement, params=()):
+            self.statements.append((statement, params))
+            return self
+
+        def fetchone(self):
+            return {"health_probe": 1}
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    connection = FakeConnection()
+    fake_psycopg = types.ModuleType("psycopg")
+    fake_psycopg.Error = RuntimeError
+    fake_psycopg.connect = lambda *args, **kwargs: connection
+    fake_rows = types.ModuleType("psycopg.rows")
+    fake_rows.dict_row = object()
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setitem(sys.modules, "psycopg.rows", fake_rows)
+
+    with PostgreSQLBackend("postgresql://user:pw@db.example/sentinel").session() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("SELECT * FROM cases WHERE case_id=?", ("case-1",))
+
+    assert connection.statements == [
+        ("BEGIN", ()),
+        ("SELECT * FROM cases WHERE case_id=%s", ("case-1",)),
+    ]
 
 
 def test_postgresql_session_rolls_back_and_closes_on_application_error(monkeypatch):

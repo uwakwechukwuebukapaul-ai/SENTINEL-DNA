@@ -4,9 +4,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
-import sqlite3
 from pathlib import Path
 from typing import Any
+
+from database.backend import DatabaseBackend
+from database.connection import DatabaseConnection
+from database.portability import execute_script, table_columns
 
 from .models import AnalystFeedbackRecord, InvestigationMemoryRecord
 
@@ -22,15 +25,15 @@ def _json(value: Any) -> str:
 class InvestigationMemoryRepository:
     """Durable memory boundary with mandatory tenant predicates on reads."""
 
-    def __init__(self, database: str | Path = ":memory:") -> None:
-        self.database = str(getattr(database, "database_path", database))
-        self._connection = sqlite3.connect(self.database)
-        self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA foreign_keys = ON")
+    def __init__(self, database: str | Path | DatabaseBackend = ":memory:") -> None:
+        self.db = database if hasattr(database, "connect") else DatabaseConnection(database)
+        self.database = str(getattr(self.db, "database_path", database))
+        self._connection = self.db.connect()
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        self._connection.executescript(
+        execute_script(
+            self._connection,
             """
             CREATE TABLE IF NOT EXISTS investigation_memory (
                 memory_id TEXT PRIMARY KEY,
@@ -83,12 +86,7 @@ class InvestigationMemoryRepository:
                 ON investigation_memory_audit(tenant_id, created_at);
             """
         )
-        columns = {
-            row["name"]
-            for row in self._connection.execute(
-                "PRAGMA table_info(investigation_memory)"
-            ).fetchall()
-        }
+        columns = table_columns(self._connection, self.db.backend_name, "investigation_memory")
         additions = {
             "tenant_id": "ALTER TABLE investigation_memory ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'",
             "investigation_id": "ALTER TABLE investigation_memory ADD COLUMN investigation_id TEXT NOT NULL DEFAULT ''",
@@ -102,7 +100,8 @@ class InvestigationMemoryRepository:
         for column, statement in additions.items():
             if column not in columns:
                 self._connection.execute(statement)
-        self._connection.executescript(
+        execute_script(
+            self._connection,
             """
             CREATE INDEX IF NOT EXISTS idx_investigation_memory_tenant_case
                 ON investigation_memory(tenant_id, case_id, created_at);
@@ -134,9 +133,10 @@ class InvestigationMemoryRepository:
             f"{tenant_id}|{resource_type}|{resource_id}|{event_type}|{event_hash}".encode()
         ).hexdigest()[:32]
         self._connection.execute(
-            """INSERT OR IGNORE INTO investigation_memory_audit
+            """INSERT INTO investigation_memory_audit
                (audit_id, tenant_id, resource_type, resource_id, event_type, payload, event_hash, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (audit_id) DO NOTHING""",
             (audit_id, tenant_id, resource_type, resource_id, event_type, _json(payload), event_hash, created_at),
         )
         return event_hash
@@ -148,12 +148,13 @@ class InvestigationMemoryRepository:
         payload = record.to_dict()
         audit_hash = record.audit_hash or self._audit_hash(payload)
         self._connection.execute(
-            """INSERT OR IGNORE INTO investigation_memory
+            """INSERT INTO investigation_memory
             (memory_id, tenant_id, case_id, investigation_id, investigation_type, scenario,
              risk_level, confidence, evidence_summary, reasoning_summary, mitre_techniques,
              outcome, created_at, synthetic_only, provenance, verdict, attack_pattern,
              evidence_fingerprint, validation_result, audit_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (memory_id) DO NOTHING""",
             (
                 record.memory_id, tenant_id, record.case_id, record.investigation_id,
                 record.investigation_type, record.scenario, record.risk_level,
@@ -176,7 +177,7 @@ class InvestigationMemoryRepository:
         return self.get(tenant_id, record.memory_id) or record
 
     @staticmethod
-    def _record(row: sqlite3.Row) -> InvestigationMemoryRecord:
+    def _record(row: Any) -> InvestigationMemoryRecord:
         data = dict(row)
         for key in ("evidence_summary", "reasoning_summary", "mitre_techniques", "outcome", "provenance", "attack_pattern"):
             default = "[]" if key in {"mitre_techniques", "attack_pattern"} else "{}"

@@ -1,12 +1,12 @@
 """Provider-neutral durable billing repository."""
 from __future__ import annotations
-import sqlite3
 from contextlib import contextmanager
 from database.connection import DatabaseConnection, database
+from database.portability import execute_script, integrity_error
 from .exceptions import BillingError
 
 def ensure_billing_schema(connection):
-    connection.executescript("""
+    execute_script(connection, """
     CREATE TABLE IF NOT EXISTS billing_customers (tenant_id TEXT PRIMARY KEY, provider TEXT NOT NULL, provider_customer_id TEXT NOT NULL UNIQUE);
     CREATE TABLE IF NOT EXISTS billing_transactions (transaction_reference TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, provider TEXT NOT NULL, provider_transaction_id TEXT UNIQUE, plan_id TEXT NOT NULL, status TEXT NOT NULL, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, verified_at TEXT);
     CREATE TABLE IF NOT EXISTS billing_subscriptions (tenant_id TEXT PRIMARY KEY, provider TEXT NOT NULL, plan_id TEXT NOT NULL, status TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -41,7 +41,9 @@ class BillingRepository:
     def event_exists(self, connection, event_id): return connection.execute("SELECT 1 FROM billing_events WHERE event_id=?",(event_id,)).fetchone() is not None
     def record_event(self, connection, event_id, provider, event_type, transaction_reference=None):
         try: connection.execute("INSERT INTO billing_events(event_id,provider,event_type,transaction_reference) VALUES(?,?,?,?)",(event_id,provider,event_type,transaction_reference)); return True
-        except sqlite3.IntegrityError: return False
+        except Exception as exc:
+            if integrity_error(exc): return False
+            raise
     def get_checkout(self, connection, tenant_id, idempotency_key): return connection.execute("SELECT * FROM billing_checkout_requests WHERE tenant_id=? AND idempotency_key=?",(tenant_id,idempotency_key)).fetchone()
     def save_checkout(self, connection, tenant_id, key, result): connection.execute("INSERT INTO billing_checkout_requests(tenant_id,idempotency_key,transaction_reference,plan_id,amount_minor,currency,authorization_url) VALUES(?,?,?,?,?,?,?)",(tenant_id,key,result.transaction_reference,result.plan_id,result.amount_minor,result.currency,result.authorization_url))
     def save_crypto_quote(self, connection, quote):

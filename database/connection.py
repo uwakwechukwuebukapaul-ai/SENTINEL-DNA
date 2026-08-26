@@ -34,9 +34,9 @@ DATABASE_PATH = resolve_database_path()
 class DatabaseConnection:
     """Backward-compatible constructor at the new backend boundary.
 
-    Passing a path explicitly creates SQLite in non-production environments,
-    preserving test and repository compatibility. Production always requires
-    the authoritative PostgreSQL ``DATABASE_URL``.
+    Passing a path explicitly creates SQLite, preserving test and repository
+    compatibility. Process-level production resolution still requires the
+    authoritative PostgreSQL ``DATABASE_URL``.
     """
 
     def __new__(
@@ -47,7 +47,10 @@ class DatabaseConnection:
         busy_timeout_ms: int = DEFAULT_BUSY_TIMEOUT_MS,
     ) -> DatabaseBackend:
         production = os.getenv("SENTINEL_DNA_ENV", "").strip().lower() == "production"
-        if database_url is not None or production or (database_path is None and os.getenv("DATABASE_URL", "").strip()):
+        if database_url is not None or (
+            database_path is None
+            and (production or os.getenv("DATABASE_URL", "").strip())
+        ):
             return create_database_backend(
                 database_url=database_url,
                 require_postgresql=True,

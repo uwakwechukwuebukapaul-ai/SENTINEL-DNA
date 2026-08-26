@@ -23,7 +23,12 @@ class DatabaseRateLimitBackend(RateLimitBackend):
         with self.db.session() as connection:
             row = connection.execute("SELECT window_started,count FROM auth_rate_limits WHERE bucket_hash=?", (key_hash,)).fetchone()
             if not row or datetime.fromisoformat(row["window_started"]) + timedelta(seconds=window_seconds) <= now:
-                connection.execute("INSERT OR REPLACE INTO auth_rate_limits(bucket_hash,window_started,count) VALUES(?,?,1)", (key_hash, now.isoformat()))
+                connection.execute(
+                    "INSERT INTO auth_rate_limits(bucket_hash,window_started,count) "
+                    "VALUES(?,?,1) ON CONFLICT(bucket_hash) DO UPDATE SET "
+                    "window_started=excluded.window_started, count=excluded.count",
+                    (key_hash, now.isoformat()),
+                )
                 return True
             if int(row["count"]) >= limit:
                 return False

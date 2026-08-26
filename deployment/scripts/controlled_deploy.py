@@ -374,7 +374,12 @@ class ControlledDeploymentAdapter:
 
         env_path = validate_protected_file(self.env_file, self.repository_root, self.acl_inspector)
         values = merged_environment(environ={}, env_file=env_path)
-        errors = validate_configuration(environ={}, env_file=env_path, repository_root=self.repository_root)
+        errors = validate_configuration(
+            environ={},
+            env_file=env_path,
+            repository_root=self.repository_root,
+            require_postgresql=True,
+        )
         if errors:
             raise ControlledDeploymentError("configuration_invalid")
         metadata_binding = Path(values["SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"])

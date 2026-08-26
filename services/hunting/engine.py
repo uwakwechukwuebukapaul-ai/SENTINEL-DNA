@@ -12,7 +12,7 @@ from services.observability import ObservabilityService
 class HuntEngine:
     def __init__(self, db_path: str | Path | None = None, observer: ObservabilityService | None = None):
         self.db = DatabaseConnection(db_path)
-        self.db_path, self.observer = self.db.database_path, observer or ObservabilityService()
+        self.db_path, self.observer = str(getattr(self.db, "database_path", "")), observer or ObservabilityService()
         self.iocs = IOCDataAccessService(IOCRepository(self.db))
 
     def execute(self, query: HuntQuery) -> HuntResult:
