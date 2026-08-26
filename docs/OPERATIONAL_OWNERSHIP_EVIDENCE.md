@@ -51,7 +51,12 @@ Observed package:
 
 - Artifact: `pilot-evidence/MONITOR-PILOT-001.json`
 - Checksum manifest: `pilot-evidence/checksums.sha256`
-- SHA-256: `930146f0ca7644d14ebc0d9ccb6f2cb056602e8dbc5814c8800e576b4ea33e67`
+- Validated implementation commit (pilot validation target): `10cb2106e0f168861daf260c4394b02157874abc`
+- Evidence artifact commit: `PENDING_CONTAINING_CUSTODY_COMMIT` (recorded after commit)
+- Current HEAD after evidence commit: `NOT_ASSERTED_BY_IMMUTABLE_PILOT_EVIDENCE` (recorded in the post-commit custody handoff)
+- Branch: `remediation/postgresql-production-readiness`
+- Worktree state at pilot execution: `clean`
+- SHA-256: `07115ba59f0cfc7417844a98a5742f59f557db6d510360ec16eaea89803a6e36`
 - Command: `python scripts/run_monitoring_pilot.py`
 
 ## Founder-operated pilot execution mechanism

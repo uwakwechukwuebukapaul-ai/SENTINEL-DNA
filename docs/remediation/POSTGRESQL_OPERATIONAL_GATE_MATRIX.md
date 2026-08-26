@@ -1,9 +1,14 @@
 # PostgreSQL operational evidence gate matrix
 
-Status snapshot for remediation HEAD
-`4ff3ecdd1f6b24bce4352c9aea81d95c14c3ea34`. This matrix is not a release
+Status snapshot for validated implementation commit
+`10cb2106e0f168861daf260c4394b02157874abc`. This matrix is not a release
 approval. Repository/remediation custody, product ownership, production
 operational ownership, and independent approval remain separate controls.
+
+Custody distinction: the pilot validates the immutable implementation commit
+above. The evidence artifact commit is the containing custody commit, and the
+post-commit current HEAD is recorded in the custody handoff; neither later
+value is substituted into the pilot evidence.
 
 Repository/product owner reference: `Uwakwe chukwuebuka paul`
 (`uwakwechukwuebukapaul-ai` repository owner metadata). This identity records
@@ -31,9 +36,9 @@ independent approval.
 | Transaction rollback/failed migration rollback | PASS | Covered by the external rehearsal report |
 | Production-like backup/restore | PASS (bounded rehearsal scope) | `pg_dump`/`pg_restore` successful; dump `C:\Temp\sentinel-dna-rehearsal.dump`; SHA-256 `BC6932E9194F38526EC75982F681D253C0764B951A9A8B4D4CA3B5C3FB1FE4D4`; restore target `sentinel_restore_test`; `schema_migrations` count `1` |
 | Credential rotation/revocation | PASS (bounded rehearsal scope) | `ALTER USER` successful; old password rejected; rotated credential accepted |
-| Monitoring and ownership | BLOCKED | `MONITOR-PILOT-001` bounded pilot evidence PASS at `pilot-evidence/MONITOR-PILOT-001.json` with SHA-256 `930146f0ca7644d14ebc0d9ccb6f2cb056602e8dbc5814c8800e576b4ea33e67`; enterprise operational ownership and independent attestation remain unknown |
+| Monitoring and ownership | BLOCKED | `MONITOR-PILOT-001` bounded pilot evidence PASS at `pilot-evidence/MONITOR-PILOT-001.json` with SHA-256 `07115ba59f0cfc7417844a98a5742f59f557db6d510360ec16eaea89803a6e36`; pilot execution recorded a clean worktree, while enterprise operational ownership and independent attestation remain unknown |
 | Stale evidence reconciliation | PASS | Outdated blocked-state references reconciled; remaining blockers are intentional |
-| Remediation custody | BLOCKED | Current HEAD is documented above; pending documentation-only changes remain in the worktree and final custody reconciliation is outstanding |
+| Remediation custody | PASS (custody model) | Validated implementation commit is fixed above; the containing evidence/documentation commit and resulting current HEAD are recorded after commit without rewriting the pilot evidence |
 
 Production readiness remains blocked until every partial or blocked gate has
 independent external evidence and custody review.

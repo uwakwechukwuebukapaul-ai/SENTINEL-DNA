@@ -8,7 +8,10 @@ pilot evidence below does not establish production readiness.
 
 - Repository: `SENTINEL-DNA`
 - Branch: `remediation/postgresql-production-readiness`
-- Current remediation HEAD: `4ff3ecdd1f6b24bce4352c9aea81d95c14c3ea34`
+- Validated implementation commit (pilot validation target): `10cb2106e0f168861daf260c4394b02157874abc`
+- Evidence artifact commit: `PENDING_CONTAINING_CUSTODY_COMMIT` (recorded after commit)
+- Current HEAD after evidence commit: `NOT_ASSERTED_BY_IMMUTABLE_PILOT_EVIDENCE` (recorded in the post-commit custody handoff)
+- Worktree state at pilot execution: `clean`
 - Protected RC1 tag: `v1.0.0-rc1`
 - Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
 - Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
@@ -64,23 +67,23 @@ evidence of completion and must remain unresolved until externally recorded.
 - Evidence status: `PASS` (bounded pilot scope; independent review `NOT ATTESTED`)
 - Pilot operator: `Uwakwe chukwuebuka paul`
 - Pilot environment: `non-production synthetic pilot`
-- Validation window (UTC): `2026-08-26T12:55:42.115842+00:00` to `2026-08-26T12:55:42.304141+00:00`
+- Validation window (UTC): `2026-08-26T14:12:30.593882+00:00` to `2026-08-26T14:12:30.692507+00:00`
 - Test identifier: `MONITOR-PILOT-001`
 - Alert signal and threshold: `synthetic_monitoring_alert`, severity `high`
-- Trigger method and time (UTC): `SyntheticMonitoringPilot` event-feed record at `2026-08-26T12:55:42.115842+00:00`
+- Trigger method and time (UTC): `SyntheticMonitoringPilot` event-feed record at `2026-08-26T14:12:30.593882+00:00`
 - Alert generation result: `PASS`
-- Alert generation timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Alert generation timestamp (UTC): `2026-08-26T14:12:30.593882+00:00`
 - Expected recipient: `Uwakwe chukwuebuka paul`
 - Alert receipt result: `PASS`
-- Alert receipt timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Alert receipt timestamp (UTC): `2026-08-26T14:12:30.593882+00:00`
 - Acknowledgement result: `PASS`
-- Acknowledgement timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Acknowledgement timestamp (UTC): `2026-08-26T14:12:30.593882+00:00`
 - Escalation simulation result: `PASS` (attention queue only; no operational notification)
-- Escalation timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Escalation timestamp (UTC): `2026-08-26T14:12:30.593882+00:00`
 - Dashboard/query verification result: `PASS` (`GET /api/command-center/events`)
-- Dashboard/query verification timestamp (UTC): `2026-08-26T12:55:42.304141+00:00`
+- Dashboard/query verification timestamp (UTC): `2026-08-26T14:12:30.692507+00:00`
 - Evidence path: `pilot-evidence/MONITOR-PILOT-001.json`
-- Evidence digest: `930146f0ca7644d14ebc0d9ccb6f2cb056602e8dbc5814c8800e576b4ea33e67`
+- Evidence digest: `07115ba59f0cfc7417844a98a5742f59f557db6d510360ec16eaea89803a6e36`
 - Customer-data exclusion: `PASS` (synthetic pilot only)
 - Secret exclusion: `PASS`
 - Independent reviewer: `UNKNOWN — not attested`
