@@ -34,10 +34,11 @@ class DatabaseBackend(Protocol):
     def connect(self) -> Any:
         """Return a backend-native connection."""
 
-    @contextmanager
-    def session(self) -> Iterator[Any]:
+    def session(self) -> Any:
         """Yield one transaction and close it after use."""
-        yield  # pragma: no cover - protocol-only declaration
+
+    def health_check(self) -> bool:
+        """Return whether the backend accepts a bounded health query."""
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,14 @@ class SQLiteBackend:
         connection.execute(f"PRAGMA busy_timeout = {self.busy_timeout_ms};")
         return connection
 
+    def health_check(self) -> bool:
+        try:
+            with self.session() as connection:
+                row = connection.execute("SELECT 1 AS health_probe").fetchone()
+                return bool(row and _health_value(row) == 1)
+        except Exception:
+            return False
+
     @contextmanager
     def session(self) -> Iterator[Any]:
         import sqlite3
@@ -161,10 +170,19 @@ class PostgreSQLBackend:
                 self.database_url,
                 connect_timeout=self.connect_timeout,
                 row_factory=dict_row,
+                autocommit=False,
             )
         except psycopg.Error as exc:
             # Do not include the URL: it may contain credentials.
             raise DatabaseError("PostgreSQL connection failed") from exc
+
+    def health_check(self) -> bool:
+        try:
+            with self.session() as connection:
+                row = connection.execute("SELECT 1 AS health_probe").fetchone()
+                return bool(row and _health_value(row) == 1)
+        except Exception:
+            return False
 
     @contextmanager
     def session(self) -> Iterator[Any]:
@@ -172,16 +190,21 @@ class PostgreSQLBackend:
         try:
             yield connection
             connection.commit()
-        except Exception as exc:
+        except Exception:
             try:
                 connection.rollback()
             except Exception:
                 pass
-            if isinstance(exc, DatabaseError):
-                raise
-            raise DatabaseError("Database transaction failed") from exc
+            raise
         finally:
             connection.close()
+
+
+def _health_value(row: Any) -> Any:
+    """Read the aliased probe from tuple-, mapping-, and row-like results."""
+    if isinstance(row, Mapping):
+        return row.get("health_probe")
+    return row[0]
 
 
 def create_database_backend(
@@ -191,6 +214,7 @@ def create_database_backend(
     database_path: str | Path | None = None,
     require_postgresql: bool | None = None,
     busy_timeout_ms: int = DEFAULT_BUSY_TIMEOUT_MS,
+    connect_timeout: int = 10,
 ) -> DatabaseBackend:
     """Create the configured backend without opening a connection."""
 
@@ -205,5 +229,5 @@ def create_database_backend(
         require_postgresql=require_postgresql,
     )
     if settings.backend == "postgresql":
-        return PostgreSQLBackend(settings.database_url)
+        return PostgreSQLBackend(settings.database_url, connect_timeout=connect_timeout)
     return SQLiteBackend(settings.database_path, busy_timeout_ms=busy_timeout_ms)

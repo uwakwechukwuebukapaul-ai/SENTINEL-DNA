@@ -187,8 +187,8 @@ def create_app():
     @app.get("/health")
     def health():
         try:
-            with database.session() as connection:
-                connection.execute("SELECT 1").fetchone()
+            if not database.health_check():
+                raise RuntimeError("database health check failed")
             return {"status": "ok", "service": "sentinel-dna", "database": "ok"}
         except Exception:
             return {"status": "degraded", "database": "unavailable"}, 503
@@ -197,8 +197,8 @@ def create_app():
     def ready():
         try:
             app.container.validate_required(("investigation_coordinator", "investigation_orchestrator", "audit_service", "audit_read_service"))
-            with database.session() as connection:
-                connection.execute("SELECT 1").fetchone()
+            if not database.health_check():
+                raise RuntimeError("database health check failed")
             return {"status": "ready", "database": "ok", "services": "registered"}
         except Exception:
             return {"status": "not_ready"}, 503

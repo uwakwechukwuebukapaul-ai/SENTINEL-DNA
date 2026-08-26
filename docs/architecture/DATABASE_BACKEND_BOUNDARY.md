@@ -10,6 +10,8 @@ contract exposed by `database.backend.DatabaseBackend`:
 
 - `connect()` returns the native connection for the selected backend.
 - `session()` owns commit, rollback, and close behavior.
+- `health_check()` runs a bounded backend-native `SELECT 1` probe and returns
+  only a boolean health result.
 - `backend_name` identifies `sqlite` or `postgresql` without exposing backend
   selection logic to callers.
 
@@ -33,6 +35,12 @@ The PostgreSQL driver is `psycopg` 3 (`psycopg[binary]` in
 `requirements.txt`). It is imported lazily, so SQLite-only test runs do not
 need a live PostgreSQL server. Connection errors never include the URL, which
 may contain credentials.
+
+PostgreSQL connections use explicit non-autocommit transactions, a bounded
+connection timeout, and `session()` cleanup that rolls back failed work and
+always closes the connection. Health probes use the same lifecycle and do not
+expose driver exceptions through the health API. Application `/health` and
+`/ready` routes call `database.health_check()` through this boundary.
 
 ## Phase boundary
 
@@ -59,3 +67,11 @@ DatabaseBackend contract
 repositories/services  [not migrated in Phase 1]
 ```
 
+## Integration-test boundary
+
+`tests/database/test_postgresql_integration.py` is marked `postgresql` and
+requires the explicitly supplied `SENTINEL_DNA_TEST_POSTGRES_URL`. It never
+uses `DATABASE_URL`, production secrets, or a production database. Each test
+uses a PostgreSQL temporary table with `ON COMMIT DROP`; absent the dedicated
+test URL, it skips rather than contacting a network service. Unit tests cover
+the driver-missing path and lifecycle semantics with an in-memory fake driver.
