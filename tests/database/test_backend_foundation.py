@@ -48,7 +48,6 @@ def test_production_backend_resolution_fails_closed_without_postgresql_url():
     with pytest.raises(DatabaseConfigurationError, match="DATABASE_URL"):
         create_database_backend(
             environ={"SENTINEL_DNA_ENV": "production", "SENTINEL_DNA_DB_PATH": "soc.db"},
-            require_postgresql=True,
         )
 
 

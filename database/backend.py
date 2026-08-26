@@ -189,10 +189,14 @@ def create_database_backend(
     environ: Mapping[str, str] | None = None,
     database_url: str | None = None,
     database_path: str | Path | None = None,
-    require_postgresql: bool = False,
+    require_postgresql: bool | None = None,
     busy_timeout_ms: int = DEFAULT_BUSY_TIMEOUT_MS,
 ) -> DatabaseBackend:
     """Create the configured backend without opening a connection."""
+
+    if require_postgresql is None:
+        values = os.environ if environ is None else environ
+        require_postgresql = values.get("SENTINEL_DNA_ENV", "").strip().lower() == "production"
 
     settings = DatabaseSettings.from_environment(
         environ,
@@ -203,4 +207,3 @@ def create_database_backend(
     if settings.backend == "postgresql":
         return PostgreSQLBackend(settings.database_url)
     return SQLiteBackend(settings.database_path, busy_timeout_ms=busy_timeout_ms)
-
