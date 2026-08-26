@@ -7,7 +7,7 @@ is claimed by the PostgreSQL rehearsal evidence.
 
 - Repository: `SENTINEL-DNA`
 - Branch: `remediation/postgresql-production-readiness`
-- Current remediation HEAD: `dc1e0c045eddeb5a2d642addb46d671522db7217`
+- Current remediation HEAD: `7d4b442b3b2c140696ce5de0d4650fa31303c488`
 - Protected RC1 tag: `v1.0.0-rc1`
 - Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
 - Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
@@ -27,6 +27,19 @@ ownership, production operational ownership, or release approval.
 This section records product ownership only. Production operational ownership
 and independent approval are separate requirements below.
 
+## Founder-operated pilot responsibility
+
+The assignments below apply only to bounded pilot validation. They do not
+establish enterprise production operations, an enterprise SLA, or independent
+approval.
+
+- Monitoring owner (founder-operated pilot): `Uwakwe chukwuebuka paul`
+- Alert recipient (founder-operated pilot): `Uwakwe chukwuebuka paul`
+- Escalation owner (founder-operated pilot): `Uwakwe chukwuebuka paul`
+- Dashboard/query ownership (founder-operated pilot): `Uwakwe chukwuebuka paul`
+- Response objective (founder-operated pilot): `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
+- Alert validation evidence: `NOT PROVIDED`
+
 ## Service record
 
 - Service/system: `UNKNOWN — operational owner input required`
@@ -45,7 +58,7 @@ and independent approval are separate requirements below.
 - Backup success/freshness alert: `UNKNOWN — not evidenced`
 - Audit-log delivery/integrity alert: `UNKNOWN — not evidenced`
 - Dashboard or query references: `UNKNOWN — not provided`
-- Alert test evidence references: `NONE — attestation not completed`
+- Alert test evidence references: `NOT PROVIDED — no actual alert tests supplied`
 
 ## Production operational ownership
 

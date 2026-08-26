@@ -9,6 +9,20 @@ Repository or product ownership does not satisfy the production operational
 assignments below. Each assignment requires an authorized operating
 organization, real evidence, and independent review.
 
+## Bounded founder-operated pilot
+
+The following responsibilities are limited to pilot validation and do not
+assign enterprise production operations:
+
+- Monitoring owner: `Uwakwe chukwuebuka paul`
+- Alert recipient: `Uwakwe chukwuebuka paul`
+- Escalation owner: `Uwakwe chukwuebuka paul`
+- Dashboard/query ownership: `Uwakwe chukwuebuka paul`
+- Response objective: `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
+- Alert validation evidence: `NOT PROVIDED`
+
+Enterprise production assignments remain unresolved in the table below.
+
 ## Required assignments
 
 | Evidence requirement | Required evidence | Assignment |
