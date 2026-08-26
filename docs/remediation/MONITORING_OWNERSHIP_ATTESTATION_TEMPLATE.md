@@ -7,7 +7,7 @@ is claimed by the PostgreSQL rehearsal evidence.
 
 - Repository: `SENTINEL-DNA`
 - Branch: `remediation/postgresql-production-readiness`
-- Current remediation HEAD: `7d4b442b3b2c140696ce5de0d4650fa31303c488`
+- Current remediation HEAD: `a21649b8b5a9dcca111391e8636e40133183bf40`
 - Protected RC1 tag: `v1.0.0-rc1`
 - Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
 - Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
@@ -39,6 +39,40 @@ approval.
 - Dashboard/query ownership (founder-operated pilot): `Uwakwe chukwuebuka paul`
 - Response objective (founder-operated pilot): `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
 - Alert validation evidence: `NOT PROVIDED`
+
+## Founder-operated pilot monitoring validation checklist
+
+This checklist prepares a bounded pilot validation. An unchecked item is not
+evidence of completion and must remain unresolved until externally recorded.
+
+- [ ] Pilot environment, scope, and UTC validation window recorded
+- [ ] Availability/readiness signal and threshold recorded
+- [ ] Connection, error, storage, recovery, and audit alert conditions recorded
+- [ ] Expected alert recipient and escalation path confirmed for the pilot
+- [ ] Alert delivery and acknowledgement observed
+- [ ] Escalation response observed
+- [ ] Dashboard/query references recorded
+- [ ] External evidence path and deterministic digest recorded
+- [ ] Evidence reviewed for secrets and customer-data exclusion
+
+## Alert validation evidence template
+
+- Evidence status: `NOT PROVIDED`
+- Pilot operator: `Uwakwe chukwuebuka paul`
+- Pilot environment: `UNKNOWN`
+- Validation window (UTC): `UNKNOWN`
+- Test identifier: `UNKNOWN`
+- Alert signal and threshold: `UNKNOWN`
+- Trigger method and time (UTC): `UNKNOWN`
+- Expected recipient: `Uwakwe chukwuebuka paul`
+- Delivery result: `NOT PROVIDED`
+- Acknowledgement result: `NOT PROVIDED`
+- Escalation result: `NOT PROVIDED`
+- Evidence path: `NOT PROVIDED`
+- Evidence digest: `NOT PROVIDED`
+- Customer-data exclusion: `NOT ATTESTED`
+- Secret exclusion: `NOT ATTESTED`
+- Independent reviewer: `UNKNOWN — not attested`
 
 ## Service record
 
