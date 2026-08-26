@@ -98,8 +98,15 @@ only new direct reference and centralizes the SQLite implementation.
 
 ## Validation record
 
-The full existing suite is the required final check. PostgreSQL connectivity
-is not exercised here: no production deployment, external database, or
-credentials are authorized in Phase 1. The PostgreSQL backend's driver and
-configuration paths are covered without opening a network connection.
+Focused foundation/deployment validation: 35 passed.
 
+Clean-worktree full suite: 2,987 passed, 6 skipped, 1 pre-existing
+branch-contract failure. The failure is
+`tests/deployment/test_release_hygiene_manifest.py::test_manifest_contains_state_identity_and_evidence_references`,
+which asserts the branch is `main`; the requested remediation branch is
+`remediation/postgresql-production-readiness`. No implementation test failed.
+
+PostgreSQL connectivity is not exercised here: no production deployment,
+external database, or credentials are authorized in Phase 1. The PostgreSQL
+backend's driver and configuration paths are covered without opening a
+network connection.
