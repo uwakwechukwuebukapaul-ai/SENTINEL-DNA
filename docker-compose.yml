@@ -9,6 +9,7 @@ services:
       SENTINEL_DNA_ENV: production
       SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?SENTINEL_DNA_SECRET_KEY must be set}
       SENTINEL_DNA_SECURE_COOKIES: "1"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set for production}
       SENTINEL_DNA_DB_PATH: ${SENTINEL_DNA_DB_PATH:-/var/lib/sentinel/soc.db}
     volumes:
       - sentinel_data:/var/lib/sentinel

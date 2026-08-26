@@ -171,6 +171,7 @@ class DeploymentContractValidator:
                         "SENTINEL_DNA_ENV",
                         "SENTINEL_DNA_SECURE_COOKIES",
                         "SENTINEL_DNA_DB_PATH",
+                        "DATABASE_URL",
                         "SENTINEL_DNA_IMAGE_DIGEST",
                         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE",
                     }
@@ -189,18 +190,19 @@ class DeploymentContractValidator:
             secret_key=values.get("SENTINEL_DNA_SECRET_KEY", ""),
             secure_cookies=values.get("SENTINEL_DNA_SECURE_COOKIES", "0") == "1",
             debug=values.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes", "on"},
+            database_url=values.get("DATABASE_URL", "").strip(),
         )
         secret = config.secret_key.strip().lower()
         parent = Path(config.database_path).expanduser().resolve().parent
+        database_configured = bool(config.database_url) or bool(values.get("SENTINEL_DNA_DB_PATH", "").strip())
         checks["runtime_config_accepts_startup"] = (
             config.environment == "production"
             and len(secret) >= 32
             and not any(marker in secret for marker in ("change-me", "replace-with", "development-only"))
             and config.secure_cookies
             and not config.debug
-            and bool(values.get("SENTINEL_DNA_DB_PATH", "").strip())
-            and parent.is_dir()
-            and os.access(parent, os.W_OK)
+            and database_configured
+            and (bool(config.database_url) or (parent.is_dir() and os.access(parent, os.W_OK)))
         )
         if not checks["runtime_config_accepts_startup"]:
             failures.append("runtime_startup_rejected")

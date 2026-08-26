@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import secrets
 
+from database.backend import DatabaseConfigurationError, DatabaseSettings
+
 
 _VALID_ENVIRONMENTS = {"development", "testing", "test", "staging", "production"}
 _PRODUCTION_PLACEHOLDERS = {
@@ -20,6 +22,7 @@ class RuntimeConfig:
     secret_key: str
     secure_cookies: bool
     debug: bool
+    database_url: str = ""
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -37,6 +40,7 @@ class RuntimeConfig:
             secret_key,
             os.getenv("SENTINEL_DNA_SECURE_COOKIES", "0") == "1",
             debug,
+            os.getenv("DATABASE_URL", "").strip(),
         )
 
     def validate(self) -> None:
@@ -60,6 +64,20 @@ class RuntimeConfig:
         if self.debug:
             raise RuntimeError("SENTINEL_DNA_DEBUG must be disabled for production")
 
+        if self.database_url.strip():
+            try:
+                DatabaseSettings.from_environment(
+                    database_url=self.database_url,
+                    require_postgresql=True,
+                )
+            except DatabaseConfigurationError as exc:
+                raise RuntimeError(str(exc)) from exc
+            return
+
+        # Retain the pre-existing SQLite path contract for compatibility with
+        # local/staging tooling. The process-level backend factory is the
+        # production fail-closed boundary and rejects this configuration when
+        # production starts without DATABASE_URL.
         database_path = os.getenv("SENTINEL_DNA_DB_PATH")
         if not database_path:
             raise RuntimeError("SENTINEL_DNA_DB_PATH must be configured for production")
