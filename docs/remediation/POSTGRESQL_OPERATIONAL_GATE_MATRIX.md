@@ -1,7 +1,7 @@
 # PostgreSQL operational evidence gate matrix
 
 Status snapshot for remediation HEAD
-`1954396f79677f0c79eaf97c556e05eb43195f5f`. This matrix is not a release
+`4ff3ecdd1f6b24bce4352c9aea81d95c14c3ea34`. This matrix is not a release
 approval. Repository/remediation custody, product ownership, production
 operational ownership, and independent approval remain separate controls.
 
@@ -18,7 +18,7 @@ Bounded founder-operated pilot responsibility only:
 - Escalation owner: `Uwakwe chukwuebuka paul`
 - Dashboard/query ownership: `Uwakwe chukwuebuka paul`
 - Response objective: `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
-- Alert validation evidence: `NOT PROVIDED`
+- Alert validation evidence: `PASS` for bounded non-production pilot only
 
 These pilot assignments do not establish enterprise production ownership or
 independent approval.
@@ -31,7 +31,7 @@ independent approval.
 | Transaction rollback/failed migration rollback | PASS | Covered by the external rehearsal report |
 | Production-like backup/restore | PASS (bounded rehearsal scope) | `pg_dump`/`pg_restore` successful; dump `C:\Temp\sentinel-dna-rehearsal.dump`; SHA-256 `BC6932E9194F38526EC75982F681D253C0764B951A9A8B4D4CA3B5C3FB1FE4D4`; restore target `sentinel_restore_test`; `schema_migrations` count `1` |
 | Credential rotation/revocation | PASS (bounded rehearsal scope) | `ALTER USER` successful; old password rejected; rotated credential accepted |
-| Monitoring and ownership | BLOCKED | Founder-operated pilot assignments, validation procedure, package structure, and evidence template are documented; alert execution evidence, enterprise operational ownership, and independent attestation remain unknown |
+| Monitoring and ownership | BLOCKED | `MONITOR-PILOT-001` bounded pilot evidence PASS at `pilot-evidence/MONITOR-PILOT-001.json` with SHA-256 `930146f0ca7644d14ebc0d9ccb6f2cb056602e8dbc5814c8800e576b4ea33e67`; enterprise operational ownership and independent attestation remain unknown |
 | Stale evidence reconciliation | PASS | Outdated blocked-state references reconciled; remaining blockers are intentional |
 | Remediation custody | BLOCKED | Current HEAD is documented above; pending documentation-only changes remain in the worktree and final custody reconciliation is outstanding |
 

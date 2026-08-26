@@ -19,9 +19,9 @@ assign enterprise production operations:
 - Escalation owner: `Uwakwe chukwuebuka paul`
 - Dashboard/query ownership: `Uwakwe chukwuebuka paul`
 - Response objective: `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
-- Alert validation evidence: `NOT PROVIDED`
+- Alert validation evidence: `PASS` for `MONITOR-PILOT-001` bounded pilot scope only
 
-Pilot evidence must be captured externally for each validation run:
+Pilot evidence must be captured for each validation run:
 
 - Alert generation from a documented synthetic trigger.
 - Alert receipt by the named pilot recipient.
@@ -31,8 +31,10 @@ Pilot evidence must be captured externally for each validation run:
 - UTC timestamps for generation, receipt, acknowledgement, escalation, and
   dashboard/query verification.
 
-No item above is evidenced by this template; each remains `NOT PROVIDED` until
-the pilot run is actually performed and independently reviewable.
+The bounded pilot run has now produced non-secret evidence for the listed
+generation, receipt, acknowledgement, escalation simulation, and dashboard
+query steps. Independent review and enterprise operational ownership remain
+unresolved.
 
 The external evidence package must contain, at minimum:
 
@@ -43,7 +45,38 @@ The external evidence package must contain, at minimum:
 - event identifiers and UTC timestamps in each applicable record; and
 - a `checksums.sha256` file covering every non-secret package artifact.
 
-Package status: `NOT PROVIDED`.
+Package status: `PASS` for bounded pilot scope; independent review `NOT ATTESTED`.
+
+Observed package:
+
+- Artifact: `pilot-evidence/MONITOR-PILOT-001.json`
+- Checksum manifest: `pilot-evidence/checksums.sha256`
+- SHA-256: `930146f0ca7644d14ebc0d9ccb6f2cb056602e8dbc5814c8800e576b4ea33e67`
+- Command: `python scripts/run_monitoring_pilot.py`
+
+## Founder-operated pilot execution mechanism
+
+The bounded implementation is `services/monitoring/pilot.py` and is executed
+from the repository root with:
+
+```text
+python scripts/run_monitoring_pilot.py
+```
+
+The command writes the append-only artifact
+`pilot-evidence/MONITOR-PILOT-001.json` and
+`pilot-evidence/checksums.sha256`. It records actual UTC transition times for
+generation, receipt, acknowledgement, escalation simulation, and dashboard
+query verification. The dashboard/query check uses the existing
+`GET /api/command-center/events` path; escalation is an explicitly synthetic
+attention-queue simulation and is not an enterprise notification or on-call
+route.
+
+The command fails closed if any transition, timestamp, dashboard query,
+artifact write, or checksum verification fails. The artifact is `PASS` only
+when every bounded pilot state is observed. The recorded execution is complete
+for this bounded run; future runs must produce a new append-only output path
+and independently reviewed evidence.
 
 Enterprise production assignments remain unresolved in the table below.
 

@@ -1,13 +1,14 @@
 # PostgreSQL monitoring and ownership attestation
 
-Template only. No monitoring, alerting, escalation, or ownership attestation
-is claimed by the PostgreSQL rehearsal evidence.
+This record separates bounded founder-operated synthetic pilot evidence from
+enterprise monitoring, operational ownership, and independent approval. The
+pilot evidence below does not establish production readiness.
 
 ## Repository/remediation custody
 
 - Repository: `SENTINEL-DNA`
 - Branch: `remediation/postgresql-production-readiness`
-- Current remediation HEAD: `1954396f79677f0c79eaf97c556e05eb43195f5f`
+- Current remediation HEAD: `4ff3ecdd1f6b24bce4352c9aea81d95c14c3ea34`
 - Protected RC1 tag: `v1.0.0-rc1`
 - Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
 - Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
@@ -38,73 +39,76 @@ approval.
 - Escalation owner (founder-operated pilot): `Uwakwe chukwuebuka paul`
 - Dashboard/query ownership (founder-operated pilot): `Uwakwe chukwuebuka paul`
 - Response objective (founder-operated pilot): `Best-effort founder-operated response during pilot validation. Enterprise SLA not established.`
-- Alert validation evidence: `NOT PROVIDED`
+- Alert validation evidence: `PASS` for the bounded non-production pilot only
 
 ## Founder-operated pilot monitoring validation checklist
 
 This checklist prepares a bounded pilot validation. An unchecked item is not
 evidence of completion and must remain unresolved until externally recorded.
 
-- [ ] Pilot environment, scope, and UTC validation window recorded
+- [x] Pilot environment, scope, and UTC validation window recorded
 - [ ] Availability/readiness signal and threshold recorded
 - [ ] Connection, error, storage, recovery, and audit alert conditions recorded
-- [ ] Expected alert recipient and escalation path confirmed for the pilot
-- [ ] Synthetic pilot alert generated from a documented test trigger
-- [ ] Alert identifier and generation timestamp (UTC) recorded
-- [ ] Alert receipt by the pilot recipient observed and receipt timestamp (UTC) recorded
-- [ ] Alert acknowledgement observed and acknowledgement timestamp (UTC) recorded
-- [ ] Escalation simulation observed and escalation timestamp (UTC) recorded
-- [ ] Dashboard/query verification performed and timestamp (UTC) recorded
-- [ ] External evidence path and deterministic digest recorded
-- [ ] Evidence reviewed for secrets and customer-data exclusion
+- [x] Expected alert recipient and escalation path confirmed for the pilot
+- [x] Synthetic pilot alert generated from a documented test trigger
+- [x] Alert identifier and generation timestamp (UTC) recorded
+- [x] Alert receipt by the pilot recipient observed and receipt timestamp (UTC) recorded
+- [x] Alert acknowledgement observed and acknowledgement timestamp (UTC) recorded
+- [x] Escalation simulation observed and escalation timestamp (UTC) recorded
+- [x] Dashboard/query verification performed and timestamp (UTC) recorded
+- [x] Evidence path and deterministic digest recorded
+- [x] Evidence reviewed for secrets and customer-data exclusion
 
 ## Alert validation evidence template
 
-- Evidence status: `NOT PROVIDED`
+- Evidence status: `PASS` (bounded pilot scope; independent review `NOT ATTESTED`)
 - Pilot operator: `Uwakwe chukwuebuka paul`
-- Pilot environment: `UNKNOWN`
-- Validation window (UTC): `UNKNOWN`
-- Test identifier: `UNKNOWN`
-- Alert signal and threshold: `UNKNOWN`
-- Trigger method and time (UTC): `UNKNOWN`
-- Alert generation result: `NOT PROVIDED`
-- Alert generation timestamp (UTC): `UNKNOWN`
+- Pilot environment: `non-production synthetic pilot`
+- Validation window (UTC): `2026-08-26T12:55:42.115842+00:00` to `2026-08-26T12:55:42.304141+00:00`
+- Test identifier: `MONITOR-PILOT-001`
+- Alert signal and threshold: `synthetic_monitoring_alert`, severity `high`
+- Trigger method and time (UTC): `SyntheticMonitoringPilot` event-feed record at `2026-08-26T12:55:42.115842+00:00`
+- Alert generation result: `PASS`
+- Alert generation timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
 - Expected recipient: `Uwakwe chukwuebuka paul`
-- Alert receipt result: `NOT PROVIDED`
-- Alert receipt timestamp (UTC): `UNKNOWN`
-- Acknowledgement result: `NOT PROVIDED`
-- Acknowledgement timestamp (UTC): `UNKNOWN`
-- Escalation simulation result: `NOT PROVIDED`
-- Escalation timestamp (UTC): `UNKNOWN`
-- Dashboard/query verification result: `NOT PROVIDED`
-- Dashboard/query verification timestamp (UTC): `UNKNOWN`
-- Evidence path: `NOT PROVIDED`
-- Evidence digest: `NOT PROVIDED`
-- Customer-data exclusion: `NOT ATTESTED`
-- Secret exclusion: `NOT ATTESTED`
+- Alert receipt result: `PASS`
+- Alert receipt timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Acknowledgement result: `PASS`
+- Acknowledgement timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Escalation simulation result: `PASS` (attention queue only; no operational notification)
+- Escalation timestamp (UTC): `2026-08-26T12:55:42.115842+00:00`
+- Dashboard/query verification result: `PASS` (`GET /api/command-center/events`)
+- Dashboard/query verification timestamp (UTC): `2026-08-26T12:55:42.304141+00:00`
+- Evidence path: `pilot-evidence/MONITOR-PILOT-001.json`
+- Evidence digest: `930146f0ca7644d14ebc0d9ccb6f2cb056602e8dbc5814c8800e576b4ea33e67`
+- Customer-data exclusion: `PASS` (synthetic pilot only)
+- Secret exclusion: `PASS`
 - Independent reviewer: `UNKNOWN — not attested`
 
-## External evidence package structure
+## Evidence package structure
 
-Store the package outside the repository. The following artifacts are required
-for an executed pilot run; all are currently `NOT PROVIDED`:
+The bounded implementation is `services/monitoring/pilot.py`, invoked by the
+following command from the repository root:
 
-- `manifest.json`: remediation HEAD, pilot scope, validation window (UTC), and
-  artifact inventory
-- `alert-generation.json`: event identifier, alert source, generation result,
-  and generation timestamp (UTC)
-- `alert-receipt.json`: event identifier, recipient, receipt result, and receipt
-  timestamp (UTC)
-- `alert-acknowledgement.json`: event identifier, acknowledgement record, and
-  acknowledgement timestamp (UTC)
-- `escalation.json`: event identifier, escalation route, result, and escalation
-  timestamp (UTC)
-- `dashboard-query.json`: event identifier, dashboard/query reference,
-  verification result, and verification timestamp (UTC)
-- `checksums.sha256`: SHA-256 digest entries for every package artifact
+```text
+python scripts/run_monitoring_pilot.py
+```
 
-The package must contain non-secret pilot records only. It must not contain
-credentials, customer data, production URLs, or enterprise SLA claims.
+The default append-only package path is `pilot-evidence/`. An alternate path
+may be supplied with `--output`, but an existing artifact or checksum file is
+rejected. The executed package contains:
+
+- `pilot-evidence/MONITOR-PILOT-001.json`: complete non-secret evidence record (`PASS`)
+- `pilot-evidence/checksums.sha256`: SHA-256 entry for the JSON artifact (`PASS`)
+
+The JSON record contains separate actual UTC timestamps for `generated_at`,
+`received_at`, `acknowledged_at`, `escalated_at`, and
+`dashboard_verified_at`, together with the event identifier, state results,
+repository custody, and a replay digest that excludes wall-clock timestamps.
+Dashboard verification uses the existing `GET /api/command-center/events`
+query path. Escalation is explicitly an in-process attention-queue simulation;
+no notification or production response action is sent. The package must not
+contain credentials, customer data, production URLs, or enterprise SLA claims.
 
 ## Service record
 
@@ -124,7 +128,7 @@ credentials, customer data, production URLs, or enterprise SLA claims.
 - Backup success/freshness alert: `UNKNOWN — not evidenced`
 - Audit-log delivery/integrity alert: `UNKNOWN — not evidenced`
 - Dashboard or query references: `UNKNOWN — not provided`
-- Alert test evidence references: `NOT PROVIDED — no actual alert tests supplied`
+- Alert test evidence references: `pilot-evidence/MONITOR-PILOT-001.json` (bounded pilot only)
 
 ## Production operational ownership
 

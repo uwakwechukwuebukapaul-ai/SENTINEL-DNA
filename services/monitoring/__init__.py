@@ -1,2 +1,4 @@
 from .service import MonitoringService
-__all__ = ["MonitoringService"]
+from .pilot import SyntheticMonitoringPilot
+
+__all__ = ["MonitoringService", "SyntheticMonitoringPilot"]
