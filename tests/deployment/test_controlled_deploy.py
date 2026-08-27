@@ -101,8 +101,12 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
     repository_root = _clean_repository(tmp_path)
     env_file = tmp_path / "protected" / ".env"
     env_file.parent.mkdir()
+    if os.name != "nt":
+        env_file.parent.chmod(0o700)
     metadata_file = tmp_path / "trusted" / "metadata.json"
     metadata_file.parent.mkdir()
+    if os.name != "nt":
+        metadata_file.parent.chmod(0o700)
     metadata_file.write_text(
         json.dumps(metadata or {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}),
         encoding="utf-8",
@@ -122,8 +126,12 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         output=release_manifest_file,
         repository_root=repository_root,
     )
+    if os.name != "nt":
+        release_manifest_file.parent.chmod(0o700)
     tls_dir = tmp_path / "tls"
     tls_dir.mkdir()
+    if os.name != "nt":
+        tls_dir.chmod(0o700)
     env_file.write_text(
         "\n".join(
             (
@@ -143,6 +151,8 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         ),
         encoding="utf-8",
     )
+    if os.name != "nt":
+        env_file.chmod(0o600)
     image_info = {
         "Id": "sha256:image-id",
         "RepoDigests": [f"deployment-app@{RELEASE_DIGEST}"],
