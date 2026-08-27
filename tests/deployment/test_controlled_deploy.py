@@ -44,6 +44,27 @@ SAFE_ENTRIES = (
 )
 
 
+def _clean_repository(tmp_path):
+    source = Path(__file__).resolve().parents[2]
+    repository_root = tmp_path.parent / "repository"
+    if repository_root.exists():
+        return repository_root
+    branch = subprocess.run(
+        ["git", "symbolic-ref", "--short", "HEAD"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "clone", "--quiet", "--branch", branch, str(source), str(repository_root)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return repository_root
+
+
 class FakeAclInspector:
     def __init__(self, entries=SAFE_ENTRIES):
         self.entries = entries
@@ -77,6 +98,7 @@ class FakeRunner:
 
 
 def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner=None):
+    repository_root = _clean_repository(tmp_path)
     env_file = tmp_path / "protected" / ".env"
     env_file.parent.mkdir()
     metadata_file = tmp_path / "trusted" / "metadata.json"
@@ -90,7 +112,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
     release_manifest_file = tmp_path / "trusted" / "release-manifest.json"
     write_manifest(
         build_manifest(
-            repository_root=Path(__file__).resolve().parents[2],
+            repository_root=repository_root,
             release_sha=RELEASE_SHA,
             image_reference=f"deployment-app:{RELEASE_SHA}",
             image_digest=RELEASE_DIGEST,
@@ -98,7 +120,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
             image_source=SOURCE,
         ),
         output=release_manifest_file,
-        repository_root=Path(__file__).resolve().parents[2],
+        repository_root=repository_root,
     )
     tls_dir = tmp_path / "tls"
     tls_dir.mkdir()
@@ -159,7 +181,8 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         env_file=env_file,
         metadata_file=metadata_file,
         release_manifest_file=release_manifest_file,
-        compose_file=Path("deployment/docker-compose.yml").resolve(),
+        compose_file=repository_root / "deployment" / "docker-compose.yml",
+        repository_root=repository_root,
         runner=runner or FakeRunner(image_info, compose_info),
         acl_inspector=FakeAclInspector(acl or SAFE_ENTRIES),
     )
@@ -265,7 +288,7 @@ def test_missing_protected_configuration_fails_closed(tmp_path):
 
 
 def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_validation(tmp_path, monkeypatch, capsys):
-    repository_root = Path(__file__).resolve().parents[2]
+    repository_root = _clean_repository(tmp_path)
     script = repository_root / "deployment" / "scripts" / "controlled_deploy.py"
     env_file = tmp_path / "protected" / "production.env"
     env_file.parent.mkdir()
