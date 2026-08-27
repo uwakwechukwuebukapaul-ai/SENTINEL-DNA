@@ -291,17 +291,6 @@ class DeploymentContractValidator:
         wsgi = self.repository_root / "wsgi.py"
         docker_text = dockerfile.read_text(encoding="utf-8") if dockerfile.is_file() else ""
         wsgi_text = wsgi.read_text(encoding="utf-8") if wsgi.is_file() else ""
-<<<<<<< HEAD
-        checks.update({
-            "canonical_wsgi_entrypoint": wsgi.is_file() and "application = create_app()" in wsgi_text,
-            "production_image_mode": (
-                "SENTINEL_DNA_ENV=production" in docker_text
-                or "SENTINEL_DNA_ENV=__RUNTIME_ENV_REQUIRED__" in docker_text
-             ),
-            "non_root_runtime_user": "USER sentinel" in docker_text,
-            "single_sqlite_worker_boundary": '"--workers", "1"' in docker_text,
-        })
-=======
         instructions = _dockerfile_instructions(docker_text)
         command = _dockerfile_command(instructions)
         runtime_user = _dockerfile_runtime_user(instructions)
@@ -329,7 +318,6 @@ class DeploymentContractValidator:
         # Keep the public check name while making it describe the image
         # characteristics that make the image safe for production startup.
         checks["production_image_mode"] = all(image_checks.values())
->>>>>>> 65d137c (fix: harden postgres portability and deployment validation contracts)
         failures.extend(name for name, passed in checks.items() if not passed)
         return _result(
             "production_startup",
