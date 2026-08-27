@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from database.connection import database
+from database.portability import identity_primary_key
 
 class InvestigationQualityRepository:
     def __init__(self, db=None):
@@ -14,7 +15,8 @@ class InvestigationQualityRepository:
         self._ensure_schema()
     def _ensure_schema(self):
         with self.db.session() as connection:
-            connection.execute("""CREATE TABLE IF NOT EXISTS investigation_quality_assessments (id INTEGER PRIMARY KEY AUTOINCREMENT, quality_id TEXT NOT NULL UNIQUE, investigation_id TEXT NOT NULL, case_id TEXT NOT NULL, tenant_id TEXT NOT NULL, scores_json TEXT NOT NULL, evidence_refs_json TEXT NOT NULL DEFAULT '[]', artifact_refs_json TEXT NOT NULL DEFAULT '[]', provenance_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}')""")
+            identity = identity_primary_key(self.db.backend_name)
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS investigation_quality_assessments (id {identity}, quality_id TEXT NOT NULL UNIQUE, investigation_id TEXT NOT NULL, case_id TEXT NOT NULL, tenant_id TEXT NOT NULL, scores_json TEXT NOT NULL, evidence_refs_json TEXT NOT NULL DEFAULT '[]', artifact_refs_json TEXT NOT NULL DEFAULT '[]', provenance_json TEXT NOT NULL DEFAULT '{{}}', created_at TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{{}}')""")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_quality_investigation ON investigation_quality_assessments(tenant_id, investigation_id, created_at)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_quality_case ON investigation_quality_assessments(tenant_id, case_id, created_at)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_quality_tenant ON investigation_quality_assessments(tenant_id, created_at)")

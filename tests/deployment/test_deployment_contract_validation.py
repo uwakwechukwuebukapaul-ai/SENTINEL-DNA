@@ -100,8 +100,20 @@ def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
         generated_at="2027-01-01T00:00:00+00:00",
     ).run()
 
+    print(json.dumps(first.to_dict(), indent=2))
     assert first.validation_result == "passed"
     assert all(item["status"] == "passed" for item in first.contracts)
+    startup = next(item for item in first.contracts if item["contract"] == "production_startup")
+    assert startup["checks"] == {
+        "canonical_wsgi_entrypoint": True,
+        "debug_mode_disabled": True,
+        "gunicorn_production_server": True,
+        "non_root_runtime_user": True,
+        "production_image_mode": True,
+        "runtime_config_accepts_startup": True,
+        "single_sqlite_worker_boundary": True,
+    }
+    assert "SENTINEL_DNA_ENV=production" not in (repository_root / "Dockerfile").read_text(encoding="utf-8")
     migration = next(item for item in first.contracts if item["contract"] == "database_migration_rehearsal")
     recovery = next(item for item in first.contracts if item["contract"] == "backup_restore_readiness")
     assert migration["checks"] == {

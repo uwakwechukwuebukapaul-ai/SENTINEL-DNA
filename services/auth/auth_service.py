@@ -1,4 +1,4 @@
-"""SQLite-backed authentication service."""
+"""Backend-neutral authentication service."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from database.connection import DatabaseConnection, database
-from database.portability import table_columns
+from database.portability import identity_primary_key, table_columns
 from .models import User
 from .security import hash_password, verify_password
 from .age import validate_minimum_age
@@ -22,20 +22,31 @@ class AuthService:
     def __init__(self, db: DatabaseConnection | None = None) -> None:
         self.db = db or database
         with self.db.session() as connection:
-            connection.execute("""CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
+            identity = identity_primary_key(self.db.backend_name)
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS users (
+                id {identity}, username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'analyst', created_at TEXT NOT NULL,
                 last_login TEXT, is_active INTEGER NOT NULL DEFAULT 1)""")
             columns = table_columns(connection, self.db.backend_name, "users")
-            for name in ("phone_number", "phone_verified_at", "tenant_id", "actor_id", "date_of_birth", "email_verified_at", "expires_at", "audit_correlation_id"):
-                if name not in columns: connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            for name in (
+                "phone_number",
+                "phone_verified_at",
+                "tenant_id",
+                "actor_id",
+                "date_of_birth",
+                "email_verified_at",
+                "expires_at",
+                "audit_correlation_id",
+            ):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
             if "revocation_status" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
-            connection.execute("""CREATE TABLE IF NOT EXISTS auth_identities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_identities (
+                id {identity}, user_id INTEGER NOT NULL,
                 provider TEXT NOT NULL, provider_subject TEXT NOT NULL,
                 normalized_identifier TEXT, verified_at TEXT, created_at TEXT NOT NULL,
                 last_used_at TEXT, UNIQUE(provider, provider_subject),
@@ -51,9 +62,10 @@ class AuthService:
                 revoked_at TEXT, last_used_at TEXT)""")
             session_columns = table_columns(connection, self.db.backend_name, "persistent_sessions")
             for name in ("user_agent", "ip_address", "auth_method"):
-                if name not in session_columns: connection.execute(f"ALTER TABLE persistent_sessions ADD COLUMN {name} TEXT")
-            connection.execute("""CREATE TABLE IF NOT EXISTS auth_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+                if name not in session_columns:
+                    connection.execute(f"ALTER TABLE persistent_sessions ADD COLUMN {name} TEXT")
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_events (
+                id {identity}, event_type TEXT NOT NULL,
                 user_id INTEGER, actor_id TEXT, tenant_id TEXT, correlation_id TEXT,
                 method TEXT, outcome TEXT, reason TEXT, source_ip TEXT, created_at TEXT NOT NULL)""")
             connection.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (

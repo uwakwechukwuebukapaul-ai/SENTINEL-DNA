@@ -29,6 +29,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from database.connection import database
+from database.portability import identity_primary_key
 from cases.timeline import add_timeline_event
 
 
@@ -89,10 +90,10 @@ def record_action(
 
 
         cursor.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS analyst_actions (
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {identity_primary_key(database.backend_name)},
 
                 case_id TEXT NOT NULL,
 

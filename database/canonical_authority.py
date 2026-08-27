@@ -8,7 +8,7 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 from .connection import DatabaseConnection, database
-from .portability import execute_script
+from .portability import execute_script, identity_primary_key
 
 
 def _now() -> str:
@@ -17,11 +17,12 @@ def _now() -> str:
 
 def ensure_canonical_schema(connection: Any) -> None:
     """Create only the additive canonical foundation tables."""
+    identity = identity_primary_key(getattr(connection, "backend_name", "sqlite"))
     execute_script(
         connection,
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS audit_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {identity},
             event_type TEXT NOT NULL,
             case_id TEXT,
             user_id INTEGER,
