@@ -236,7 +236,7 @@ Open:
 http://localhost:5000
 ```
 
-For production, use only `deployment/docker-compose.yml`. nginx publishes port 80 and the application port 5000 remains internal-only. Derive immutable image metadata with `deployment/scripts/release_metadata.py` and validate protected configuration before startup; never use the root Compose file for production.
+For self-contained staging/integration validation, `docker-compose.yml` starts the application with PostgreSQL, Redis, and the Nginx edge; the application port 5000 remains internal-only. Provide `POSTGRES_PASSWORD`, `SENTINEL_DNA_SECRET_KEY`, and `SENTINEL_DNA_TLS_DIR` through the operator environment. For controlled production, use only `deployment/docker-compose.yml`; derive immutable image metadata with `deployment/scripts/release_metadata.py` and validate protected configuration before startup.
 
 
 ---
