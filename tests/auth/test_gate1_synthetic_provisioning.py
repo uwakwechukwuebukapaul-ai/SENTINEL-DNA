@@ -158,7 +158,7 @@ def test_rotation_accepts_analyst_application_and_membership_roles(tmp_path, mon
     service.cleanup()
     _enable_rotation(monkeypatch)
     spec = synthetic_identity_specs()[0]
-    assert auth.get_by_username(spec.username).role == "analyst"
+    assert auth.get_by_username(spec.username, include_inactive=True).role == "analyst"
     assert authority.memberships.get(spec.tenant_id, spec.actor_id).role == "analyst"
     assert service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))[0].state == "rotated"
 
@@ -211,7 +211,8 @@ def test_cleanup_expires_only_marked_synthetic_identities_and_audits(tmp_path, m
     assert [item.state for item in cleaned] == ["cleaned", "cleaned"]
     assert auth.get_by_username(unrelated.username).is_active
     for spec in synthetic_identity_specs():
-        user = auth.get_by_username(spec.username)
+        assert auth.get_by_username(spec.username) is None
+        user = auth.get_by_username(spec.username, include_inactive=True)
         assert user is not None and not user.is_active
         assert authority.tenants.get(spec.tenant_id).status == "inactive"
         assert authority.identities.get(spec.actor_id).status == "inactive"
@@ -329,7 +330,8 @@ def test_rotation_can_select_one_lane_without_touching_the_other(tmp_path, monke
     service.rotate_inactive({"A": ROTATED_DEMO_PASSWORDS["A"]}, lanes=("A",))
 
     assert auth.get_by_username(synthetic_identity_specs()[0].username).is_active
-    assert not auth.get_by_username(synthetic_identity_specs()[1].username).is_active
+    assert auth.get_by_username(synthetic_identity_specs()[1].username) is None
+    assert not auth.get_by_username(synthetic_identity_specs()[1].username, include_inactive=True).is_active
     assert authority.resolve(synthetic_identity_specs()[0].tenant_id, synthetic_identity_specs()[0].actor_id)[0].status == "active"
     assert authority.tenants.get(synthetic_identity_specs()[1].tenant_id).status == "inactive"
 
@@ -496,7 +498,8 @@ def test_rotation_audit_failure_rolls_back_every_selected_lane(tmp_path, monkeyp
 
     assert [item.state for item in service.inspect_rotation_state()] == ["inactive_complete", "inactive_complete"]
     for spec in synthetic_identity_specs():
-        assert not auth.get_by_username(spec.username).is_active
+        assert auth.get_by_username(spec.username) is None
+        assert not auth.get_by_username(spec.username, include_inactive=True).is_active
 
 
 def test_rotation_invalidates_existing_signed_session_epoch(tmp_path, monkeypatch):

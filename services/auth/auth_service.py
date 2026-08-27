@@ -221,15 +221,16 @@ class AuthService:
             else:
                 connection.execute("DELETE FROM auth_identities WHERE user_id=? AND provider=? AND provider_subject=?", (user_id, provider, subject))
 
-    def get_by_username(self, username, connection=None):
+    def get_by_username(self, username, connection=None, include_inactive=False):
         normalized = str(username or "").strip()
         if not normalized:
             return None
+        predicate = "username=?" if include_inactive else "username=? AND is_active=1"
         if connection is None:
             with self.db.session() as owned_connection:
-                row = owned_connection.execute("SELECT * FROM users WHERE username=?", (normalized,)).fetchone()
+                row = owned_connection.execute(f"SELECT * FROM users WHERE {predicate}", (normalized,)).fetchone()
         else:
-            row = connection.execute("SELECT * FROM users WHERE username=?", (normalized,)).fetchone()
+            row = connection.execute(f"SELECT * FROM users WHERE {predicate}", (normalized,)).fetchone()
         return self._user(row) if row else None
 
     def get_by_email(self, email, connection=None, include_inactive=False):

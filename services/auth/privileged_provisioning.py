@@ -116,7 +116,7 @@ class PrivilegedIdentityProvisioningService:
                 if tenant is None or tenant.status != "active":
                     raise PrivilegedProvisioningError("invalid_tenant")
 
-                if self.auth.get_by_username(normalized_username, connection=unit.conn):
+                if self.auth.get_by_username(normalized_username, connection=unit.conn, include_inactive=True):
                     raise PrivilegedProvisioningError("identity_already_exists")
                 if self.auth.get_by_email(normalized_email, connection=unit.conn, include_inactive=True):
                     raise PrivilegedProvisioningError("identity_already_exists")

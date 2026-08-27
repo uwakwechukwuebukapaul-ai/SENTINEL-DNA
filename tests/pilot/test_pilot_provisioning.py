@@ -96,7 +96,7 @@ def test_provisioning_creates_inactive_account_isolated_tenant_and_bounded_autho
     result = provision(provisioning, clock, manager_tenant_id)
 
     with db.session() as connection:
-        user = auth.get_by_username("remote-analyst", connection=connection)
+        user = auth.get_by_username("remote-analyst", connection=connection, include_inactive=True)
     assert result.account_status == "pending_activation"
     assert result.authorization_status == "active"
     assert result.tenant_status == "active"
