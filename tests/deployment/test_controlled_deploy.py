@@ -113,20 +113,28 @@ def _clean_repository(tmp_path: Path) -> Path:
 
 def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner=None):
     repository_root = _clean_repository(tmp_path)
+
     env_file = tmp_path / "protected" / ".env"
     env_file.parent.mkdir()
+
     if os.name != "nt":
         env_file.parent.chmod(0o700)
+
     metadata_file = tmp_path / "trusted" / "metadata.json"
     metadata_file.parent.mkdir()
+
     if os.name != "nt":
         metadata_file.parent.chmod(0o700)
+
     metadata_file.write_text(
         json.dumps(metadata or {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}),
         encoding="utf-8",
     )
+
     if os.name != "nt":
-        metadata_file.chmod(0o600)
+        metadata_file.chmod(0o444)
+    if os.name != "nt":
+        metadata_file.chmod(0o444)
     release_manifest_file = tmp_path / "trusted" / "release-manifest.json"
     write_manifest(
         build_manifest(
