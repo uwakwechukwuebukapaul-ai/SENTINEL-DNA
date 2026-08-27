@@ -23,7 +23,7 @@ import tempfile
 from typing import Any, Mapping, Protocol, Sequence
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-if __package__ in {None, ""} and str(REPOSITORY_ROOT) not in sys.path:
+if __name__ == "__main__" and str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest

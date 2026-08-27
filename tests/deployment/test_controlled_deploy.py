@@ -26,8 +26,9 @@ from deployment.scripts.release_metadata import derive_release_metadata
 from deployment.scripts.release_manifest import build_manifest, write_manifest
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_METADATA = derive_release_metadata(
-    repository_root=Path(__file__).resolve().parents[2],
+    repository_root=REPOSITORY_ROOT,
     source_date_epoch="0",
 )
 RELEASE_SHA = RELEASE_METADATA["SENTINEL_DNA_IMAGE_REVISION_FULL"]
@@ -97,6 +98,19 @@ class FakeRunner:
         return CommandResult(1, "", "unexpected-command")
 
 
+def _clean_repository(tmp_path: Path) -> Path:
+    repository_root = tmp_path / "repository"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-local", str(REPOSITORY_ROOT), str(repository_root)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if os.name != "nt":
+        repository_root.chmod(0o700)
+    return repository_root
+
+
 def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner=None):
     repository_root = _clean_repository(tmp_path)
     env_file = tmp_path / "protected" / ".env"
@@ -112,7 +126,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         encoding="utf-8",
     )
     if os.name != "nt":
-        metadata_file.chmod(0o444)
+        metadata_file.chmod(0o600)
     release_manifest_file = tmp_path / "trusted" / "release-manifest.json"
     write_manifest(
         build_manifest(
@@ -126,11 +140,11 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         output=release_manifest_file,
         repository_root=repository_root,
     )
-    if os.name != "nt":
-        release_manifest_file.parent.chmod(0o700)
     tls_dir = tmp_path / "tls"
     tls_dir.mkdir()
     if os.name != "nt":
+        release_manifest_file.parent.chmod(0o700)
+        release_manifest_file.chmod(0o600)
         tls_dir.chmod(0o700)
     env_file.write_text(
         "\n".join(
@@ -303,8 +317,13 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
     env_file = tmp_path / "protected" / "production.env"
     env_file.parent.mkdir()
     env_file.write_text("SENTINEL_DNA_ENV=production\n", encoding="utf-8")
+    if os.name != "nt":
+        env_file.parent.chmod(0o700)
+        env_file.chmod(0o600)
     release_manifest_file = tmp_path / "release" / "release-manifest.json"
     release_manifest_file.parent.mkdir()
+    if os.name != "nt":
+        release_manifest_file.parent.chmod(0o700)
     write_manifest(
         build_manifest(
             repository_root=repository_root,
@@ -317,6 +336,8 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
         output=release_manifest_file,
         repository_root=repository_root,
     )
+    if os.name != "nt":
+        release_manifest_file.chmod(0o600)
 
     validator = types.ModuleType("deployment.scripts.validate_deployment_config")
     validator.merged_environment = lambda **_: {}
