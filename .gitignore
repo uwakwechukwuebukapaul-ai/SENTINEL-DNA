@@ -24,3 +24,4 @@ work/pytest-packages/
 work/pytest-runner/
 work/
 .env
+staging.env
