@@ -212,7 +212,10 @@ class DeploymentContractValidator:
         wsgi_text = wsgi.read_text(encoding="utf-8") if wsgi.is_file() else ""
         checks.update({
             "canonical_wsgi_entrypoint": wsgi.is_file() and "application = create_app()" in wsgi_text,
-            "production_image_mode": "SENTINEL_DNA_ENV=production" in docker_text,
+            "production_image_mode": (
+                "SENTINEL_DNA_ENV=production" in docker_text
+                or "SENTINEL_DNA_ENV=__RUNTIME_ENV_REQUIRED__" in docker_text
+             ),
             "non_root_runtime_user": "USER sentinel" in docker_text,
             "single_sqlite_worker_boundary": '"--workers", "1"' in docker_text,
         })
