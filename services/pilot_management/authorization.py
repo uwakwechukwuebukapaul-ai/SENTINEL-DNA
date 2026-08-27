@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from database.connection import DatabaseConnection, database
 from database.portability import table_columns
+from .scenario_catalog import APPROVED_SCENARIO_IDENTIFIERS
 
 
 class PilotAuthorizationError(ValueError):
@@ -19,19 +20,7 @@ class PilotAuthorizationError(ValueError):
 # These identifiers are drawn from the repository's existing deterministic
 # evaluation/demo fixtures.  A scenario not represented here must be added to
 # the approved fixture catalog before it can be authorized.
-APPROVED_SCENARIOS = frozenset(
-    {
-        "phishing_compromise",
-        "credential_theft",
-        "malware_execution",
-        "suspicious_authentication",
-        "lateral_movement",
-        "command_and_control",
-        "benign_false_positive",
-        "multi_ioc_investigation",
-        "suspicious_powershell_execution",
-    }
-)
+APPROVED_SCENARIOS = APPROVED_SCENARIO_IDENTIFIERS
 
 
 def _utcnow() -> datetime:

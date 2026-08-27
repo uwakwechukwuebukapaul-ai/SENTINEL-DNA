@@ -5,18 +5,25 @@ analyst pilot. It is not a deployment authorization and contains no real
 credentials, URLs, certificates, analyst identities, tenant identifiers, or
 activation tokens.
 
-## Important deployment boundary
+## Runtime contract
 
-Do not run `deployment/scripts/deploy.sh` as part of this preparation. The
-script invokes `docker compose` without selecting a staging-specific Compose
-file, and the repository root `docker-compose.yml` is a production contract.
-Do not point either production Compose file at the existing ignored `.env`.
+The staging runtime is defined by
+`deployment/staging/docker-compose.yml` and uses the canonical
+`wsgi:application` entrypoint. The application, PostgreSQL, and Redis services
+are private; only the staging edge is exposed, and that edge must be private
+HTTPS, VPN, or zero-trust infrastructure.
+
+`deployment/scripts/deploy.sh` is staging-only. It requires an absolute
+`STAGING_ENV_FILE` outside the repository and explicitly selects the staging
+Compose file. It must not be run as part of this repository gate. The root
+`docker-compose.yml` and `deployment/docker-compose.yml` remain production
+contracts and must not be used for staging.
 
 Use the [staging checklist](CHECKLIST.md) with an infrastructure operator who
 can provide an approved private non-production runtime and remote boundary.
 The [staging environment template](.env.example) is a non-secret template
 only; inject values through the approved non-production secret/configuration
-store and never commit the populated file.
+store and never commit the populated file or use the repository `.env`.
 
 ## Required staging controls
 
@@ -30,10 +37,17 @@ SENTINEL_DNA_SECURE_COOKIES=1
 FLASK_DEBUG=0
 ```
 
-Staging must use a separate database and non-production secret material. The
-analyst-facing boundary is browser-only and private HTTPS, VPN, or
-zero-trust; database, Redis, SSH, shell, repository, GitHub, and management
-interfaces remain unavailable to the analyst.
+The runtime also requires `SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION` to be
+`external_non_production` and
+`SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION` to be
+`disposable_staging`. These values are defense-in-depth declarations; network,
+database-role, target-ownership, and secret-store isolation remain
+infrastructure responsibilities. No hostname heuristic is used.
+
+Staging must use separate database, Redis, volumes, and non-production secret
+material. The analyst-facing boundary is browser-only and private; database,
+Redis, SSH, shell, repository, GitHub, and management interfaces remain
+unavailable to the analyst.
 
 ## Health and rollback gates
 

@@ -9,7 +9,10 @@ LABEL org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.created="${IMAGE_CREATED}" \
       com.sentinel-dna.git.revision.full="${VCS_REF_FULL}"
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SENTINEL_DNA_ENV=production
+# The deployment contract must provide the environment explicitly.  An
+# invalid sentinel keeps an image started without a runtime contract from
+# silently becoming development or production.
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SENTINEL_DNA_ENV=__RUNTIME_ENV_REQUIRED__
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

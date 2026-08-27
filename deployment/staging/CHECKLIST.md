@@ -30,6 +30,8 @@ activation tokens, private keys, customer data, or fabricated analyst results.
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED=1
       SENTINEL_DNA_SECURE_COOKIES=1
       FLASK_DEBUG=0
+      SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION=external_non_production
+      SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION=disposable_staging
       ```
 
 - [ ] Reject startup if the environment is `production`, debug is enabled,
@@ -37,10 +39,14 @@ activation tokens, private keys, customer data, or fabricated analyst results.
       as production.
 - [ ] Confirm the populated configuration is held outside Git and its values
       are not printed in logs or evidence.
+- [ ] Confirm configuration classification is `external_non_production` and
+      database target classification is `disposable_staging`; these are
+      defense-in-depth values and do not replace infrastructure isolation.
 - [ ] Do not use the repository root `docker-compose.yml` or
       `deployment/docker-compose.yml` as an implicit staging contract; both
       are production-oriented. Use an approved staging runtime definition
-      supplied by the infrastructure operator.
+      supplied by the infrastructure operator:
+      `deployment/staging/docker-compose.yml`.
 
 ## 3. Private browser access boundary
 
