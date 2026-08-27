@@ -48,7 +48,7 @@ def _bind(user):
     memberships = [m for m in authority.memberships.list_for_actor(identity.actor_id) if m.status == "active"]
     if not memberships:
         tenant = authority.tenants.create(f"{user.username} workspace", tenant_id=user.tenant_id or f"tenant-{user.id}")
-        memberships = [authority.memberships.add(tenant.tenant_id, identity.actor_id, "analyst")]
+        memberships = [authority.memberships.add(tenant.tenant_id, identity.actor_id, str(user.role).lower())]
     membership = sorted(memberships, key=lambda item: item.tenant_id)[0]
     with _service().db.session() as connection:
         connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, membership.tenant_id, user.id))
