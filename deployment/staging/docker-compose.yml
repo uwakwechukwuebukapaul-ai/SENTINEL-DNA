@@ -38,7 +38,10 @@ services:
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
       SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set external non-production secret}
-      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/staging/soc.db
+      # The named volume is mounted at /var/lib/sentinel. Keep the SQLite
+      # compatibility path at that mount root; staging's authoritative
+      # backend remains the private PostgreSQL DATABASE_URL below.
+      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
       PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
       REDIS_URL: redis://redis:6379/0
@@ -75,7 +78,7 @@ services:
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
       SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set external non-production secret}
-      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/staging/soc.db
+      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
       PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
     depends_on:

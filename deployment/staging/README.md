@@ -132,6 +132,14 @@ material. The analyst-facing boundary is browser-only and private; database,
 Redis, SSH, shell, repository, GitHub, and management interfaces remain
 unavailable to the analyst.
 
+The staging application volume is the named `staging_app_data` volume mounted
+at `/var/lib/sentinel`. Its canonical SQLite compatibility path is
+`/var/lib/sentinel/soc.db`; `/var/lib/sentinel/staging` is not part of the
+contract and must not be introduced as an application-created directory. The
+staging runtime's authoritative database remains the private PostgreSQL
+`DATABASE_URL`, so the SQLite path is not a fallback when PostgreSQL is
+configured or unavailable.
+
 ## Health and rollback gates
 
 After an approved operator starts the staging runtime, verify `/health` and
