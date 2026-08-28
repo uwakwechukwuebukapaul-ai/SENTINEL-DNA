@@ -25,6 +25,89 @@ The [staging environment template](.env.example) is a non-secret template
 only; inject values through the approved non-production secret/configuration
 store and never commit the populated file or use the repository `.env`.
 
+## Staging TLS certificate
+
+The supported browser endpoint is:
+
+```text
+https://sentinel-dna-staging:8443/
+```
+
+TLS terminates at the Nginx edge on container port `443`; Docker publishes
+that edge as `0.0.0.0:8443:443`. Gunicorn remains private on the Docker
+network at `app:5000`. Use the checked-in
+[`nginx.conf`](nginx.conf) as the reviewed source for the external edge
+configuration file. It references `/etc/nginx/tls/staging.crt` and
+`/etc/nginx/tls/staging.key` and must be mounted read-only by Compose.
+
+The self-signed staging certificate must contain these SANs:
+
+```text
+DNS:sentinel-dna-staging
+IP Address:192.168.1.115
+IP Address:127.0.0.1
+```
+
+The LAN address is an example for the current staging VM. It is supplied by
+`SENTINEL_DNA_STAGING_TLS_IP` in the external staging environment and is not
+application configuration. The generator also always includes the stable
+hostname and `127.0.0.1`; it does not add arbitrary SANs. It uses the reviewed
+[`staging-cert-config.json`](staging-cert-config.json) configuration, RSA
+3072-bit keys, SHA-256, and a 397-day validity period.
+
+On the staging host, with `/etc/sentinel-dna/staging.env` populated outside
+Git, generate or validate the material as follows:
+
+```sh
+set -a
+. /etc/sentinel-dna/staging.env
+set +a
+python3 deployment/staging/scripts/generate_staging_cert.py
+```
+
+The TLS directory must be an absolute path outside the repository. The
+generator creates the directory with restrictive permissions, writes the
+private key as mode `0600`, writes the certificate as mode `0644`, validates
+the SAN and key/certificate pairing, and is safe to rerun. An existing
+certificate with a changed LAN IP or missing SANs fails closed; rotate it only
+after review with:
+
+```sh
+python3 deployment/staging/scripts/generate_staging_cert.py --rotate
+```
+
+After generation, copy the reviewed repository Nginx template to the external
+path named by `SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE`, then run the documented
+staging deployment workflow. Recreate or reload only the staging edge after a
+certificate rotation so Nginx reads the new files. Never place
+`staging.env`, a private key, or generated certificate material in Git.
+
+Validate the certificate before opening the browser:
+
+```sh
+openssl x509 \
+  -in "$SENTINEL_DNA_STAGING_TLS_DIR/staging.crt" \
+  -noout -subject -issuer -dates -ext subjectAltName
+```
+
+The output must show `DNS:sentinel-dna-staging`, the configured LAN IP, and
+`IP Address:127.0.0.1`. Because this is self-signed staging material, import
+the exact certificate into the Windows current-user Trusted Root store; do
+not disable TLS verification or trust a private key:
+
+```powershell
+Import-Certificate -FilePath .\staging.crt -CertStoreLocation Cert:\CurrentUser\Root
+Test-NetConnection sentinel-dna-staging -Port 8443
+curl.exe -I https://sentinel-dna-staging:8443/
+```
+
+The expected application result for the final request is HTTP `401` with the
+authentication-required response. A browser hostname mismatch indicates that
+the requested hostname is not in SAN; do not weaken authentication or bypass
+certificate verification. This certificate model is for internal staging
+only and can later be replaced by a CA-issued certificate using the same
+Nginx certificate/key mount contract.
+
 ## Required staging controls
 
 The runtime must fail the preflight if any control is absent or if production

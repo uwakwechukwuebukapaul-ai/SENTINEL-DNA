@@ -25,3 +25,8 @@ work/pytest-runner/
 work/
 .env
 staging.env
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx

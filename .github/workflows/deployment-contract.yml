@@ -149,7 +149,8 @@ jobs:
             tests/production/test_runtime_hardening.py \
             tests/intelligence/api/test_execution_visibility_api.py \
             tests/security/test_production_entrypoint_reconciliation.py \
-            tests/intelligence/runtime/test_execution_durable_state.py
+            tests/intelligence/runtime/test_execution_durable_state.py \
+            tests/staging/test_staging_security_contract.py
 
       - name: Authenticate to private GHCR
         shell: bash

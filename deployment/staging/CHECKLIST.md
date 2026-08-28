@@ -60,6 +60,9 @@ activation tokens, private keys, customer data, or fabricated analyst results.
       the analyst.
 - [ ] Verify TLS/certificate and hostname behavior from the analyst's actual
       network before handoff.
+- [ ] Confirm the certificate SAN contains `DNS:sentinel-dna-staging`, the
+      configured staging LAN IP, and `IP Address:127.0.0.1`; confirm the
+      private key remains outside Git and is readable only by the edge owner.
 - [ ] Verify no public development server, wildcard public listener, or
       production DNS route exists.
 
