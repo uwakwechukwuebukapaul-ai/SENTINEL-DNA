@@ -15,7 +15,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def ensure_canonical_schema(connection: Any) -> None:
+def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
     """Create only the additive canonical foundation tables."""
     identity = identity_primary_key(getattr(connection, "backend_name", "sqlite"))
     execute_script(
@@ -115,7 +115,8 @@ def ensure_canonical_schema(connection: Any) -> None:
     # The legacy SQLite schema API committed setup here. Preserve that
     # boundary because legacy authorization flows may open a nested,
     # read-only unit of work on the same SQLite database.
-    connection.commit()
+    if commit:
+        connection.commit()
 
 
 class CanonicalUnitOfWork:

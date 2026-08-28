@@ -1,28 +1,13 @@
-"""Portable, transactional runner for the normalized core schema."""
+"""Portable, transactional runner for the authoritative schema chain."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
-
 from .backend import DatabaseBackend
-from .schema import SchemaBackend, core_schema_statements
+from .migrations.registry import MIGRATIONS, Migration
 
 
-@dataclass(frozen=True)
-class Migration:
-    version: int
-    name: str
-    statements: Callable[[SchemaBackend], tuple[str, ...]]
-
-
-CORE_MIGRATIONS = (
-    Migration(
-        version=1,
-        name="normalized_core_schema",
-        statements=lambda backend: core_schema_statements(backend)[1:],
-    ),
-)
+# Backward-compatible public name retained for existing callers.
+CORE_MIGRATIONS = MIGRATIONS
 
 
 class MigrationRunner:
@@ -31,9 +16,11 @@ class MigrationRunner:
     def __init__(
         self,
         backend: DatabaseBackend,
-        migrations: tuple[Migration, ...] = CORE_MIGRATIONS,
+        migrations: tuple[Migration, ...] | None = None,
     ) -> None:
         self.backend = backend
+        if migrations is None:
+            migrations = MIGRATIONS
         self.migrations = tuple(sorted(migrations, key=lambda item: item.version))
         versions = [item.version for item in self.migrations]
         if len(set(versions)) != len(versions) or versions != list(range(1, len(versions) + 1)):
@@ -44,6 +31,11 @@ class MigrationRunner:
 
         applied_now: list[int] = []
         with self.backend.session() as connection:
+            # Python's sqlite3 driver does not implicitly start a transaction
+            # for DDL. Keep this scoped to migrations so legacy repositories
+            # remain free to use their own BEGIN IMMEDIATE boundaries.
+            if self.backend.backend_name == "sqlite":
+                connection.execute("BEGIN")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -61,8 +53,7 @@ class MigrationRunner:
             for migration in self.migrations:
                 if migration.version in applied:
                     continue
-                for statement in migration.statements(self.backend.backend_name):
-                    connection.execute(statement)
+                migration.apply(connection, self.backend.backend_name)
                 connection.execute(
                     """
                     INSERT INTO schema_migrations(version, applied_at)
@@ -75,4 +66,4 @@ class MigrationRunner:
         return tuple(applied_now)
 
 
-__all__ = ["CORE_MIGRATIONS", "Migration", "MigrationRunner"]
+__all__ = ["CORE_MIGRATIONS", "MIGRATIONS", "Migration", "MigrationRunner"]

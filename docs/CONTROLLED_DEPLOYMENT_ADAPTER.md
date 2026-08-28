@@ -58,14 +58,22 @@ safe release/evidence fields and static failure categories.
 ## Deployment boundary
 
 The explicit `--execute` mode is not part of release validation. After all
-operator authorization and preflight controls are complete, it recreates only
-the application service with:
+operator authorization and preflight controls are complete, it first runs the
+one-shot migration service from the pinned image:
+
+```text
+docker compose ... run --rm --no-build --no-deps migration
+```
+
+Only after that command succeeds does it recreate the application service with:
 
 ```text
 docker compose ... up -d --no-build --no-deps app
 ```
 
-PostgreSQL, Redis, and nginx are not recreated by the adapter. The Compose
+PostgreSQL, Redis, and nginx are not recreated by the adapter. The migration
+job mutates only the configured PostgreSQL schema and exits; it does not create
+users, tenants, credentials, or default operational data. The Compose
 contract requires the application, PostgreSQL, and Redis to remain internal;
 nginx alone publishes ports 80 and 443. Runtime verification confirms the
 running application digest and read-only trusted metadata mount. Immediately

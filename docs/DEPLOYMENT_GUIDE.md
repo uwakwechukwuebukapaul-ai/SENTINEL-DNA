@@ -2,7 +2,7 @@
 
 Set `SENTINEL_DNA_ENV` to `production`. Production requires protected `SENTINEL_DNA_SECRET_KEY` and `POSTGRES_PASSWORD` values. The release helper derives immutable image metadata from Git; operators must not maintain those values manually.
 
-Use the controlled deployment adapter in `deployment/scripts/controlled_deploy.py`. An authorized provider must materialize the protected production configuration outside the repository; never use the repository `.env` as production authority. Prepare the deployment-owned Gate 1 artifact with `deployment/scripts/prepare_trusted_release_metadata.py`, then run the adapter in `--dry-run` or `--validate-only` mode before any explicitly authorized `--execute` operation. The adapter uses only `deployment/docker-compose.yml`, pins the verified immutable digest, and recreates only the application service. The container runs as a non-root `sentinel` user and persists data under `/var/lib/sentinel`. V1 uses one Gunicorn worker because SQLite is the current persistence boundary; do not add workers or replicas against the same database file.
+Use the controlled deployment adapter in `deployment/scripts/controlled_deploy.py`. An authorized provider must materialize the protected production configuration outside the repository; never use the repository `.env` as production authority. Prepare the deployment-owned Gate 1 artifact with `deployment/scripts/prepare_trusted_release_metadata.py`, then run the adapter in `--dry-run` or `--validate-only` mode before any explicitly authorized `--execute` operation. The adapter uses only `deployment/docker-compose.yml`, pins the verified immutable digest, runs the one-shot migration service, and recreates only the application service. The container runs as a non-root `sentinel` user and persists data under `/var/lib/sentinel`.
 
 `GET /health` checks application and database availability. `GET /ready` additionally validates required registered services. Use the `deployment/docker-compose.yml` topology when an Nginx reverse proxy is required. Nginx is the public edge: port 80 redirects to HTTPS on port 443, while the application remains internal on port 5000. The proxy forwards `X-Forwarded-Proto=https`, `X-Forwarded-For`, and `X-Correlation-ID`; do not expose the application port directly to the public internet. The manual `deployment-contract` GitHub Actions workflow validates protected production configuration and provenance without assuming a remote hosting provider.
 
@@ -18,7 +18,11 @@ Dockerfile -> gunicorn wsgi:application -> wsgi.py -> app.create_app()
 
 ## Current persistence boundary
 
-Option A is the supported database decision for the current V1 release: SQLite is the implemented application persistence backend and the deployment documentation deliberately constrains the service to one Gunicorn worker. PostgreSQL and Redis are declared in the controlled Compose topology for future infrastructure alignment, but no PostgreSQL driver, Redis client, migration path, or application startup integration is currently implemented. Their presence in Compose does not certify them as active application persistence.
+PostgreSQL is the production and staging persistence backend. SQLite remains
+supported for local development and tests. Redis is the internal runtime
+dependency. The explicit migration job runs the complete authoritative chain
+before application traffic is enabled; the application does not silently run
+deployment migrations while importing WSGI.
 
 | Domain data | Current boundary |
 | --- | --- |
@@ -28,9 +32,10 @@ Option A is the supported database decision for the current V1 release: SQLite i
 | Billing and payment state | Persistent SQLite repositories/migrations |
 | Intelligence and fusion | Mixed: SQLite-backed repositories where wired; process-local derived results in some engines |
 | Replay data | Mixed: derived/process-local Customer Zero replay plus selected SQLite execution/report records; no dedicated immutable replay store |
-| PostgreSQL and Redis Compose services | Declared external services, not currently used by the demonstrated application persistence path |
+| PostgreSQL and Redis Compose services | Internal production dependencies; PostgreSQL is initialized by the explicit migration job |
 
-This boundary is not a production-scale database certification. Backup/restore, multi-instance operation, PostgreSQL integration, Redis integration, and RPO/RTO evidence remain separate release blockers.
+This boundary is not by itself a production-scale certification. Backup/restore,
+multi-instance operation, and RPO/RTO evidence remain separate release gates.
 
 ## Local operator HTTPS validation
 

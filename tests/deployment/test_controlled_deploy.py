@@ -95,6 +95,10 @@ class FakeRunner:
             compose_files = [index + 1 for index, value in enumerate(args) if value == "-f"]
             self.pin_contents = Path(args[compose_files[-1]]).read_text(encoding="utf-8")
             return CommandResult(0, "", "")
+        if "compose" in args and "run" in args:
+            compose_files = [index + 1 for index, value in enumerate(args) if value == "-f"]
+            self.pin_contents = Path(args[compose_files[-1]]).read_text(encoding="utf-8")
+            return CommandResult(0, "", "")
         return CommandResult(1, "", "unexpected-command")
 
 
@@ -530,11 +534,14 @@ def test_execute_requires_all_validation_gates_before_up(tmp_path):
     assert not any("up" in call for call in adapter.runner.calls)
 
 
-def test_execute_pins_compose_to_verified_digest_and_only_checks_app(tmp_path):
+def test_execute_runs_pinned_migrations_before_recreating_app(tmp_path):
     adapter, _, _ = _fixture(tmp_path)
     adapter.verify_runtime = lambda: None
     evidence = adapter.execute()
     assert f"deployment-app@{RELEASE_DIGEST}" in adapter.runner.pin_contents
+    migration_call = next(call for call in adapter.runner.calls if "run" in call)
+    assert migration_call[-1] == "migration"
+    assert "  migration:" in adapter.runner.pin_contents
     up_call = next(call for call in adapter.runner.calls if "up" in call)
     assert "--no-build" in up_call
     assert "--no-deps" in up_call

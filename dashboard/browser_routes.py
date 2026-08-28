@@ -98,6 +98,59 @@ def investigation_detail(principal, investigation_id):
     )
 
 
+@browser.post("/workspace/investigation/<investigation_id>/feedback")
+def investigation_feedback(principal=None, investigation_id=None):
+    """Record analyst feedback through the canonical tenant-scoped service."""
+    expected = session.get("csrf_token")
+    supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    if not expected or supplied != expected:
+        return jsonify({"error": "csrf_validation_failed"}), 403
+    principal = _principal()
+    if principal is None:
+        return jsonify({"error": "authentication_required"}), 401
+
+    try:
+        detail = _detail(str(investigation_id))
+    except (LookupError, PermissionError, ValueError):
+        detail = None
+    if not detail:
+        return jsonify({"error": "investigation_not_found"}), 404
+
+    report = detail.get("report") or {}
+    intelligence = detail.get("intelligence") or {}
+    metadata = report.get("metadata") or intelligence.get("metadata") or {}
+    allowed, error = authorize_investigation({"metadata": metadata}, write=True)
+    if not allowed:
+        return jsonify({"error": error}), 403
+
+    payload = request.get_json(silent=True) if request.is_json else request.form.to_dict()
+    payload = dict(payload or {})
+    payload.pop("csrf_token", None)
+    action = str(payload.pop("action", "")).strip().lower()
+    action_decisions = {
+        "confirm": "accepted",
+        "reject": "rejected",
+        "review": "escalated",
+        "note": "modified",
+    }
+    if action:
+        payload["decision"] = action_decisions.get(action, action)
+    try:
+        feedback = current_app.container.require("investigation_coordinator").submit_feedback(
+            str(investigation_id),
+            payload,
+            tenant_id=principal["tenant_id"],
+            analyst_id=principal["analyst"]["actor_id"],
+        )
+    except LookupError:
+        return jsonify({"error": "investigation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if request.is_json:
+        return jsonify({"success": True, "feedback": feedback.to_dict()}), 201
+    return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id) + "#feedback")
+
+
 @browser.get("/workspace/investigation/<investigation_id>/report")
 @_authenticated
 def investigation_report(principal, investigation_id):

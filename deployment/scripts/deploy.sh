@@ -28,6 +28,18 @@ docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
-  up -d --build
+  up -d --build postgres redis
+
+docker compose \
+  --project-name sentinel-dna-staging \
+  --env-file "$STAGING_ENV_FILE" \
+  --file "$STAGING_COMPOSE" \
+  run --rm --build migration
+
+docker compose \
+  --project-name sentinel-dna-staging \
+  --env-file "$STAGING_ENV_FILE" \
+  --file "$STAGING_COMPOSE" \
+  up -d --build app edge
 
 "$SCRIPT_DIR/health_check.sh"

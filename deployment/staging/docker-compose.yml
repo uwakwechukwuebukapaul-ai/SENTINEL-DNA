@@ -39,13 +39,14 @@ services:
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
       SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set external non-production secret}
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/staging/soc.db
-      DATABASE_URL: postgresql://sentinel:${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}@postgres:5432/sentinel_dna
+      DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
+      PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - staging_app_data:/var/lib/sentinel
     networks:
@@ -56,6 +57,32 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  migration:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["python", "-m", "database.run_migrations"]
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      SENTINEL_DNA_ENV: staging
+      SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"
+      SENTINEL_DNA_SECURE_COOKIES: "1"
+      FLASK_DEBUG: "0"
+      SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
+      SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
+      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set external non-production secret}
+      SENTINEL_DNA_DB_PATH: /var/lib/sentinel/staging/soc.db
+      DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
+      PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - staging_internal
 
   postgres:
     image: postgres:16-alpine
@@ -82,6 +109,11 @@ services:
       - staging_redis_data:/data
     networks:
       - staging_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   staging_edge:

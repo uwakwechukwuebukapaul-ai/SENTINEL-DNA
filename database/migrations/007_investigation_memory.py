@@ -5,7 +5,10 @@ DESCRIPTION = "Investigation memory learning records and append-only feedback au
 
 
 def upgrade(connection):
-    connection.executescript(
+    from database.portability import execute_script, table_columns
+
+    execute_script(
+        connection,
         """
         CREATE TABLE IF NOT EXISTS investigation_memory (
             memory_id TEXT PRIMARY KEY,
@@ -58,10 +61,8 @@ def upgrade(connection):
             ON investigation_memory_audit(tenant_id, created_at);
         """
     )
-    columns = {
-        row[1]
-        for row in connection.execute("PRAGMA table_info(investigation_memory)").fetchall()
-    }
+    backend = getattr(connection, "backend_name", "sqlite")
+    columns = table_columns(connection, backend, "investigation_memory")
     additions = {
         "tenant_id": "ALTER TABLE investigation_memory ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'",
         "investigation_id": "ALTER TABLE investigation_memory ADD COLUMN investigation_id TEXT NOT NULL DEFAULT ''",
@@ -75,7 +76,8 @@ def upgrade(connection):
     for column, statement in additions.items():
         if column not in columns:
             connection.execute(statement)
-    connection.executescript(
+    execute_script(
+        connection,
         """
         CREATE INDEX IF NOT EXISTS idx_investigation_memory_tenant_case
             ON investigation_memory(tenant_id, case_id, created_at);

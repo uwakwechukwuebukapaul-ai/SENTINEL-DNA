@@ -6,5 +6,4 @@ DESCRIPTION = "Canonical tenants, identities, memberships, and authority metadat
 
 def upgrade(connection):
     from database.canonical_authority import ensure_canonical_schema
-    ensure_canonical_schema(connection)
-
+    ensure_canonical_schema(connection, commit=False)

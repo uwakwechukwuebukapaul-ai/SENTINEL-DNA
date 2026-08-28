@@ -535,7 +535,8 @@ class ControlledDeploymentAdapter:
         evidence = self.validate()
         # Revalidate every trust input immediately before execution and pin
         # Compose to the exact digest so a mutable tag cannot be rebound
-        # between validation and use.
+        # between validation and use. Database migrations run as an explicit
+        # one-shot job before the application service is recreated.
         evidence = self.validate()
         try:
             descriptor, temporary_name = tempfile.mkstemp(prefix=".controlled-deploy-pin-", suffix=".yml")
@@ -544,9 +545,25 @@ class ControlledDeploymentAdapter:
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
                 descriptor = -1
-                temporary.write("services:\n  app:\n    image: deployment-app@" + evidence.image_digest + "\n")
+                temporary.write(
+                    "services:\n"
+                    "  migration:\n"
+                    "    image: deployment-app@" + evidence.image_digest + "\n"
+                    "  app:\n"
+                    "    image: deployment-app@" + evidence.image_digest + "\n"
+                )
                 temporary.flush()
                 os.fsync(temporary.fileno())
+            migration = self._compose(
+                "run",
+                "--rm",
+                "--no-build",
+                "--no-deps",
+                "migration",
+                compose_files=(self.compose_file, Path(temporary_name)),
+            )
+            if migration.returncode != 0:
+                raise ControlledDeploymentError("database_migration_failed")
             result = self._compose(
                 "up",
                 "-d",

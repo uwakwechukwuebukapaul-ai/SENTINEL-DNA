@@ -93,17 +93,27 @@ def test_pilot_boundary_is_allowlist_and_denies_non_pilot_surfaces():
 
 def test_staging_compose_and_deploy_contract_are_explicit():
     compose = (ROOT / "deployment" / "staging" / "docker-compose.yml").read_text()
+    root_compose = (ROOT / "docker-compose.yml").read_text()
     deploy = (ROOT / "deployment" / "scripts" / "deploy.sh").read_text()
 
     assert "SENTINEL_DNA_ENV: staging" in compose
     assert 'SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"' in compose
     assert 'SENTINEL_DNA_SECURE_COOKIES: "1"' in compose
     assert "FLASK_DEBUG: \"0\"" in compose
-    assert "DATABASE_URL: postgresql://" in compose
+    assert "DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna" in compose
+    assert "PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD" in compose
+    assert 'command: ["python", "-m", "database.run_migrations"]' in compose
+    assert "  migration:" in compose
+    assert "condition: service_healthy" in compose
+    assert 'test: ["CMD", "redis-cli", "ping"]' in compose
     assert "staging_internal:" in compose
     assert "internal: true" in compose
     assert 'ports:\n      - "${SENTINEL_DNA_STAGING_EDGE_BIND' in compose
     assert "--file \"$STAGING_COMPOSE\"" in deploy
     assert "--env-file \"$STAGING_ENV_FILE\"" in deploy
+    assert "up -d --build postgres redis" in deploy
+    assert "run --rm --build migration" in deploy
     assert "docker compose up -d --build" not in deploy
     assert "Missing .env" not in deploy
+    assert 'command: ["python", "-m", "database.run_migrations"]' in root_compose
+    assert "  migration:" in root_compose
