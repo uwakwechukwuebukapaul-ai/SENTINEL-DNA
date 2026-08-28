@@ -108,7 +108,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert 'test: ["CMD", "redis-cli", "ping"]' in compose
     assert "staging_internal:" in compose
     assert "internal: true" in compose
-    assert 'ports:\n      - "${SENTINEL_DNA_STAGING_EDGE_BIND' in compose
+    assert 'ports:\n      - "8443:443"' in compose
     assert "--file \"$STAGING_COMPOSE\"" in deploy
     assert "--env-file \"$STAGING_ENV_FILE\"" in deploy
     assert "up -d --build postgres redis" in deploy
