@@ -110,6 +110,21 @@ Nginx certificate/key mount contract.
 
 ## Required staging controls
 
+The application image must be built only after deriving release metadata from
+the clean, exact candidate checkout. From the repository root, export the
+non-secret values emitted by `release_metadata.py` into the external staging
+environment file before running the staging deploy script:
+
+```sh
+python3 deployment/scripts/release_metadata.py --format dotenv
+```
+
+The required values are `SENTINEL_DNA_IMAGE_TAG`,
+`SENTINEL_DNA_IMAGE_REVISION_FULL`, and `SENTINEL_DNA_IMAGE_CREATED`. Compose
+passes these values to the Dockerfile; missing, shortened, stale, or
+`unknown` provenance values make the build fail closed. The resulting image
+must be inspected and its immutable digest recorded before deployment.
+
 The runtime must fail the preflight if any control is absent or if production
 configuration, production credentials, or a production database is detected:
 

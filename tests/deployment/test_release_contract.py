@@ -163,6 +163,12 @@ def test_compose_preserves_internal_application_port_and_no_generated_env_mount(
     assert "read_only: true" in compose
 
 
+def test_compose_build_contract_uses_full_candidate_revision():
+    compose = (ROOT / "deployment" / "docker-compose.yml").read_text(encoding="utf-8")
+    assert compose.count("VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}") == 2
+    assert "VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION:?set SENTINEL_DNA_IMAGE_REVISION}" not in compose
+
+
 def test_nginx_contract_preserves_internal_app_and_secure_tls_forwarding():
     nginx = (ROOT / "deployment" / "nginx.conf").read_text(encoding="utf-8")
 
@@ -256,6 +262,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     manifest = _step(workflow, "Generate image-bound release manifest")
     assert "PUBLISHED_IMAGE_DIGEST" in _step_text(manifest)
     assert "PUBLISHED_IMAGE_ID" in _step_text(manifest)
+    assert "SENTINEL_DNA_IMAGE_CREATED" in _step_text(manifest)
     verify_manifest = _step(workflow, "Verify image-bound release manifest")
     assert "--require-image" in _step_text(verify_manifest)
     upload = _step(workflow, "Upload non-secret image release evidence")

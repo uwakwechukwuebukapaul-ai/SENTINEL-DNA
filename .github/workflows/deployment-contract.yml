@@ -311,7 +311,8 @@ jobs:
             --image-digest "$PUBLISHED_IMAGE_DIGEST" \
             --image-id "$PUBLISHED_IMAGE_ID" \
             --image-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
-            --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+            --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
+            --image-created "$SENTINEL_DNA_IMAGE_CREATED"
           echo "IMAGE_BOUND_MANIFEST_PATH=$manifest" >> "$GITHUB_ENV"
 
       - name: Verify image-bound release manifest

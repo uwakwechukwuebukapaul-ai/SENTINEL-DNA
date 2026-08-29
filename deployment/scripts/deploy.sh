@@ -3,6 +3,9 @@ set -eu
 
 : "${STAGING_ENV_FILE:?STAGING_ENV_FILE must point to external staging configuration}"
 : "${SENTINEL_DNA_BASE_URL:?SENTINEL_DNA_BASE_URL must point to the private staging edge}"
+: "${SENTINEL_DNA_IMAGE_TAG:?SENTINEL_DNA_IMAGE_TAG must be derived from the reviewed checkout}"
+: "${SENTINEL_DNA_IMAGE_REVISION_FULL:?SENTINEL_DNA_IMAGE_REVISION_FULL must be the full reviewed commit}"
+: "${SENTINEL_DNA_IMAGE_CREATED:?SENTINEL_DNA_IMAGE_CREATED must be derived release metadata}"
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPOSITORY_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
@@ -21,6 +24,16 @@ if [ ! -f "$STAGING_ENV_FILE" ]; then
 fi
 if [ ! -f "$STAGING_COMPOSE" ]; then
   echo "Staging Compose contract was not found" >&2
+  exit 1
+fi
+
+actual_revision=$(git -C "$REPOSITORY_ROOT" rev-parse HEAD 2>/dev/null || true)
+if [ "$actual_revision" != "$SENTINEL_DNA_IMAGE_REVISION_FULL" ]; then
+  echo "Staging checkout does not match the requested release revision" >&2
+  exit 1
+fi
+if [ -n "$(git -C "$REPOSITORY_ROOT" status --porcelain --untracked-files=all)" ]; then
+  echo "Staging checkout must be clean before an image build" >&2
   exit 1
 fi
 

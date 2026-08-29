@@ -129,6 +129,10 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert rendered["networks"]["staging_internal"]["internal"] is True
     assert "--file \"$STAGING_COMPOSE\"" in deploy
     assert "--env-file \"$STAGING_ENV_FILE\"" in deploy
+    assert "SENTINEL_DNA_IMAGE_TAG" in deploy
+    assert "SENTINEL_DNA_IMAGE_REVISION_FULL" in deploy
+    assert "git -C \"$REPOSITORY_ROOT\" rev-parse HEAD" in deploy
+    assert "git -C \"$REPOSITORY_ROOT\" status --porcelain --untracked-files=all" in deploy
     assert "up -d --build postgres redis" in deploy
     assert "run --rm --build migration" in deploy
     assert "docker compose up -d --build" not in deploy

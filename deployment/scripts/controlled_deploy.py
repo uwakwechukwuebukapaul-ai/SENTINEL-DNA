@@ -319,7 +319,10 @@ class ReleaseEvidence:
     image_id: str
     image_digest: str
     oci_revision: str
+    git_revision_full: str
     oci_source: str
+    oci_version: str
+    oci_created: str
     runtime_user: str
     entrypoint: tuple[str, ...]
     command: tuple[str, ...]
@@ -408,7 +411,7 @@ class ControlledDeploymentAdapter:
         except ReleaseManifestError as exc:
             raise ControlledDeploymentError("release_manifest_invalid") from exc
 
-    def _validate_release(self) -> ReleaseEvidence:
+    def _validate_release(self, *, expected_created: str) -> ReleaseEvidence:
         from deployment.scripts.release_metadata import derive_release_metadata
 
         derived = derive_release_metadata(repository_root=self.repository_root, source_date_epoch="0")
@@ -428,8 +431,14 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("image_id_unavailable")
         if labels.get("com.sentinel-dna.git.revision.full") != self.reviewed_sha:
             raise ControlledDeploymentError("image_revision_mismatch")
+        if labels.get("org.opencontainers.image.revision") != self.reviewed_sha:
+            raise ControlledDeploymentError("oci_revision_mismatch")
         if labels.get("org.opencontainers.image.source") != EXPECTED_IMAGE_SOURCE:
             raise ControlledDeploymentError("image_source_mismatch")
+        if labels.get("org.opencontainers.image.version") != self.reviewed_sha:
+            raise ControlledDeploymentError("oci_version_mismatch")
+        if labels.get("org.opencontainers.image.created") != expected_created:
+            raise ControlledDeploymentError("oci_created_mismatch")
         if config.get("User") != "sentinel":
             raise ControlledDeploymentError("image_runtime_user_mismatch")
         command = tuple(config.get("Cmd") or ())
@@ -443,8 +452,11 @@ class ControlledDeploymentAdapter:
             image=self.image,
             image_id=str(info.get("Id", "")),
             image_digest=self.expected_digest,
-            oci_revision=str(labels.get("com.sentinel-dna.git.revision.full", "")),
+            oci_revision=str(labels.get("org.opencontainers.image.revision", "")),
+            git_revision_full=str(labels.get("com.sentinel-dna.git.revision.full", "")),
             oci_source=str(labels.get("org.opencontainers.image.source", "")),
+            oci_version=str(labels.get("org.opencontainers.image.version", "")),
+            oci_created=str(labels.get("org.opencontainers.image.created", "")),
             runtime_user=str(config.get("User", "")),
             entrypoint=tuple(config.get("Entrypoint") or ()),
             command=command,
@@ -488,9 +500,9 @@ class ControlledDeploymentAdapter:
 
     def validate(self) -> ReleaseEvidence:
         self._validate_release_manifest()
-        self._validate_configuration()
+        configuration = self._validate_configuration()
         self._validate_metadata()
-        evidence = self._validate_release()
+        evidence = self._validate_release(expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"])
         self._validate_compose()
         return evidence
 
@@ -665,7 +677,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "image_id": evidence.image_id,
             "image_digest": evidence.image_digest,
             "oci_revision": evidence.oci_revision,
+            "git_revision_full": evidence.git_revision_full,
             "oci_source": evidence.oci_source,
+            "oci_version": evidence.oci_version,
+            "oci_created": evidence.oci_created,
             "runtime_user": evidence.runtime_user,
             "entrypoint": list(evidence.entrypoint),
             "command": list(evidence.command),

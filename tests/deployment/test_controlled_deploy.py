@@ -146,8 +146,10 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
             release_sha=RELEASE_SHA,
             image_reference=f"deployment-app:{RELEASE_SHA}",
             image_digest=RELEASE_DIGEST,
+            image_id="sha256:image-id",
             image_revision=RELEASE_SHA,
             image_source=SOURCE,
+            image_created=RELEASE_CREATED,
         ),
         output=release_manifest_file,
         repository_root=repository_root,
@@ -185,7 +187,10 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
         "Config": {
             "Labels": {
                 "com.sentinel-dna.git.revision.full": RELEASE_SHA,
+                "org.opencontainers.image.revision": RELEASE_SHA,
                 "org.opencontainers.image.source": SOURCE,
+                "org.opencontainers.image.version": RELEASE_SHA,
+                "org.opencontainers.image.created": RELEASE_CREATED,
             },
             "User": "sentinel",
             "Entrypoint": [],
@@ -336,18 +341,36 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
     release_manifest_file.parent.mkdir()
     if os.name != "nt":
         release_manifest_file.parent.chmod(0o700)
-    write_manifest(
-        build_manifest(
-            repository_root=repository_root,
-            release_sha=RELEASE_SHA,
-            image_reference=f"deployment-app:{RELEASE_SHA}",
-            image_digest=RELEASE_DIGEST,
-            image_revision=RELEASE_SHA,
-            image_source=SOURCE,
-        ),
-        output=release_manifest_file,
-        repository_root=repository_root,
-    )
+    manifest_script = repository_root / "deployment" / "scripts" / "release_manifest.py"
+    manifest_help = subprocess.run(
+        [sys.executable, str(manifest_script), "build", "--help"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    manifest_command = [
+        sys.executable,
+        str(manifest_script),
+        "build",
+        "--repository-root",
+        str(repository_root),
+        "--output",
+        str(release_manifest_file),
+        "--image-reference",
+        f"deployment-app:{RELEASE_SHA}",
+        "--image-digest",
+        RELEASE_DIGEST,
+        "--image-id",
+        "sha256:image-id",
+        "--image-revision",
+        RELEASE_SHA,
+        "--image-source",
+        SOURCE,
+    ]
+    if "--image-created" in manifest_help:
+        manifest_command.extend(("--image-created", RELEASE_CREATED))
+    subprocess.run(manifest_command, cwd=repository_root, check=True, capture_output=True, text=True)
     if os.name != "nt":
         release_manifest_file.chmod(0o600)
 
@@ -467,14 +490,14 @@ def test_adapter_rejects_wrong_image_digest(tmp_path):
     adapter, _, _ = _fixture(tmp_path)
     adapter.expected_digest = "sha256:" + "1" * 64
     with pytest.raises(ControlledDeploymentError, match="image_digest_mismatch"):
-        adapter._validate_release()
+        adapter._validate_release(expected_created=RELEASE_CREATED)
 
 
 def test_adapter_rejects_wrong_image_revision(tmp_path):
     adapter, _, _ = _fixture(tmp_path)
     adapter.reviewed_sha = "c" * 40
     with pytest.raises(ControlledDeploymentError, match="git_revision_mismatch"):
-        adapter._validate_release()
+        adapter._validate_release(expected_created=RELEASE_CREATED)
 
 
 def test_adapter_rejects_compose_public_internal_ports(tmp_path):

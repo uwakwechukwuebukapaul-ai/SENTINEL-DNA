@@ -163,6 +163,7 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
         image_reference="deployment-app:current-release",
         image_digest=digest,
         image_id="sha256:image-id",
+        image_created="1970-01-01T00:00:00Z",
     )
     valid_manifest_path = tmp_path / "valid-release-manifest.json"
     write_manifest(manifest, output=valid_manifest_path, repository_root=clean_repository)
@@ -186,6 +187,38 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
             expected_image_digest=digest,
         )
     assert secret not in str(failure.value)
+
+
+def test_image_bound_manifest_requires_creation_timestamp(clean_repository: Path) -> None:
+    with pytest.raises(ReleaseManifestError, match="creation timestamp is required"):
+        build_manifest(
+            repository_root=clean_repository,
+            image_digest="sha256:" + "a" * 64,
+            image_id="sha256:image-id",
+        )
+
+
+def test_manifest_rejects_tampered_full_git_revision(tmp_path: Path, clean_repository: Path) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    manifest["image"]["git_revision_full"] = "0" * 40
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    with pytest.raises(ReleaseManifestError, match="full Git revision"):
+        verify_manifest(manifest_path=manifest_path, repository_root=clean_repository)
+
+
+def test_image_bound_manifest_requires_image_id(clean_repository: Path) -> None:
+    with pytest.raises(ReleaseManifestError, match="image ID is required"):
+        build_manifest(
+            repository_root=clean_repository,
+            image_digest="sha256:" + "a" * 64,
+            image_created="1970-01-01T00:00:00Z",
+        )
+
+
+def test_manifest_rejects_wrong_image_source(clean_repository: Path) -> None:
+    with pytest.raises(ReleaseManifestError, match="image source identity is invalid"):
+        build_manifest(repository_root=clean_repository, image_source="https://example.invalid/repo")
 
 
 def _prepare_detached_github_pr_checkout(clean_repository: Path, monkeypatch: pytest.MonkeyPatch) -> str:
