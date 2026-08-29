@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -97,6 +98,41 @@ def _git_text(root: Path, *args: str) -> str:
     output = _git(root, *args, text=True)
     assert isinstance(output, str)
     return output.strip()
+
+
+def repository_branch(root: Path) -> str:
+    try:
+        branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+    except ReleaseManifestError:
+        branch = ""
+    if branch:
+        return branch
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return ""
+    event = os.environ.get("GITHUB_EVENT_NAME", "").strip()
+    ref = os.environ.get("GITHUB_REF", "").strip()
+    if event == "pull_request" and ref.startswith("refs/pull/") and ref.endswith("/merge"):
+        branch = os.environ.get("GITHUB_HEAD_REF", "").strip()
+    elif event in {"push", "workflow_dispatch"} and ref.startswith("refs/heads/"):
+        branch = ref.removeprefix("refs/heads/")
+    else:
+        return ""
+    ci_sha = os.environ.get("GITHUB_SHA", "").strip()
+    if not branch or not SHA_RE.fullmatch(ci_sha):
+        return ""
+    if _git_text(root, "rev-parse", "HEAD") != ci_sha:
+        return ""
+    try:
+        subprocess.run(
+            ["git", "check-ref-format", "--branch", branch],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return branch
 
 
 def _git_blob(root: Path, release_sha: str, path: str) -> tuple[str, bytes]:
@@ -255,7 +291,7 @@ def build_manifest(
         raise ReleaseManifestError("release SHA must equal the checked-out HEAD")
     _assert_clean_worktree(root)
 
-    branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+    branch = repository_branch(root)
     if not branch:
         raise ReleaseManifestError("release branch is unavailable")
     tree_id = _git_text(root, "rev-parse", f"{selected_sha}^{{tree}}")
@@ -403,7 +439,7 @@ def verify_manifest(
         raise ReleaseManifestError("release manifest SHA does not match checked-out HEAD")
     if require_current_head:
         _assert_clean_worktree(root)
-        current_branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+        current_branch = repository_branch(root)
         if current_branch != repository["branch"]:
             raise ReleaseManifestError("release manifest branch does not match checked-out branch")
 

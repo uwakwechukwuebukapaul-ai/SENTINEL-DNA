@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 from typing import Any, Iterable
 
-from deployment.scripts.release_manifest import ReleaseManifestError, build_manifest, verify_manifest
+from deployment.scripts.release_manifest import ReleaseManifestError, build_manifest, repository_branch, verify_manifest
 
 
 REPORT_VERSION = "sentinel-dna-release-hygiene-validation.v1"
@@ -174,7 +174,7 @@ class ReleaseHygieneValidator:
 
     def run(self) -> dict[str, Any]:
         commit_sha = self._git("rev-parse", "HEAD")
-        branch = self._git("symbolic-ref", "--short", "-q", "HEAD")
+        branch = repository_branch(self.repository_root)
         repository_state = self._repository_state()
         clean = bool(commit_sha) and not repository_state["tracked_modifications"] and not repository_state["untracked_release_impacting_files"]
         branch_ok = bool(branch) and (self.expected_branch is None or branch == self.expected_branch)

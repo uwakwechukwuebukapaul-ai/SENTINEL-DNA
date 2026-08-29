@@ -186,3 +186,40 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
             expected_image_digest=digest,
         )
     assert secret not in str(failure.value)
+
+
+def _prepare_detached_github_pr_checkout(clean_repository: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    subprocess.run(
+        ["git", "checkout", "--detach", "HEAD"],
+        cwd=clean_repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_REF", "refs/pull/3/merge")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "integrate/staging-persistence-dns-fix")
+    monkeypatch.setenv("GITHUB_SHA", commit_sha)
+    return commit_sha
+
+
+def test_manifest_uses_verified_github_source_branch_for_detached_pr_checkout(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _prepare_detached_github_pr_checkout(clean_repository, monkeypatch)
+
+    manifest = build_manifest(repository_root=clean_repository)
+
+    assert manifest["repository"]["branch"] == "integrate/staging-persistence-dns-fix"
+
+
+def test_manifest_fails_closed_when_github_commit_identity_does_not_match_detached_head(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _prepare_detached_github_pr_checkout(clean_repository, monkeypatch)
+    monkeypatch.setenv("GITHUB_SHA", "0" * 40)
+
+    with pytest.raises(ReleaseManifestError, match="release branch is unavailable"):
+        build_manifest(repository_root=clean_repository)
