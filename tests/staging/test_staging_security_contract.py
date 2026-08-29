@@ -54,6 +54,21 @@ def test_staging_runtime_requires_external_secret_and_postgresql(monkeypatch, tm
         RuntimeConfig.from_environment().validate()
 
 
+def test_staging_runtime_consumes_secret_key_from_docker_secret_file(monkeypatch, tmp_path):
+    staging_environment(tmp_path, monkeypatch)
+    secret = random_secret()
+    secret_file = tmp_path / "sentinel-dna-secret-key"
+    secret_file.write_text(secret + "\n", encoding="utf-8")
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY")
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY_FILE", str(secret_file))
+
+    config = RuntimeConfig.from_environment()
+    config.validate()
+
+    assert config.secret_key == secret
+    assert config.secret_was_configured is True
+
+
 @pytest.mark.parametrize(
     ("name", "value", "message"),
     [
@@ -109,7 +124,14 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert 'SENTINEL_DNA_SECURE_COOKIES: "1"' in compose
     assert "FLASK_DEBUG: \"0\"" in compose
     assert "DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna" in compose
-    assert "PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD" in compose
+    assert "PGPASSWORD" not in compose
+    assert "SENTINEL_DNA_SECRET_KEY: ${" not in compose
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD: ${" not in compose
+    assert "SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key" in compose
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
+    assert "POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
+    assert "environment: SENTINEL_DNA_SECRET_KEY" in compose
+    assert "environment: SENTINEL_DNA_POSTGRES_PASSWORD" in compose
     assert 'command: ["python", "-m", "database.run_migrations"]' in compose
     assert "  migration:" in compose
     assert "condition: service_healthy" in compose
@@ -139,6 +161,65 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "Missing .env" not in deploy
     assert 'command: ["python", "-m", "database.run_migrations"]' in root_compose
     assert "  migration:" in root_compose
+
+
+def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp_path):
+    secret = random_secret()
+    postgres_password = random_secret()
+    env_file = tmp_path / "staging.env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "SENTINEL_DNA_SECRET_KEY=" + secret,
+                "SENTINEL_DNA_POSTGRES_PASSWORD=" + postgres_password,
+                "SENTINEL_DNA_STAGING_EDGE_IMAGE=nginx:1.27-alpine",
+                "SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE=/tmp/staging-nginx.conf",
+                "SENTINEL_DNA_STAGING_TLS_DIR=/tmp/staging-tls",
+                "SENTINEL_DNA_IMAGE_TAG=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
+                "SENTINEL_DNA_IMAGE_REVISION_FULL=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
+                "SENTINEL_DNA_IMAGE_CREATED=2026-08-29T00:00:00Z",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--project-name",
+            "sentinel-dna-gate2-secret-test",
+            "--env-file",
+            str(env_file),
+            "--file",
+            str(ROOT / "deployment" / "staging" / "docker-compose.yml"),
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert secret not in result.stdout
+    assert postgres_password not in result.stdout
+    assert "PGPASSWORD" not in result.stdout
+    rendered = json.loads(result.stdout)
+    app_environment = rendered["services"]["app"]["environment"]
+    migration_environment = rendered["services"]["migration"]["environment"]
+    postgres_environment = rendered["services"]["postgres"]["environment"]
+    assert "SENTINEL_DNA_SECRET_KEY" not in app_environment
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD" not in app_environment
+    assert app_environment["SENTINEL_DNA_SECRET_KEY_FILE"] == "/run/secrets/sentinel_dna_secret_key"
+    assert app_environment["SENTINEL_DNA_POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
+    assert migration_environment["SENTINEL_DNA_SECRET_KEY_FILE"] == "/run/secrets/sentinel_dna_secret_key"
+    assert migration_environment["SENTINEL_DNA_POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
+    assert postgres_environment["POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
+    assert rendered["secrets"]["staging_app_secret_key"]["environment"] == "SENTINEL_DNA_SECRET_KEY"
+    assert rendered["secrets"]["staging_postgres_password"]["environment"] == "SENTINEL_DNA_POSTGRES_PASSWORD"
 
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():

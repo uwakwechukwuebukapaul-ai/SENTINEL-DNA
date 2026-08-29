@@ -132,6 +132,51 @@ def test_postgresql_session_commits_and_closes(monkeypatch):
     assert connections[-1].closed is True
 
 
+def test_postgresql_backend_consumes_password_file_without_environment_password(monkeypatch, tmp_path):
+    class FakeConnection:
+        def execute(self, query):
+            assert query == "SELECT 1 AS health_probe"
+            return self
+
+        def fetchone(self):
+            return {"health_probe": 1}
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    connection = FakeConnection()
+    observed = {}
+    fake_psycopg = types.ModuleType("psycopg")
+    fake_psycopg.Error = RuntimeError
+
+    def connect(*args, **kwargs):
+        observed.update(kwargs)
+        return connection
+
+    fake_psycopg.connect = connect
+    fake_rows = types.ModuleType("psycopg.rows")
+    fake_rows.dict_row = object()
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setitem(sys.modules, "psycopg.rows", fake_rows)
+    password = "p" * 40
+    password_file = tmp_path / "postgres-password"
+    password_file.write_text(password + "\n", encoding="utf-8")
+
+    backend = PostgreSQLBackend(
+        "postgresql://sentinel@db.example/sentinel",
+        password_file=password_file,
+    )
+
+    assert backend.health_check() is True
+    assert observed["password"] == password
+
+
 def test_postgresql_adapter_translates_legacy_repository_sql(monkeypatch):
     class FakeConnection:
         def __init__(self):

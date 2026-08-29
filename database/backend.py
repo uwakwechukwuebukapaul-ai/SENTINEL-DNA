@@ -201,10 +201,28 @@ class PostgreSQLBackend:
 
     backend_name: BackendName = "postgresql"
 
-    def __init__(self, database_url: str, *, connect_timeout: int = 10) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        connect_timeout: int = 10,
+        password_file: str | Path | None = None,
+    ) -> None:
         _validate_postgresql_url(database_url)
         self.database_url = database_url
         self.connect_timeout = max(1, int(connect_timeout))
+        self.password_file = str(password_file).strip() if password_file else ""
+
+    def _password(self) -> str:
+        if not self.password_file:
+            return ""
+        try:
+            password = Path(self.password_file).read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError) as exc:
+            raise DatabaseError("PostgreSQL password file is unavailable") from exc
+        if not password:
+            raise DatabaseError("PostgreSQL password file is empty")
+        return password
 
     def connect(self) -> Any:
         try:
@@ -216,12 +234,14 @@ class PostgreSQLBackend:
             ) from exc
 
         try:
-            connection = psycopg.connect(
-                self.database_url,
-                connect_timeout=self.connect_timeout,
-                row_factory=dict_row,
-                autocommit=False,
-            )
+            connect_options = {
+                "connect_timeout": self.connect_timeout,
+                "row_factory": dict_row,
+                "autocommit": False,
+            }
+            if self.password_file:
+                connect_options["password"] = self._password()
+            connection = psycopg.connect(self.database_url, **connect_options)
             return _PostgreSQLConnectionAdapter(connection)
         except psycopg.Error as exc:
             # Do not include the URL: it may contain credentials.
@@ -280,5 +300,10 @@ def create_database_backend(
         require_postgresql=require_postgresql,
     )
     if settings.backend == "postgresql":
-        return PostgreSQLBackend(settings.database_url, connect_timeout=connect_timeout)
+        values = os.environ if environ is None else environ
+        return PostgreSQLBackend(
+            settings.database_url,
+            connect_timeout=connect_timeout,
+            password_file=values.get("SENTINEL_DNA_POSTGRES_PASSWORD_FILE", ""),
+        )
     return SQLiteBackend(settings.database_path, busy_timeout_ms=busy_timeout_ms)

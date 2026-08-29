@@ -44,14 +44,19 @@ services:
       FLASK_DEBUG: "0"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set external non-production secret}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       # The named volume is mounted at /var/lib/sentinel. Keep the SQLite
       # compatibility path at that mount root; staging's authoritative
       # backend remains the private PostgreSQL DATABASE_URL below.
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-      PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
       REDIS_URL: redis://redis:6379/0
+    secrets:
+      - source: staging_app_secret_key
+        target: sentinel_dna_secret_key
+      - source: staging_postgres_password
+        target: sentinel_dna_postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,10 +96,15 @@ services:
       FLASK_DEBUG: "0"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set external non-production secret}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-      PGPASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - source: staging_app_secret_key
+        target: sentinel_dna_secret_key
+      - source: staging_postgres_password
+        target: sentinel_dna_postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,7 +117,10 @@ services:
     environment:
       POSTGRES_DB: sentinel_dna
       POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: ${SENTINEL_DNA_POSTGRES_PASSWORD:?set external disposable staging password}
+      POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - source: staging_postgres_password
+        target: sentinel_dna_postgres_password
     volumes:
       - staging_postgres_data:/var/lib/postgresql/data
     networks:
@@ -136,6 +149,12 @@ networks:
   staging_edge:
   staging_internal:
     internal: true
+
+secrets:
+  staging_app_secret_key:
+    environment: SENTINEL_DNA_SECRET_KEY
+  staging_postgres_password:
+    environment: SENTINEL_DNA_POSTGRES_PASSWORD
 
 volumes:
   staging_app_data:

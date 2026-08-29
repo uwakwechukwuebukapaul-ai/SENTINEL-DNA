@@ -15,6 +15,24 @@ _PRODUCTION_PLACEHOLDERS = {
     "change-me-before-production",
 }
 
+
+def _configured_secret(name: str) -> tuple[str, bool]:
+    """Read a configured secret directly or from a Docker secret file."""
+    configured = os.getenv(name)
+    if configured is not None:
+        return configured, True
+
+    file_name = f"{name}_FILE"
+    secret_file = os.getenv(file_name, "").strip()
+    if not secret_file:
+        return "", False
+    try:
+        value = Path(secret_file).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"{file_name} must point to a readable secret file") from exc
+    return value, bool(value)
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     environment: str
@@ -40,8 +58,8 @@ class RuntimeConfig:
         debug = environment == "development" or (
             raw_flask_debug in {"1", "true", "yes", "on"}
         )
-        configured_secret = os.getenv("SENTINEL_DNA_SECRET_KEY")
-        secret_key = configured_secret if configured_secret is not None else (
+        configured_secret, secret_was_configured = _configured_secret("SENTINEL_DNA_SECRET_KEY")
+        secret_key = configured_secret if secret_was_configured else (
             "" if environment == "production" else secrets.token_urlsafe(48)
         )
         return cls(
@@ -57,7 +75,7 @@ class RuntimeConfig:
             raw_pilot_access_required,
             raw_secure_cookies,
             raw_flask_debug,
-            configured_secret is not None,
+            secret_was_configured,
         )
 
     def validate(self) -> None:
