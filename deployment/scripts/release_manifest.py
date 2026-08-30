@@ -104,7 +104,63 @@ def _git_text(root: Path, *args: str) -> str:
     return output.strip()
 
 
-def repository_branch(root: Path) -> str:
+def _valid_ref(root: Path, ref: str) -> bool:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", ref):
+        return False
+    try:
+        subprocess.run(
+            ["git", "check-ref-format", "--branch", ref],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def _protected_workflow_release_branch(root: Path, release_sha: str) -> str:
+    """Return the release ref established by the protected workflow contract."""
+
+    authorized_release_ref = os.environ.get("SENTINEL_DNA_AUTHORIZED_RELEASE_REF", "").strip()
+    authorized_release_sha = os.environ.get("SENTINEL_DNA_AUTHORIZED_RELEASE_SHA", "").strip()
+    authorized_release_tree = os.environ.get("SENTINEL_DNA_AUTHORIZED_RELEASE_TREE", "").strip()
+    authorized_workflow_ref = os.environ.get("SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF", "").strip()
+    authorized_workflow_sha = os.environ.get("SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA", "").strip()
+    github_ref = os.environ.get("GITHUB_REF", "").strip()
+    github_workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "").strip()
+    github_workflow_sha = os.environ.get("GITHUB_WORKFLOW_SHA", "").strip()
+    github_repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
+
+    if not _valid_ref(root, authorized_release_ref):
+        return ""
+    if not _valid_ref(root, authorized_workflow_ref):
+        return ""
+    if not SHA_RE.fullmatch(release_sha) or authorized_release_sha != release_sha:
+        return ""
+    if not SHA_RE.fullmatch(authorized_release_sha) or not SHA_RE.fullmatch(authorized_release_tree):
+        return ""
+    if not SHA_RE.fullmatch(authorized_workflow_sha) or not SHA_RE.fullmatch(github_workflow_sha):
+        return ""
+    if github_ref != f"refs/heads/{authorized_workflow_ref}":
+        return ""
+    expected_workflow_ref = (
+        f"{github_repository}/.github/workflows/deployment-contract.yml@"
+        f"refs/heads/{authorized_workflow_ref}"
+    )
+    if not github_repository or github_workflow_ref != expected_workflow_ref:
+        return ""
+    try:
+        actual_tree = _git_text(root, "rev-parse", f"{release_sha}^{{tree}}")
+    except ReleaseManifestError:
+        return ""
+    if actual_tree != authorized_release_tree:
+        return ""
+    return authorized_release_ref
+
+
+def repository_branch(root: Path, release_sha: str | None = None) -> str:
     try:
         branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
     except ReleaseManifestError:
@@ -115,28 +171,20 @@ def repository_branch(root: Path) -> str:
         return ""
     event = os.environ.get("GITHUB_EVENT_NAME", "").strip()
     ref = os.environ.get("GITHUB_REF", "").strip()
+    if event == "workflow_dispatch":
+        return _protected_workflow_release_branch(root, release_sha or _git_text(root, "rev-parse", "HEAD"))
     if event == "pull_request" and ref.startswith("refs/pull/") and ref.endswith("/merge"):
         branch = os.environ.get("GITHUB_HEAD_REF", "").strip()
-    elif event in {"push", "workflow_dispatch"} and ref.startswith("refs/heads/"):
+    elif event == "push" and ref.startswith("refs/heads/"):
         branch = ref.removeprefix("refs/heads/")
     else:
         return ""
     ci_sha = os.environ.get("GITHUB_SHA", "").strip()
     if not branch or not SHA_RE.fullmatch(ci_sha):
         return ""
-    if _git_text(root, "rev-parse", "HEAD") != ci_sha:
+    if (release_sha or _git_text(root, "rev-parse", "HEAD")) != ci_sha:
         return ""
-    try:
-        subprocess.run(
-            ["git", "check-ref-format", "--branch", branch],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return branch
+    return branch if _valid_ref(root, branch) else ""
 
 
 def _git_blob(root: Path, release_sha: str, path: str) -> tuple[str, bytes]:
@@ -306,7 +354,7 @@ def build_manifest(
         raise ReleaseManifestError("release SHA must equal the checked-out HEAD")
     _assert_clean_worktree(root)
 
-    branch = repository_branch(root)
+    branch = repository_branch(root, selected_sha)
     if not branch:
         raise ReleaseManifestError("release branch is unavailable")
     tree_id = _git_text(root, "rev-parse", f"{selected_sha}^{{tree}}")
@@ -465,7 +513,7 @@ def verify_manifest(
         raise ReleaseManifestError("release manifest SHA does not match checked-out HEAD")
     if require_current_head:
         _assert_clean_worktree(root)
-        current_branch = repository_branch(root)
+        current_branch = repository_branch(root, release_sha)
         if current_branch != repository["branch"]:
             raise ReleaseManifestError("release manifest branch does not match checked-out branch")
 

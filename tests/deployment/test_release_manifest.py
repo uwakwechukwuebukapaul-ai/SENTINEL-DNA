@@ -256,3 +256,80 @@ def test_manifest_fails_closed_when_github_commit_identity_does_not_match_detach
 
     with pytest.raises(ReleaseManifestError, match="release branch is unavailable"):
         build_manifest(repository_root=clean_repository)
+
+
+def _prepare_detached_github_workflow_dispatch_checkout(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, str]:
+    subprocess.run(
+        ["git", "checkout", "--detach", "HEAD"],
+        cwd=clean_repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    tree_id = subprocess.check_output(
+        ["git", "show", "-s", "--format=%T", "HEAD"], cwd=clean_repository, text=True
+    ).strip()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv(
+        "GITHUB_WORKFLOW_REF",
+        "sentinel/example/.github/workflows/deployment-contract.yml@refs/heads/main",
+    )
+    monkeypatch.setenv("GITHUB_WORKFLOW_SHA", "f" * 40)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "sentinel/example")
+    monkeypatch.setenv("GITHUB_SHA", "0" * 40)
+    monkeypatch.setenv("SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF", "main")
+    monkeypatch.setenv("SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA", "e" * 40)
+    monkeypatch.setenv("SENTINEL_DNA_AUTHORIZED_RELEASE_REF", "main")
+    monkeypatch.setenv("SENTINEL_DNA_AUTHORIZED_RELEASE_SHA", commit_sha)
+    monkeypatch.setenv("SENTINEL_DNA_AUTHORIZED_RELEASE_TREE", tree_id)
+    return commit_sha, tree_id
+
+
+def test_manifest_accepts_detached_workflow_dispatch_with_separate_event_sha(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commit_sha, tree_id = _prepare_detached_github_workflow_dispatch_checkout(clean_repository, monkeypatch)
+
+    manifest = build_manifest(repository_root=clean_repository)
+
+    assert manifest["repository"]["branch"] == "main"
+    assert manifest["repository"]["release_sha"] == commit_sha
+    assert manifest["repository"]["tree_id"] == tree_id
+    assert os.environ.get("GITHUB_SHA") != commit_sha
+
+
+def test_manifest_workflow_dispatch_event_sha_mismatch_does_not_bypass_release_binding(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commit_sha, _tree_id = _prepare_detached_github_workflow_dispatch_checkout(clean_repository, monkeypatch)
+    monkeypatch.setenv("GITHUB_SHA", "1" * 40)
+
+    manifest = build_manifest(repository_root=clean_repository)
+
+    assert manifest["repository"]["release_sha"] == commit_sha
+
+
+def test_manifest_workflow_dispatch_requires_protected_release_ref(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _prepare_detached_github_workflow_dispatch_checkout(clean_repository, monkeypatch)
+    monkeypatch.delenv("SENTINEL_DNA_AUTHORIZED_RELEASE_REF")
+
+    with pytest.raises(ReleaseManifestError, match="release branch is unavailable"):
+        build_manifest(repository_root=clean_repository)
+
+
+@pytest.mark.parametrize("field", ("SENTINEL_DNA_AUTHORIZED_RELEASE_SHA", "SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"))
+def test_manifest_workflow_dispatch_rejects_conflicting_protected_release_identity(
+    clean_repository: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    _prepare_detached_github_workflow_dispatch_checkout(clean_repository, monkeypatch)
+    monkeypatch.setenv(field, "a" * 40)
+
+    with pytest.raises(ReleaseManifestError, match="release branch is unavailable"):
+        build_manifest(repository_root=clean_repository)
