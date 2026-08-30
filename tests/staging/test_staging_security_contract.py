@@ -18,16 +18,19 @@ from tests.credential_helpers import random_secret
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def staging_secret() -> str:
+    """Return a random secret that satisfies the staging secret contract."""
+    # token_urlsafe() may contain patterns that staging correctly rejects,
+    # such as "__" or placeholder-like hyphenated sequences.
+    return random_secret().replace("-", "a").replace("_", "a")
+
+
 def staging_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
     monkeypatch.setenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "1")
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
     monkeypatch.setenv("FLASK_DEBUG", "0")
-    # Keep the fixture valid for the staging secret contract. token_urlsafe()
-    # may contain patterns that staging correctly rejects, such as "__".
-    monkeypatch.setenv(
-        "SENTINEL_DNA_SECRET_KEY", random_secret().replace("-", "a").replace("_", "a")
-    )
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", staging_secret())
     monkeypatch.setenv(
         "SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION", "external_non_production"
     )
@@ -52,7 +55,7 @@ def test_staging_runtime_requires_external_secret_and_postgresql(monkeypatch, tm
         RuntimeConfig.from_environment().validate()
 
     staging_environment(tmp_path, monkeypatch)
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", random_secret())
+    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", staging_secret())
     monkeypatch.setenv("DATABASE_URL", "sqlite:///production.sqlite")
     with pytest.raises(RuntimeError, match="PostgreSQL"):
         RuntimeConfig.from_environment().validate()
@@ -60,7 +63,7 @@ def test_staging_runtime_requires_external_secret_and_postgresql(monkeypatch, tm
 
 def test_staging_runtime_consumes_secret_key_from_docker_secret_file(monkeypatch, tmp_path):
     staging_environment(tmp_path, monkeypatch)
-    secret = random_secret()
+    secret = staging_secret()
     secret_file = tmp_path / "sentinel-dna-secret-key"
     secret_file.write_text(secret + "\n", encoding="utf-8")
     monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY")
