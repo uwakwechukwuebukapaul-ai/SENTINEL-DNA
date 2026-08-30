@@ -1,0 +1,70 @@
+:root {
+  color-scheme: dark;
+  --sdna-bg: #07111f;
+  --sdna-bg-soft: #0a1727;
+  --sdna-surface: #0d1b2d;
+  --sdna-surface-elevated: #102238;
+  --sdna-surface-strong: #142b44;
+  --sdna-border: #233c57;
+  --sdna-border-strong: #315473;
+  --sdna-text: #e8f0fa;
+  --sdna-text-soft: #c7d7e8;
+  --sdna-muted: #8fa5be;
+  --sdna-accent: #55b7ff;
+  --sdna-intelligence: #6ee7e7;
+  --sdna-success: #63d3a3;
+  --sdna-warning: #f4c76b;
+  --sdna-danger: #f77f92;
+  --sdna-confidence: #a995ff;
+  --sdna-focus: #8bd3ff;
+  --sdna-space-1: 4px;
+  --sdna-space-2: 8px;
+  --sdna-space-3: 12px;
+  --sdna-space-4: 16px;
+  --sdna-space-5: 20px;
+  --sdna-space-6: 24px;
+  --sdna-space-7: 32px;
+  --sdna-space-8: 40px;
+  --sdna-radius-sm: 6px;
+  --sdna-radius-md: 10px;
+  --sdna-radius-lg: 14px;
+  --sdna-radius-pill: 999px;
+  --sdna-shadow-sm: 0 8px 24px rgba(0, 0, 0, .16);
+  --sdna-shadow-lg: 0 20px 60px rgba(0, 0, 0, .28);
+  --sdna-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sdna-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --sdna-text-xs: 11px;
+  --sdna-text-sm: 12px;
+  --sdna-text-md: 14px;
+  --sdna-text-lg: 18px;
+  --sdna-text-xl: 28px;
+  --sdna-motion-fast: 120ms;
+  --sdna-motion-base: 180ms;
+  --sdna-motion-slow: 260ms;
+  --sdna-ease: cubic-bezier(.2, .8, .2, 1);
+  --sdna-z-sidebar: 30;
+  --sdna-z-overlay: 40;
+  --sdna-z-palette: 60;
+
+  /* Compatibility aliases for existing canonical templates. */
+  --bg: var(--sdna-bg);
+  --surface: var(--sdna-surface);
+  --surface-2: var(--sdna-surface-elevated);
+  --line: var(--sdna-border);
+  --text: var(--sdna-text);
+  --muted: var(--sdna-muted);
+  --blue: var(--sdna-accent);
+  --cyan: var(--sdna-intelligence);
+  --green: var(--sdna-success);
+  --amber: var(--sdna-warning);
+  --red: var(--sdna-danger);
+  --purple: var(--sdna-confidence);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sdna-motion-fast: 0ms;
+    --sdna-motion-base: 0ms;
+    --sdna-motion-slow: 0ms;
+  }
+}
