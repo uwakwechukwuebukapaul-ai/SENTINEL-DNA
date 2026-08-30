@@ -150,9 +150,20 @@ must never be inferred from an untrusted workflow-dispatch request.
 
 `SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF` and
 `SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA` identify the reviewed workflow source.
-The workflow compares `GITHUB_REF` and `GITHUB_SHA` with these protected values
-before candidate validation. This identity answers which workflow revision is
-authorized to perform the gate; it is not the release candidate.
+The workflow compares the dispatch ref and GitHub's workflow-definition ref
+with the protected workflow ref before candidate validation. It uses
+`GITHUB_WORKFLOW_SHA` as GitHub's immutable workflow-file revision, then
+resolves the workflow file at both that revision and the protected workflow
+commit and requires their Git blob identities to match. This preserves the
+existing commit anchor while allowing later release commits that leave the
+trusted workflow definition unchanged. `GITHUB_SHA` is deliberately not used
+for this control: for `workflow_dispatch`, it identifies the commit on the
+dispatched branch, not the workflow definition.
+
+The protected workflow SHA remains the reviewed immutable commit anchor; it is
+not changed to the release candidate SHA. The GitHub token is used only with
+`contents: read` to resolve the two immutable workflow-file references before
+the candidate checkout.
 
 ### Protected candidate and baseline identity
 
