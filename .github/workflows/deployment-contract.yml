@@ -21,7 +21,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: deployment-contract-${{ inputs.authorized_sha }}
+  group: deployment-contract-${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
   cancel-in-progress: false
 
 jobs:
@@ -34,17 +34,49 @@ jobs:
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       SENTINEL_DNA_TLS_DIR: ${{ vars.SENTINEL_DNA_TLS_DIR }}
-      SENTINEL_DNA_AUTHORIZED_RELEASE_REF: feature/controlled-production-deployment-adapter
+      SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF: ${{ vars.SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF }}
+      SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA: ${{ vars.SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA }}
+      SENTINEL_DNA_AUTHORIZED_RELEASE_REF: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_REF }}
       SENTINEL_DNA_AUTHORIZED_RELEASE_SHA: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
       SENTINEL_DNA_AUTHORIZED_RELEASE_TREE: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_TREE }}
+      SENTINEL_DNA_AUTHORIZED_BASELINE_SHA: ${{ vars.SENTINEL_DNA_AUTHORIZED_BASELINE_SHA }}
     steps:
-      - name: Checkout authorized workflow commit
+      - name: Verify protected workflow identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF"
+          test -n "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"
+          [[ "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = "refs/heads/$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF"
+          test "$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"
+
+      - name: Validate protected release identity before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF"
+          test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"
+          test -n "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"
+          test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+          test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          test -n "$SENTINEL_DNA_AUTHORIZED_BASELINE_SHA"
+          [[ "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          [[ "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          git check-ref-format --branch "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF" >/dev/null
+          git check-ref-format --branch "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF" >/dev/null
+          [[ "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SENTINEL_DNA_AUTHORIZED_BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Checkout protected candidate commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.authorized_sha }}
+          ref: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
           fetch-depth: 0
 
-      - name: Verify authorized candidate identity
+      - name: Verify protected candidate identity
         shell: bash
         env:
           REQUESTED_RELEASE_REF: ${{ inputs.authorized_ref }}
@@ -55,15 +87,18 @@ jobs:
           test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"
           test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          test -n "$SENTINEL_DNA_AUTHORIZED_BASELINE_SHA"
           [[ "$REQUESTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUESTED_RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = "refs/heads/$REQUESTED_RELEASE_REF"
           test "$REQUESTED_RELEASE_REF" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"
           test "$REQUESTED_RELEASE_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test "$REQUESTED_RELEASE_TREE" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
-          test "$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test "$(git rev-parse HEAD)" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test "$(git rev-parse 'HEAD^{tree}')" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          git cat-file -e "${SENTINEL_DNA_AUTHORIZED_BASELINE_SHA}^{commit}"
+          git merge-base --is-ancestor \
+            "$SENTINEL_DNA_AUTHORIZED_BASELINE_SHA" \
+            "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Verify tracked deployment release boundary
@@ -328,7 +363,7 @@ jobs:
       - name: Upload non-secret image release evidence
         uses: actions/upload-artifact@v4
         with:
-          name: sentinel-dna-gate2-image-evidence-${{ inputs.authorized_sha }}
+          name: sentinel-dna-gate2-image-evidence-${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
           if-no-files-found: error
           retention-days: 30
           path: |

@@ -140,3 +140,78 @@ candidate image to private GHCR, captures its immutable digest and non-secret
 release evidence, but has no approved transport or deployment-host adapter. It
 does not deploy containers. A future integration must be separately reviewed
 before `--execute` is used from CI.
+
+## Candidate-bound controlled release gate
+
+The protected GitHub Actions release gate uses three separate identities. They
+must never be inferred from an untrusted workflow-dispatch request.
+
+### Trusted workflow identity
+
+`SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF` and
+`SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA` identify the reviewed workflow source.
+The workflow compares `GITHUB_REF` and `GITHUB_SHA` with these protected values
+before candidate validation. This identity answers which workflow revision is
+authorized to perform the gate; it is not the release candidate.
+
+### Protected candidate and baseline identity
+
+`SENTINEL_DNA_AUTHORIZED_RELEASE_REF`,
+`SENTINEL_DNA_AUTHORIZED_RELEASE_SHA`, and
+`SENTINEL_DNA_AUTHORIZED_RELEASE_TREE` identify the exact candidate authorized
+for promotion. `SENTINEL_DNA_AUTHORIZED_BASELINE_SHA` identifies the protected
+ancestry boundary. The candidate SHA must descend from that baseline.
+
+The workflow checks the caller assertions against the protected candidate
+values, checks out the protected candidate SHA, and independently verifies
+checked-out `HEAD`, `HEAD^{tree}`, and baseline ancestry. A branch name alone
+is never sufficient to establish release identity.
+
+Before `actions/checkout` runs, the workflow validates that every protected
+SHA/tree/baseline value is exactly 40 lowercase hexadecimal characters and that
+the protected workflow and release refs are non-empty valid Git branch refs.
+This pre-check prevents a malformed protected SHA from being interpreted as a
+mutable checkout ref. The post-checkout identity and ancestry checks remain
+required defense in depth.
+
+### Dispatch inputs are assertions only
+
+The `authorized_ref`, `authorized_sha`, and `authorized_tree` dispatch inputs
+are compatibility assertions. They must equal the protected candidate values,
+or the workflow fails closed. They never select the checkout, image source,
+release SHA, concurrency identity, evidence identity, or deployment target.
+
+Using `ref: ${{ inputs.authorized_sha }}` would allow a dispatcher to select
+arbitrary code before the identity checks run. Checkout therefore uses
+`vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA`, which is protected configuration.
+The identity variables used by top-level workflow concurrency must be
+repository- or organization-scoped configuration variables with restricted
+administrative control; environment-only variables are not sufficient for
+that pre-run concurrency expression. The protected production environment and
+its approval rules remain separate controls.
+
+### Evidence and promotion sequence
+
+The release sequence is:
+
+```text
+trusted workflow identity
+        -> protected candidate SHA/tree
+        -> protected baseline ancestry
+        -> exact protected-SHA checkout
+        -> HEAD/tree verification
+        -> immutable image and digest
+        -> trusted release metadata
+        -> image-bound release manifest
+        -> backup/restore evidence
+        -> protected environment approval
+        -> controlled deployment
+```
+
+Every identity or evidence mismatch, missing protected value, unavailable
+secret/configuration, absent image digest, invalid metadata, invalid manifest,
+missing backup/restore evidence, or unavailable approval stops promotion. The
+workflow does not bypass environment protection or invoke the deployment
+adapter directly. Staging TLS, health/readiness, authentication,
+authorization, tenant-isolation, smoke testing, and browser/runtime QA remain
+separate gates.
