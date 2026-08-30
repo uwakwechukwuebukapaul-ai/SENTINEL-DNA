@@ -23,7 +23,11 @@ def staging_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "1")
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
     monkeypatch.setenv("FLASK_DEBUG", "0")
-    monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", random_secret())
+    # Keep the fixture valid for the staging secret contract. token_urlsafe()
+    # may contain patterns that staging correctly rejects, such as "__".
+    monkeypatch.setenv(
+        "SENTINEL_DNA_SECRET_KEY", random_secret().replace("-", "a").replace("_", "a")
+    )
     monkeypatch.setenv(
         "SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION", "external_non_production"
     )
