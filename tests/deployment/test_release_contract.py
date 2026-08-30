@@ -89,6 +89,10 @@ def _evaluate_identity_contract(
     *,
     github_ref: str,
     github_sha: str,
+    github_workflow_ref: str,
+    github_workflow_sha: str,
+    executed_workflow_blob: str,
+    authorized_workflow_blob: str,
     checkout_sha: str,
     checkout_tree: str,
     baseline_is_ancestor: bool,
@@ -102,8 +106,20 @@ def _evaluate_identity_contract(
             raise ReleaseContractViolation(f"invalid protected {field}")
     if github_ref != f"refs/heads/{protected['workflow_ref']}":
         raise ReleaseContractViolation("workflow ref mismatch")
-    if github_sha != protected["workflow_sha"]:
-        raise ReleaseContractViolation("workflow SHA mismatch")
+    if not HEX40.fullmatch(github_workflow_sha):
+        raise ReleaseContractViolation("workflow definition SHA malformed")
+    expected_workflow_ref = (
+        f"sentinel/example/.github/workflows/deployment-contract.yml@"
+        f"refs/heads/{protected['workflow_ref']}"
+    )
+    if github_workflow_ref != expected_workflow_ref:
+        raise ReleaseContractViolation("workflow definition ref mismatch")
+    if not HEX40.fullmatch(executed_workflow_blob):
+        raise ReleaseContractViolation("executed workflow blob malformed")
+    if not HEX40.fullmatch(authorized_workflow_blob):
+        raise ReleaseContractViolation("authorized workflow blob malformed")
+    if executed_workflow_blob != authorized_workflow_blob:
+        raise ReleaseContractViolation("workflow file identity mismatch")
     if assertions != _valid_assertions(protected):
         raise ReleaseContractViolation("candidate assertion mismatch")
     if checkout_sha != protected["release_sha"]:
@@ -120,12 +136,21 @@ def _checkout_authority(protected: dict[str, str], _assertions: dict[str, str]) 
     return protected["release_sha"]
 
 
-def _evaluate_valid_contract(**overrides: object) -> str:
-    protected = _valid_protected_identity()
+def _evaluate_valid_contract(
+    *, protected: dict[str, str] | None = None, **overrides: object
+) -> str:
+    protected = protected or _valid_protected_identity()
     assertions = _valid_assertions(protected)
     values = {
         "github_ref": f"refs/heads/{protected['workflow_ref']}",
-        "github_sha": protected["workflow_sha"],
+        "github_sha": "e" * 40,
+        "github_workflow_ref": (
+            "sentinel/example/.github/workflows/deployment-contract.yml@"
+            f"refs/heads/{protected['workflow_ref']}"
+        ),
+        "github_workflow_sha": "f" * 40,
+        "executed_workflow_blob": "1" * 40,
+        "authorized_workflow_blob": "1" * 40,
         "checkout_sha": protected["release_sha"],
         "checkout_tree": protected["release_tree"],
         "baseline_is_ancestor": True,
@@ -142,7 +167,14 @@ def test_executable_identity_fixture_accepts_protected_candidate():
         protected,
         assertions,
         github_ref=f"refs/heads/{protected['workflow_ref']}",
-        github_sha=protected["workflow_sha"],
+        github_sha="e" * 40,
+        github_workflow_ref=(
+            "sentinel/example/.github/workflows/deployment-contract.yml@"
+            f"refs/heads/{protected['workflow_ref']}"
+        ),
+        github_workflow_sha="f" * 40,
+        executed_workflow_blob="1" * 40,
+        authorized_workflow_blob="1" * 40,
         checkout_sha=protected["release_sha"],
         checkout_tree=protected["release_tree"],
         baseline_is_ancestor=True,
@@ -170,7 +202,14 @@ def test_invalid_protected_identity_fails_closed(field: str, value: str):
             protected,
             _valid_assertions(protected),
             github_ref=f"refs/heads/{protected['workflow_ref']}",
-            github_sha=protected["workflow_sha"],
+            github_sha="e" * 40,
+            github_workflow_ref=(
+                "sentinel/example/.github/workflows/deployment-contract.yml@"
+                f"refs/heads/{protected['workflow_ref']}"
+            ),
+            github_workflow_sha="f" * 40,
+            executed_workflow_blob="1" * 40,
+            authorized_workflow_blob="1" * 40,
             checkout_sha=protected["release_sha"],
             checkout_tree=protected["release_tree"],
             baseline_is_ancestor=True,
@@ -178,15 +217,61 @@ def test_invalid_protected_identity_fails_closed(field: str, value: str):
 
 
 @pytest.mark.parametrize(
-    ("github_ref", "github_sha"),
+    ("github_ref", "github_workflow_ref"),
     (
-        ("refs/heads/other-workflow", "a" * 40),
-        ("refs/heads/release-gate/trust-premium-af00b71", "b" * 40),
+        ("refs/heads/other-workflow", "unused"),
+        ("unused", "sentinel/example/.github/workflows/deployment-contract.yml@refs/heads/other-workflow"),
     ),
 )
-def test_workflow_identity_mismatch_fails_closed(github_ref: str, github_sha: str):
+def test_workflow_identity_mismatch_fails_closed(github_ref: str, github_workflow_ref: str):
     with pytest.raises(ReleaseContractViolation):
-        _evaluate_valid_contract(github_ref=github_ref, github_sha=github_sha)
+        _evaluate_valid_contract(github_ref=github_ref, github_workflow_ref=github_workflow_ref)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("github_workflow_sha", ""),
+        ("github_workflow_sha", "G" * 40),
+        ("executed_workflow_blob", "not-a-blob"),
+        ("authorized_workflow_blob", "2" * 39),
+    ),
+)
+def test_workflow_definition_identity_missing_or_malformed_fails_closed(field: str, value: str):
+    with pytest.raises(ReleaseContractViolation):
+        _evaluate_valid_contract(**{field: value})
+
+
+def test_unauthorized_workflow_definition_fails_closed():
+    with pytest.raises(ReleaseContractViolation):
+        _evaluate_valid_contract(executed_workflow_blob="2" * 40)
+
+
+def test_newer_release_commit_does_not_change_trusted_workflow_identity():
+    assert _evaluate_valid_contract(github_sha="9" * 40) == "b" * 40
+
+
+def test_release_sha_cannot_satisfy_workflow_definition_identity():
+    protected = _valid_protected_identity()
+    protected["release_sha"] = protected["workflow_sha"]
+    with pytest.raises(ReleaseContractViolation):
+        _evaluate_valid_contract(
+            protected=protected,
+            executed_workflow_blob="2" * 40,
+            authorized_workflow_blob="1" * 40,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("checkout_sha", "9" * 40),
+        ("checkout_tree", "8" * 40),
+    ),
+)
+def test_release_checkout_identity_remains_independent_and_fail_closed(field: str, value: str):
+    with pytest.raises(ReleaseContractViolation):
+        _evaluate_valid_contract(**{field: value})
 
 
 def test_candidate_assertion_mismatch_fails_closed():
@@ -199,7 +284,14 @@ def test_candidate_assertion_mismatch_fails_closed():
             protected,
             assertions,
             github_ref=f"refs/heads/{protected['workflow_ref']}",
-            github_sha=protected["workflow_sha"],
+            github_sha="e" * 40,
+            github_workflow_ref=(
+                "sentinel/example/.github/workflows/deployment-contract.yml@"
+                f"refs/heads/{protected['workflow_ref']}"
+            ),
+            github_workflow_sha="f" * 40,
+            executed_workflow_blob="1" * 40,
+            authorized_workflow_blob="1" * 40,
             checkout_sha=protected["release_sha"],
             checkout_tree=protected["release_tree"],
             baseline_is_ancestor=True,
@@ -222,7 +314,14 @@ def test_alternate_dispatch_sha_cannot_become_checkout_authority():
             protected,
             assertions,
             github_ref=f"refs/heads/{protected['workflow_ref']}",
-            github_sha=protected["workflow_sha"],
+            github_sha="e" * 40,
+            github_workflow_ref=(
+                "sentinel/example/.github/workflows/deployment-contract.yml@"
+                f"refs/heads/{protected['workflow_ref']}"
+            ),
+            github_workflow_sha="f" * 40,
+            executed_workflow_blob="1" * 40,
+            authorized_workflow_blob="1" * 40,
             checkout_sha=protected["release_sha"],
             checkout_tree=protected["release_tree"],
             baseline_is_ancestor=True,
@@ -394,7 +493,11 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     workflow_identity = _step(workflow, "Verify protected workflow identity")
     workflow_identity_text = _step_text(workflow_identity)
     assert 'test "$GITHUB_REF" = "refs/heads/$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF"' in workflow_identity_text
-    assert 'test "$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"' in workflow_identity_text
+    assert '"$GITHUB_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$' in workflow_identity_text
+    assert '"$GITHUB_WORKFLOW_REF" = "$expected_workflow_ref"' in workflow_identity_text
+    assert "workflow_blob_sha" in workflow_identity_text
+    assert '"$executed_workflow_blob" = "$authorized_workflow_blob"' in workflow_identity_text
+    assert '"$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"' not in workflow_identity_text
 
     precheck = _step(workflow, "Validate protected release identity before checkout")
     precheck_text = _step_text(precheck)
