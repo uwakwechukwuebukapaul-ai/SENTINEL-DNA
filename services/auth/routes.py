@@ -2,8 +2,8 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 from flask import Blueprint, current_app, g, jsonify, redirect, request, session, url_for
-from sqlite3 import IntegrityError
 from database.errors import DatabaseError
+from database.portability import integrity_error
 from .age import validate_minimum_age
 from .oauth import GoogleOIDC
 from .phone import country_options, normalize_phone
@@ -48,7 +48,7 @@ def _bind(user):
     memberships = [m for m in authority.memberships.list_for_actor(identity.actor_id) if m.status == "active"]
     if not memberships:
         tenant = authority.tenants.create(f"{user.username} workspace", tenant_id=user.tenant_id or f"tenant-{user.id}")
-        memberships = [authority.memberships.add(tenant.tenant_id, identity.actor_id, "analyst")]
+        memberships = [authority.memberships.add(tenant.tenant_id, identity.actor_id, str(user.role).lower())]
     membership = sorted(memberships, key=lambda item: item.tenant_id)[0]
     with _service().db.session() as connection:
         connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, membership.tenant_id, user.id))
@@ -90,6 +90,8 @@ def enforce_current_session():
 
 @auth_api.post("/register")
 def register():
+    if current_app.config.get("PILOT_ACCESS_REQUIRED", False):
+        return jsonify({"error": "registration_unavailable"}), 403
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     data = request.get_json(silent=True) or {}
     if not _allowed("signup", 12, 3600): return jsonify({"error": "registration_unavailable"}), 429
@@ -111,8 +113,9 @@ def register():
             if not verified or not email_verified: raise ValueError("verification_required")
             email_verified_at = datetime.now(timezone.utc).isoformat()
         user = _service().register(data.get("username", ""), data.get("email", ""), data.get("password", ""), "analyst", phone_number=phone, date_of_birth=dob, email_verified_at=email_verified_at)
-    except (IntegrityError, DatabaseError): return jsonify({"error": "registration_unavailable"}), 409
-    except Exception:
+    except DatabaseError: return jsonify({"error": "registration_unavailable"}), 409
+    except Exception as exc:
+        if integrity_error(exc): return jsonify({"error": "registration_unavailable"}), 409
         _audit("signup_failed", method="password", outcome="failure", reason="invalid_registration")
         return jsonify({"error": "invalid_registration"}), 400
     try: _bind(user)

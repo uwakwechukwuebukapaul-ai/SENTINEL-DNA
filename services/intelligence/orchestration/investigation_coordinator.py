@@ -1194,10 +1194,25 @@ class InvestigationCoordinator:
             mitre = report.get("mitre") or intelligence.get("mitre_techniques") or []
             execution = self.get_execution_projection_for_investigation(case_id, str(tenant_id))
             last_activity = max((str(item.get("timestamp") or item.get("created_at") or "") for item in timeline if isinstance(item, dict)), default=str(report.get("created_at") or ""))
+            metadata = report.get("metadata") if isinstance(report.get("metadata"), dict) else {}
+            affected_assets = (
+                report.get("affected_assets")
+                or report.get("assets")
+                or intelligence.get("affected_assets")
+                or intelligence.get("assets")
+                or []
+            )
+            if not isinstance(affected_assets, list):
+                affected_assets = [affected_assets]
             investigations.append({
                 "case_id": case_id, "status": report.get("status", "unknown"),
                 "title": report.get("title") or case_id,
                 "severity": report.get("severity") or intelligence.get("risk_severity", "unknown"),
+                "priority": report.get("priority") or metadata.get("priority") or intelligence.get("priority"),
+                "affected_assets": affected_assets,
+                "created_at": report.get("created_at") or report.get("created"),
+                "updated_at": last_activity,
+                "assigned_analyst": report.get("assigned_analyst") or report.get("analyst") or metadata.get("assigned_analyst"),
                 "risk_score": report.get("risk_score", intelligence.get("risk_score", 0)),
                 "confidence": report.get("confidence", intelligence.get("confidence", 0)),
                 "evidence_count": len(evidence),

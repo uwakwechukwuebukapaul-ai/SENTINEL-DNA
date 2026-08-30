@@ -5,8 +5,8 @@ from .models import HuntQuery
 from .repository import HuntRepository
 
 hunting_api = Blueprint("hunting_api", __name__, url_prefix="/api/hunting")
-def _repo(): return HuntRepository(str(current_app.config["HUNT_DB_PATH"]))
-def _engine(): return HuntEngine(str(current_app.config["HUNT_DB_PATH"]))
+def _repo(): return HuntRepository()
+def _engine(): return HuntEngine()
 
 @hunting_api.post("/search")
 @permission_required("hunting:execute")

@@ -1,4 +1,4 @@
-"""SQLite-backed authentication service."""
+"""Backend-neutral authentication service."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from database.connection import DatabaseConnection, database
+from database.portability import identity_primary_key, table_columns
 from .models import User
 from .security import hash_password, verify_password
 from .age import validate_minimum_age
@@ -21,18 +22,31 @@ class AuthService:
     def __init__(self, db: DatabaseConnection | None = None) -> None:
         self.db = db or database
         with self.db.session() as connection:
-            connection.execute("""CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
+            identity = identity_primary_key(self.db.backend_name)
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS users (
+                id {identity}, username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'analyst', created_at TEXT NOT NULL,
                 last_login TEXT, is_active INTEGER NOT NULL DEFAULT 1)""")
-            columns = {row[1] for row in connection.execute("PRAGMA table_info(users)")}
-            for name in ("phone_number", "phone_verified_at", "tenant_id", "actor_id", "date_of_birth", "email_verified_at"):
-                if name not in columns: connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            columns = table_columns(connection, self.db.backend_name, "users")
+            for name in (
+                "phone_number",
+                "phone_verified_at",
+                "tenant_id",
+                "actor_id",
+                "date_of_birth",
+                "email_verified_at",
+                "expires_at",
+                "audit_correlation_id",
+            ):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            if "revocation_status" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
-            connection.execute("""CREATE TABLE IF NOT EXISTS auth_identities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_identities (
+                id {identity}, user_id INTEGER NOT NULL,
                 provider TEXT NOT NULL, provider_subject TEXT NOT NULL,
                 normalized_identifier TEXT, verified_at TEXT, created_at TEXT NOT NULL,
                 last_used_at TEXT, UNIQUE(provider, provider_subject),
@@ -46,11 +60,12 @@ class AuthService:
                 id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT UNIQUE NOT NULL,
                 tenant_id TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
                 revoked_at TEXT, last_used_at TEXT)""")
-            session_columns = {row[1] for row in connection.execute("PRAGMA table_info(persistent_sessions)")}
+            session_columns = table_columns(connection, self.db.backend_name, "persistent_sessions")
             for name in ("user_agent", "ip_address", "auth_method"):
-                if name not in session_columns: connection.execute(f"ALTER TABLE persistent_sessions ADD COLUMN {name} TEXT")
-            connection.execute("""CREATE TABLE IF NOT EXISTS auth_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL,
+                if name not in session_columns:
+                    connection.execute(f"ALTER TABLE persistent_sessions ADD COLUMN {name} TEXT")
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_events (
+                id {identity}, event_type TEXT NOT NULL,
                 user_id INTEGER, actor_id TEXT, tenant_id TEXT, correlation_id TEXT,
                 method TEXT, outcome TEXT, reason TEXT, source_ip TEXT, created_at TEXT NOT NULL)""")
             connection.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (
@@ -59,7 +74,7 @@ class AuthService:
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
-    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, connection=None) -> User:
+    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, connection=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
             raise ValueError("invalid_user_registration")
         normalized_role = str(role or "analyst").strip().lower()
@@ -69,13 +84,15 @@ class AuthService:
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
-            cursor = connection.execute(
-                "INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0),
-            )
-            user_id = cursor.lastrowid
+            row = connection.execute(
+                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0),
+            ).fetchone()
+            user_id = row["id"]
             connection.execute(
-                "INSERT OR IGNORE INTO auth_identities(user_id,provider,provider_subject,normalized_identifier,verified_at,created_at,last_used_at) VALUES(?,?,?,?,?,?,?)",
+                """INSERT INTO auth_identities(user_id,provider,provider_subject,normalized_identifier,verified_at,created_at,last_used_at)
+                   VALUES(?,?,?,?,?,?,?) ON CONFLICT (provider, provider_subject) DO NOTHING""",
                 (user_id, "password", str(user_id), email.strip().lower(), None, now, now),
             )
             return user_id
@@ -88,7 +105,7 @@ class AuthService:
 
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
-            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1", (username, username.strip().lower())).fetchone()
+            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active'", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
             if not row or not verify_password(row["password_hash"], password):
                 return None
             now = datetime.now(timezone.utc).isoformat()
@@ -117,6 +134,20 @@ class AuthService:
                 revoke(owned_connection)
             return
         revoke(connection)
+
+    def invalidate_user_sessions(self, user_id, connection=None):
+        """Invalidate signed and persistent sessions for one user."""
+        def invalidate(owned_connection):
+            owned_connection.execute(
+                "UPDATE users SET session_version=COALESCE(session_version, 0)+1 WHERE id=?",
+                (user_id,),
+            )
+            self.revoke_all_sessions(user_id, connection=owned_connection)
+        if connection is None:
+            with self.db.session() as owned_connection:
+                invalidate(owned_connection)
+            return
+        invalidate(connection)
 
     def invalidate_tenant_sessions(self, tenant_id, connection=None):
         """Invalidate every authentication session bound to a tenant."""
@@ -190,15 +221,16 @@ class AuthService:
             else:
                 connection.execute("DELETE FROM auth_identities WHERE user_id=? AND provider=? AND provider_subject=?", (user_id, provider, subject))
 
-    def get_by_username(self, username, connection=None):
+    def get_by_username(self, username, connection=None, include_inactive=False):
         normalized = str(username or "").strip()
         if not normalized:
             return None
+        predicate = "username=?" if include_inactive else "username=? AND is_active=1"
         if connection is None:
             with self.db.session() as owned_connection:
-                row = owned_connection.execute("SELECT * FROM users WHERE username=?", (normalized,)).fetchone()
+                row = owned_connection.execute(f"SELECT * FROM users WHERE {predicate}", (normalized,)).fetchone()
         else:
-            row = connection.execute("SELECT * FROM users WHERE username=?", (normalized,)).fetchone()
+            row = connection.execute(f"SELECT * FROM users WHERE {predicate}", (normalized,)).fetchone()
         return self._user(row) if row else None
 
     def get_by_email(self, email, connection=None, include_inactive=False):
@@ -215,7 +247,7 @@ class AuthService:
         """Deactivate one user and revoke its persistent sessions."""
         def deactivate(owned_connection):
             cursor = owned_connection.execute(
-                "UPDATE users SET is_active=0, session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=1",
+                "UPDATE users SET is_active=0, revocation_status='revoked', session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=1",
                 (user_id,),
             )
             self.revoke_all_sessions(user_id, connection=owned_connection)
@@ -229,7 +261,7 @@ class AuthService:
         """Activate one previously inactive user within the caller's transaction."""
         def activate(owned_connection):
             cursor = owned_connection.execute(
-                "UPDATE users SET is_active=1, session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=0",
+                "UPDATE users SET is_active=1, revocation_status='active', session_version=COALESCE(session_version, 0)+1 WHERE id=? AND is_active=0",
                 (user_id,),
             )
             self.revoke_all_sessions(user_id, connection=owned_connection)
@@ -309,8 +341,14 @@ class AuthService:
     def session_user(self, user_id: int | None, session_version: int | None = None) -> User | None:
         """Return an active user only when the signed session epoch is current."""
         user = self.get_by_id(user_id)
-        if not user or not user.is_active:
+        if not user or not user.is_active or user.revocation_status != "active":
             return None
+        if user.expires_at:
+            try:
+                if datetime.fromisoformat(user.expires_at) <= datetime.now(timezone.utc):
+                    return None
+            except ValueError:
+                return None
         try:
             presented = 0 if session_version is None else int(session_version)
         except (TypeError, ValueError):
@@ -319,4 +357,11 @@ class AuthService:
 
     @staticmethod
     def _user(row: Any) -> User:
-        return User(row["id"], row["username"], row["email"], row["password_hash"], row["role"], row["created_at"], row["last_login"], bool(row["is_active"]), row["phone_number"], row["phone_verified_at"], row["tenant_id"], row["actor_id"], row["date_of_birth"], row["email_verified_at"], int(row["session_version"] or 0))
+        return User(
+            row["id"], row["username"], row["email"], row["password_hash"],
+            row["role"], row["created_at"], row["last_login"], bool(row["is_active"]),
+            row["phone_number"], row["phone_verified_at"], row["tenant_id"],
+            row["actor_id"], row["date_of_birth"], row["email_verified_at"],
+            int(row["session_version"] or 0), row["expires_at"],
+            str(row["revocation_status"] or "active"), row["audit_correlation_id"],
+        )

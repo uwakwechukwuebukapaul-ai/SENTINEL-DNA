@@ -5,7 +5,10 @@ DESCRIPTION = "Tenant-scoped organizational cyber memory foundation"
 
 
 def upgrade(connection):
-    connection.executescript(
+    from database.portability import append_only_statements, execute_script
+
+    execute_script(
+        connection,
         """
         CREATE TABLE IF NOT EXISTS organizational_memory (
             record_id TEXT PRIMARY KEY,
@@ -38,17 +41,17 @@ def upgrade(connection):
         );
         CREATE INDEX IF NOT EXISTS idx_org_memory_audit_tenant
             ON organizational_memory_audit(tenant_id, created_at, audit_id);
-        CREATE TRIGGER IF NOT EXISTS organizational_memory_append_only_update
-        BEFORE UPDATE ON organizational_memory
-        BEGIN SELECT RAISE(ABORT, 'organizational_memory_is_append_only'); END;
-        CREATE TRIGGER IF NOT EXISTS organizational_memory_append_only_delete
-        BEFORE DELETE ON organizational_memory
-        BEGIN SELECT RAISE(ABORT, 'organizational_memory_is_append_only'); END;
-        CREATE TRIGGER IF NOT EXISTS organizational_memory_audit_append_only_update
-        BEFORE UPDATE ON organizational_memory_audit
-        BEGIN SELECT RAISE(ABORT, 'organizational_memory_audit_is_append_only'); END;
-        CREATE TRIGGER IF NOT EXISTS organizational_memory_audit_append_only_delete
-        BEFORE DELETE ON organizational_memory_audit
-        BEGIN SELECT RAISE(ABORT, 'organizational_memory_audit_is_append_only'); END;
         """
     )
+    backend = getattr(connection, "backend_name", "sqlite")
+    for table_name, prefix, message in (
+        ("organizational_memory", "organizational_memory_append_only", "organizational_memory_is_append_only"),
+        ("organizational_memory_audit", "organizational_memory_audit_append_only", "organizational_memory_audit_is_append_only"),
+    ):
+        for statement in append_only_statements(
+            backend,
+            table_name=table_name,
+            trigger_prefix=prefix,
+            error_message=message,
+        ):
+            connection.execute(statement)

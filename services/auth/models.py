@@ -21,6 +21,9 @@ class User:
     date_of_birth: str | None = None
     email_verified_at: str | None = None
     session_version: int = 0
+    expires_at: str | None = None
+    revocation_status: str = "active"
+    audit_correlation_id: str | None = None
 
     def public(self) -> dict[str, Any]:
         return {

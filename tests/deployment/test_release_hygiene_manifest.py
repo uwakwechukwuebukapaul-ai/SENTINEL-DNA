@@ -11,6 +11,7 @@ import pytest
 from deployment.scripts.release_manifest import (
     ReleaseManifestError,
     build_manifest,
+    repository_branch,
     verify_manifest,
     write_manifest,
 )
@@ -51,7 +52,8 @@ def test_manifest_contains_state_identity_and_evidence_references(tmp_path: Path
     with patch("deployment.scripts.release_manifest._assert_clean_worktree"):
         manifest = build_manifest(repository_root=REPOSITORY_ROOT, artifact_paths=(artifact,))
 
-    assert manifest["repository"]["branch"] == "main"
+    expected_branch = repository_branch(REPOSITORY_ROOT)
+    assert manifest["repository"]["branch"] == expected_branch
     assert "deployment/scripts/release_manifest.py" in manifest["tracked_files"]
     assert manifest["artifact_references"][0]["commit_sha"] == commit_sha
     assert manifest["artifact_references"][0]["immutable"] is True

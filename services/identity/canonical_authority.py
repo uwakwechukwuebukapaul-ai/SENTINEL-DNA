@@ -179,12 +179,18 @@ class CanonicalAuthorityService:
         self.identities = CanonicalIdentityService(db)
         self.memberships = CanonicalMembershipService(db)
 
-    def resolve(self, tenant_id: str, actor_id: str) -> tuple[CanonicalTenant, CanonicalIdentity, CanonicalMembership]:
-        with CanonicalUnitOfWork(self.db) as unit:
-            tenants = CanonicalTenantRepository(unit.conn)
-            identities = CanonicalIdentityRepository(unit.conn)
-            memberships = CanonicalMembershipRepository(unit.conn)
+    def resolve(self, tenant_id: str, actor_id: str, connection=None) -> tuple[CanonicalTenant, CanonicalIdentity, CanonicalMembership]:
+        if connection is not None:
+            tenants = CanonicalTenantRepository(connection)
+            identities = CanonicalIdentityRepository(connection)
+            memberships = CanonicalMembershipRepository(connection)
             tenant, identity, membership = _tenant(tenants.get(tenant_id)), _identity(identities.get(actor_id)), _membership(memberships.get(tenant_id, actor_id))
+        else:
+            with CanonicalUnitOfWork(self.db) as unit:
+                tenants = CanonicalTenantRepository(unit.conn)
+                identities = CanonicalIdentityRepository(unit.conn)
+                memberships = CanonicalMembershipRepository(unit.conn)
+                tenant, identity, membership = _tenant(tenants.get(tenant_id)), _identity(identities.get(actor_id)), _membership(memberships.get(tenant_id, actor_id))
         if not tenant: raise CanonicalAuthorityError("canonical_tenant_not_found")
         if not identity: raise CanonicalAuthorityError("canonical_identity_not_found")
         if not membership: raise CanonicalAuthorityError("canonical_membership_not_found")

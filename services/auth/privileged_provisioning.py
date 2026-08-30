@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import re
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from database.canonical_authority import CanonicalUnitOfWork
 from database.connection import DatabaseConnection, database
+from database.portability import integrity_error
 from services.audit.service import AuditService
 from services.identity.canonical_authority import CanonicalAuthorityService
 
@@ -116,7 +116,7 @@ class PrivilegedIdentityProvisioningService:
                 if tenant is None or tenant.status != "active":
                     raise PrivilegedProvisioningError("invalid_tenant")
 
-                if self.auth.get_by_username(normalized_username, connection=unit.conn):
+                if self.auth.get_by_username(normalized_username, connection=unit.conn, include_inactive=True):
                     raise PrivilegedProvisioningError("identity_already_exists")
                 if self.auth.get_by_email(normalized_email, connection=unit.conn, include_inactive=True):
                     raise PrivilegedProvisioningError("identity_already_exists")
@@ -172,9 +172,9 @@ class PrivilegedIdentityProvisioningService:
                 )
         except PrivilegedProvisioningError:
             raise
-        except sqlite3.IntegrityError as exc:
-            raise PrivilegedProvisioningError("identity_already_exists") from exc
         except Exception as exc:
+            if integrity_error(exc):
+                raise PrivilegedProvisioningError("identity_already_exists") from exc
             raise PrivilegedProvisioningError("provisioning_failed") from exc
 
 

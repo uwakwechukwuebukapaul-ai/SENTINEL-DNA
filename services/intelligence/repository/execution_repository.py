@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from database.connection import database
+from database.portability import table_columns
 from services.audit.service import AuditService
 from services.intelligence.investigation.canonical import sha256_digest
 
@@ -142,12 +143,7 @@ class ExecutionRepository:
                 )
                 """
             )
-            columns = {
-                row["name"]
-                for row in connection.execute(
-                    "PRAGMA table_info(investigation_execution_envelopes)"
-                ).fetchall()
-            }
+            columns = table_columns(connection, self.db.backend_name, "investigation_execution_envelopes")
             migrations = {
                 "created_at": "ALTER TABLE investigation_execution_envelopes ADD COLUMN created_at TEXT",
                 "queued_at": "ALTER TABLE investigation_execution_envelopes ADD COLUMN queued_at TEXT",
@@ -404,12 +400,7 @@ class ExecutionRepository:
                 )
                 """
             )
-            health_columns = {
-                row["name"]
-                for row in connection.execute(
-                    "PRAGMA table_info(investigation_provider_health_snapshots)"
-                ).fetchall()
-            }
+            health_columns = table_columns(connection, self.db.backend_name, "investigation_provider_health_snapshots")
             health_migrations = {
                 "request_id": "ALTER TABLE investigation_provider_health_snapshots ADD COLUMN request_id TEXT",
                 "job_id": "ALTER TABLE investigation_provider_health_snapshots ADD COLUMN job_id TEXT",

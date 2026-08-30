@@ -54,17 +54,23 @@ class InvestigationFeedbackRepository:
 
     @staticmethod
     def _from_row(row: Any) -> AnalystFeedback:
+        metadata = json.loads(row["metadata_json"] or "{}")
         return AnalystFeedback(
             feedback_id=row["feedback_id"], investigation_id=row["investigation_id"], case_id=row["case_id"],
             finding_id=row["finding_id"], recommendation_id=row["recommendation_id"], decision=row["decision"],
             reason=row["reason"], analyst_id=row["analyst_id"], tenant_id=row["tenant_id"],
-            created_at=row["created_at"], metadata=json.loads(row["metadata_json"] or "{}"),
+            created_at=row["created_at"],
+            helpful_rating=metadata.get("helpful_rating"),
+            confidence_rating=metadata.get("confidence_rating"),
+            estimated_time_saved=metadata.get("estimated_time_saved"),
+            analyst_comments=metadata.get("analyst_comments", row["reason"]),
+            metadata=metadata,
         )
 
     def list_for_investigation(self, tenant_id: str, investigation_id: str) -> list[AnalystFeedback]:
         with self.db.session() as connection:
             rows = connection.execute(
-                "SELECT * FROM investigation_feedback WHERE tenant_id=? AND investigation_id=? ORDER BY rowid",
+                "SELECT * FROM investigation_feedback WHERE tenant_id=? AND investigation_id=? ORDER BY created_at, feedback_id",
                 (tenant_id, investigation_id),
             ).fetchall()
         return [self._from_row(row) for row in rows]
@@ -94,7 +100,7 @@ class InvestigationFeedbackRepository:
             parameters.append(str(investigation_id))
         with self.db.session() as connection:
             rows = connection.execute(
-                f"SELECT * FROM investigation_feedback WHERE {' AND '.join(clauses)} ORDER BY rowid",
+                f"SELECT * FROM investigation_feedback WHERE {' AND '.join(clauses)} ORDER BY created_at, feedback_id",
                 parameters,
             ).fetchall()
         return [self._from_row(row) for row in rows]

@@ -21,6 +21,7 @@ from typing import Any, Iterator
 
 from database.canonical_authority import ensure_canonical_schema
 from database.connection import DatabaseConnection
+from database.portability import execute_script
 from services.audit.service import AuditService
 from services.billing.entitlements import EntitlementService
 from services.billing.events import NormalizedBillingEvent
@@ -111,7 +112,8 @@ class _SyntheticBillingEnvironment:
         self.db = DatabaseConnection(directory / "billing-validation.sqlite")
         with self.db.session() as connection:
             ensure_canonical_schema(connection)
-            connection.executescript(
+            execute_script(
+                connection,
                 """
                 CREATE TABLE investigations (
                     investigation_id TEXT PRIMARY KEY,

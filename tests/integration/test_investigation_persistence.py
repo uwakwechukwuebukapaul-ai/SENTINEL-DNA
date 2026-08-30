@@ -56,6 +56,26 @@ def test_create_and_get_investigation(
     )
 
 
+def test_repository_round_trips_stage_results_and_metadata(tmp_path):
+    repository = SQLiteInvestigationRepository(tmp_path / "investigations.db")
+    state = InvestigationState(
+        investigation_id="INV-STATE",
+        investigation={"source": "endpoint"},
+        current_stage="correlation",
+        completed_stages=["intake"],
+        results={"intake": {"accepted": True}},
+        metadata={"tenant_id": "tenant-a", "provenance": "synthetic"},
+    )
+
+    repository.create(state)
+    loaded = repository.get("INV-STATE")
+
+    assert loaded.current_stage == "correlation"
+    assert loaded.completed_stages == ["intake"]
+    assert loaded.results == {"intake": {"accepted": True}}
+    assert loaded.metadata == {"tenant_id": "tenant-a", "provenance": "synthetic"}
+
+
 def test_repository_exists(
     tmp_path,
 ):

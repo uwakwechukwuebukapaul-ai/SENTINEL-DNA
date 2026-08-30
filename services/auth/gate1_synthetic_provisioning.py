@@ -269,7 +269,7 @@ class Gate1SyntheticProvisioningService:
         )
 
     def _state(self, spec: SyntheticIdentitySpec, connection):
-        user_by_username = self.auth.get_by_username(spec.username, connection=connection)
+        user_by_username = self.auth.get_by_username(spec.username, connection=connection, include_inactive=True)
         user_by_email = self.auth.get_by_email(spec.email, connection=connection, include_inactive=True)
         if user_by_username and user_by_email and user_by_username.id != user_by_email.id:
             raise Gate1ProvisioningError(f"synthetic_identity_conflict_{spec.lane}")

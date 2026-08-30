@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import logging
 import re
 from pathlib import Path
@@ -23,7 +22,12 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 
 
 # Core platform services
-from database.connection import DatabaseConnection, resolve_database_path
+from database.connection import (
+    DatabaseConnection,
+    database_for_environment,
+    resolve_database_path,
+)
+from database.errors import DatabaseError
 from database.ioc_repository import IOCRepository
 from services.core.application_container import build_container
 from services.api.investigations.controller import InvestigationController
@@ -89,7 +93,7 @@ from services.customer_success.routes import customer_success_api
 from services.product_analytics.routes import product_analytics_api
 
 from services.pilot_reports.routes import pilot_reports_api
-from services.pilot_management.routes import pilot_management_api
+from services.pilot_management.routes import pilot_management_api, pilot_provisioning_api, pilot_authorization_api
 
 from services.support.routes import support_api
 from services.exercises.routes import exercise_api
@@ -190,6 +194,10 @@ app.config.update(
 
 app.config["JSON_SORT_KEYS"] = False
 
+app.config["PILOT_ACCESS_REQUIRED"] = (
+    os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"
+)
+
 app.config["OBSERVABILITY"] = ObservabilityService()
 
 app.config["HUNT_DB_PATH"] = str(DB_PATH)
@@ -267,6 +275,8 @@ app.register_blueprint(
 app.register_blueprint(
     pilot_management_api
 )
+app.register_blueprint(pilot_authorization_api)
+app.register_blueprint(pilot_provisioning_api)
 
 app.register_blueprint(
     support_api
@@ -484,15 +494,30 @@ def enforce_csrf():
 # DATABASE HELPERS
 # ---------------------------------------------------------
 
+def _configured_dashboard_database():
+    """Resolve the dashboard backend without bypassing production selection."""
+    if (
+        os.getenv("DATABASE_URL", "").strip()
+        or os.getenv("SENTINEL_DNA_ENV", "").strip().lower() == "production"
+    ):
+        return database_for_environment(require_postgresql=True)
+
+    configured_default = resolve_database_path()
+    if Path(DB_PATH).resolve() != configured_default.resolve():
+        return DatabaseConnection(DB_PATH)
+    return database_for_environment(require_postgresql=False)
+
+
+def _dashboard_service() -> CommandCenterDashboardService:
+    backend = _configured_dashboard_database()
+    return CommandCenterDashboardService(backend)
+
 def fetch_all(
     sql: str,
     params: tuple = ()
 ) -> list[dict]:
 
-    with sqlite3.connect(DB_PATH) as conn:
-
-        conn.row_factory = sqlite3.Row
-
+    with _configured_dashboard_database().session() as conn:
         return [
             dict(row)
             for row in conn.execute(
@@ -518,7 +543,7 @@ def fetch_one(
 
 def ioc_data_access() -> IOCDataAccessService:
     """Build the canonical IOC boundary for the currently configured database."""
-    return IOCDataAccessService(IOCRepository(DatabaseConnection(DB_PATH)))
+    return IOCDataAccessService(IOCRepository(_configured_dashboard_database()))
 
 
 def authorized_ioc_context(case_id: str) -> IOCAccessContext:
@@ -815,7 +840,7 @@ def workspace_iocs():
 # ERROR HANDLING
 # ---------------------------------------------------------
 
-@app.errorhandler(sqlite3.Error)
+@app.errorhandler(DatabaseError)
 def database_error(error):
 
     logger.exception(
@@ -851,9 +876,7 @@ def workspace_dashboard():
         ), 401
 
 
-    snapshot = CommandCenterDashboardService(
-        DB_PATH
-    ).snapshot()
+    snapshot = _dashboard_service().snapshot()
 
 
     app.container.get(
@@ -1217,9 +1240,7 @@ def workspace_dashboard_data():
         ), 401
 
 
-    snapshot = CommandCenterDashboardService(
-        DB_PATH
-    ).snapshot()
+    snapshot = _dashboard_service().snapshot()
 
 
     return jsonify(
@@ -1588,7 +1609,7 @@ def healthz():
         )
 
 
-    except sqlite3.Error:
+    except DatabaseError:
 
 
         return jsonify(
@@ -1655,7 +1676,7 @@ def ready():
         )
 
 
-    except sqlite3.Error:
+    except DatabaseError:
 
         return jsonify(
             {

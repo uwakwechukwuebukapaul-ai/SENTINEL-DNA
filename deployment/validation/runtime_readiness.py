@@ -30,6 +30,7 @@ REQUIRED_NAMES = tuple(sorted({
     "SENTINEL_DNA_ENV",
     "SENTINEL_DNA_SECURE_COOKIES",
     "SENTINEL_DNA_DB_PATH",
+    "DATABASE_URL",
     "FLASK_DEBUG",
     "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE",
 }))
@@ -107,8 +108,10 @@ class RuntimeReadinessValidator:
         debug_enabled = values.get("FLASK_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
         secure_cookies = values.get("SENTINEL_DNA_SECURE_COOKIES", "") == "1"
         db_path_value = values.get("SENTINEL_DNA_DB_PATH", "").strip()
+        database_url_value = values.get("DATABASE_URL", "").strip()
         db_parent = Path(db_path_value).expanduser().resolve().parent if db_path_value else None
-        required_present = all(bool(values.get(name, "").strip()) for name in REQUIRED_NAMES)
+        required_without_database = [name for name in REQUIRED_NAMES if name not in {"DATABASE_URL", "SENTINEL_DNA_DB_PATH"}]
+        required_present = all(bool(values.get(name, "").strip()) for name in required_without_database) and bool(database_url_value or db_path_value)
         checks = {
             "required_production_configuration_keys": required_present,
             "missing_secrets_fail_closed": all(name in missing_probe_codes for name in SECRET_NAMES),
@@ -117,7 +120,7 @@ class RuntimeReadinessValidator:
                 environment == "production"
                 and secure_cookies
                 and not debug_enabled
-                and bool(db_parent and db_parent.is_dir() and os.access(db_parent, os.W_OK))
+                and (bool(database_url_value) or bool(db_parent and db_parent.is_dir() and os.access(db_parent, os.W_OK)))
             ),
             "configuration_contract_valid": not errors,
             "secret_values_not_printed": True,

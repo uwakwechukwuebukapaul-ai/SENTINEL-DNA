@@ -36,7 +36,9 @@ def configure_fake_release(monkeypatch, image_info=None):
 def test_prepare_metadata_requires_exact_verified_checkout_and_image(tmp_path, monkeypatch):
     configure_fake_release(monkeypatch)
     output = tmp_path / "release" / "metadata.json"
-    output.parent.mkdir()
+    output.parent.mkdir(mode=0o700)
+    if os.name != "nt":
+        assert output.parent.stat().st_mode & 0o777 == 0o700
 
     metadata = trusted.prepare_metadata(
         image="deployment-app:" + REVISION,
@@ -67,7 +69,7 @@ def test_prepare_metadata_fails_closed_for_release_mismatches(
 ):
     configure_fake_release(monkeypatch, image_info)
     output = tmp_path / "release" / "metadata.json"
-    output.parent.mkdir()
+    output.parent.mkdir(mode=0o700)
     with pytest.raises(trusted.TrustedReleaseMetadataError, match=error):
         trusted.prepare_metadata(
             image="deployment-app:" + REVISION,
@@ -94,7 +96,7 @@ def test_prepare_metadata_never_writes_inside_source_tree(tmp_path, monkeypatch)
 def test_prepare_metadata_rejects_invalid_digest_without_writing(tmp_path, monkeypatch):
     configure_fake_release(monkeypatch)
     output = tmp_path / "release" / "metadata.json"
-    output.parent.mkdir()
+    output.parent.mkdir(mode=0o700)
     with pytest.raises(trusted.TrustedReleaseMetadataError, match="trusted_release_digest_invalid"):
         trusted.prepare_metadata(
             image="deployment-app:" + REVISION,

@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import shlex
 import subprocess
 from typing import Any, Mapping
 
@@ -59,6 +61,85 @@ def _file_digest(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _dockerfile_instructions(text: str) -> tuple[str, ...]:
+    """Return effective Dockerfile instructions with continuations joined."""
+
+    instructions: list[str] = []
+    current = ""
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if current:
+            current = f"{current} {line}"
+        else:
+            current = line
+        if current.endswith("\\"):
+            current = current[:-1].rstrip()
+            continue
+        instructions.append(current)
+        current = ""
+    if current:
+        instructions.append(current)
+    return tuple(instructions)
+
+
+def _dockerfile_command(instructions: tuple[str, ...]) -> tuple[str, ...]:
+    """Parse the final Docker CMD in either exec or shell form."""
+
+    command: tuple[str, ...] = ()
+    for instruction in instructions:
+        name, _, payload = instruction.partition(" ")
+        if name.upper() != "CMD" or not payload.strip():
+            continue
+        payload = payload.strip()
+        try:
+            parsed = json.loads(payload) if payload.startswith("[") else shlex.split(payload)
+        except ValueError:
+            command = ()
+            continue
+        if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
+            command = tuple(parsed)
+        elif isinstance(parsed, tuple):
+            command = parsed
+        else:
+            command = ()
+    return command
+
+
+def _dockerfile_runtime_user(instructions: tuple[str, ...]) -> str:
+    users = [
+        payload.strip().split()[0]
+        for instruction in instructions
+        for name, _, payload in [instruction.partition(" ")]
+        if name.upper() == "USER" and payload.strip()
+    ]
+    return users[-1].split(":", 1)[0] if users else ""
+
+
+def _dockerfile_debug_disabled(instructions: tuple[str, ...]) -> bool:
+    effective_text = "\n".join(instructions)
+    debug_markers = (
+        r"\bFLASK_DEBUG\s*=\s*[\"']?(?:1|true|yes|on)\b",
+        r"\b(?:FLASK_|SENTINEL_DNA_)?DEBUG\s*=\s*[\"']?(?:1|true|yes|on)\b",
+        r"\b(?:FLASK_ENV|SENTINEL_DNA_ENV)\s*=\s*[\"']?development\b",
+        r"(?:^|\s)--debug(?:\s|$)",
+        r"\bflask\s+run\b",
+    )
+    return not any(re.search(marker, effective_text, flags=re.IGNORECASE) for marker in debug_markers)
+
+
+def _dockerfile_worker_count(command: tuple[str, ...]) -> str | None:
+    for argument in command:
+        if argument.startswith("--workers="):
+            return argument.partition("=")[2]
+    try:
+        index = command.index("--workers")
+    except ValueError:
+        return None
+    return command[index + 1] if index + 1 < len(command) else ""
 
 
 def _result(name: str, passed: bool, checks: Mapping[str, bool], failures: list[str], evidence: Mapping[str, Any]) -> dict[str, Any]:
@@ -171,6 +252,7 @@ class DeploymentContractValidator:
                         "SENTINEL_DNA_ENV",
                         "SENTINEL_DNA_SECURE_COOKIES",
                         "SENTINEL_DNA_DB_PATH",
+                        "DATABASE_URL",
                         "SENTINEL_DNA_IMAGE_DIGEST",
                         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE",
                     }
@@ -189,18 +271,19 @@ class DeploymentContractValidator:
             secret_key=values.get("SENTINEL_DNA_SECRET_KEY", ""),
             secure_cookies=values.get("SENTINEL_DNA_SECURE_COOKIES", "0") == "1",
             debug=values.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes", "on"},
+            database_url=values.get("DATABASE_URL", "").strip(),
         )
         secret = config.secret_key.strip().lower()
         parent = Path(config.database_path).expanduser().resolve().parent
+        database_configured = bool(config.database_url) or bool(values.get("SENTINEL_DNA_DB_PATH", "").strip())
         checks["runtime_config_accepts_startup"] = (
             config.environment == "production"
             and len(secret) >= 32
             and not any(marker in secret for marker in ("change-me", "replace-with", "development-only"))
             and config.secure_cookies
             and not config.debug
-            and bool(values.get("SENTINEL_DNA_DB_PATH", "").strip())
-            and parent.is_dir()
-            and os.access(parent, os.W_OK)
+            and database_configured
+            and (bool(config.database_url) or (parent.is_dir() and os.access(parent, os.W_OK)))
         )
         if not checks["runtime_config_accepts_startup"]:
             failures.append("runtime_startup_rejected")
@@ -208,19 +291,48 @@ class DeploymentContractValidator:
         wsgi = self.repository_root / "wsgi.py"
         docker_text = dockerfile.read_text(encoding="utf-8") if dockerfile.is_file() else ""
         wsgi_text = wsgi.read_text(encoding="utf-8") if wsgi.is_file() else ""
-        checks.update({
-            "canonical_wsgi_entrypoint": wsgi.is_file() and "application = create_app()" in wsgi_text,
-            "production_image_mode": "SENTINEL_DNA_ENV=production" in docker_text,
-            "non_root_runtime_user": "USER sentinel" in docker_text,
-            "single_sqlite_worker_boundary": '"--workers", "1"' in docker_text,
-        })
+        instructions = _dockerfile_instructions(docker_text)
+        command = _dockerfile_command(instructions)
+        runtime_user = _dockerfile_runtime_user(instructions)
+        worker_count = _dockerfile_worker_count(command)
+        image_checks = {
+            "canonical_wsgi_entrypoint": (
+                wsgi.is_file()
+                and "from app import create_app" in wsgi_text
+                and re.search(r"^\s*application\s*=\s*create_app\(\)\s*$", wsgi_text, flags=re.MULTILINE)
+                and "wsgi:application" in command
+            ),
+            "gunicorn_production_server": bool(command)
+            and (
+                Path(command[0]).name.lower() == "gunicorn"
+                or command[:3] == ("python", "-m", "gunicorn")
+            ),
+            "non_root_runtime_user": runtime_user == "sentinel",
+            "debug_mode_disabled": _dockerfile_debug_disabled(instructions),
+            # SQLite is process-local, so it must remain behind one Gunicorn
+            # worker. PostgreSQL-backed production may use its configured
+            # worker count (or Gunicorn's default) without this restriction.
+            "single_sqlite_worker_boundary": bool(config.database_url) or worker_count == "1",
+        }
+        checks.update(image_checks)
+        # Keep the public check name while making it describe the image
+        # characteristics that make the image safe for production startup.
+        checks["production_image_mode"] = all(image_checks.values())
         failures.extend(name for name, passed in checks.items() if not passed)
         return _result(
             "production_startup",
             all(checks.values()),
             checks,
             failures,
-            {"observed_files": [path for path in ("Dockerfile", "wsgi.py") if (self.repository_root / path).is_file()]},
+            {
+                "observed_files": [
+                    path for path in ("Dockerfile", "wsgi.py") if (self.repository_root / path).is_file()
+                ],
+                "runtime_environment_source": "operator_environment_or_compose",
+                "image_command": list(command),
+                "image_runtime_user": runtime_user,
+                "sqlite_worker_boundary_required": not bool(config.database_url),
+            },
         )
 
     def migration_rehearsal(self) -> dict[str, Any]:

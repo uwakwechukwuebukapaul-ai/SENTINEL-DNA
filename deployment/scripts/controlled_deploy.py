@@ -23,7 +23,7 @@ import tempfile
 from typing import Any, Mapping, Protocol, Sequence
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-if __package__ in {None, ""} and str(REPOSITORY_ROOT) not in sys.path:
+if __name__ == "__main__" and str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest
@@ -51,6 +51,7 @@ CONTROLLED_ENVIRONMENT_NAMES = frozenset(
         "SENTINEL_DNA_TLS_DIR",
         "SENTINEL_DNA_SECURE_COOKIES",
         "SENTINEL_DNA_DB_PATH",
+        "DATABASE_URL",
         "SENTINEL_DNA_IMAGE_SOURCE",
         "COMPOSE_FILE",
         "COMPOSE_PROJECT_NAME",
@@ -318,7 +319,10 @@ class ReleaseEvidence:
     image_id: str
     image_digest: str
     oci_revision: str
+    git_revision_full: str
     oci_source: str
+    oci_version: str
+    oci_created: str
     runtime_user: str
     entrypoint: tuple[str, ...]
     command: tuple[str, ...]
@@ -373,7 +377,12 @@ class ControlledDeploymentAdapter:
 
         env_path = validate_protected_file(self.env_file, self.repository_root, self.acl_inspector)
         values = merged_environment(environ={}, env_file=env_path)
-        errors = validate_configuration(environ={}, env_file=env_path, repository_root=self.repository_root)
+        errors = validate_configuration(
+            environ={},
+            env_file=env_path,
+            repository_root=self.repository_root,
+            require_postgresql=True,
+        )
         if errors:
             raise ControlledDeploymentError("configuration_invalid")
         metadata_binding = Path(values["SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"])
@@ -402,7 +411,7 @@ class ControlledDeploymentAdapter:
         except ReleaseManifestError as exc:
             raise ControlledDeploymentError("release_manifest_invalid") from exc
 
-    def _validate_release(self) -> ReleaseEvidence:
+    def _validate_release(self, *, expected_created: str) -> ReleaseEvidence:
         from deployment.scripts.release_metadata import derive_release_metadata
 
         derived = derive_release_metadata(repository_root=self.repository_root, source_date_epoch="0")
@@ -422,8 +431,14 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("image_id_unavailable")
         if labels.get("com.sentinel-dna.git.revision.full") != self.reviewed_sha:
             raise ControlledDeploymentError("image_revision_mismatch")
+        if labels.get("org.opencontainers.image.revision") != self.reviewed_sha:
+            raise ControlledDeploymentError("oci_revision_mismatch")
         if labels.get("org.opencontainers.image.source") != EXPECTED_IMAGE_SOURCE:
             raise ControlledDeploymentError("image_source_mismatch")
+        if labels.get("org.opencontainers.image.version") != self.reviewed_sha:
+            raise ControlledDeploymentError("oci_version_mismatch")
+        if labels.get("org.opencontainers.image.created") != expected_created:
+            raise ControlledDeploymentError("oci_created_mismatch")
         if config.get("User") != "sentinel":
             raise ControlledDeploymentError("image_runtime_user_mismatch")
         command = tuple(config.get("Cmd") or ())
@@ -437,8 +452,11 @@ class ControlledDeploymentAdapter:
             image=self.image,
             image_id=str(info.get("Id", "")),
             image_digest=self.expected_digest,
-            oci_revision=str(labels.get("com.sentinel-dna.git.revision.full", "")),
+            oci_revision=str(labels.get("org.opencontainers.image.revision", "")),
+            git_revision_full=str(labels.get("com.sentinel-dna.git.revision.full", "")),
             oci_source=str(labels.get("org.opencontainers.image.source", "")),
+            oci_version=str(labels.get("org.opencontainers.image.version", "")),
+            oci_created=str(labels.get("org.opencontainers.image.created", "")),
             runtime_user=str(config.get("User", "")),
             entrypoint=tuple(config.get("Entrypoint") or ()),
             command=command,
@@ -482,9 +500,9 @@ class ControlledDeploymentAdapter:
 
     def validate(self) -> ReleaseEvidence:
         self._validate_release_manifest()
-        self._validate_configuration()
+        configuration = self._validate_configuration()
         self._validate_metadata()
-        evidence = self._validate_release()
+        evidence = self._validate_release(expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"])
         self._validate_compose()
         return evidence
 
@@ -529,7 +547,8 @@ class ControlledDeploymentAdapter:
         evidence = self.validate()
         # Revalidate every trust input immediately before execution and pin
         # Compose to the exact digest so a mutable tag cannot be rebound
-        # between validation and use.
+        # between validation and use. Database migrations run as an explicit
+        # one-shot job before the application service is recreated.
         evidence = self.validate()
         try:
             descriptor, temporary_name = tempfile.mkstemp(prefix=".controlled-deploy-pin-", suffix=".yml")
@@ -538,9 +557,25 @@ class ControlledDeploymentAdapter:
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
                 descriptor = -1
-                temporary.write("services:\n  app:\n    image: deployment-app@" + evidence.image_digest + "\n")
+                temporary.write(
+                    "services:\n"
+                    "  migration:\n"
+                    "    image: deployment-app@" + evidence.image_digest + "\n"
+                    "  app:\n"
+                    "    image: deployment-app@" + evidence.image_digest + "\n"
+                )
                 temporary.flush()
                 os.fsync(temporary.fileno())
+            migration = self._compose(
+                "run",
+                "--rm",
+                "--no-build",
+                "--no-deps",
+                "migration",
+                compose_files=(self.compose_file, Path(temporary_name)),
+            )
+            if migration.returncode != 0:
+                raise ControlledDeploymentError("database_migration_failed")
             result = self._compose(
                 "up",
                 "-d",
@@ -642,7 +677,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "image_id": evidence.image_id,
             "image_digest": evidence.image_digest,
             "oci_revision": evidence.oci_revision,
+            "git_revision_full": evidence.git_revision_full,
             "oci_source": evidence.oci_source,
+            "oci_version": evidence.oci_version,
+            "oci_created": evidence.oci_created,
             "runtime_user": evidence.runtime_user,
             "entrypoint": list(evidence.entrypoint),
             "command": list(evidence.command),

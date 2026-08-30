@@ -80,6 +80,44 @@ def _intake():
     return current_app.container.get("investigation_intake")
 
 
+def _canonical_auth_service_available() -> bool:
+    """Distinguish the canonical app from small legacy blueprint harnesses."""
+    try:
+        auth_service = current_app.container.get("auth_service")
+        return auth_service is not None and callable(getattr(auth_service, "session_user", None))
+    except AttributeError:
+        return False
+
+
+def _authorize_canonical_read():
+    context = request_context()
+    allowed, error = authorize_investigation(
+        {"metadata": {"tenant_id": context.tenant_id}}, write=False
+    )
+    if not allowed:
+        return context, (jsonify({"error": error}), 401 if error == "authentication_required" else 403)
+    if not context.tenant_id:
+        return context, (jsonify({"error": "organization_context_required"}), 403)
+    return context, None
+
+
+def _record_pilot_audit(context, *, event_type: str, case_id: str, operation: str, details: dict | None = None) -> None:
+    if not context.pilot_authorization_id:
+        return
+    current_app.container.require("audit_service").record(
+        event_type,
+        case_id=case_id,
+        tenant_id=context.tenant_id,
+        actor_id=context.actor_id,
+        correlation_id=context.correlation_id,
+        resource_type="pilot_authorization",
+        resource_id=context.pilot_authorization_id,
+        operation=operation,
+        outcome="success",
+        details=details or {},
+    )
+
+
 def _investigation_execution_failure(observer: ObservabilityService, case_id: str, exc: Exception):
     """Return a safe API error while keeping failure details internal."""
     try:
@@ -148,6 +186,15 @@ def _execute_investigation():
 
 
     observer.event("investigation_api_completed", case_id=case_id, operation="investigate", component="api", status="completed", duration_ms=round((time.perf_counter() - started) * 1000, 2), correlation_id=security_context.correlation_id, tenant_id=security_context.tenant_id)
+    metadata = payload.get("metadata") or {}
+    alert_metadata = ((payload.get("alert") or {}).get("metadata") or {})
+    _record_pilot_audit(
+        security_context,
+        event_type="PILOT_INVESTIGATION_EXECUTED",
+        case_id=case_id,
+        operation="investigate",
+        details={"scenario_id": metadata.get("scenario_id") or metadata.get("scenario") or alert_metadata.get("scenario")},
+    )
     return jsonify(
         investigation_response(
             result
@@ -234,27 +281,22 @@ def get_investigation(
 ):
 
     coordinator = _coordinator()
-
-
-    intelligence = (
-        coordinator
-        .intelligence_repository
-        .get_by_case_id(
-            case_id
+    context = None
+    if _canonical_auth_service_available():
+        context, failure = _authorize_canonical_read()
+        if failure:
+            return failure
+        intelligence = coordinator.intelligence_repository.get_by_case_id_for_tenant(
+            case_id, context.tenant_id
         )
-    )
+        report = coordinator.get_report_by_case_id(case_id, context.tenant_id)
+    else:
+        intelligence = coordinator.intelligence_repository.get_by_case_id(case_id)
+        report = coordinator.get_report_by_case_id(case_id)
 
     allowed, error = authorize_investigation(_serialize(intelligence), write=False)
     if not allowed:
         return jsonify({"error": error}), 401 if error == "authentication_required" else 403
-
-
-    report = (
-        coordinator
-        .get_report_by_case_id(
-            case_id
-        )
-    )
 
 
     if intelligence is None and report is None:
@@ -297,13 +339,15 @@ def get_investigation(
 def get_investigation_report(
     case_id: str,
 ):
-
-    report = (
-        _coordinator()
-        .get_report_by_case_id(
-            case_id
-        )
-    )
+    coordinator = _coordinator()
+    context = None
+    if _canonical_auth_service_available():
+        context, failure = _authorize_canonical_read()
+        if failure:
+            return failure
+        report = coordinator.get_report_by_case_id(case_id, context.tenant_id)
+    else:
+        report = coordinator.get_report_by_case_id(case_id)
 
 
     if report is None:
@@ -331,14 +375,17 @@ def get_investigation_report(
 def get_investigation_timeline(
     case_id: str,
 ):
-
-    intelligence = (
-        _coordinator()
-        .intelligence_repository
-        .get_by_case_id(
-            case_id
+    coordinator = _coordinator()
+    context = None
+    if _canonical_auth_service_available():
+        context, failure = _authorize_canonical_read()
+        if failure:
+            return failure
+        intelligence = coordinator.intelligence_repository.get_by_case_id_for_tenant(
+            case_id, context.tenant_id
         )
-    )
+    else:
+        intelligence = coordinator.intelligence_repository.get_by_case_id(case_id)
 
 
     if intelligence is None:
@@ -415,7 +462,12 @@ def get_investigation_metrics(case_id: str):
 def submit_investigation_feedback(case_id: str):
     context = request_context()
     analyst_id = getattr(context, "actor_id", None) or session.get("actor_id") or getattr(context, "user_id", None)
-    allowed, error = authorize_investigation({"metadata": {"tenant_id": context.tenant_id}}, write=True)
+    report = _coordinator().get_report_by_case_id(case_id, context.tenant_id)
+    report_metadata = report.get("metadata") if isinstance(report, dict) else {}
+    allowed, error = authorize_investigation(
+        {"metadata": {"tenant_id": context.tenant_id, **(report_metadata or {})}},
+        write=True,
+    )
     if not allowed:
         return jsonify({"error": error}), 401 if error == "authentication_required" else 403
     if not context.tenant_id or not analyst_id:
@@ -429,6 +481,13 @@ def submit_investigation_feedback(case_id: str):
         return jsonify({"error": "investigation_not_found"}), 404
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    _record_pilot_audit(
+        context,
+        event_type="PILOT_FEEDBACK_CORRELATED",
+        case_id=case_id,
+        operation="feedback",
+        details={"feedback_id": feedback.feedback_id},
+    )
     return jsonify({"success": True, "feedback": feedback.to_dict()}), 201
 
 

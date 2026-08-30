@@ -8,9 +8,11 @@ file set so there is no circular self-hash.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +25,7 @@ SCHEMA_VERSION = "sentinel-dna-release-manifest-v2"
 EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+CREATED_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 MANIFEST_FIELDS = frozenset(
     (
         "schema_version",
@@ -41,7 +44,7 @@ FILE_FIELDS = frozenset(("git_blob", "sha256"))
 ARTIFACT_FIELDS = frozenset(("reference", "artifact_digest", "replay_digest", "commit_sha", "immutable"))
 VALIDATION_EVIDENCE_FIELDS = frozenset(("source", "report_digest", "replay_digest"))
 REPLAY_REFERENCE_FIELDS = frozenset(("source", "digest"))
-IMAGE_FIELDS = frozenset(("reference", "digest", "id", "oci_revision", "oci_source"))
+IMAGE_FIELDS = frozenset(("reference", "digest", "id", "oci_revision", "oci_source", "oci_created", "git_revision_full"))
 MANIFEST_POLICY_FIELDS = frozenset(("generated_output", "self_hash", "identity_excludes"))
 
 # This is the reviewed release boundary.  The generated manifest is not part
@@ -58,6 +61,8 @@ RELEASE_FILE_SET = (
     "deployment/scripts/release_manifest.py",
     "deployment/scripts/release_metadata.py",
     "deployment/scripts/validate_deployment_config.py",
+    "deployment/scripts/deploy.sh",
+    "deployment/staging/docker-compose.yml",
     "docs/CONTROLLED_DEPLOYMENT_ADAPTER.md",
     "docs/DEPLOYMENT_GUIDE.md",
     "docs/PRODUCTION_RUNBOOK.md",
@@ -99,6 +104,41 @@ def _git_text(root: Path, *args: str) -> str:
     return output.strip()
 
 
+def repository_branch(root: Path) -> str:
+    try:
+        branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+    except ReleaseManifestError:
+        branch = ""
+    if branch:
+        return branch
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return ""
+    event = os.environ.get("GITHUB_EVENT_NAME", "").strip()
+    ref = os.environ.get("GITHUB_REF", "").strip()
+    if event == "pull_request" and ref.startswith("refs/pull/") and ref.endswith("/merge"):
+        branch = os.environ.get("GITHUB_HEAD_REF", "").strip()
+    elif event in {"push", "workflow_dispatch"} and ref.startswith("refs/heads/"):
+        branch = ref.removeprefix("refs/heads/")
+    else:
+        return ""
+    ci_sha = os.environ.get("GITHUB_SHA", "").strip()
+    if not branch or not SHA_RE.fullmatch(ci_sha):
+        return ""
+    if _git_text(root, "rev-parse", "HEAD") != ci_sha:
+        return ""
+    try:
+        subprocess.run(
+            ["git", "check-ref-format", "--branch", branch],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return branch
+
+
 def _git_blob(root: Path, release_sha: str, path: str) -> tuple[str, bytes]:
     object_name = f"{release_sha}:{path}"
     try:
@@ -118,6 +158,16 @@ def _validate_release_sha(release_sha: str) -> None:
 def _validate_digest(digest: str | None) -> None:
     if digest is not None and not DIGEST_RE.fullmatch(digest):
         raise ReleaseManifestError("image digest must be a full lowercase sha256 digest")
+
+
+def _validate_created(created: str | None) -> None:
+    if created is not None and not CREATED_RE.fullmatch(created):
+        raise ReleaseManifestError("image creation timestamp must be a UTC second-precision timestamp")
+    if created is not None:
+        try:
+            datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError as exc:
+            raise ReleaseManifestError("image creation timestamp is not a valid UTC timestamp") from exc
 
 
 def _require_exact_keys(value: Any, expected: frozenset[str], error_code: str) -> dict[str, Any]:
@@ -243,6 +293,7 @@ def build_manifest(
     image_id: str | None = None,
     image_revision: str | None = None,
     image_source: str = EXPECTED_IMAGE_SOURCE,
+    image_created: str | None = None,
     artifact_paths: tuple[Path, ...] = (),
 ) -> dict[str, Any]:
     """Return deterministic release evidence for the current reviewed tree."""
@@ -255,7 +306,7 @@ def build_manifest(
         raise ReleaseManifestError("release SHA must equal the checked-out HEAD")
     _assert_clean_worktree(root)
 
-    branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+    branch = repository_branch(root)
     if not branch:
         raise ReleaseManifestError("release branch is unavailable")
     tree_id = _git_text(root, "rev-parse", f"{selected_sha}^{{tree}}")
@@ -288,15 +339,26 @@ def build_manifest(
     replay_digest_references.sort(key=lambda item: (item["source"], item["digest"]))
 
     _validate_digest(image_digest)
+    _validate_created(image_created)
+    if image_source != EXPECTED_IMAGE_SOURCE:
+        raise ReleaseManifestError("image source identity is invalid")
+    if image_digest is not None and image_created is None:
+        raise ReleaseManifestError("image creation timestamp is required for image-bound release certification")
+    if image_digest is not None and not image_id:
+        raise ReleaseManifestError("image ID is required for image-bound release certification")
     image = {
         "reference": image_reference or f"deployment-app:{selected_sha}",
         "digest": image_digest,
         "id": image_id,
         "oci_revision": image_revision or selected_sha,
+        "git_revision_full": image_revision or selected_sha,
         "oci_source": image_source,
+        "oci_created": image_created,
     }
     if image["oci_revision"] != selected_sha:
         raise ReleaseManifestError("image OCI revision must equal the release SHA")
+    if image["git_revision_full"] != selected_sha:
+        raise ReleaseManifestError("image full Git revision must equal the release SHA")
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -403,7 +465,7 @@ def verify_manifest(
         raise ReleaseManifestError("release manifest SHA does not match checked-out HEAD")
     if require_current_head:
         _assert_clean_worktree(root)
-        current_branch = _git_text(root, "symbolic-ref", "--short", "-q", "HEAD")
+        current_branch = repository_branch(root)
         if current_branch != repository["branch"]:
             raise ReleaseManifestError("release manifest branch does not match checked-out branch")
 
@@ -496,8 +558,15 @@ def verify_manifest(
     )
     if image["oci_revision"] != release_sha:
         raise ReleaseManifestError("image OCI revision does not match release SHA")
+    if image["git_revision_full"] != release_sha:
+        raise ReleaseManifestError("image full Git revision does not match release SHA")
     if image["oci_source"] != EXPECTED_IMAGE_SOURCE:
         raise ReleaseManifestError("image source identity is invalid")
+    created = image["oci_created"]
+    if created is not None:
+        if not isinstance(created, str):
+            raise ReleaseManifestError("image creation timestamp field is invalid")
+        _validate_created(created)
     digest = image["digest"]
     if digest is not None:
         if not isinstance(digest, str):
@@ -505,6 +574,10 @@ def verify_manifest(
         _validate_digest(digest)
     if require_image and digest is None:
         raise ReleaseManifestError("verified image digest is required for release certification")
+    if require_image and (not isinstance(image["id"], str) or not image["id"]):
+        raise ReleaseManifestError("verified image ID is required for release certification")
+    if require_image and created is None:
+        raise ReleaseManifestError("verified image creation timestamp is required for release certification")
     if expected_image_digest is not None and digest != expected_image_digest:
         raise ReleaseManifestError("release manifest image digest does not match requested digest")
 
@@ -522,6 +595,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--image-id")
     build.add_argument("--image-revision")
     build.add_argument("--image-source", default=EXPECTED_IMAGE_SOURCE)
+    build.add_argument("--image-created")
     build.add_argument("--artifact", action="append", type=Path, default=[])
 
     verify = subparsers.add_parser("verify", help="verify a deterministic manifest")
@@ -549,6 +623,7 @@ def main(argv: list[str] | None = None) -> int:
                 image_id=args.image_id,
                 image_revision=args.image_revision,
                 image_source=args.image_source,
+                image_created=args.image_created,
                 artifact_paths=tuple(args.artifact),
             )
             write_manifest(manifest, output=args.output, repository_root=args.repository_root)

@@ -74,6 +74,8 @@ from services.product_analytics.service import ProductAnalyticsService
 from services.pilot_analytics.service import PilotAnalyticsService
 from services.pilot_reports.service import PilotReportService
 from services.pilot_management.service import PilotManagementService
+from services.pilot_management.authorization import PilotAuthorizationService
+from services.pilot_management.provisioning import PilotAccountProvisioningService
 from services.support.service import SupportService
 from services.exercises.service import ExerciseService
 from services.case_studies.service import CaseStudyService
@@ -296,7 +298,19 @@ def build_container() -> ServiceRegistry:
     customer_success_service = CustomerSuccessService()
     product_analytics_service = ProductAnalyticsService()
     pilot_analytics_service = PilotAnalyticsService(); pilot_report_service = PilotReportService()
-    pilot_management_service = PilotManagementService(); support_service = SupportService()
+    pilot_management_service = PilotManagementService()
+    pilot_authorization_service = PilotAuthorizationService(
+        auth_service=auth_service,
+        canonical_authority=canonical_authority,
+        audit_service=audit_service,
+    )
+    pilot_account_provisioning_service = PilotAccountProvisioningService(
+        auth_service=auth_service,
+        canonical_authority=canonical_authority,
+        pilot_authorization_service=pilot_authorization_service,
+        audit_service=audit_service,
+    )
+    support_service = SupportService()
     exercise_service = ExerciseService(); case_study_service = CaseStudyService()
     readiness_service = ReadinessService(service_lookup=lambda name: registry.get(name) if registry.has(name) else None)
     workflow_service = WorkflowService(); collaboration_service = CollaborationService(); sla_calculator = SLACalculator()
@@ -401,7 +415,10 @@ def build_container() -> ServiceRegistry:
     registry.register("customer_success_service", customer_success_service)
     registry.register("product_analytics_service", product_analytics_service)
     registry.register("pilot_analytics_service", pilot_analytics_service); registry.register("pilot_report_service", pilot_report_service)
-    registry.register("pilot_management_service", pilot_management_service); registry.register("support_service", support_service)
+    registry.register("pilot_management_service", pilot_management_service)
+    registry.register("pilot_authorization_service", pilot_authorization_service)
+    registry.register("pilot_account_provisioning_service", pilot_account_provisioning_service)
+    registry.register("support_service", support_service)
     registry.register("exercise_service", exercise_service); registry.register("case_study_service", case_study_service)
     registry.register("readiness_service", readiness_service)
     registry.register("workflow_service", workflow_service); registry.register("collaboration_service", collaboration_service); registry.register("sla_calculator", sla_calculator)

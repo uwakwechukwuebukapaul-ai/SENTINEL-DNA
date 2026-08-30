@@ -1,0 +1,77 @@
+{
+  "acknowledged_at": "2026-08-26T14:12:30.593882+00:00",
+  "acknowledgement_status": "acknowledged",
+  "alert_recipient": "Uwakwe chukwuebuka paul",
+  "alert_status": "received",
+  "checksum_manifest": "checksums.sha256",
+  "customer_data_exclusion": "PASS",
+  "dashboard_query_owner": "Uwakwe chukwuebuka paul",
+  "dashboard_verification_status": "PASS",
+  "dashboard_verified_at": "2026-08-26T14:12:30.692507+00:00",
+  "environment": "non-production synthetic pilot",
+  "external_notification": false,
+  "escalated_at": "2026-08-26T14:12:30.593882+00:00",
+  "escalation_owner": "Uwakwe chukwuebuka paul",
+  "escalation_status": "PASS",
+  "event_id": "MONITOR-PILOT-001",
+  "evidence_version": "monitoring-pilot.v1",
+  "execution_mode": "bounded founder-operated pilot",
+  "generated_at": "2026-08-26T14:12:30.593882+00:00",
+  "monitoring_owner": "Uwakwe chukwuebuka paul",
+  "pilot_response_objective": "Best-effort founder-operated response during pilot validation. Enterprise SLA not established.",
+  "production_impact": {
+    "deployment_performed": false,
+    "external_services_contacted": false,
+    "production_database_touched": false
+  },
+  "received_at": "2026-08-26T14:12:30.593882+00:00",
+  "replay_digest": "9a11314a64907e4623663fa50f453473665b08e500c0b637ba8e95c5a6fcb51a",
+  "repository": {
+    "branch": "remediation/postgresql-production-readiness",
+    "protected_rc1_commit": "30c9568012879319675a4c86eeb712519f61dfe3",
+    "validated_commit": "10cb2106e0f168861daf260c4394b02157874abc",
+    "evidence_artifact_commit": "PENDING_CONTAINING_CUSTODY_COMMIT",
+    "current_head": "NOT_ASSERTED_BY_IMMUTABLE_PILOT_EVIDENCE",
+    "worktree_dirty": false
+  },
+  "scenario": "Synthetic Sentinel DNA alert test",
+  "secret_exclusion": "PASS",
+  "transitions": {
+    "acknowledged": {
+      "acknowledgement": "acknowledged",
+      "event_id": "MONITOR-PILOT-001",
+      "status": "PASS",
+      "timestamp_utc": "2026-08-26T14:12:30.593882+00:00"
+    },
+    "dashboard_verified": {
+      "acknowledgement": "acknowledged",
+      "event_count": 1,
+      "event_id": "MONITOR-PILOT-001",
+      "filter": "source_domain=synthetic-monitoring",
+      "query_path": "GET /api/command-center/events",
+      "status": "PASS",
+      "timestamp_utc": "2026-08-26T14:12:30.692507+00:00"
+    },
+    "escalated": {
+      "attention_id": "ab9d04fe85ec9a3ec3d60823",
+      "escalation": "attention_queue_simulation",
+      "event_id": "MONITOR-PILOT-001",
+      "operational_notification": false,
+      "status": "PASS",
+      "timestamp_utc": "2026-08-26T14:12:30.593882+00:00"
+    },
+    "generated": {
+      "event_id": "MONITOR-PILOT-001",
+      "source": "synthetic-monitoring",
+      "status": "PASS",
+      "timestamp_utc": "2026-08-26T14:12:30.593882+00:00"
+    },
+    "received": {
+      "event_id": "MONITOR-PILOT-001",
+      "recipient": "Uwakwe chukwuebuka paul",
+      "status": "PASS",
+      "timestamp_utc": "2026-08-26T14:12:30.593882+00:00"
+    }
+  },
+  "validation_result": "PASS"
+}

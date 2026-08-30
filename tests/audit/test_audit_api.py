@@ -113,6 +113,19 @@ def test_privileged_audit_read_succeeds(application, role):
     assert any(item["event_type"] == "AUDIT_READ" for item in recorded)
 
 
+@pytest.mark.parametrize("role", ["admin", "soc_manager"])
+def test_privileged_audit_read_is_not_blocked_by_pilot_boundary(application, role):
+    username = f"staging-audit-{role}"
+    create_user(application, username, role)
+    client = application.test_client()
+    login(client, username)
+    application.config["PILOT_ACCESS_REQUIRED"] = True
+
+    response = client.get("/api/admin/audit")
+
+    assert response.status_code == 200
+
+
 def test_audit_read_is_tenant_scoped_and_ignores_tenant_override(application):
     create_user(application, "audit-admin-a", "admin")
     create_user(application, "audit-admin-b", "admin")

@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from database.connection import DatabaseConnection, database
+from database.portability import append_only_statements, identity_primary_key, table_columns
 
 
 _SENSITIVE_KEY_PARTS = (
@@ -74,8 +75,8 @@ class AuditService:
         self.db = db or database
         with self.db.session() as connection:
             connection.execute(
-                """CREATE TABLE IF NOT EXISTS audit_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                f"""CREATE TABLE IF NOT EXISTS audit_events (
+                    id {identity_primary_key(self.db.backend_name)},
                     event_type TEXT NOT NULL,
                     case_id TEXT,
                     user_id INTEGER,
@@ -83,7 +84,7 @@ class AuditService:
                     created_at TEXT NOT NULL
                 )"""
             )
-            columns = {row["name"] for row in connection.execute("PRAGMA table_info(audit_events)").fetchall()}
+            columns = table_columns(connection, self.db.backend_name, "audit_events")
             migrations = {
                 "event_id": "ALTER TABLE audit_events ADD COLUMN event_id TEXT",
                 "tenant_id": "ALTER TABLE audit_events ADD COLUMN tenant_id TEXT",
@@ -109,16 +110,13 @@ class AuditService:
                 "WHERE sequence_number IS NOT NULL"
             )
             connection.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_created ON audit_events(tenant_id, created_at, id)")
-            connection.execute(
-                """CREATE TRIGGER IF NOT EXISTS audit_events_append_only_update
-                BEFORE UPDATE ON audit_events
-                BEGIN SELECT RAISE(ABORT, 'audit_events_are_append_only'); END"""
-            )
-            connection.execute(
-                """CREATE TRIGGER IF NOT EXISTS audit_events_append_only_delete
-                BEFORE DELETE ON audit_events
-                BEGIN SELECT RAISE(ABORT, 'audit_events_are_append_only'); END"""
-            )
+            for statement in append_only_statements(
+                self.db.backend_name,
+                table_name="audit_events",
+                trigger_prefix="audit_events_append_only",
+                error_message="audit_events_are_append_only",
+            ):
+                connection.execute(statement)
 
     @staticmethod
     def _request_context() -> dict[str, str | None]:

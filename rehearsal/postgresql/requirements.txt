@@ -1,0 +1,2 @@
+# Isolated dependency set for the disposable rehearsal only.
+psycopg[binary]>=3.2,<4

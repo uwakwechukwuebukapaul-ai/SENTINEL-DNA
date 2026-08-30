@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 from typing import Mapping
+from urllib.parse import urlparse
 
 try:
     from .release_metadata import derive_release_metadata
@@ -63,6 +64,7 @@ def validate_configuration(
     environ: Mapping[str, str] | None = None,
     env_file: Path | None = None,
     repository_root: Path | None = None,
+    require_postgresql: bool = False,
 ) -> list[str]:
     """Return safe error names; an empty list means valid configuration."""
     values = merged_environment(environ=environ, env_file=env_file)
@@ -133,6 +135,13 @@ def validate_configuration(
         errors.append("SENTINEL_DNA_ENV:must-be-production")
     if values.get("SENTINEL_DNA_SECURE_COOKIES", "1") != "1":
         errors.append("SENTINEL_DNA_SECURE_COOKIES:must-be-enabled")
+    database_url = values.get("DATABASE_URL", "").strip()
+    if not database_url and require_postgresql:
+        errors.append("DATABASE_URL:missing")
+    elif database_url:
+        parsed = urlparse(database_url)
+        if parsed.scheme not in {"postgres", "postgresql"} or not parsed.netloc:
+            errors.append("DATABASE_URL:invalid-postgresql-url")
     return errors
 
 

@@ -2,25 +2,27 @@
 
 from __future__ import annotations
 
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Iterator
+from typing import Any, Iterator
 from uuid import uuid4
 
 from .connection import DatabaseConnection, database
+from .portability import execute_script, identity_primary_key
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def ensure_canonical_schema(connection: sqlite3.Connection) -> None:
+def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
     """Create only the additive canonical foundation tables."""
-    connection.executescript(
-        """
+    identity = identity_primary_key(getattr(connection, "backend_name", "sqlite"))
+    execute_script(
+        connection,
+        f"""
         CREATE TABLE IF NOT EXISTS audit_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {identity},
             event_type TEXT NOT NULL,
             case_id TEXT,
             user_id INTEGER,
@@ -105,10 +107,16 @@ def ensure_canonical_schema(connection: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-        INSERT OR IGNORE INTO canonical_schema_metadata(key, value)
-            VALUES ('authority_version', '1');
+        INSERT INTO canonical_schema_metadata(key, value)
+            VALUES ('authority_version', '1')
+            ON CONFLICT (key) DO NOTHING;
         """
     )
+    # The legacy SQLite schema API committed setup here. Preserve that
+    # boundary because legacy authorization flows may open a nested,
+    # read-only unit of work on the same SQLite database.
+    if commit:
+        connection.commit()
 
 
 class CanonicalUnitOfWork:
@@ -116,7 +124,7 @@ class CanonicalUnitOfWork:
 
     def __init__(self, db: DatabaseConnection = database) -> None:
         self.db = db
-        self.connection: sqlite3.Connection | None = None
+        self.connection: Any | None = None
 
     def __enter__(self) -> "CanonicalUnitOfWork":
         self.connection = self.db.connect()
@@ -141,14 +149,14 @@ class CanonicalUnitOfWork:
             self.connection = None
 
     @property
-    def conn(self) -> sqlite3.Connection:
+    def conn(self) -> Any:
         if self.connection is None:
             raise RuntimeError("canonical_unit_of_work_not_active")
         return self.connection
 
 
 class CanonicalTenantRepository:
-    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+    def __init__(self, connection: Any): self.connection = connection
 
     def create(self, name: str, tenant_id: str | None = None):
         tenant_id = tenant_id or str(uuid4()); now = _now()
@@ -167,7 +175,7 @@ class CanonicalTenantRepository:
 
 
 class CanonicalIdentityRepository:
-    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+    def __init__(self, connection: Any): self.connection = connection
 
     def create(self, email: str, display_name: str = "", actor_id: str | None = None):
         actor_id = actor_id or str(uuid4()); now = _now()
@@ -182,7 +190,7 @@ class CanonicalIdentityRepository:
 
 
 class CanonicalMembershipRepository:
-    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+    def __init__(self, connection: Any): self.connection = connection
 
     def add(self, tenant_id: str, actor_id: str, role: str = "viewer"):
         now = _now()
@@ -205,7 +213,7 @@ class CanonicalMembershipRepository:
 
 
 class CanonicalIdentityBindingRepository:
-    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+    def __init__(self, connection: Any): self.connection = connection
 
     def create(self, provider: str, external_subject: str, actor_id: str, created_by: str, binding_id: str | None = None):
         binding_id = binding_id or str(uuid4()); now = _now()
@@ -234,7 +242,7 @@ class CanonicalIdentityBindingRepository:
 
 
 class ProviderTenantTrustRepository:
-    def __init__(self, connection: sqlite3.Connection): self.connection = connection
+    def __init__(self, connection: Any): self.connection = connection
     def create(self, provider, issuer, external_tenant_id, canonical_tenant_id, created_by, trust_id=None):
         trust_id = trust_id or str(uuid4()); now = _now()
         self.connection.execute("INSERT INTO canonical_provider_tenant_trusts VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)", (trust_id, provider, issuer, external_tenant_id, canonical_tenant_id, now, now, created_by))
