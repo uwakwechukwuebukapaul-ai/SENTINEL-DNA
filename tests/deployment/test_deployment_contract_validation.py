@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -145,11 +146,45 @@ def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
         "restore_integrity": True,
         "tenant_isolation_after_restore": True,
     }
+    assert recovery["evidence"]["artifact_sha256"] == recovery["evidence"]["restored_artifact_sha256"]
+    assert recovery["evidence"]["source_provenance"] == {"commit": "a" * 40, "tree": "b" * 40}
+    assert recovery["evidence"]["tenant"]["isolation_ok"] is True
+    assert recovery["evidence"]["audit"]["integrity_ok"] is True
     assert first.replay_digest == second.replay_digest
     assert first.report_digest != second.report_digest
     serialized = first.to_json()
     assert environment["SENTINEL_DNA_SECRET_KEY"] not in serialized
     assert environment["POSTGRES_PASSWORD"] not in serialized
+
+
+def test_backup_restore_readiness_consumes_release_scoped_evidence(tmp_path: Path):
+    environment, release_manifest, _, repository_root = _evidence_inputs(tmp_path)
+    _source, artifact, backup_manifest = _backup_inputs(tmp_path)
+    evidence_root = release_manifest.parent / "evidence"
+    restore_root = evidence_root / "restore-test"
+    restore_root.mkdir(parents=True)
+    shutil.copyfile(artifact, evidence_root / "gate2-backup.db")
+    shutil.copyfile(backup_manifest, evidence_root / "gate2-backup-manifest.json")
+    shutil.copyfile(artifact, restore_root / "restored.db")
+
+    report = DeploymentContractValidator(
+        repository_root=repository_root,
+        environ=environment,
+        release_manifest=release_manifest,
+    ).run()
+
+    recovery = next(item for item in report.contracts if item["contract"] == "backup_restore_readiness")
+    assert recovery["status"] == "passed"
+    assert recovery["checks"] == {
+        "audit_integrity_after_restore": True,
+        "backup_contents": True,
+        "backup_creation": True,
+        "backup_integrity": True,
+        "provenance_preserved": True,
+        "restore_integrity": True,
+        "tenant_isolation_after_restore": True,
+    }
+    assert recovery["evidence"]["restore_evidence_filename"] == "restored.db"
 
 
 def test_production_startup_rejects_sqlite_only_compatibility_configuration(tmp_path: Path):

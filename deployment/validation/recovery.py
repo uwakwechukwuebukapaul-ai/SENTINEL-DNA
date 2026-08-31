@@ -108,48 +108,107 @@ def _content_digest(connection: sqlite3.Connection, profile: dict[str, Any]) -> 
 
 def _tenant_profile(connection: sqlite3.Connection, profile: dict[str, Any]) -> dict[str, Any]:
     tenant_tables = [table for table, columns in profile["columns"].items() if "tenant_id" in columns]
+    required_tenant_tables: list[str] = []
     null_rows = 0
+    nullable_null_rows = 0
+    required_null_rows = 0
     grouped_rows = 0
     distinct_tenants = 0
     for table in tenant_tables:
-        null_rows += int(
+        table_info = connection.execute(f"PRAGMA table_info({_quote(table)})").fetchall()
+        tenant_required = any(row[1] == "tenant_id" and bool(row[3]) for row in table_info)
+        if tenant_required:
+            required_tenant_tables.append(table)
+        table_null_rows = int(
             connection.execute(
                 f"SELECT COUNT(*) FROM {_quote(table)} WHERE tenant_id IS NULL OR TRIM(CAST(tenant_id AS TEXT)) = ''"
             ).fetchone()[0]
         )
+        null_rows += table_null_rows
+        if tenant_required:
+            required_null_rows += table_null_rows
+        else:
+            nullable_null_rows += table_null_rows
         groups = connection.execute(
-            f"SELECT tenant_id, COUNT(*) FROM {_quote(table)} GROUP BY tenant_id"
+            f"SELECT tenant_id, COUNT(*) FROM {_quote(table)} "
+            "WHERE tenant_id IS NOT NULL AND TRIM(CAST(tenant_id AS TEXT)) <> '' GROUP BY tenant_id"
         ).fetchall()
         grouped_rows += sum(int(row[1]) for row in groups)
         distinct_tenants += len(groups)
     total_tenant_rows = sum(profile["table_counts"][table] for table in tenant_tables)
     return {
         "tenant_table_count": len(tenant_tables),
+        "required_tenant_table_count": len(required_tenant_tables),
         "tenant_row_count": total_tenant_rows,
         "grouped_row_count": grouped_rows,
         "distinct_tenant_group_count": distinct_tenants,
         "null_or_empty_tenant_rows": null_rows,
-        "isolation_ok": bool(tenant_tables) and null_rows == 0 and grouped_rows == total_tenant_rows,
+        "nullable_tenant_rows": nullable_null_rows,
+        "required_null_or_empty_tenant_rows": required_null_rows,
+        "isolation_ok": (
+            bool(required_tenant_tables)
+            and required_null_rows == 0
+            and grouped_rows == total_tenant_rows - nullable_null_rows
+        ),
     }
 
 
-def _audit_profile(profile: dict[str, Any], objects: list[tuple[str, str, str]]) -> dict[str, Any]:
+def _content_addressed_audit_ok(connection: sqlite3.Connection, table: str, columns: set[str]) -> bool:
+    """Validate the row identity and payload hash used by memory audit tables."""
+
+    required = {"audit_id", "tenant_id", "resource_type", "resource_id", "event_type", "payload", "event_hash"}
+    if not required.issubset(columns):
+        return False
+    rows = connection.execute(
+        f"SELECT audit_id, tenant_id, resource_type, resource_id, event_type, payload, event_hash FROM {_quote(table)}"
+    ).fetchall()
+    if not rows:
+        return False
+    for row in rows:
+        try:
+            payload = json.loads(str(row[5]))
+        except (TypeError, json.JSONDecodeError):
+            return False
+        event_hash = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        expected_audit_id = hashlib.sha256(
+            f"{row[1]}|{row[2]}|{row[3]}|{row[4]}|{event_hash}".encode("utf-8")
+        ).hexdigest()[:32]
+        if str(row[6]) != event_hash or str(row[0]) != expected_audit_id:
+            return False
+    return True
+
+
+def _audit_profile(connection: sqlite3.Connection, profile: dict[str, Any], objects: list[tuple[str, str, str]]) -> dict[str, Any]:
     audit_tables = [table for table in profile["tables"] if "audit" in table.lower()]
     trigger_sql = {str(row[1]): str(row[2]).lower() for row in objects if row[0] == "trigger"}
     table_checks: dict[str, bool] = {}
+    enforcement: dict[str, str] = {}
+    content_integrity: dict[str, bool] = {}
     for table in audit_tables:
         columns = set(profile["columns"][table])
         table_triggers = [sql for name, sql in trigger_sql.items() if table.lower() in sql]
+        trigger_enforced = (
+            any("before update" in sql for sql in table_triggers)
+            and any("before delete" in sql for sql in table_triggers)
+        )
+        content_addressed = _content_addressed_audit_ok(connection, table, columns)
+        content_integrity[table] = content_addressed
+        if trigger_enforced:
+            enforcement[table] = "database_triggers"
+        elif content_addressed:
+            enforcement[table] = "content_addressed_rows"
         table_checks[table] = (
             "tenant_id" in columns
-            and bool(columns & HASH_COLUMNS)
-            and any("before update" in sql for sql in table_triggers)
-            and any("before delete" in sql for sql in table_triggers)
+            and (trigger_enforced or content_addressed)
         )
     return {
         "audit_table_count": len(audit_tables),
         "audit_tables": audit_tables,
         "audit_table_checks": table_checks,
+        "enforcement": enforcement,
+        "content_integrity": content_integrity,
         "integrity_ok": bool(audit_tables) and all(table_checks.values()),
     }
 
@@ -177,7 +236,7 @@ def _database_profile(path: Path) -> dict[str, Any]:
                 "integrity_check": integrity,
                 "content_digest": _content_digest(connection, profile),
                 "tenant": _tenant_profile(connection, profile),
-                "audit": _audit_profile(profile, [(row[0], row[1], row[2]) for row in objects]),
+                "audit": _audit_profile(connection, profile, [(row[0], row[1], row[2]) for row in objects]),
                 "provenance_columns": sorted(
                     column
                     for values in profile["columns"].values()
@@ -301,6 +360,7 @@ class BackupRecoveryValidationService:
     source: Path | None = None
     artifact: Path | None = None
     manifest: Path | None = None
+    restored: Path | None = None
 
     def validate(self) -> dict[str, Any]:
         checks = {
@@ -334,6 +394,12 @@ class BackupRecoveryValidationService:
                     checks["backup_creation"] = True
                 if artifact is None or manifest is None:
                     raise RuntimeError("backup_evidence_missing")
+                checks["backup_creation"] = (
+                    artifact.is_file()
+                    and not artifact.is_symlink()
+                    and manifest.is_file()
+                    and not manifest.is_symlink()
+                )
                 payload = service.validate(artifact, manifest)
                 checks["backup_integrity"] = True
                 artifact_profile = _database_profile(artifact)
@@ -342,10 +408,28 @@ class BackupRecoveryValidationService:
                 checks["backup_contents"] = bool(artifact_profile["tables"]) and artifact_profile["table_counts"] == payload["database"]["table_counts"] and source_matches_artifact
                 restored = service.restore(artifact, manifest, workspace / "restored.sqlite")
                 restored_profile = _database_profile(Path(restored.restored_database))
+                restored_evidence_profile: dict[str, Any] | None = None
+                if self.restored is not None:
+                    if self.restored.is_symlink() or not self.restored.is_file():
+                        raise RuntimeError("restore_evidence_invalid")
+                    restored_evidence_path = self.restored
+                    restored_evidence_profile = _database_profile(restored_evidence_path)
+                    if hashlib.sha256(restored_evidence_path.read_bytes()).hexdigest() != payload["artifact"]["sha256"]:
+                        raise RuntimeError("restore_evidence_digest_mismatch")
+                    if restored_evidence_profile != artifact_profile:
+                        raise RuntimeError("restore_evidence_metadata_mismatch")
                 checks["restore_integrity"] = restored_profile["integrity_check"] == "ok" and restored_profile["content_digest"] == artifact_profile["content_digest"]
-                comparison_profiles = [profile for profile in (source_profile, artifact_profile, restored_profile) if profile is not None]
+                if restored_evidence_profile is not None:
+                    checks["restore_integrity"] = checks["restore_integrity"] and restored_evidence_profile["content_digest"] == artifact_profile["content_digest"]
+                comparison_profiles = [profile for profile in (source_profile, artifact_profile, restored_profile, restored_evidence_profile) if profile is not None]
                 content_preserved = len({profile["content_digest"] for profile in comparison_profiles}) == 1
-                checks["provenance_preserved"] = bool(restored_profile["provenance_columns"]) and content_preserved
+                source_provenance = payload.get("source")
+                manifest_provenance = (
+                    isinstance(source_provenance, dict)
+                    and bool(str(source_provenance.get("commit", "")).strip())
+                    and bool(str(source_provenance.get("tree", "")).strip())
+                )
+                checks["provenance_preserved"] = bool(restored_profile["provenance_columns"]) and manifest_provenance and content_preserved
                 checks["tenant_isolation_after_restore"] = bool(restored_profile["tenant"]["isolation_ok"])
                 checks["audit_integrity_after_restore"] = bool(restored_profile["audit"]["integrity_ok"])
                 evidence = {
@@ -354,8 +438,11 @@ class BackupRecoveryValidationService:
                     "source_content_digest": source_profile["content_digest"] if source_profile else None,
                     "artifact_content_digest": artifact_profile["content_digest"],
                     "restored_content_digest": restored_profile["content_digest"],
+                    "restored_artifact_sha256": hashlib.sha256(Path(restored.restored_database).read_bytes()).hexdigest(),
+                    "restore_evidence_filename": self.restored.name if self.restored is not None else None,
                     "tenant": restored_profile["tenant"],
                     "provenance_columns": restored_profile["provenance_columns"],
+                    "source_provenance": source_provenance,
                     "audit": restored_profile["audit"],
                     "integrity_check": restored_profile["integrity_check"],
                 }

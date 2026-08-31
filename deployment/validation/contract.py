@@ -47,6 +47,10 @@ PROTECTED_PATHS = (
     "services/intelligence/runtime/runtime_task_executor.py",
 )
 
+GATE2_BACKUP_ARTIFACT = "gate2-backup.db"
+GATE2_BACKUP_MANIFEST = "gate2-backup-manifest.json"
+GATE2_RESTORED_DATABASE = "restore-test/restored.db"
+
 
 def _canonical(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("utf-8")
@@ -210,6 +214,7 @@ class DeploymentContractValidator:
         backup_source: str | Path | None = None,
         backup_artifact: str | Path | None = None,
         backup_manifest: str | Path | None = None,
+        backup_restored: str | Path | None = None,
         generated_at: str | None = None,
     ) -> None:
         self.repository_root = Path(repository_root).resolve()
@@ -219,6 +224,19 @@ class DeploymentContractValidator:
         self.backup_source = Path(backup_source).resolve() if backup_source else None
         self.backup_artifact = Path(backup_artifact).resolve() if backup_artifact else None
         self.backup_manifest = Path(backup_manifest).resolve() if backup_manifest else None
+        self.backup_restored = Path(backup_restored).resolve() if backup_restored else None
+        if self.release_manifest is not None and self.backup_source is None:
+            evidence_root = self.release_manifest.parent / "evidence"
+            if self.backup_artifact is None and self.backup_manifest is None:
+                candidate_artifact = evidence_root / GATE2_BACKUP_ARTIFACT
+                candidate_manifest = evidence_root / GATE2_BACKUP_MANIFEST
+                if candidate_artifact.exists() or candidate_manifest.exists():
+                    self.backup_artifact = candidate_artifact
+                    self.backup_manifest = candidate_manifest
+            if self.backup_restored is None:
+                candidate = evidence_root / GATE2_RESTORED_DATABASE
+                if candidate.is_file() and not candidate.is_symlink():
+                    self.backup_restored = candidate
         self.generated_at = generated_at or datetime.now(timezone.utc).isoformat()
 
     def _environment(self) -> dict[str, str]:
@@ -396,6 +414,7 @@ class DeploymentContractValidator:
             source=self.backup_source,
             artifact=self.backup_artifact,
             manifest=self.backup_manifest,
+            restored=self.backup_restored,
         ).validate()
 
     def run(self) -> DeploymentContractReport:

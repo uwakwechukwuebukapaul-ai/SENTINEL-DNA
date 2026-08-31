@@ -19,6 +19,7 @@ def main() -> int:
     parser.add_argument("--backup-source", type=Path, help="Read-only source database used for isolated backup creation rehearsal")
     parser.add_argument("--backup-artifact", type=Path)
     parser.add_argument("--backup-manifest", type=Path)
+    parser.add_argument("--backup-restored", type=Path, help="Read-only restored database evidence; defaults to release-scoped restore-test/restored.db")
     parser.add_argument("--output", type=Path, help="Immutable report path outside the repository")
     args = parser.parse_args()
     validator = DeploymentContractValidator(
@@ -28,6 +29,7 @@ def main() -> int:
         backup_source=args.backup_source,
         backup_artifact=args.backup_artifact,
         backup_manifest=args.backup_manifest,
+        backup_restored=args.backup_restored,
     )
     report = validator.run()
     if args.output:
