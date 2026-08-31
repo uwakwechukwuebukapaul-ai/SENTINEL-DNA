@@ -10,6 +10,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPOSITORY_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 STAGING_COMPOSE="$REPOSITORY_ROOT/deployment/staging/docker-compose.yml"
+STAGING_OVERRIDE="$REPOSITORY_ROOT/deployment/staging/docker-compose.pilot.override.yml"
 
 case "$STAGING_ENV_FILE" in
   /*) ;;
@@ -26,6 +27,14 @@ if [ ! -f "$STAGING_COMPOSE" ]; then
   echo "Staging Compose contract was not found" >&2
   exit 1
 fi
+if [ ! -f "$STAGING_OVERRIDE" ]; then
+  echo "Pilot staging Compose override was not found" >&2
+  exit 1
+fi
+case "$SENTINEL_DNA_BASE_URL" in
+  https://*) ;;
+  *) echo "SENTINEL_DNA_BASE_URL must use HTTPS" >&2; exit 1 ;;
+esac
 
 actual_revision=$(git -C "$REPOSITORY_ROOT" rev-parse HEAD 2>/dev/null || true)
 if [ "$actual_revision" != "$SENTINEL_DNA_IMAGE_REVISION_FULL" ]; then
@@ -41,18 +50,21 @@ docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
+  --file "$STAGING_OVERRIDE" \
   up -d --build postgres redis
 
 docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
+  --file "$STAGING_OVERRIDE" \
   run --rm --build migration
 
 docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
+  --file "$STAGING_OVERRIDE" \
   up -d --build app edge
 
 "$SCRIPT_DIR/health_check.sh"

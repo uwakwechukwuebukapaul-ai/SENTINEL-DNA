@@ -16,6 +16,8 @@ from tests.credential_helpers import random_secret
 
 
 ROOT = Path(__file__).resolve().parents[2]
+STAGING_COMPOSE = ROOT / "deployment" / "staging" / "docker-compose.yml"
+STAGING_OVERRIDE = ROOT / "deployment" / "staging" / "docker-compose.pilot.override.yml"
 
 
 def staging_secret() -> str:
@@ -122,9 +124,10 @@ def test_pilot_boundary_is_allowlist_and_denies_non_pilot_surfaces():
 
 
 def test_staging_compose_and_deploy_contract_are_explicit():
-    compose = (ROOT / "deployment" / "staging" / "docker-compose.yml").read_text()
+    compose = STAGING_COMPOSE.read_text()
     root_compose = (ROOT / "docker-compose.yml").read_text()
     deploy = (ROOT / "deployment" / "scripts" / "deploy.sh").read_text()
+    override = STAGING_OVERRIDE.read_text()
 
     assert "SENTINEL_DNA_ENV: staging" in compose
     assert 'SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"' in compose
@@ -156,8 +159,14 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert set(rendered["services"]["postgres"]["networks"]) == {"staging_internal"}
     assert set(rendered["services"]["redis"]["networks"]) == {"staging_internal"}
     assert rendered["networks"]["staging_internal"]["internal"] is True
+    override_rendered = yaml.safe_load(override)
+    assert override_rendered["services"]["edge"]["ports"] == ["127.0.0.1:8443:443"]
+    assert "loopback" in override.lower()
     assert "--file \"$STAGING_COMPOSE\"" in deploy
+    assert "--file \"$STAGING_OVERRIDE\"" in deploy
     assert "--env-file \"$STAGING_ENV_FILE\"" in deploy
+    assert "Pilot staging Compose override was not found" in deploy
+    assert "SENTINEL_DNA_BASE_URL must use HTTPS" in deploy
     assert "SENTINEL_DNA_IMAGE_TAG" in deploy
     assert "SENTINEL_DNA_IMAGE_REVISION_FULL" in deploy
     assert "git -C \"$REPOSITORY_ROOT\" rev-parse HEAD" in deploy
@@ -166,8 +175,9 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "run --rm --build migration" in deploy
     assert "docker compose up -d --build" not in deploy
     assert "Missing .env" not in deploy
-    assert 'command: ["python", "-m", "database.run_migrations"]' in root_compose
-    assert "  migration:" in root_compose
+    root_rendered = yaml.safe_load(root_compose)
+    assert root_rendered["services"]["migration"]["command"] == ["python", "-m", "database.run_migrations"]
+    assert "migration" in root_rendered["services"]
 
 
 def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp_path):

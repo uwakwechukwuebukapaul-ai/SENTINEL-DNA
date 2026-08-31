@@ -1,0 +1,8 @@
+# Controlled analyst pilot override.
+# The base staging profile owns service isolation and external secret mounts.
+# Bind the only host-published surface to loopback; remote access must use an
+# approved VPN, zero-trust tunnel, or operator-controlled port forward.
+services:
+  edge:
+    ports:
+      - "127.0.0.1:8443:443"
