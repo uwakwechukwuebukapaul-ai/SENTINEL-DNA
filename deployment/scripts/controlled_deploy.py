@@ -408,6 +408,8 @@ class ControlledDeploymentAdapter:
                 expected_release_sha=self.reviewed_sha,
                 expected_image_digest=self.expected_digest,
                 expected_image_created=expected_created,
+                trusted_metadata_path=self.metadata_file,
+                require_trusted_metadata=True,
             )
         except ReleaseManifestError as exc:
             raise ControlledDeploymentError("release_manifest_invalid") from exc

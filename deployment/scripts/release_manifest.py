@@ -46,6 +46,7 @@ VALIDATION_EVIDENCE_FIELDS = frozenset(("source", "report_digest", "replay_diges
 REPLAY_REFERENCE_FIELDS = frozenset(("source", "digest"))
 IMAGE_FIELDS = frozenset(("reference", "digest", "id", "oci_revision", "oci_source", "oci_created", "git_revision_full"))
 MANIFEST_POLICY_FIELDS = frozenset(("generated_output", "self_hash", "identity_excludes"))
+TRUSTED_METADATA_FIELDS = frozenset(("release_sha", "image_digest"))
 
 # This is the reviewed release boundary.  The generated manifest is not part
 # of this tuple and must be written outside the repository tree.
@@ -226,6 +227,30 @@ def _require_exact_keys(value: Any, expected: frozenset[str], error_code: str) -
     return value
 
 
+def _read_trusted_release_metadata(path: Path, repository_root: Path) -> dict[str, str]:
+    """Read the protected Gate 1 binding without accepting partial evidence."""
+
+    metadata_path = path.resolve()
+    _assert_outside_repository(metadata_path, repository_root)
+    _assert_regular_nonreparse(metadata_path, "trusted release metadata")
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ReleaseManifestError("trusted release metadata is not valid JSON") from exc
+    metadata = _require_exact_keys(
+        payload,
+        TRUSTED_METADATA_FIELDS,
+        "trusted release metadata fields are invalid",
+    )
+    release_sha = metadata["release_sha"]
+    image_digest = metadata["image_digest"]
+    if not isinstance(release_sha, str) or not isinstance(image_digest, str):
+        raise ReleaseManifestError("trusted release metadata values are invalid")
+    _validate_release_sha(release_sha)
+    _validate_digest(image_digest)
+    return {"release_sha": release_sha, "image_digest": image_digest}
+
+
 def _assert_outside_repository(path: Path, repository_root: Path) -> None:
     try:
         path.relative_to(repository_root)
@@ -345,15 +370,23 @@ def build_manifest(
     image_source: str = EXPECTED_IMAGE_SOURCE,
     image_created: str | None = None,
     artifact_paths: tuple[Path, ...] = (),
+    trusted_metadata_path: Path | None = None,
 ) -> dict[str, Any]:
     """Return deterministic release evidence for the current reviewed tree."""
 
     root = repository_root.resolve()
     actual_head = _git_text(root, "rev-parse", "HEAD")
-    selected_sha = release_sha or actual_head
+    trusted_metadata = (
+        _read_trusted_release_metadata(Path(trusted_metadata_path), root)
+        if trusted_metadata_path is not None
+        else None
+    )
+    selected_sha = release_sha or (trusted_metadata["release_sha"] if trusted_metadata else actual_head)
     _validate_release_sha(selected_sha)
     if selected_sha != actual_head:
         raise ReleaseManifestError("release SHA must equal the checked-out HEAD")
+    if trusted_metadata is not None and trusted_metadata["release_sha"] != selected_sha:
+        raise ReleaseManifestError("trusted release metadata SHA does not match release")
     _assert_clean_worktree(root)
 
     branch = repository_branch(root, selected_sha)
@@ -388,6 +421,10 @@ def build_manifest(
     validation_evidence_references.sort(key=lambda item: (item["source"], item["replay_digest"]))
     replay_digest_references.sort(key=lambda item: (item["source"], item["digest"]))
 
+    if trusted_metadata is not None:
+        if image_digest is not None and image_digest != trusted_metadata["image_digest"]:
+            raise ReleaseManifestError("image digest does not match trusted release metadata")
+        image_digest = trusted_metadata["image_digest"]
     _validate_digest(image_digest)
     _validate_created(image_created)
     if image_source != EXPECTED_IMAGE_SOURCE:
@@ -468,11 +505,22 @@ def verify_manifest(
     artifact_paths: tuple[Path, ...] = (),
     require_artifact_references: bool = False,
     require_validation_evidence: bool = False,
+    trusted_metadata_path: Path | None = None,
+    require_trusted_metadata: bool = False,
 ) -> None:
     """Verify a manifest against the reviewed Git tree without reading secrets."""
 
     root = repository_root.resolve()
     path = manifest_path.resolve()
+    if require_trusted_metadata and trusted_metadata_path is None:
+        raise ReleaseManifestError("trusted release metadata is required for release certification")
+    if require_trusted_metadata and expected_image_digest is None:
+        raise ReleaseManifestError("independently verified image digest is required for release certification")
+    trusted_metadata = (
+        _read_trusted_release_metadata(Path(trusted_metadata_path), root)
+        if trusted_metadata_path is not None
+        else None
+    )
     _assert_outside_repository(path, root)
     _assert_regular_nonreparse(path, "release manifest")
     try:
@@ -506,6 +554,8 @@ def verify_manifest(
     _validate_release_sha(release_sha)
     if expected_release_sha is not None and release_sha != expected_release_sha:
         raise ReleaseManifestError("release manifest SHA does not match requested release")
+    if trusted_metadata is not None and trusted_metadata["release_sha"] != release_sha:
+        raise ReleaseManifestError("release manifest SHA does not match trusted release metadata")
     _validate_digest(expected_image_digest)
     _validate_created(expected_image_created)
     expected_tree = _git_text(root, "rev-parse", f"{release_sha}^{{tree}}")
@@ -630,6 +680,8 @@ def verify_manifest(
         raise ReleaseManifestError("verified image ID is required for release certification")
     if require_image and created is None:
         raise ReleaseManifestError("verified image creation timestamp is required for release certification")
+    if trusted_metadata is not None and digest != trusted_metadata["image_digest"]:
+        raise ReleaseManifestError("release manifest image digest does not match trusted release metadata")
     if expected_image_digest is not None and digest != expected_image_digest:
         raise ReleaseManifestError("release manifest image digest does not match requested digest")
     if expected_image_created is not None and created != expected_image_created:
@@ -651,6 +703,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--image-source", default=EXPECTED_IMAGE_SOURCE)
     build.add_argument("--image-created")
     build.add_argument("--artifact", action="append", type=Path, default=[])
+    build.add_argument("--trusted-metadata", type=Path)
 
     verify = subparsers.add_parser("verify", help="verify a deterministic manifest")
     verify.add_argument("--repository-root", type=Path, default=Path.cwd())
@@ -663,6 +716,8 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--artifact", action="append", type=Path, default=[])
     verify.add_argument("--require-artifact-references", action="store_true")
     verify.add_argument("--require-validation-evidence", action="store_true")
+    verify.add_argument("--trusted-metadata", type=Path)
+    verify.add_argument("--require-trusted-metadata", action="store_true")
     return parser
 
 
@@ -680,6 +735,7 @@ def main(argv: list[str] | None = None) -> int:
                 image_source=args.image_source,
                 image_created=args.image_created,
                 artifact_paths=tuple(args.artifact),
+                trusted_metadata_path=args.trusted_metadata,
             )
             write_manifest(manifest, output=args.output, repository_root=args.repository_root)
             print("Release manifest generated without secret material")
@@ -695,6 +751,8 @@ def main(argv: list[str] | None = None) -> int:
                 artifact_paths=tuple(args.artifact),
                 require_artifact_references=args.require_artifact_references,
                 require_validation_evidence=args.require_validation_evidence,
+                trusted_metadata_path=args.trusted_metadata,
+                require_trusted_metadata=args.require_trusted_metadata,
             )
             print("Release manifest verified")
     except ReleaseManifestError as exc:

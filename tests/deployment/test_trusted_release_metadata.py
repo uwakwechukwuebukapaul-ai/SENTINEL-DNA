@@ -19,6 +19,7 @@ def fake_image(revision=REVISION, digest=DIGEST, created=CREATED):
         "Config": {
             "Labels": {
                 "com.sentinel-dna.git.revision.full": revision,
+                "org.opencontainers.image.revision": revision,
                 "org.opencontainers.image.source": SOURCE,
                 "org.opencontainers.image.created": created,
             }
@@ -64,6 +65,20 @@ def test_prepare_metadata_requires_exact_verified_checkout_and_image(tmp_path, m
         ("c2" * 20, DIGEST, fake_image(), "trusted_release_revision_mismatch"),
         (REVISION, "sha256:" + "c" * 64, fake_image(), "trusted_release_image_digest_mismatch"),
         (REVISION, DIGEST, fake_image(revision="c2" * 20), "trusted_release_image_revision_mismatch"),
+        (
+            REVISION,
+            DIGEST,
+            {
+                **fake_image(),
+                "Config": {
+                    "Labels": {
+                        **fake_image()["Config"]["Labels"],
+                        "org.opencontainers.image.revision": "c2" * 20,
+                    }
+                },
+            },
+            "trusted_release_oci_revision_mismatch",
+        ),
         (REVISION, DIGEST, fake_image(digest="sha256:" + "c" * 64), "trusted_release_image_digest_mismatch"),
         (REVISION, DIGEST, fake_image(created="1970-01-01T00:00:01Z"), "trusted_release_image_created_mismatch"),
     ],

@@ -585,8 +585,11 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "PUBLISHED_IMAGE_DIGEST" in _step_text(manifest)
     assert "PUBLISHED_IMAGE_ID" in _step_text(manifest)
     assert "SENTINEL_DNA_IMAGE_CREATED" in _step_text(manifest)
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in _step_text(manifest)
     verify_manifest = _step(workflow, "Verify image-bound release manifest")
     assert "--require-image" in _step_text(verify_manifest)
+    assert "--require-trusted-metadata" in _step_text(verify_manifest)
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in _step_text(verify_manifest)
     upload = _step(workflow, "Upload non-secret image release evidence")
     assert "sentinel-dna-image-provenance.json" in upload["with"]["path"]
     assert "sentinel-dna-release-manifest-image-bound.json" in upload["with"]["path"]

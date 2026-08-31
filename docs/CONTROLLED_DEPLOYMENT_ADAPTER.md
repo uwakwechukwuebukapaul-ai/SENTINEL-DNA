@@ -104,9 +104,10 @@ checkout before a release is considered reviewable. A manifest verifies source
 provenance; it does not authorize Gate 1, provision secrets, or replace the
 independent image-digest and trusted-metadata gates. Final release
 certification must run verification with `--require-image`, an independently
-verified digest, and the protected `SENTINEL_DNA_IMAGE_CREATED` value for the
-same release SHA. The controller's existing reviewed SHA check does not replace
-this artifact check; the release process must
+verified digest, the protected trusted metadata file (`--trusted-metadata` and
+`--require-trusted-metadata`), and the protected `SENTINEL_DNA_IMAGE_CREATED`
+value for the same release SHA. The controller's existing reviewed SHA check
+does not replace this artifact check; the release process must
 complete manifest verification before any deployment validation is authorized,
 so a working-tree controller is never accepted as a reviewed release by
 process convention.

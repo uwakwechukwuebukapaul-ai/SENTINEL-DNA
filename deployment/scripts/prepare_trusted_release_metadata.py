@@ -112,6 +112,8 @@ def prepare_metadata(
     labels = info.get("Config", {}).get("Labels", {}) or {}
     if labels.get("com.sentinel-dna.git.revision.full") != expected_revision:
         raise TrustedReleaseMetadataError("trusted_release_image_revision_mismatch")
+    if labels.get("org.opencontainers.image.revision") != expected_revision:
+        raise TrustedReleaseMetadataError("trusted_release_oci_revision_mismatch")
     if labels.get("org.opencontainers.image.source") != IMAGE_SOURCE:
         raise TrustedReleaseMetadataError("trusted_release_image_source_mismatch")
     if _image_digest(info) != expected_digest:

@@ -388,7 +388,8 @@ jobs:
             --image-id "$PUBLISHED_IMAGE_ID" \
             --image-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
-            --image-created "$SENTINEL_DNA_IMAGE_CREATED"
+            --image-created "$SENTINEL_DNA_IMAGE_CREATED" \
+            --trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"
           echo "IMAGE_BOUND_MANIFEST_PATH=$manifest" >> "$GITHUB_ENV"
 
       - name: Verify image-bound release manifest
@@ -398,6 +399,8 @@ jobs:
           python deployment/scripts/release_manifest.py verify \
             --manifest "$IMAGE_BOUND_MANIFEST_PATH" \
             --require-image \
+            --require-trusted-metadata \
+            --trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" \
             --expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --expected-image-digest "$PUBLISHED_IMAGE_DIGEST" \
             --expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"
