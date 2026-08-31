@@ -29,6 +29,7 @@ METADATA_NAMES = (
     "SENTINEL_DNA_IMAGE_CREATED",
 )
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+IMAGE_CREATED_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 _PLACEHOLDER_MARKERS = ("change-me", "replace-with", "development-only")
 
 
@@ -89,13 +90,13 @@ def validate_configuration(
         elif name != "SENTINEL_DNA_IMAGE_CREATED" and value != expected[name]:
             errors.append(f"{name}:does-not-match-HEAD")
         elif name == "SENTINEL_DNA_IMAGE_CREATED":
-            try:
-                created = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
+            if not IMAGE_CREATED_PATTERN.fullmatch(value):
                 errors.append(f"{name}:invalid-ISO-8601")
             else:
-                if created.tzinfo is None or not value.endswith("Z"):
-                    errors.append(f"{name}:must-be-UTC")
+                try:
+                    datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+                except ValueError:
+                    errors.append(f"{name}:invalid-ISO-8601")
 
     image_digest = values.get("SENTINEL_DNA_IMAGE_DIGEST", "").strip()
     if not image_digest:

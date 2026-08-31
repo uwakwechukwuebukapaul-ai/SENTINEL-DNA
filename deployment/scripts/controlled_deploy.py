@@ -398,7 +398,7 @@ class ControlledDeploymentAdapter:
         validate_protected_directory(tls_dir, self.repository_root, self.acl_inspector)
         return values
 
-    def _validate_release_manifest(self) -> None:
+    def _validate_release_manifest(self, *, expected_created: str) -> None:
         try:
             verify_manifest(
                 manifest_path=self.release_manifest_file,
@@ -407,6 +407,7 @@ class ControlledDeploymentAdapter:
                 require_image=True,
                 expected_release_sha=self.reviewed_sha,
                 expected_image_digest=self.expected_digest,
+                expected_image_created=expected_created,
             )
         except ReleaseManifestError as exc:
             raise ControlledDeploymentError("release_manifest_invalid") from exc
@@ -499,8 +500,8 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("compose_tls_mount_not_read_only")
 
     def validate(self) -> ReleaseEvidence:
-        self._validate_release_manifest()
         configuration = self._validate_configuration()
+        self._validate_release_manifest(expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"])
         self._validate_metadata()
         evidence = self._validate_release(expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"])
         self._validate_compose()

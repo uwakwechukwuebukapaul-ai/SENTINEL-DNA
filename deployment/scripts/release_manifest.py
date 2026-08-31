@@ -60,9 +60,11 @@ RELEASE_FILE_SET = (
     "deployment/scripts/prepare_trusted_release_metadata.py",
     "deployment/scripts/release_manifest.py",
     "deployment/scripts/release_metadata.py",
+    "deployment/scripts/validate_deployment_contract.py",
     "deployment/scripts/validate_deployment_config.py",
     "deployment/scripts/deploy.sh",
     "deployment/staging/docker-compose.yml",
+    "deployment/validation/contract.py",
     "docs/CONTROLLED_DEPLOYMENT_ADAPTER.md",
     "docs/DEPLOYMENT_GUIDE.md",
     "docs/PRODUCTION_RUNBOOK.md",
@@ -462,6 +464,7 @@ def verify_manifest(
     require_image: bool = False,
     expected_release_sha: str | None = None,
     expected_image_digest: str | None = None,
+    expected_image_created: str | None = None,
     artifact_paths: tuple[Path, ...] = (),
     require_artifact_references: bool = False,
     require_validation_evidence: bool = False,
@@ -504,6 +507,7 @@ def verify_manifest(
     if expected_release_sha is not None and release_sha != expected_release_sha:
         raise ReleaseManifestError("release manifest SHA does not match requested release")
     _validate_digest(expected_image_digest)
+    _validate_created(expected_image_created)
     expected_tree = _git_text(root, "rev-parse", f"{release_sha}^{{tree}}")
     if repository["tree_id"] != expected_tree:
         raise ReleaseManifestError("release manifest tree identity does not match Git")
@@ -628,6 +632,8 @@ def verify_manifest(
         raise ReleaseManifestError("verified image creation timestamp is required for release certification")
     if expected_image_digest is not None and digest != expected_image_digest:
         raise ReleaseManifestError("release manifest image digest does not match requested digest")
+    if expected_image_created is not None and created != expected_image_created:
+        raise ReleaseManifestError("release manifest image creation timestamp does not match requested timestamp")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -653,6 +659,7 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--require-image", action="store_true")
     verify.add_argument("--expected-release-sha")
     verify.add_argument("--expected-image-digest")
+    verify.add_argument("--expected-image-created")
     verify.add_argument("--artifact", action="append", type=Path, default=[])
     verify.add_argument("--require-artifact-references", action="store_true")
     verify.add_argument("--require-validation-evidence", action="store_true")
@@ -684,6 +691,7 @@ def main(argv: list[str] | None = None) -> int:
                 require_image=args.require_image,
                 expected_release_sha=args.expected_release_sha,
                 expected_image_digest=args.expected_image_digest,
+                expected_image_created=args.expected_image_created,
                 artifact_paths=tuple(args.artifact),
                 require_artifact_references=args.require_artifact_references,
                 require_validation_evidence=args.require_validation_evidence,

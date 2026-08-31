@@ -10,6 +10,7 @@ manifest outside the source tree.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,7 @@ from deployment.scripts.release_metadata import derive_release_metadata
 
 REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+IMAGE_CREATED_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 METADATA_KEYS = frozenset(("release_sha", "image_digest"))
 
@@ -86,6 +88,7 @@ def prepare_metadata(
     image: str,
     expected_revision: str,
     expected_digest: str,
+    expected_created: str,
     output: Path,
     repository_root: Path,
     docker_executable: str = "docker",
@@ -94,6 +97,12 @@ def prepare_metadata(
         raise TrustedReleaseMetadataError("trusted_release_revision_invalid")
     if not IMAGE_DIGEST_PATTERN.fullmatch(expected_digest):
         raise TrustedReleaseMetadataError("trusted_release_digest_invalid")
+    if not IMAGE_CREATED_PATTERN.fullmatch(expected_created):
+        raise TrustedReleaseMetadataError("trusted_release_image_created_invalid")
+    try:
+        datetime.strptime(expected_created, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as exc:
+        raise TrustedReleaseMetadataError("trusted_release_image_created_invalid") from exc
     current_revision = derive_release_metadata(repository_root=repository_root, source_date_epoch="0")[
         "SENTINEL_DNA_IMAGE_REVISION_FULL"
     ]
@@ -107,6 +116,8 @@ def prepare_metadata(
         raise TrustedReleaseMetadataError("trusted_release_image_source_mismatch")
     if _image_digest(info) != expected_digest:
         raise TrustedReleaseMetadataError("trusted_release_image_digest_mismatch")
+    if labels.get("org.opencontainers.image.created") != expected_created:
+        raise TrustedReleaseMetadataError("trusted_release_image_created_mismatch")
 
     resolved_output, parent = _validate_output_path(output, repository_root)
     metadata = {"release_sha": expected_revision, "image_digest": expected_digest}
@@ -137,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--image", required=True)
     parser.add_argument("--expected-revision", required=True)
     parser.add_argument("--expected-digest", required=True)
+    parser.add_argument("--expected-image-created", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--docker-executable", default="docker")
     args = parser.parse_args(argv)
@@ -145,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
             image=args.image,
             expected_revision=args.expected_revision,
             expected_digest=args.expected_digest,
+            expected_created=args.expected_image_created,
             output=args.output,
             repository_root=REPOSITORY_ROOT,
             docker_executable=args.docker_executable,

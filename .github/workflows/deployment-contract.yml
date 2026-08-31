@@ -357,6 +357,7 @@ jobs:
             --image "$PUBLISHED_IMAGE_REFERENCE" \
             --expected-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --expected-digest "$PUBLISHED_IMAGE_DIGEST" \
+            --expected-image-created "$SENTINEL_DNA_IMAGE_CREATED" \
             --output "$metadata_path"
           echo "SENTINEL_DNA_IMAGE_DIGEST=$PUBLISHED_IMAGE_DIGEST" >> "$GITHUB_ENV"
           echo "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE=$metadata_path" >> "$GITHUB_ENV"
@@ -398,7 +399,8 @@ jobs:
             --manifest "$IMAGE_BOUND_MANIFEST_PATH" \
             --require-image \
             --expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
-            --expected-image-digest "$PUBLISHED_IMAGE_DIGEST"
+            --expected-image-digest "$PUBLISHED_IMAGE_DIGEST" \
+            --expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"
 
       - name: Upload non-secret image release evidence
         uses: actions/upload-artifact@v4

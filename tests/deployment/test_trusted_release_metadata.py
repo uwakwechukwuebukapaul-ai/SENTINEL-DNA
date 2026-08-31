@@ -10,15 +10,17 @@ from deployment.scripts import prepare_trusted_release_metadata as trusted
 REVISION = "a1" * 20
 DIGEST = "sha256:" + "b" * 64
 SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+CREATED = "1970-01-01T00:00:00Z"
 
 
-def fake_image(revision=REVISION, digest=DIGEST):
+def fake_image(revision=REVISION, digest=DIGEST, created=CREATED):
     return {
         "RepoDigests": [f"deployment-app@{digest}"],
         "Config": {
             "Labels": {
                 "com.sentinel-dna.git.revision.full": revision,
                 "org.opencontainers.image.source": SOURCE,
+                "org.opencontainers.image.created": created,
             }
         },
     }
@@ -44,6 +46,7 @@ def test_prepare_metadata_requires_exact_verified_checkout_and_image(tmp_path, m
         image="deployment-app:" + REVISION,
         expected_revision=REVISION,
         expected_digest=DIGEST,
+        expected_created=CREATED,
         output=output,
         repository_root=Path(__file__).parents[2],
     )
@@ -62,6 +65,7 @@ def test_prepare_metadata_requires_exact_verified_checkout_and_image(tmp_path, m
         (REVISION, "sha256:" + "c" * 64, fake_image(), "trusted_release_image_digest_mismatch"),
         (REVISION, DIGEST, fake_image(revision="c2" * 20), "trusted_release_image_revision_mismatch"),
         (REVISION, DIGEST, fake_image(digest="sha256:" + "c" * 64), "trusted_release_image_digest_mismatch"),
+        (REVISION, DIGEST, fake_image(created="1970-01-01T00:00:01Z"), "trusted_release_image_created_mismatch"),
     ],
 )
 def test_prepare_metadata_fails_closed_for_release_mismatches(
@@ -75,6 +79,7 @@ def test_prepare_metadata_fails_closed_for_release_mismatches(
             image="deployment-app:" + REVISION,
             expected_revision=expected_revision,
             expected_digest=expected_digest,
+            expected_created=CREATED,
             output=output,
             repository_root=Path(__file__).parents[2],
         )
@@ -88,6 +93,7 @@ def test_prepare_metadata_never_writes_inside_source_tree(tmp_path, monkeypatch)
             image="deployment-app:" + REVISION,
             expected_revision=REVISION,
             expected_digest=DIGEST,
+            expected_created=CREATED,
             output=Path(__file__).parents[2] / "trusted-release-metadata.json",
             repository_root=Path(__file__).parents[2],
         )
@@ -102,6 +108,23 @@ def test_prepare_metadata_rejects_invalid_digest_without_writing(tmp_path, monke
             image="deployment-app:" + REVISION,
             expected_revision=REVISION,
             expected_digest="not-a-digest",
+            expected_created=CREATED,
+            output=output,
+            repository_root=Path(__file__).parents[2],
+        )
+    assert not output.exists()
+
+
+def test_prepare_metadata_rejects_invalid_creation_timestamp_without_writing(tmp_path, monkeypatch):
+    configure_fake_release(monkeypatch)
+    output = tmp_path / "release" / "metadata.json"
+    output.parent.mkdir(mode=0o700)
+    with pytest.raises(trusted.TrustedReleaseMetadataError, match="trusted_release_image_created_invalid"):
+        trusted.prepare_metadata(
+            image="deployment-app:" + REVISION,
+            expected_revision=REVISION,
+            expected_digest=DIGEST,
+            expected_created="2026-02-30T00:00:00Z",
             output=output,
             repository_root=Path(__file__).parents[2],
         )
