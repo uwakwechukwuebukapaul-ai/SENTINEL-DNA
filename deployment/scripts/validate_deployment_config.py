@@ -30,6 +30,8 @@ METADATA_NAMES = (
 )
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_CREATED_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+IMAGE_TAG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+IMAGE_REVISION_SHORT_PATTERN = re.compile(r"^[0-9a-f]{7,39}$")
 _PLACEHOLDER_MARKERS = ("change-me", "replace-with", "development-only")
 
 
@@ -83,11 +85,26 @@ def validate_configuration(
             errors.append(f"{name}:invalid")
 
     expected = derive_release_metadata(repository_root=repository_root or Path(__file__).resolve().parents[2])
+    expected_full_revision = expected["SENTINEL_DNA_IMAGE_REVISION_FULL"]
     for name in METADATA_NAMES:
         value = values.get(name, "").strip()
         if not value:
             errors.append(f"{name}:missing")
-        elif name != "SENTINEL_DNA_IMAGE_CREATED" and value != expected[name]:
+        elif name == "SENTINEL_DNA_IMAGE_TAG":
+            # The tag is a release identifier supplied by the release
+            # authority.  The release manifest, not the tag spelling, binds
+            # that identifier to the reviewed commit and image digest.
+            if not IMAGE_TAG_PATTERN.fullmatch(value):
+                errors.append(f"{name}:invalid")
+        elif name == "SENTINEL_DNA_IMAGE_REVISION":
+            # This is an abbreviated presentation of the full revision.  It
+            # may use Git's default seven characters or a longer abbreviation,
+            # but it must be a prefix of the exact HEAD SHA.
+            if not IMAGE_REVISION_SHORT_PATTERN.fullmatch(value):
+                errors.append(f"{name}:invalid")
+            elif not expected_full_revision.startswith(value):
+                errors.append(f"{name}:does-not-match-full-revision")
+        elif name == "SENTINEL_DNA_IMAGE_REVISION_FULL" and value != expected_full_revision:
             errors.append(f"{name}:does-not-match-HEAD")
         elif name == "SENTINEL_DNA_IMAGE_CREATED":
             if not IMAGE_CREATED_PATTERN.fullmatch(value):
@@ -154,7 +171,7 @@ def main() -> int:
     if errors:
         print("Deployment configuration invalid: " + ", ".join(errors))
         return 1
-    print("Deployment configuration valid: protected variables present; release metadata matches HEAD")
+    print("Deployment configuration valid: protected variables present; release metadata contract verified")
     return 0
 
 

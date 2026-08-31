@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -395,6 +396,76 @@ def test_deployment_validation_requires_exact_trusted_release_artifact(tmp_path)
         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(manifest),
     }
     assert validate_configuration(environ=environment, repository_root=ROOT) == []
+
+
+def test_deployment_validation_accepts_release_tag_and_seven_character_revision(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "b" * 64
+    trusted = tmp_path / "metadata.json"
+    trusted.write_text(
+        json.dumps(
+            {
+                "image_digest": digest,
+                "release_sha": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    trusted.chmod(0o444)
+    environment = {
+        "SENTINEL_DNA_IMAGE_TAG": "sentinel-dna-gate2-certified-2026-08-31",
+        "SENTINEL_DNA_IMAGE_REVISION": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"][:7],
+        "SENTINEL_DNA_IMAGE_REVISION_FULL": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+        "SENTINEL_DNA_IMAGE_CREATED": "2026-08-31T12:39:35Z",
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+    }
+
+    assert validate_configuration(environ=environment, repository_root=ROOT) == []
+
+    full_revision_as_short = dict(environment)
+    full_revision_as_short["SENTINEL_DNA_IMAGE_REVISION"] = metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"]
+    assert validate_configuration(environ=full_revision_as_short, repository_root=ROOT) == [
+        "SENTINEL_DNA_IMAGE_REVISION:invalid",
+    ]
+
+
+def test_deployment_validation_rejects_short_revision_not_bound_to_full_revision(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "c" * 64
+    trusted = tmp_path / "metadata.json"
+    trusted.write_text(
+        json.dumps(
+            {
+                "image_digest": digest,
+                "release_sha": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    trusted.chmod(0o444)
+    environment = {
+        "SENTINEL_DNA_IMAGE_TAG": "sentinel-dna-gate2-certified-2026-08-31",
+        "SENTINEL_DNA_IMAGE_REVISION": "deadbee",
+        "SENTINEL_DNA_IMAGE_REVISION_FULL": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+        "SENTINEL_DNA_IMAGE_CREATED": "2026-08-31T12:39:35Z",
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+    }
+
+    errors = validate_configuration(environ=environment, repository_root=ROOT)
+
+    assert errors == ["SENTINEL_DNA_IMAGE_REVISION:does-not-match-full-revision"]
 
 
 def test_controlled_production_validation_requires_postgresql_url():

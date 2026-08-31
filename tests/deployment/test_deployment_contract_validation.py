@@ -49,6 +49,9 @@ def _evidence_inputs(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
         "POSTGRES_PASSWORD": random_password(),
         "SENTINEL_DNA_SECURE_COOKIES": "1",
         "SENTINEL_DNA_DB_PATH": str(tmp_path / "runtime" / "soc.db"),
+        # Production persistence is PostgreSQL-authoritative; the SQLite
+        # path remains only as compatibility metadata for this offline test.
+        "DATABASE_URL": "postgresql://sentinel@postgres.example:5432/sentinel_dna",
         "SENTINEL_DNA_IMAGE_DIGEST": digest,
         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
     }
@@ -118,6 +121,7 @@ def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
         "runtime_config_accepts_startup": True,
         "single_sqlite_worker_boundary": True,
     }
+    assert startup["evidence"]["database_backend"] == "postgresql"
     assert "SENTINEL_DNA_ENV=production" not in (repository_root / "Dockerfile").read_text(encoding="utf-8")
     migration = next(item for item in first.contracts if item["contract"] == "database_migration_rehearsal")
     recovery = next(item for item in first.contracts if item["contract"] == "backup_restore_readiness")
@@ -126,6 +130,11 @@ def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
         "migration_integrity": True,
         "migration_ordering": True,
         "upgrade_path": True,
+    }
+    assert migration["evidence"]["upgrade_path"] == {
+        "initial_apply": True,
+        "replay_apply": True,
+        "schema_stable_after_replay": True,
     }
     assert recovery["checks"] == {
         "audit_integrity_after_restore": True,
@@ -141,6 +150,20 @@ def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
     serialized = first.to_json()
     assert environment["SENTINEL_DNA_SECRET_KEY"] not in serialized
     assert environment["POSTGRES_PASSWORD"] not in serialized
+
+
+def test_production_startup_rejects_sqlite_only_compatibility_configuration(tmp_path: Path):
+    environment, _, _, repository_root = _evidence_inputs(tmp_path)
+    environment.pop("DATABASE_URL")
+
+    startup = DeploymentContractValidator(
+        repository_root=repository_root,
+        environ=environment,
+    ).production_startup()
+
+    assert startup["status"] == "failed"
+    assert startup["checks"]["runtime_config_accepts_startup"] is False
+    assert "runtime_startup_rejected" in startup["failures"]
 
 
 def test_missing_backup_evidence_fails_closed(tmp_path: Path):

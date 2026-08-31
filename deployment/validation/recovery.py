@@ -221,6 +221,11 @@ class MigrationRehearsalService:
         }
         failures: list[str] = []
         migration_evidence: list[dict[str, Any]] = []
+        upgrade_evidence = {
+            "initial_apply": False,
+            "replay_apply": False,
+            "schema_stable_after_replay": False,
+        }
         connection: sqlite3.Connection | None = None
         try:
             for version, path in files:
@@ -243,11 +248,17 @@ class MigrationRehearsalService:
             connection.execute("PRAGMA foreign_keys = ON")
             for version, path in files:
                 _load_migration(path, version).upgrade(connection)
+            upgrade_evidence["initial_apply"] = True
             first = _schema_profile(connection)
             for version, path in files:
                 _load_migration(path, version).upgrade(connection)
+            upgrade_evidence["replay_apply"] = True
             second = _schema_profile(connection)
-            checks["upgrade_path"] = bool(files) and first["schema_digest"] == second["schema_digest"] and first["tables"] == second["tables"]
+            upgrade_evidence["schema_stable_after_replay"] = (
+                first["schema_digest"] == second["schema_digest"]
+                and first["tables"] == second["tables"]
+            )
+            checks["upgrade_path"] = bool(files) and all(upgrade_evidence.values())
 
             failure_connection = sqlite3.connect(":memory:")
             try:
@@ -278,6 +289,7 @@ class MigrationRehearsalService:
             "evidence": {
                 "migration_versions": versions,
                 "migrations": migration_evidence,
+                "upgrade_path": upgrade_evidence,
                 "rollback_expectation": "forward migrations have no inferred down path; rollback requires restoring a validated pre-migration backup",
                 "rehearsal_database": "sqlite-in-memory",
             },

@@ -20,6 +20,7 @@ import subprocess
 from typing import Any, Mapping
 
 from config.runtime import RuntimeConfig
+from database.backend import DatabaseConfigurationError, create_database_backend
 from deployment.scripts.build_context_policy import validate_policy
 from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest
 from deployment.scripts.validate_deployment_config import (
@@ -265,26 +266,24 @@ class DeploymentContractValidator:
         values = self._environment()
         checks: dict[str, bool] = {}
         failures: list[str] = []
-        config = RuntimeConfig(
-            environment=values.get("SENTINEL_DNA_ENV", values.get("FLASK_ENV", "development")).lower(),
-            database_path=values.get("SENTINEL_DNA_DB_PATH", "soc.db"),
-            secret_key=values.get("SENTINEL_DNA_SECRET_KEY", ""),
-            secure_cookies=values.get("SENTINEL_DNA_SECURE_COOKIES", "0") == "1",
-            debug=values.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes", "on"},
-            database_url=values.get("DATABASE_URL", "").strip(),
-        )
-        secret = config.secret_key.strip().lower()
-        parent = Path(config.database_path).expanduser().resolve().parent
-        database_configured = bool(config.database_url) or bool(values.get("SENTINEL_DNA_DB_PATH", "").strip())
-        checks["runtime_config_accepts_startup"] = (
-            config.environment == "production"
-            and len(secret) >= 32
-            and not any(marker in secret for marker in ("change-me", "replace-with", "development-only"))
-            and config.secure_cookies
-            and not config.debug
-            and database_configured
-            and (bool(config.database_url) or (parent.is_dir() and os.access(parent, os.W_OK)))
-        )
+        config: RuntimeConfig | None = None
+        backend_name = ""
+        try:
+            config = RuntimeConfig.from_environment(values)
+            config.validate()
+            # The process-level backend boundary is authoritative for
+            # production persistence.  It resolves configuration only and
+            # never opens a database connection during evidence collection.
+            backend = create_database_backend(
+                environ=values,
+                require_postgresql=config.environment == "production",
+            )
+            backend_name = backend.backend_name
+            checks["runtime_config_accepts_startup"] = (
+                config.environment == "production" and backend_name == "postgresql"
+            )
+        except (DatabaseConfigurationError, RuntimeError):
+            checks["runtime_config_accepts_startup"] = False
         if not checks["runtime_config_accepts_startup"]:
             failures.append("runtime_startup_rejected")
         dockerfile = self.repository_root / "Dockerfile"
@@ -329,9 +328,10 @@ class DeploymentContractValidator:
                     path for path in ("Dockerfile", "wsgi.py") if (self.repository_root / path).is_file()
                 ],
                 "runtime_environment_source": "operator_environment_or_compose",
+                "database_backend": backend_name,
                 "image_command": list(command),
                 "image_runtime_user": runtime_user,
-                "sqlite_worker_boundary_required": not bool(config.database_url),
+                "sqlite_worker_boundary_required": not bool(config and config.database_url),
             },
         )
 
@@ -365,10 +365,17 @@ class DeploymentContractValidator:
                 verify_manifest(
                     manifest_path=self.release_manifest,
                     repository_root=self.repository_root,
+                    require_current_head=True,
                     require_image=True,
                     expected_release_sha=values.get("SENTINEL_DNA_IMAGE_REVISION_FULL") or None,
                     expected_image_digest=values.get("SENTINEL_DNA_IMAGE_DIGEST") or None,
                     expected_image_created=values.get("SENTINEL_DNA_IMAGE_CREATED") or None,
+                    trusted_metadata_path=(
+                        Path(values["SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"])
+                        if values.get("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE", "").strip()
+                        else None
+                    ),
+                    require_trusted_metadata=True,
                 )
                 checks["release_manifest_verified"] = True
             except (ReleaseManifestError, OSError, ValueError):

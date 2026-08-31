@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 import secrets
+from typing import Mapping
 
 from database.backend import DatabaseConfigurationError, DatabaseSettings
 
@@ -16,14 +17,18 @@ _PRODUCTION_PLACEHOLDERS = {
 }
 
 
-def _configured_secret(name: str) -> tuple[str, bool]:
+def _configured_secret(
+    name: str,
+    environ: Mapping[str, str] | None = None,
+) -> tuple[str, bool]:
     """Read a configured secret directly or from a Docker secret file."""
-    configured = os.getenv(name)
+    values = os.environ if environ is None else environ
+    configured = values.get(name)
     if configured is not None:
         return configured, True
 
     file_name = f"{name}_FILE"
-    secret_file = os.getenv(file_name, "").strip()
+    secret_file = values.get(file_name, "").strip()
     if not secret_file:
         return "", False
     try:
@@ -50,28 +55,39 @@ class RuntimeConfig:
     secret_was_configured: bool = False
 
     @classmethod
-    def from_environment(cls) -> "RuntimeConfig":
-        environment = os.getenv("SENTINEL_DNA_ENV", os.getenv("FLASK_ENV", "development")).lower()
-        raw_flask_debug = os.getenv("FLASK_DEBUG", "").strip().lower()
-        raw_secure_cookies = os.getenv("SENTINEL_DNA_SECURE_COOKIES", "").strip()
-        raw_pilot_access_required = os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "").strip()
+    def from_environment(
+        cls,
+        environ: Mapping[str, str] | None = None,
+    ) -> "RuntimeConfig":
+        """Resolve runtime settings from a supplied or process environment."""
+        values = os.environ if environ is None else environ
+        environment = values.get("SENTINEL_DNA_ENV", values.get("FLASK_ENV", "development")).lower()
+        raw_flask_debug = values.get("FLASK_DEBUG", "").strip().lower()
+        raw_secure_cookies = values.get("SENTINEL_DNA_SECURE_COOKIES", "").strip()
+        raw_pilot_access_required = values.get("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "").strip()
         debug = environment == "development" or (
             raw_flask_debug in {"1", "true", "yes", "on"}
         )
-        configured_secret, secret_was_configured = _configured_secret("SENTINEL_DNA_SECRET_KEY")
+        configured_database_path = values.get("SENTINEL_DNA_DB_PATH")
+        database_path = (
+            configured_database_path
+            if configured_database_path is not None
+            else ("" if environment == "production" else str(Path("soc.db")))
+        )
+        configured_secret, secret_was_configured = _configured_secret("SENTINEL_DNA_SECRET_KEY", values)
         secret_key = configured_secret if secret_was_configured else (
             "" if environment == "production" else secrets.token_urlsafe(48)
         )
         return cls(
             environment,
-            os.getenv("SENTINEL_DNA_DB_PATH", str(Path("soc.db"))),
+            database_path,
             secret_key,
             raw_secure_cookies == "1",
             debug,
-            os.getenv("DATABASE_URL", "").strip(),
+            values.get("DATABASE_URL", "").strip(),
             raw_pilot_access_required == "1",
-            os.getenv("SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION", "").strip().lower(),
-            os.getenv("SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION", "").strip().lower(),
+            values.get("SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION", "").strip().lower(),
+            values.get("SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION", "").strip().lower(),
             raw_pilot_access_required,
             raw_secure_cookies,
             raw_flask_debug,
@@ -117,7 +133,10 @@ class RuntimeConfig:
         # local/staging tooling. The process-level backend factory is the
         # production fail-closed boundary and rejects this configuration when
         # production starts without DATABASE_URL.
-        database_path = os.getenv("SENTINEL_DNA_DB_PATH")
+        # Validate the resolved configuration, not the ambient process
+        # environment. This matters to evidence validators that project an
+        # operator-supplied environment without mutating process state.
+        database_path = self.database_path.strip()
         if not database_path:
             raise RuntimeError("SENTINEL_DNA_DB_PATH must be configured for production")
 
