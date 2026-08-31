@@ -149,7 +149,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "staging_internal:" in compose
     assert "internal: true" in compose
     rendered = yaml.safe_load(compose)
-    assert rendered["services"]["edge"]["ports"] == ["0.0.0.0:8443:443"]
+    assert "ports" not in rendered["services"]["edge"]
     assert "ports" not in rendered["services"]["app"]
     assert rendered["services"]["app"]["expose"] == ["5000"]
     assert "ports" not in rendered["services"]["postgres"]

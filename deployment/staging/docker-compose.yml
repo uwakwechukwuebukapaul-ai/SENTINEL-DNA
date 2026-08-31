@@ -5,8 +5,6 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    ports:
-      - "0.0.0.0:8443:443"
     volumes:
       - type: bind
         source: ${SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE:?set external edge configuration}
