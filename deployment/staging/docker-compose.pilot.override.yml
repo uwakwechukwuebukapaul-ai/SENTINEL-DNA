@@ -14,9 +14,3 @@ services:
   edge:
     ports:
       - "127.0.0.1:8443:443"
-
-secrets:
-  staging_app_secret_key:
-    file: ${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}
-  staging_postgres_password:
-    file: ${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}

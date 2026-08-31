@@ -152,9 +152,9 @@ networks:
 
 secrets:
   staging_app_secret_key:
-    environment: SENTINEL_DNA_SECRET_KEY
+    file: ${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}
   staging_postgres_password:
-    environment: SENTINEL_DNA_POSTGRES_PASSWORD
+    file: ${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}
 
 volumes:
   staging_app_data:

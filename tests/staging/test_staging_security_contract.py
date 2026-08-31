@@ -140,8 +140,8 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key" in compose
     assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
     assert "POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
-    assert "environment: SENTINEL_DNA_SECRET_KEY" in compose
-    assert "environment: SENTINEL_DNA_POSTGRES_PASSWORD" in compose
+    assert "file: ${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}" in compose
+    assert "file: ${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}" in compose
     assert 'command: ["python", "-m", "database.run_migrations"]' in compose
     assert "  migration:" in compose
     assert "condition: service_healthy" in compose
@@ -165,8 +165,6 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert override_rendered["services"]["migration"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["app"]["build"] is None
     assert override_rendered["services"]["migration"]["build"] is None
-    assert override_rendered["secrets"]["staging_app_secret_key"]["file"] == "${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}"
-    assert override_rendered["secrets"]["staging_postgres_password"]["file"] == "${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}"
     assert "loopback" in override.lower()
     assert "--file \"$STAGING_COMPOSE\"" in deploy
     assert "--file \"$STAGING_OVERRIDE\"" in deploy
@@ -198,6 +196,8 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
                 "SENTINEL_DNA_STAGING_EDGE_IMAGE=nginx:1.27-alpine",
                 "SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE=/tmp/staging-nginx.conf",
                 "SENTINEL_DNA_STAGING_TLS_DIR=/tmp/staging-tls",
+                "SENTINEL_DNA_STAGING_APP_SECRET_FILE=" + str(tmp_path / "app.secret"),
+                "SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE=" + str(tmp_path / "postgres.secret"),
                 "SENTINEL_DNA_IMAGE_TAG=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
                 "SENTINEL_DNA_IMAGE_REVISION_FULL=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
                 "SENTINEL_DNA_IMAGE_CREATED=2026-08-29T00:00:00Z",
@@ -241,8 +241,8 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
     assert migration_environment["SENTINEL_DNA_SECRET_KEY_FILE"] == "/run/secrets/sentinel_dna_secret_key"
     assert migration_environment["SENTINEL_DNA_POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
     assert postgres_environment["POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
-    assert rendered["secrets"]["staging_app_secret_key"]["environment"] == "SENTINEL_DNA_SECRET_KEY"
-    assert rendered["secrets"]["staging_postgres_password"]["environment"] == "SENTINEL_DNA_POSTGRES_PASSWORD"
+    assert rendered["secrets"]["staging_app_secret_key"]["file"] == str(tmp_path / "app.secret")
+    assert rendered["secrets"]["staging_postgres_password"]["file"] == str(tmp_path / "postgres.secret")
 
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():
