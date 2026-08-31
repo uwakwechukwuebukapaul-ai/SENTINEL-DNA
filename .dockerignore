@@ -1,43 +1,272 @@
+# ============================================================
+# Sentinel DNA Production Docker Ignore
+# Prevent development artifacts, secrets, tests, and local data
+# from entering production container images.
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Git
+# ------------------------------------------------------------
 .git
+.git/**
+.gitignore
+
+# The production WSGI entrypoint imports the canonical ``app/`` package.
+# Exclude the legacy top-level module so image imports cannot resolve to the
+# reduced compatibility file in a different launch context.
+app.py
+
+
+# ------------------------------------------------------------
+# Python cache / tooling
+# ------------------------------------------------------------
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
 .pytest_cache
 .pytest-*
-__pycache__
-*.pyc
+.coverage
+htmlcov
+
+
+# ------------------------------------------------------------
+# Test files
+# ------------------------------------------------------------
+tests
+tests/**
+
+test_*.py
+*_test.py
+
+pytest.ini
+
+
+# ------------------------------------------------------------
+# Environment files / secrets
+# ------------------------------------------------------------
 .env
 .env.*
+
 *.env
 *.env.*
-production.env
-production.env.*
+
 **/.env
 **/.env.*
 **/*.env
 **/*.env.*
+
+production.env
+production.env.*
+
 **/production.env
 **/production.env.*
+
+
+# ------------------------------------------------------------
+# Certificates / private keys
+# ------------------------------------------------------------
 *.pem
 **/*.pem
+
 *.key
 **/*.key
+
 *.crt
 **/*.crt
+
 *.p12
 **/*.p12
+
 *.pfx
 **/*.pfx
+
+
+# ------------------------------------------------------------
+# Credentials / secret stores
+# ------------------------------------------------------------
 secret
 secret/**
+
 **/secret
 **/secret/**
+
 secrets
 secrets/**
+
 **/secrets
 **/secrets/**
+
 credentials
 credentials/**
+
 **/credentials
 **/credentials/**
+
+
+# ------------------------------------------------------------
+# Local databases
+# ------------------------------------------------------------
 soc.db
+*.db
+*.sqlite
+*.sqlite3
+
+
+# ------------------------------------------------------------
+# Logs and runtime artifacts
+# ------------------------------------------------------------
 logs
+logs/**
+
+*.log
+
 work
-tests
+work/**
+
+
+# ------------------------------------------------------------
+# Deployment evidence
+# Never ship validation artifacts
+# ------------------------------------------------------------
+deployment-evidence
+deployment-evidence/**
+
+
+# ------------------------------------------------------------
+# Pilot / research / simulation artifacts
+# Never ship customer or internal validation data
+# ------------------------------------------------------------
+archive
+archive/**
+
+artifacts
+artifacts/**
+
+pilot-evidence
+pilot-evidence/**
+
+customer_zero
+customer_zero/**
+
+demo
+demo/**
+
+rehearsal
+rehearsal/**
+
+
+# ------------------------------------------------------------
+# Reports and generated files
+# ------------------------------------------------------------
+*.pdf
+*.csv
+*.zip
+
+image-inspect.json
+image-runtime-inspect.json
+installed_packages.txt
+
+
+# ------------------------------------------------------------
+# Developer utility scripts
+# ------------------------------------------------------------
+check_*.py
+
+cleanup_*.py
+
+seed_*.py
+
+find_*.py
+
+*_old.py
+
+
+# ------------------------------------------------------------
+# Internal documentation
+# Not required inside runtime container
+# ------------------------------------------------------------
+README.md
+ROADMAP.md
+CONTRIBUTING.md
+
+Founder-Bible
+
+docs
+docs/**
+
+
+# ------------------------------------------------------------
+# Local development files
+# ------------------------------------------------------------
+.vscode
+.vscode/**
+
+.idea
+.idea/**
+
+*.swp
+*.swo
+
+.DS_Store
+Thumbs.db
+
+
+# ------------------------------------------------------------
+# Temporary files
+# ------------------------------------------------------------
+*.tmp
+*.temp
+*.bak
+*.old
+
+
+# ------------------------------------------------------------
+# Node / frontend development artifacts
+# ------------------------------------------------------------
+node_modules
+node_modules/**
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ------------------------------------------------------------
+# Build artifacts
+# ------------------------------------------------------------
+dist
+dist/**
+
+build
+build/**
+
+coverage
+coverage/**
+
+
+# ------------------------------------------------------------
+# Internal engineering tooling
+# Not required in customer runtime images
+# ------------------------------------------------------------
+
+evaluation
+evaluation/**
+
+scripts
+scripts/**
+
+code
+code/**
+
+
+# ------------------------------------------------------------
+# Demo data
+# ------------------------------------------------------------
+
+sample_email.txt
+sample_emails
+sample_emails/**

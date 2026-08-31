@@ -3,17 +3,19 @@ services:
   migration:
     image: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196
     restart: "no"
-    command:
-      - python
-      - -m
-      - database.run_migrations
+    command: ["python", "-m", "database.run_migrations"]
     environment:
       SENTINEL_DNA_ENV: production
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?SENTINEL_DNA_SECRET_KEY must be set}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_SECURE_COOKIES: "1"
       DATABASE_URL: ${DATABASE_URL:-postgresql://sentinel@postgres:5432/sentinel_dna}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
       SENTINEL_DNA_DB_PATH: ${SENTINEL_DNA_DB_PATH:-/var/lib/sentinel/soc.db}
+    secrets:
+      - source: sentinel_dna_secret_key
+        target: sentinel_dna_secret_key
+      - source: sentinel_dna_postgres_password
+        target: sentinel_dna_postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,13 +28,18 @@ services:
     restart: unless-stopped
     environment:
       SENTINEL_DNA_ENV: production
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?SENTINEL_DNA_SECRET_KEY must be set}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_SECURE_COOKIES: "1"
       FLASK_DEBUG: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://sentinel@postgres:5432/sentinel_dna}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
       REDIS_URL: redis://redis:6379/0
       SENTINEL_DNA_DB_PATH: ${SENTINEL_DNA_DB_PATH:-/var/lib/sentinel/soc.db}
+    secrets:
+      - source: sentinel_dna_secret_key
+        target: sentinel_dna_secret_key
+      - source: sentinel_dna_postgres_password
+        target: sentinel_dna_postgres_password
 
     expose:
       - "5000"
@@ -70,7 +77,10 @@ services:
     environment:
       POSTGRES_DB: sentinel_dna
       POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - source: sentinel_dna_postgres_password
+        target: sentinel_dna_postgres_password
 
     volumes:
       - sentinel_postgres:/var/lib/postgresql/data
@@ -142,6 +152,14 @@ volumes:
   sentinel_postgres:
 
   sentinel_redis:
+
+secrets:
+
+  sentinel_dna_secret_key:
+    environment: SENTINEL_DNA_SECRET_KEY
+
+  sentinel_dna_postgres_password:
+    environment: POSTGRES_PASSWORD
 
 
 networks:

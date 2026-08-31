@@ -439,8 +439,11 @@ def test_compose_preserves_internal_application_port_and_no_generated_env_mount(
     assert 'ports: ["80:80", "443:443"]' in compose
     assert "SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR" in compose
     assert "target: /etc/nginx/tls" in compose
-    assert "SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY" in compose
-    assert "POSTGRES_PASSWORD:?set POSTGRES_PASSWORD" in compose
+    assert "SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key" in compose
+    assert "environment: SENTINEL_DNA_SECRET_KEY" in compose
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
+    assert "environment: POSTGRES_PASSWORD" in compose
+    assert "POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
     assert "SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST" in compose
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:?set SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in compose
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json" in compose
