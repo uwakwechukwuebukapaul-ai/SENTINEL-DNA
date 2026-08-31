@@ -165,6 +165,8 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert override_rendered["services"]["migration"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["app"]["build"] is None
     assert override_rendered["services"]["migration"]["build"] is None
+    assert override_rendered["secrets"]["staging_app_secret_key"]["file"] == "${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}"
+    assert override_rendered["secrets"]["staging_postgres_password"]["file"] == "${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}"
     assert "loopback" in override.lower()
     assert "--file \"$STAGING_COMPOSE\"" in deploy
     assert "--file \"$STAGING_OVERRIDE\"" in deploy
