@@ -161,6 +161,10 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert rendered["networks"]["staging_internal"]["internal"] is True
     override_rendered = yaml.safe_load(override)
     assert override_rendered["services"]["edge"]["ports"] == ["127.0.0.1:8443:443"]
+    assert override_rendered["services"]["app"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
+    assert override_rendered["services"]["migration"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
+    assert override_rendered["services"]["app"]["build"] is None
+    assert override_rendered["services"]["migration"]["build"] is None
     assert "loopback" in override.lower()
     assert "--file \"$STAGING_COMPOSE\"" in deploy
     assert "--file \"$STAGING_OVERRIDE\"" in deploy
