@@ -1,5 +1,19 @@
 services:
 
+  favp-volume-init:
+    image: staging-app:974e3275bc678851e3979a5cbb95ff7d2e9dc4c9
+    user: "0:0"
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/lib/sentinel/favp-evidence
+        chown -R 10001:10001 /var/lib/sentinel/favp-evidence
+        chmod 750 /var/lib/sentinel/favp-evidence
+        echo "FAVP evidence volume initialized"
+    volumes:
+      - staging_favp_evidence:/var/lib/sentinel/favp-evidence
+
   edge:
     image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set external staging edge image}
     restart: unless-stopped
@@ -51,8 +65,14 @@ services:
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"
       SENTINEL_DNA_SECURE_COOKIES: "1"
       FLASK_DEBUG: "0"
+      SENTINEL_DNA_TENANT_ISOLATION_ENABLED: "1"
+      SENTINEL_DNA_AUDIT_LOGGING_ENABLED: "1"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
+      SENTINEL_DNA_FAVP_OPERATIONS_ENABLED: ${SENTINEL_DNA_FAVP_OPERATIONS_ENABLED:-0}
+      SENTINEL_DNA_FAVP_SYNTHETIC_ONLY: ${SENTINEL_DNA_FAVP_SYNTHETIC_ONLY:-1}
+      SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
+      SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       # The named volume is mounted at /var/lib/sentinel. Keep the SQLite
       # compatibility path at that mount root; staging's authoritative
@@ -71,8 +91,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     volumes:
       - staging_app_data:/var/lib/sentinel
+      - staging_favp_evidence:/var/lib/sentinel/favp-evidence
     networks:
       - staging_edge
       - staging_internal
@@ -94,17 +117,25 @@ services:
         IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
     command: ["python", "-m", "database.run_migrations"]
+    working_dir: /app
     restart: "no"
     read_only: true
     tmpfs:
       - /tmp
     environment:
+      PYTHONPATH: /app
       SENTINEL_DNA_ENV: staging
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"
       SENTINEL_DNA_SECURE_COOKIES: "1"
       FLASK_DEBUG: "0"
+      SENTINEL_DNA_TENANT_ISOLATION_ENABLED: "1"
+      SENTINEL_DNA_AUDIT_LOGGING_ENABLED: "1"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
+      SENTINEL_DNA_FAVP_OPERATIONS_ENABLED: ${SENTINEL_DNA_FAVP_OPERATIONS_ENABLED:-0}
+      SENTINEL_DNA_FAVP_SYNTHETIC_ONLY: ${SENTINEL_DNA_FAVP_SYNTHETIC_ONLY:-1}
+      SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
+      SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
@@ -114,6 +145,8 @@ services:
         target: sentinel_dna_secret_key
       - source: staging_postgres_password
         target: sentinel_dna_postgres_password
+    volumes:
+      - staging_favp_evidence:/var/lib/sentinel/favp-evidence
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,5 +200,6 @@ secrets:
 
 volumes:
   staging_app_data:
+  staging_favp_evidence:
   staging_postgres_data:
   staging_redis_data:

@@ -3,6 +3,7 @@ set -eu
 
 : "${STAGING_ENV_FILE:?STAGING_ENV_FILE must point to external staging configuration}"
 : "${SENTINEL_DNA_BASE_URL:?SENTINEL_DNA_BASE_URL must point to the private staging edge}"
+: "${SENTINEL_DNA_STAGING_TLS_DIR:?SENTINEL_DNA_STAGING_TLS_DIR must point to external staging TLS material}"
 : "${SENTINEL_DNA_IMAGE_TAG:?SENTINEL_DNA_IMAGE_TAG must be derived from the reviewed checkout}"
 : "${SENTINEL_DNA_IMAGE_REVISION_FULL:?SENTINEL_DNA_IMAGE_REVISION_FULL must be the full reviewed commit}"
 : "${SENTINEL_DNA_IMAGE_CREATED:?SENTINEL_DNA_IMAGE_CREATED must be derived release metadata}"
@@ -67,4 +68,7 @@ docker compose \
   --file "$STAGING_OVERRIDE" \
   up -d --build app edge
 
+staging_ca_file="${SENTINEL_DNA_STAGING_TLS_CA_FILE:-$SENTINEL_DNA_STAGING_TLS_DIR/staging-ca.crt}"
+SENTINEL_DNA_TLS_CA_FILE="$staging_ca_file" \
+  SENTINEL_DNA_BASE_URL="$SENTINEL_DNA_BASE_URL" \
 "$SCRIPT_DIR/health_check.sh"

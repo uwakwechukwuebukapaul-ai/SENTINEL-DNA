@@ -21,6 +21,13 @@ STAGING_COMPOSE = ROOT / "deployment" / "staging" / "docker-compose.yml"
 STAGING_OVERRIDE = ROOT / "deployment" / "staging" / "docker-compose.pilot.override.yml"
 
 
+class ComposeLoader(yaml.SafeLoader):
+    """Accept Docker Compose's !reset tag for contract inspection."""
+
+
+ComposeLoader.add_constructor("!reset", lambda loader, node: None)
+
+
 def staging_secret() -> str:
     """Return a random secret that satisfies the staging secret contract."""
     # token_urlsafe() may contain patterns that staging correctly rejects,
@@ -153,6 +160,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert 'worker_tmp_dir = "/tmp"' in gunicorn_config
     assert "control_socket_mode = 0o600" in gunicorn_config
     assert "gunicorn>=25.1.0" in (ROOT / "requirements.txt").read_text()
+    rendered = yaml.safe_load(compose)
     assert rendered["services"]["app"]["read_only"] is True
     assert "/tmp" in rendered["services"]["app"]["tmpfs"]
     assert "  migration:" in compose
@@ -160,7 +168,6 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert 'test: ["CMD", "redis-cli", "ping"]' in compose
     assert "staging_internal:" in compose
     assert "internal: true" in compose
-    rendered = yaml.safe_load(compose)
     assert "ports" not in rendered["services"]["edge"]
     assert "ports" not in rendered["services"]["app"]
     assert rendered["services"]["app"]["expose"] == ["5000"]
@@ -178,7 +185,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert set(rendered["services"]["postgres"]["networks"]) == {"staging_internal"}
     assert set(rendered["services"]["redis"]["networks"]) == {"staging_internal"}
     assert rendered["networks"]["staging_internal"]["internal"] is True
-    override_rendered = yaml.safe_load(override)
+    override_rendered = yaml.load(override, Loader=ComposeLoader)
     assert override_rendered["services"]["edge"]["ports"] == ["127.0.0.1:18443:443"]
     assert override_rendered["services"]["app"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["migration"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"

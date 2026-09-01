@@ -193,9 +193,9 @@ def create_app():
         try:
             if not database.health_check():
                 raise RuntimeError("database health check failed")
-            return {"status": "ok", "service": "sentinel-dna", "database": "ok"}
+            return {"status": "ok"}
         except Exception:
-            return {"status": "degraded", "database": "unavailable"}, 503
+            return {"status": "degraded"}, 503
 
     @app.get("/ready")
     def ready():

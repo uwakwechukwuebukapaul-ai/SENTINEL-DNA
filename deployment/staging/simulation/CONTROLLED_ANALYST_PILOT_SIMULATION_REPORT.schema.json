@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentinel-dna.example/schemas/controlled-analyst-pilot-simulation-report-1.0.json",
+  "title": "Sentinel DNA Controlled Analyst Pilot Non-Production Simulation Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "simulation_only",
+    "production_authorization",
+    "status",
+    "manifest_status",
+    "provider_status",
+    "image_digest_status",
+    "origin_status",
+    "tenant_isolation_status",
+    "audit_status",
+    "final_readiness_decision",
+    "checks",
+    "evidence",
+    "blocked_phase",
+    "simulation_phase",
+    "initial_readiness_status",
+    "initial_blocked_codes",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0-simulation" },
+    "mode": { "const": "NON-PRODUCTION_SIMULATION" },
+    "simulation_only": { "const": true },
+    "production_authorization": { "const": false },
+    "status": {
+      "enum": ["BLOCKED_WITH_REASON", "SIMULATION_READY_FOR_ANALYST_PILOT"]
+    },
+    "manifest_status": { "enum": ["PASS", "BLOCKED"] },
+    "provider_status": { "enum": ["PASS", "BLOCKED"] },
+    "image_digest_status": { "enum": ["PASS", "BLOCKED"] },
+    "origin_status": { "enum": ["PASS", "BLOCKED"] },
+    "tenant_isolation_status": { "enum": ["PASS", "BLOCKED"] },
+    "audit_status": { "enum": ["PASS", "BLOCKED"] },
+    "final_readiness_decision": {
+      "enum": ["BLOCKED_WITH_REASON", "SIMULATION_READY_FOR_ANALYST_PILOT"]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "reason"],
+        "properties": {
+          "name": {
+            "enum": [
+              "provider_configured",
+              "runtime_reachable",
+              "browser_contract_valid",
+              "origin_reachable",
+              "browser_auth_available",
+              "tenant_isolation_evidence",
+              "audit_logging_evidence",
+              "analyst_access_approval_workflow"
+            ]
+          },
+          "status": { "enum": ["PASS", "BLOCKED", "SIMULATION_ONLY"] },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_.: -]+$"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "tenant_isolation", "audit_logging", "analyst_access_approval"],
+      "properties": {
+        "endpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "status", "origin", "tls_verified", "public_exposure", "network_listener_created"],
+          "properties": {
+            "mode": { "const": "NON-PRODUCTION_SIMULATION" },
+            "status": { "const": "PASS" },
+            "origin": { "const": "https://sentinel-dna-staging:18443" },
+            "tls_verified": { "const": true },
+            "public_exposure": { "const": false },
+            "network_listener_created": { "const": false }
+          }
+        },
+        "tenant_isolation": { "$ref": "#/$defs/evidenceReference" },
+        "audit_logging": { "$ref": "#/$defs/evidenceReference" },
+        "analyst_access_approval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "human_approval_required", "production_authorization"],
+          "properties": {
+            "status": { "const": "SIMULATION_ONLY" },
+            "human_approval_required": { "const": true },
+            "production_authorization": { "const": false }
+          }
+        }
+      }
+    },
+    "blocked_phase": { "$ref": "#/$defs/phase" },
+    "simulation_phase": { "$ref": "#/$defs/phase" },
+    "initial_readiness_status": { "const": "BLOCKED_WITH_REASON" },
+    "initial_blocked_codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^TB_[A-Z0-9_]+$" }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_file", "signature_file", "tenant_evidence_file", "audit_evidence_file", "readiness_report_file"],
+      "properties": {
+        "manifest_file": { "$ref": "#/$defs/relativeArtifactName" },
+        "signature_file": { "$ref": "#/$defs/relativeArtifactName" },
+        "tenant_evidence_file": { "$ref": "#/$defs/relativeArtifactName" },
+        "audit_evidence_file": { "$ref": "#/$defs/relativeArtifactName" },
+        "readiness_report_file": { "$ref": "#/$defs/relativeArtifactName" }
+      }
+    }
+  },
+  "$defs": {
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence_reference"],
+      "properties": {
+        "status": { "const": "PASS" },
+        "evidence_reference": { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$" }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "codes"],
+      "properties": {
+        "status": {
+          "enum": ["BLOCKED_WITH_REASON", "SIMULATION_READY_FOR_ANALYST_PILOT"]
+        },
+        "codes": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^TB_[A-Z0-9_]+$" }
+        }
+      }
+    },
+    "relativeArtifactName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/-]+$",
+      "not": { "pattern": "(^|/)(pilot-evidence|ProgramData)(/|$)" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "SIMULATION_READY_FOR_ANALYST_PILOT" } }
+      },
+      "then": {
+        "properties": {
+          "final_readiness_decision": { "const": "SIMULATION_READY_FOR_ANALYST_PILOT" },
+          "simulation_phase": { "properties": { "status": { "const": "SIMULATION_READY_FOR_ANALYST_PILOT" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "BLOCKED_WITH_REASON" } }
+      },
+      "then": {
+        "properties": {
+          "final_readiness_decision": { "const": "BLOCKED_WITH_REASON" }
+        }
+      }
+    }
+  ]
+}

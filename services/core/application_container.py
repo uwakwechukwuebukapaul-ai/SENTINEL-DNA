@@ -12,6 +12,7 @@ runtime instances.
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
 from services.core.service_registry import (
@@ -144,6 +145,7 @@ from lab.lab_content.simulation_runner import SimulationRunner
 from services.customer_zero.demo_pipeline import CustomerZeroDemoPipeline
 from services.operations_hardening.service import OperationsHardeningService
 from services.pilot_simulation.service import PilotSimulationService
+from services.favp_operations import FAVPOperationsRepository, FAVPOperationsService, FAVPExecutionService
 from services.compliance.governance import GovernanceService
 from services.identity_security.service import IdentitySecurityService
 from services.identity.canonical_authority import CanonicalAuthorityService
@@ -333,6 +335,20 @@ def build_container() -> ServiceRegistry:
     customer_zero_demo_pipeline = CustomerZeroDemoPipeline()
     operations_hardening = OperationsHardeningService()
     pilot_simulation = PilotSimulationService()
+    favp_operations = None
+    favp_execution = None
+    # FAVP is an internal, explicitly opt-in operations layer.  Keeping the
+    # service absent in production means it cannot create tables or expose a
+    # route in a production process by accident.
+    if (
+        os.getenv("SENTINEL_DNA_FAVP_OPERATIONS_ENABLED", "0") == "1"
+        and os.getenv("SENTINEL_DNA_ENV", "").strip().lower() != "production"
+    ):
+        favp_operations = FAVPOperationsService(
+            FAVPOperationsRepository(database),
+            audit_service,
+        )
+        favp_execution = FAVPExecutionService(favp_operations, audit_service)
     governance_compliance = GovernanceService()
     identity_security = IdentitySecurityService()
     data_security = DataSecurityService()
@@ -443,6 +459,8 @@ def build_container() -> ServiceRegistry:
     registry.register("customer_zero_demo_pipeline", customer_zero_demo_pipeline)
     registry.register("operations_hardening", operations_hardening)
     registry.register("pilot_simulation", pilot_simulation)
+    registry.register("favp_operations", favp_operations)
+    registry.register("favp_execution", favp_execution)
     registry.register("governance_compliance", governance_compliance)
     registry.register("identity_security", identity_security)
     registry.register("data_security", data_security)

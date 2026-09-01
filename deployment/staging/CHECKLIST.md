@@ -30,6 +30,8 @@ activation tokens, private keys, customer data, or fabricated analyst results.
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED=1
       SENTINEL_DNA_SECURE_COOKIES=1
       FLASK_DEBUG=0
+      SENTINEL_DNA_TENANT_ISOLATION_ENABLED=1
+      SENTINEL_DNA_AUDIT_LOGGING_ENABLED=1
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION=external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION=disposable_staging
       ```

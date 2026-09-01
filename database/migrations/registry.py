@@ -42,6 +42,13 @@ MIGRATION_MODULES = (
     "database.migrations.008_organizational_cyber_memory",
 )
 
+# FAVP is a staging-only surface. Keep its migration out of the authoritative
+# production chain; the staging migration runner composes this tuple with the
+# disposable FAVP migration explicitly.
+STAGING_MIGRATION_MODULES = MIGRATION_MODULES + (
+    "database.migrations.009_favp_staging",
+)
+
 
 def migration_registry() -> tuple[Migration, ...]:
     """Load and validate the checked-in migration chain deterministically."""
@@ -63,6 +70,35 @@ def migration_registry() -> tuple[Migration, ...]:
     return ordered
 
 
-MIGRATIONS = migration_registry()
+def staging_migration_registry() -> tuple[Migration, ...]:
+    """Load the core chain plus staging-only FAVP schema migrations."""
 
-__all__ = ["MIGRATIONS", "MIGRATION_MODULES", "Migration", "migration_registry"]
+    migrations: list[Migration] = []
+    for module_name in STAGING_MIGRATION_MODULES:
+        module = import_module(module_name)
+        version = getattr(module, "VERSION", None)
+        upgrade = getattr(module, "upgrade", None)
+        if not isinstance(version, int) or not callable(upgrade):
+            raise ValueError(f"invalid_migration_module:{module_name}")
+        name = str(getattr(module, "DESCRIPTION", module_name.rsplit(".", 1)[-1]))
+        migrations.append(Migration(version=version, name=name, upgrade=upgrade))
+
+    ordered = tuple(sorted(migrations, key=lambda item: item.version))
+    versions = [migration.version for migration in ordered]
+    if len(set(versions)) != len(versions) or versions != list(range(1, len(versions) + 1)):
+        raise ValueError("migration_versions_must_be_contiguous")
+    return ordered
+
+
+MIGRATIONS = migration_registry()
+STAGING_MIGRATIONS = staging_migration_registry()
+
+__all__ = [
+    "MIGRATIONS",
+    "MIGRATION_MODULES",
+    "STAGING_MIGRATIONS",
+    "STAGING_MIGRATION_MODULES",
+    "Migration",
+    "migration_registry",
+    "staging_migration_registry",
+]

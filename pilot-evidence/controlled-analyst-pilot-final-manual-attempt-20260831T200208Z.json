@@ -1,0 +1,57 @@
+{
+  "schema_version": "controlled-analyst-pilot-final-manual-attempt.v1",
+  "status": "BLOCKED_WITH_REASON",
+  "run_id": "FINAL-MANUAL-ATTEMPT-20260831-200208",
+  "generated_at_utc": "2026-08-31T20:02:08.913Z",
+  "trusted_browser_status": "UNAVAILABLE",
+  "scope": {
+    "synthetic_data_only": true,
+    "synthetic_tenant_count": 0,
+    "synthetic_analyst_count": 0,
+    "production_data_used": false,
+    "credentials_or_tokens_in_evidence": false
+  },
+  "boundary": {
+    "edge_binding": "127.0.0.1:18443->443/tcp",
+    "private_edge_verified": "PASS",
+    "public_exposure": "PASS",
+    "tls_san_verified": "PASS",
+    "app_postgres_redis_host_ports": "PASS",
+    "docker_network_isolation": "PASS",
+    "hostname_resolution": {"host": "sentinel-dna-staging", "resolved_address": "127.0.0.1", "status": "PASS"}
+  },
+  "technical_checks": {
+    "docker_engine": {"status": "PASS", "engine_version": "29.7.2"},
+    "compose_config": {"status": "PASS", "project": "sentinel-dna-pilot-974e327"},
+    "running_host_publications": ["127.0.0.1:18443->443/tcp"],
+    "tls": {"status": "PASS", "protocol": "TLSv1.3", "dns_sans": ["sentinel-dna-staging"], "ip_sans": ["127.0.0.1", "192.168.1.115"]},
+    "health": {"status": "PASS", "http_status": 200},
+    "ready": {"status": "PASS", "http_status": 200}
+  },
+  "gates": {
+    "manager_authentication": {"status": "NOT_MEASURED"},
+    "csrf_protection": {"status": "NOT_MEASURED"},
+    "analyst_rbac": {"status": "NOT_MEASURED"},
+    "tenant_isolation": {"status": "NOT_MEASURED"},
+    "audit_logging": {"status": "NOT_MEASURED"},
+    "provenance_verification": {"status": "NOT_MEASURED"},
+    "investigation_workflow": {"status": "NOT_MEASURED"},
+    "ai_advisory_only": {"status": "NOT_MEASURED"},
+    "deny_cross_tenant": {"status": "NOT_MEASURED"},
+    "deny_admin_escalation": {"status": "NOT_MEASURED"},
+    "deny_database": {"status": "NOT_MEASURED"},
+    "deny_shell_container": {"status": "NOT_MEASURED"},
+    "deny_destructive": {"status": "NOT_MEASURED"},
+    "session_revocation": {"status": "NOT_MEASURED"}
+  },
+  "audit": {"action_references": [], "audit_references": [], "provenance_references": [], "all_sensitive_actions_audited": false},
+  "revocation": {"authorization_revoked": "NOT_MEASURED", "analyst_deactivated": "NOT_MEASURED", "sessions_invalidated": "NOT_MEASURED", "post_revocation_fail_closed": "NOT_MEASURED"},
+  "controls": {"private_edge": "PASS", "public_exposure": false, "secret_free_evidence": true, "credentials_or_tokens_in_evidence": false, "customer_data_in_evidence": false},
+  "decision": {"human_release_approval": "NOT_MEASURED", "analyst_url_issued": false},
+  "blockers": [
+    "Approved trusted browser service is unavailable",
+    "No authorized manager session was available",
+    "No synthetic tenant or analyst was created",
+    "All authenticated pilot gates remain NOT_MEASURED"
+  ]
+}

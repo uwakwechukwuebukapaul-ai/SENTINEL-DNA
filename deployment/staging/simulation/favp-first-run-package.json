@@ -1,0 +1,62 @@
+{
+  "package_type": "FAVP_STAGING_FIRST_RUN_TEST_PACKAGE",
+  "package_version": "favp-first-run-test-v1",
+  "mode": "NON_PRODUCTION_TEST_ONLY",
+  "simulation_only": true,
+  "production_authorization": false,
+  "credentials_stored": false,
+  "customer_data_included": false,
+  "production_evidence": false,
+  "analyst_accounts": [
+    {
+      "account_ref": "synthetic-test-analyst-001",
+      "identity_type": "synthetic_test_only",
+      "provisioned": false,
+      "credentials_stored": false
+    }
+  ],
+  "organizations": [
+    {
+      "organization_ref": "synthetic-test-organization-001",
+      "identity_type": "synthetic_test_only",
+      "provisioned": false,
+      "customer": false
+    }
+  ],
+  "scenarios": [
+    "FAVP-EXE-001",
+    "FAVP-EXE-002",
+    "FAVP-EXE-003",
+    "FAVP-EXE-004",
+    "FAVP-EXE-005",
+    "FAVP-EXE-006",
+    "FAVP-EXE-007",
+    "FAVP-EXE-008"
+  ],
+  "validation_runs": [
+    {
+      "run_id": "FAVP-TEST-RUN-001",
+      "status": "NOT_EXECUTED",
+      "started_at": null,
+      "completed_at": null,
+      "results_recorded": false
+    }
+  ],
+  "evidence_collection_workflow": {
+    "raw_payloads_stored": false,
+    "customer_data_ingested": false,
+    "steps": [
+      "record non-secret scenario and run references",
+      "record analyst decision separately from advisory AI output",
+      "record provenance and version identifiers",
+      "compute and verify evidence hash",
+      "verify append-only audit event",
+      "retain limitations and unresolved blockers"
+    ]
+  },
+  "not_claims": [
+    "This package does not create analysts or customers.",
+    "This package does not provision accounts or credentials.",
+    "This package contains no execution result, metric, certification, revenue, or customer outcome."
+  ]
+}

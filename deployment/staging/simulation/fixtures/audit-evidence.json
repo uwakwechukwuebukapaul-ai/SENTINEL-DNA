@@ -1,0 +1,10 @@
+{
+  "mode": "NON-PRODUCTION_SIMULATION",
+  "status": "PASS",
+  "audit_logging_enabled": true,
+  "tenant_scoped": true,
+  "all_sensitive_actions_audited": true,
+  "audit_event_reference": "SIM-AUDIT-EVENT-001",
+  "provenance_reference": "SIM-PROVENANCE-001",
+  "evidence_reference": "SIM-AUDIT-001"
+}
