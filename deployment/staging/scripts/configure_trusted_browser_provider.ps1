@@ -26,6 +26,12 @@ $fileVariables = @(
     "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST"
 )
 
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
+$expectedProviderFiles = @{
+    "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT" = (Join-Path $repoRoot "deployment\staging\scripts\trusted_browser_service\browser-client.mjs")
+    "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT" = (Join-Path $repoRoot "deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs")
+}
+
 $failures = New-Object System.Collections.Generic.List[string]
 
 foreach ($name in $requiredVariables) {
@@ -57,6 +63,21 @@ foreach ($name in $fileVariables) {
             }
         } catch {
             $failures.Add("$name does not reference a readable local file")
+        }
+    }
+}
+
+foreach ($entry in $expectedProviderFiles.GetEnumerator()) {
+    $configured = [Environment]::GetEnvironmentVariable($entry.Key)
+    if (-not [string]::IsNullOrWhiteSpace($configured)) {
+        try {
+            $actual = (Resolve-Path -LiteralPath $configured -ErrorAction Stop).Path
+            $expected = (Resolve-Path -LiteralPath $entry.Value -ErrorAction Stop).Path
+            if ($actual -ne $expected) {
+                $failures.Add("$($entry.Key) does not resolve to the reviewed repository module")
+            }
+        } catch {
+            $failures.Add("$($entry.Key) does not resolve to the reviewed repository module")
         }
     }
 }

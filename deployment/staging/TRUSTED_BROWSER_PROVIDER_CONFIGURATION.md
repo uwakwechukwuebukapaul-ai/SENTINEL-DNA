@@ -53,6 +53,12 @@ The checked-in provider boundary and browser facade perform the final origin,
 surface, capability, and redaction checks. A provider must not rely on the
 runner to make an unsafe runtime safe.
 
+The repository's staging template contains the canonical checked-in facade and
+provider-boundary paths. To apply those paths reproducibly in an operator
+PowerShell scope, dot-source `scripts/configure_gate4_provider_environment.ps1`
+with the separately reviewed runtime module, activation manifest, and reviewed
+image digest. The helper does not set credentials or provide a runtime.
+
 ## Runtime lifecycle
 
 1. The operator configures the checked-in facade, provider boundary, and

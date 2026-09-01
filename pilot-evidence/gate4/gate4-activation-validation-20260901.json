@@ -1,0 +1,37 @@
+{
+  "gate": "GATE4",
+  "status": "BLOCKED_WITH_REASON",
+  "git_revision": "bcfd3960bc013b079d5fa373eca6e8bafd109ebf",
+  "git_tree": "50676fb988840ce613de902cc781598116553d50",
+  "image_digest": "sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+  "evidence_type": "trusted_browser_activation_manifest_validation",
+  "manifest_source": "external operator environment: SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST",
+  "checks": {
+    "manifest_configured": "FAIL",
+    "manifest_file": "NOT_RUN",
+    "schema": "NOT_RUN",
+    "integrity_hash": "NOT_RUN",
+    "certified_origin": "NOT_RUN",
+    "image_digest_binding": "NOT_RUN",
+    "operator_approval": "NOT_VERIFIED"
+  },
+  "observations": {
+    "required_origin": "https://sentinel-dna-staging:18443",
+    "required_image_digest": "sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+    "external_manifest_available": false,
+    "checked_in_manifest_accepted_as_custody": false
+  },
+  "blockers": [
+    "TB_PROVIDER_MANIFEST_MISSING",
+    "missing external operator approval and runtime custody record"
+  ],
+  "remediation": [
+    "Place the reviewed activation manifest in approved external custody and configure its non-secret path in the operator environment.",
+    "Ensure the manifest image digest exactly matches the deployed staging image digest, then rerun readiness validation."
+  ],
+  "evidence_safety": {
+    "secrets_included": false,
+    "credentials_included": false,
+    "browser_sessions_included": false
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "provider_identity": "sentinel-dna:playwright-runtime-provider:1",
+  "runtime_module_identity": "operator-approved:playwright-runtime:required",
+  "approved_image_runtime_digest": "sha256:f065ce859b6b349d5ee9a159768197ee773e45ab92295a6f298fd862a9cc286e",
+  "staging_origin": "https://sentinel-dna-staging:18443",
+  "activation_timestamp": "2026-09-01T00:00:00Z",
+  "operator_approval_reference": "GATE4-CONFIGURATION-2026-09-01",
+  "integrity": {
+    "algorithm": "sha256",
+    "manifest_hash": "1ba15a31e64769d90d03167c2e9bc94e16deb8a7bc004861dd096ff1c5673510"
+  }
+}
