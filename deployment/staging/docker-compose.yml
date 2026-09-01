@@ -1,19 +1,30 @@
 services:
+
   edge:
     image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set external staging edge image}
     restart: unless-stopped
+
     depends_on:
       app:
         condition: service_healthy
+
     volumes:
+
       - type: bind
         source: ${SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE:?set external edge configuration}
         target: /etc/nginx/conf.d/default.conf
         read_only: true
+
       - type: bind
-        source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}
-        target: /etc/nginx/tls
+        source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}/staging-server-fullchain.crt
+        target: /etc/nginx/tls/staging-server.crt
         read_only: true
+
+      - type: bind
+        source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}/staging-server.key
+        target: /etc/nginx/tls/staging-server.key
+        read_only: true
+
     networks:
       - staging_edge
 
@@ -28,7 +39,7 @@ services:
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
         IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
-    command: ["gunicorn", "wsgi:application", "--bind", "0.0.0.0:5000", "--workers", "1", "--access-logfile", "-", "--error-logfile", "-"]
+    command: ["gunicorn", "--config", "/app/gunicorn.conf.py", "wsgi:application", "--bind", "0.0.0.0:5000", "--workers", "1", "--access-logfile", "-", "--error-logfile", "-"]
     restart: unless-stopped
     read_only: true
     tmpfs:

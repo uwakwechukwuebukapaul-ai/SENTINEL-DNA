@@ -5,12 +5,12 @@
 services:
   app:
     image: ${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}
-    build: null
+    build: !reset null
 
   migration:
     image: ${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}
-    build: null
+    build: !reset null
 
   edge:
     ports:
-      - "127.0.0.1:8443:443"
+      - "127.0.0.1:18443:443"

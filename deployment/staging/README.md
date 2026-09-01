@@ -5,6 +5,10 @@ analyst pilot. It is not a deployment authorization and contains no real
 credentials, URLs, certificates, analyst identities, tenant identifiers, or
 activation tokens.
 
+For the deterministic certificate, trust-installation, hostname, and HTTPS
+health validation procedure, see
+[`docs/staging-tls-validation.md`](../../docs/staging-tls-validation.md).
+
 ## Runtime contract
 
 The staging runtime is defined by
@@ -12,6 +16,11 @@ The staging runtime is defined by
 `wsgi:application` entrypoint. The application, PostgreSQL, and Redis services
 are private; only the staging edge is exposed, and that edge must be private
 HTTPS, VPN, or zero-trust infrastructure.
+
+Gunicorn reads the checked-in `gunicorn.conf.py`. Its control socket and worker
+temporary files use `/tmp`, which staging mounts as an ephemeral tmpfs. The
+application root filesystem remains read-only and the control socket is mode
+`0600`; no credentials or application data are written there.
 
 `deployment/scripts/deploy.sh` is staging-only. It requires an absolute
 `STAGING_ENV_FILE` outside the repository and explicitly selects the staging
@@ -30,20 +39,28 @@ store and never commit the populated file or use the repository `.env`.
 The supported browser endpoint is:
 
 ```text
-https://sentinel-dna-staging:8443/
+https://sentinel-dna-staging:18443/
 ```
 
 TLS terminates at the Nginx edge on container port `443`; Docker publishes
-that edge as `0.0.0.0:8443:443`. Gunicorn remains private on the Docker
+that edge as `127.0.0.1:18443:443`. Gunicorn remains private on the Docker
 network at `app:5000`. Use the checked-in
 [`nginx.conf`](nginx.conf) as the reviewed source for the external edge
-configuration file. It references `/etc/nginx/tls/staging.crt` and
-`/etc/nginx/tls/staging.key` and must be mounted read-only by Compose.
+configuration file. It references `/etc/nginx/tls/staging-server.crt` and
+`/etc/nginx/tls/staging-server.key` and must be mounted read-only by Compose.
+Compose mounts `staging-server-fullchain.crt` at the certificate path so Nginx
+serves the leaf followed by the staging CA. The CA private key is never
+mounted into a container.
 
-The self-signed staging certificate must contain these SANs:
+The generator creates a private, self-signed staging root CA as
+`staging-ca.crt`/`staging-ca.key`, then creates a separate HTTPS leaf as
+`staging-server.crt`/`staging-server.key` signed by that CA and publishes the
+leaf-first `staging-server-fullchain.crt` bundle. The leaf must
+contain these SANs:
 
 ```text
 DNS:sentinel-dna-staging
+DNS:localhost
 IP Address:192.168.1.115
 IP Address:127.0.0.1
 ```
@@ -65,16 +82,33 @@ set +a
 python3 deployment/staging/scripts/generate_staging_cert.py
 ```
 
+The former `staging.crt`/`staging.key` pair is legacy material and is not
+read by the new edge configuration. Quarantine or securely remove that old
+pair according to the host's custody procedure after confirming the new
+server pair is active; never rename the CA certificate to `staging.crt`.
+
 The TLS directory must be an absolute path outside the repository. The
-generator creates the directory with restrictive permissions, writes the
-private key as mode `0600`, writes the certificate as mode `0644`, validates
-the SAN and key/certificate pairing, and is safe to rerun. An existing
-certificate with a changed LAN IP or missing SANs fails closed; rotate it only
-after review with:
+generator creates the directory with restrictive permissions, writes both
+private keys as mode `0600` (and limits their Windows ACL to Administrators
+and SYSTEM), writes both certificates as mode `0644`, validates the CA/leaf
+chain, SANs, and key pairings, and is safe to rerun. Existing
+material with a changed LAN IP, a CA used as the leaf, or missing SANs fails
+closed. Rotate only the server leaf after review with:
 
 ```sh
 python3 deployment/staging/scripts/generate_staging_cert.py --rotate
 ```
+
+The existing CA is retained during normal leaf rotation, so the trusted-root
+installation does not change. Replace the CA only as a separate reviewed
+trust event with `--rotate-ca`, then distribute the new `staging-ca.crt` to
+approved analyst machines before restarting the edge.
+
+The deploy health check uses `SENTINEL_DNA_STAGING_TLS_CA_FILE` when it is set;
+otherwise it uses `$SENTINEL_DNA_STAGING_TLS_DIR/staging-ca.crt`. This is an
+explicit trust anchor for curl and does not disable certificate or hostname
+verification. If an approved external CA replaces the private staging CA,
+set the override to the reviewed public CA bundle.
 
 After generation, copy the reviewed repository Nginx template to the external
 path named by `SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE`, then run the documented
@@ -86,27 +120,35 @@ Validate the certificate before opening the browser:
 
 ```sh
 openssl x509 \
-  -in "$SENTINEL_DNA_STAGING_TLS_DIR/staging.crt" \
+  -in "$SENTINEL_DNA_STAGING_TLS_DIR/staging-server.crt" \
   -noout -subject -issuer -dates -ext subjectAltName
+python3 deployment/staging/scripts/validate_staging_tls.py \
+  --ca-file "$SENTINEL_DNA_STAGING_TLS_DIR/staging-ca.crt" \
+  --connect-host 127.0.0.1 \
+  --server-name sentinel-dna-staging \
+  --port 18443
 ```
 
-The output must show `DNS:sentinel-dna-staging`, the configured LAN IP, and
-`IP Address:127.0.0.1`. Because this is self-signed staging material, import
-the exact certificate into the Windows current-user Trusted Root store; do
-not disable TLS verification or trust a private key:
+The output must show `DNS:sentinel-dna-staging`, `DNS:localhost`, the
+configured LAN IP, and `IP Address:127.0.0.1`. Because the leaf is signed by
+the private staging CA, import only the CA certificate into the Windows
+LocalMachine Trusted Root store; do not trust a leaf as a root, disable TLS
+verification, or trust a private key. The handshake validator must report TLS
+1.2 or TLS 1.3 success; otherwise the pilot remains blocked:
 
 ```powershell
-Import-Certificate -FilePath .\staging.crt -CertStoreLocation Cert:\CurrentUser\Root
-Test-NetConnection sentinel-dna-staging -Port 8443
-curl.exe -I https://sentinel-dna-staging:8443/
+Import-Certificate -FilePath .\staging-ca.crt -CertStoreLocation Cert:\LocalMachine\Root
+Test-NetConnection 127.0.0.1 -Port 18443
+curl.exe --ssl-revoke-best-effort --cacert .\staging-ca.crt -I https://sentinel-dna-staging:18443/
 ```
 
 The expected application result for the final request is HTTP `401` with the
 authentication-required response. A browser hostname mismatch indicates that
 the requested hostname is not in SAN; do not weaken authentication or bypass
-certificate verification. This certificate model is for internal staging
-only and can later be replaced by a CA-issued certificate using the same
-Nginx certificate/key mount contract.
+certificate verification. This CA/leaf model is for internal staging only. If
+an approved external CA is provisioned later, replace the staging leaf files
+and retain the same Nginx certificate/key mount contract; never replace the
+leaf with a CA certificate.
 
 ## Required staging controls
 

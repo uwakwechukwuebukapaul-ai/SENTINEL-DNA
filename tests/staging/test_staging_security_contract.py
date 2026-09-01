@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives import serialization
 
 from config.runtime import RuntimeConfig
 from services.core.pilot_boundary import pilot_path_allowed
+from deployment.staging.scripts.validate_staging_tls import _validate_trust_anchor
 from tests.credential_helpers import random_secret
 
 
@@ -126,7 +127,10 @@ def test_pilot_boundary_is_allowlist_and_denies_non_pilot_surfaces():
 def test_staging_compose_and_deploy_contract_are_explicit():
     compose = STAGING_COMPOSE.read_text()
     root_compose = (ROOT / "docker-compose.yml").read_text()
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    gunicorn_config = (ROOT / "gunicorn.conf.py").read_text()
     deploy = (ROOT / "deployment" / "scripts" / "deploy.sh").read_text()
+    health_check = (ROOT / "deployment" / "scripts" / "health_check.sh").read_text()
     override = STAGING_OVERRIDE.read_text()
 
     assert "SENTINEL_DNA_ENV: staging" in compose
@@ -143,6 +147,14 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "file: ${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}" in compose
     assert "file: ${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}" in compose
     assert 'command: ["python", "-m", "database.run_migrations"]' in compose
+    assert '"--config", "/app/gunicorn.conf.py"' in compose
+    assert '"--config", "/app/gunicorn.conf.py"' in dockerfile
+    assert 'control_socket = "/tmp/sentinel-dna-gunicorn.ctl"' in gunicorn_config
+    assert 'worker_tmp_dir = "/tmp"' in gunicorn_config
+    assert "control_socket_mode = 0o600" in gunicorn_config
+    assert "gunicorn>=25.1.0" in (ROOT / "requirements.txt").read_text()
+    assert rendered["services"]["app"]["read_only"] is True
+    assert "/tmp" in rendered["services"]["app"]["tmpfs"]
     assert "  migration:" in compose
     assert "condition: service_healthy" in compose
     assert 'test: ["CMD", "redis-cli", "ping"]' in compose
@@ -152,6 +164,13 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "ports" not in rendered["services"]["edge"]
     assert "ports" not in rendered["services"]["app"]
     assert rendered["services"]["app"]["expose"] == ["5000"]
+    edge_volumes = rendered["services"]["edge"]["volumes"]
+    edge_targets = {volume["target"] for volume in edge_volumes}
+    assert "/etc/nginx/tls/staging-server.crt" in edge_targets
+    assert "/etc/nginx/tls/staging-server.key" in edge_targets
+    assert any(volume["source"].endswith("/staging-server-fullchain.crt") for volume in edge_volumes)
+    assert "/etc/nginx/tls" not in edge_targets
+    assert not any("staging-ca.key" in volume.get("source", "") for volume in edge_volumes)
     assert "ports" not in rendered["services"]["postgres"]
     assert "ports" not in rendered["services"]["redis"]
     assert set(rendered["services"]["edge"]["networks"]) == {"staging_edge"}
@@ -160,7 +179,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert set(rendered["services"]["redis"]["networks"]) == {"staging_internal"}
     assert rendered["networks"]["staging_internal"]["internal"] is True
     override_rendered = yaml.safe_load(override)
-    assert override_rendered["services"]["edge"]["ports"] == ["127.0.0.1:8443:443"]
+    assert override_rendered["services"]["edge"]["ports"] == ["127.0.0.1:18443:443"]
     assert override_rendered["services"]["app"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["migration"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["app"]["build"] is None
@@ -171,6 +190,11 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "--env-file \"$STAGING_ENV_FILE\"" in deploy
     assert "Pilot staging Compose override was not found" in deploy
     assert "SENTINEL_DNA_BASE_URL must use HTTPS" in deploy
+    assert "SENTINEL_DNA_STAGING_TLS_DIR" in deploy
+    assert "SENTINEL_DNA_STAGING_TLS_CA_FILE" in deploy
+    assert "staging-ca.crt" in deploy
+    assert '--cacert "$ca_file"' in health_check
+    assert "--insecure" not in health_check
     assert "SENTINEL_DNA_IMAGE_TAG" in deploy
     assert "SENTINEL_DNA_IMAGE_REVISION_FULL" in deploy
     assert "git -C \"$REPOSITORY_ROOT\" rev-parse HEAD" in deploy
@@ -221,6 +245,17 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
             "json",
         ],
         cwd=ROOT,
+        # Shell environment variables have higher precedence than
+        # --env-file in Compose. Remove any operator workstation defaults so
+        # this contract verifies the fixture paths supplied above.
+        env={
+            key: value
+            for key, value in os.environ.items()
+            if key not in {
+                "SENTINEL_DNA_STAGING_APP_SECRET_FILE",
+                "SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE",
+            }
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -247,7 +282,7 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():
     env_example = (ROOT / "deployment" / "staging" / ".env.example").read_text()
-    assert "SENTINEL_DNA_BASE_URL=https://sentinel-dna-staging:8443" in env_example
+    assert "SENTINEL_DNA_BASE_URL=https://sentinel-dna-staging:18443" in env_example
     assert "SENTINEL_DNA_STAGING_TLS_IP=192.168.1.115" in env_example
     assert "SENTINEL_DNA_SECRET_KEY=__INJECT_NON_PRODUCTION_SECRET__" in env_example
     assert "SENTINEL_DNA_POSTGRES_PASSWORD=__INJECT_DISPOSABLE_STAGING_PASSWORD__" in env_example
@@ -256,13 +291,23 @@ def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip(
 def test_staging_nginx_contract_terminates_tls_and_keeps_gunicorn_private():
     nginx = (ROOT / "deployment" / "staging" / "nginx.conf").read_text()
     assert "listen 443 ssl;" in nginx
-    assert "ssl_certificate /etc/nginx/tls/staging.crt;" in nginx
-    assert "ssl_certificate_key /etc/nginx/tls/staging.key;" in nginx
+    assert "ssl_certificate /etc/nginx/tls/staging-server.crt;" in nginx
+    assert "ssl_certificate_key /etc/nginx/tls/staging-server.key;" in nginx
     assert "ssl_protocols TLSv1.2 TLSv1.3;" in nginx
     assert "proxy_pass http://app:5000;" in nginx
     assert "proxy_set_header X-Forwarded-Proto https;" in nginx
     assert "5000:5000" not in nginx
     assert "sentinel-dna-staging" in nginx
+
+
+def test_staging_tls_validator_requires_the_private_root_ca_as_trust_anchor():
+    validator = (ROOT / "deployment" / "staging" / "scripts" / "validate_staging_tls.py").read_text()
+    assert "_validate_trust_anchor" in validator
+    assert "BasicConstraints" in validator
+    assert "constraints.path_length != 0" in validator
+    assert "certificate.subject != certificate.issuer" in validator
+    assert "create_default_context" in validator
+    assert "CERT_NONE" not in validator
 
 
 def _run_staging_certificate_generator(tmp_path: Path, ip: str = "192.168.1.115", *args: str):
@@ -282,10 +327,12 @@ def _run_staging_certificate_generator(tmp_path: Path, ip: str = "192.168.1.115"
     )
 
 
-def _certificate_from(tmp_path: Path) -> tuple[x509.Certificate, object]:
-    certificate = x509.load_pem_x509_certificate((tmp_path / "staging.crt").read_bytes())
-    key = serialization.load_pem_private_key((tmp_path / "staging.key").read_bytes(), password=None)
-    return certificate, key
+def _certificate_from(tmp_path: Path) -> tuple[x509.Certificate, object, x509.Certificate, object]:
+    ca_certificate = x509.load_pem_x509_certificate((tmp_path / "staging-ca.crt").read_bytes())
+    ca_key = serialization.load_pem_private_key((tmp_path / "staging-ca.key").read_bytes(), password=None)
+    certificate = x509.load_pem_x509_certificate((tmp_path / "staging-server.crt").read_bytes())
+    key = serialization.load_pem_private_key((tmp_path / "staging-server.key").read_bytes(), password=None)
+    return ca_certificate, ca_key, certificate, key
 
 
 def test_staging_certificate_generator_emits_required_sans_and_valid_key_pair(tmp_path):
@@ -293,38 +340,62 @@ def test_staging_certificate_generator_emits_required_sans_and_valid_key_pair(tm
     assert result.returncode == 0, result.stderr
     assert "PRIVATE KEY" not in result.stdout + result.stderr
 
-    certificate, key = _certificate_from(tmp_path)
+    ca_certificate, ca_key, certificate, key = _certificate_from(tmp_path)
+    ca_constraints = ca_certificate.extensions.get_extension_for_class(x509.BasicConstraints).value
+    assert ca_constraints.ca is True
+    assert ca_constraints.path_length == 0
+    assert ca_certificate.subject == ca_certificate.issuer
+    assert ca_certificate.public_key().public_numbers() == ca_key.public_key().public_numbers()
+    assert certificate.issuer == ca_certificate.subject
+    assert certificate.extensions.get_extension_for_class(x509.BasicConstraints).value.ca is False
+    assert certificate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
     sans = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-    assert sans.get_values_for_type(x509.DNSName) == ["sentinel-dna-staging"]
+    assert sans.get_values_for_type(x509.DNSName) == ["sentinel-dna-staging", "localhost"]
     assert {str(value) for value in sans.get_values_for_type(x509.IPAddress)} == {
         "192.168.1.115",
         "127.0.0.1",
     }
     assert certificate.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value == "sentinel-dna-staging"
     assert certificate.public_key().public_numbers() == key.public_key().public_numbers()
+    _validate_trust_anchor(tmp_path / "staging-ca.crt")
+    with pytest.raises(ValueError, match="not a server leaf"):
+        _validate_trust_anchor(tmp_path / "staging-server.crt")
     now = datetime.now(timezone.utc)
     assert certificate.not_valid_before_utc <= now <= certificate.not_valid_after_utc
     assert certificate.signature_hash_algorithm.name == "sha256"
     if os.name != "nt":
-        assert (tmp_path / "staging.key").stat().st_mode & 0o777 == 0o600
+        assert (tmp_path / "staging-ca.key").stat().st_mode & 0o777 == 0o600
+        assert (tmp_path / "staging-server.key").stat().st_mode & 0o777 == 0o600
 
 
 def test_staging_certificate_generator_is_safe_to_rerun_and_requires_explicit_rotation(tmp_path):
     first = _run_staging_certificate_generator(tmp_path)
     assert first.returncode == 0, first.stderr
-    original = (tmp_path / "staging.crt").read_bytes()
+    original_ca = (tmp_path / "staging-ca.crt").read_bytes()
+    original = (tmp_path / "staging-server.crt").read_bytes()
     rerun = _run_staging_certificate_generator(tmp_path)
     assert rerun.returncode == 0, rerun.stderr
-    assert (tmp_path / "staging.crt").read_bytes() == original
+    assert (tmp_path / "staging-server.crt").read_bytes() == original
 
     mismatch = _run_staging_certificate_generator(tmp_path, "192.168.1.116")
     assert mismatch.returncode == 2
     assert "--rotate" in mismatch.stderr
     rotated = _run_staging_certificate_generator(tmp_path, "192.168.1.116", "--rotate")
     assert rotated.returncode == 0, rotated.stderr
-    certificate, _ = _certificate_from(tmp_path)
+    assert (tmp_path / "staging-ca.crt").read_bytes() == original_ca
+    _, _, certificate, _ = _certificate_from(tmp_path)
     ips = {str(value) for value in certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(x509.IPAddress)}
     assert ips == {"192.168.1.116", "127.0.0.1"}
+
+
+def test_staging_certificate_generator_rejects_a_ca_used_as_the_server_leaf(tmp_path):
+    result = _run_staging_certificate_generator(tmp_path)
+    assert result.returncode == 0, result.stderr
+    (tmp_path / "staging-server.crt").write_bytes((tmp_path / "staging-ca.crt").read_bytes())
+
+    rejected = _run_staging_certificate_generator(tmp_path)
+    assert rejected.returncode == 2
+    assert "--rotate" in rejected.stderr
 
 
 def test_staging_certificate_generator_fails_closed_for_missing_or_invalid_configuration(tmp_path):
@@ -365,11 +436,14 @@ def test_staging_secret_hygiene_contract_has_no_tracked_runtime_tls_or_secret_fi
 
 def test_staging_certificate_configuration_is_explicit_and_non_secret():
     config = json.loads((ROOT / "deployment" / "staging" / "staging-cert-config.json").read_text())
-    assert config["dns_sans"] == ["sentinel-dna-staging"]
+    assert config["dns_sans"] == ["sentinel-dna-staging", "localhost"]
     assert config["fixed_ip_sans"] == ["127.0.0.1"]
     assert config["lan_ip_environment_variable"] == "SENTINEL_DNA_STAGING_TLS_IP"
-    assert config["certificate_filename"] == "staging.crt"
-    assert config["private_key_filename"] == "staging.key"
+    assert config["ca_certificate_filename"] == "staging-ca.crt"
+    assert config["ca_private_key_filename"] == "staging-ca.key"
+    assert config["certificate_filename"] == "staging-server.crt"
+    assert config["fullchain_certificate_filename"] == "staging-server-fullchain.crt"
+    assert config["private_key_filename"] == "staging-server.key"
     assert config["key_algorithm"] == "RSA"
     assert config["key_size"] >= 2048
     assert config["signature_hash"] == "SHA-256"

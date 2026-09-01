@@ -1,0 +1,50 @@
+{
+  "evidence_type": "controlled_analyst_pilot_tls_remediation",
+  "evidence_version": "sentinel-dna-staging-tls-remediation.v1",
+  "generated_at": "2026-08-31T21:09:15Z",
+  "append_only": true,
+  "readiness": "BLOCKED_PENDING_LIVE_TLS_VALIDATION",
+  "trust_chain": {
+    "root_certificate": "staging-ca.crt",
+    "root_private_key": "staging-ca.key",
+    "server_certificate": "staging-server.crt",
+    "server_private_key": "staging-server.key",
+    "server_identity": "sentinel-dna-staging",
+    "server_certificate_ca": false,
+    "root_certificate_ca": true,
+    "root_path_length": 0,
+    "server_extended_key_usage": ["serverAuth"],
+    "san_contract": [
+      "DNS:sentinel-dna-staging",
+      "IP:127.0.0.1",
+      "IP:192.168.1.115 when required by the current staging contract"
+    ]
+  },
+  "checks": {
+    "ca_and_leaf_generation_contract": "PASS",
+    "nginx_mounts_server_leaf_only": "PASS",
+    "client_trust_uses_root_ca": "PASS",
+    "server_leaf_rejected_as_trust_anchor": "PASS",
+    "tls_bypass_absent": "PASS",
+    "staging_security_contract_tests": "PASS",
+    "live_tls_handshake": "NOT_MEASURED",
+    "chrome_certificate_warning_check": "NOT_MEASURED",
+    "health_http_200": "NOT_MEASURED",
+    "ready_http_200": "NOT_MEASURED"
+  },
+  "validation_command": "python -m pytest tests/staging/test_staging_security_contract.py",
+  "preservation": {
+    "gate_2_artifacts": "PRESERVED",
+    "existing_manifests": "PRESERVED",
+    "prior_evidence": "NOT_OVERWRITTEN",
+    "generated_private_material_in_repository": false
+  },
+  "source_sha256": {
+    "deployment/staging/scripts/generate_staging_cert.py": "24e1342372c102c0e1f884fdeb184cfb2d2035574228976ca589ad3426f9d3cb",
+    "deployment/staging/scripts/validate_staging_tls.py": "5a2981ae7faad32824460794c10b0327953351f848258108b9245aaee78fa66f",
+    "deployment/staging/staging-cert-config.json": "09814cb38d93aa82f9ba1aaa288f71c56ad0e0b5bb6567833162058aadfe54c2",
+    "deployment/staging/docker-compose.yml": "3f56ce65a2bbf43e0d6e9e728480a10e26f268a5e8cde67669ff0b4f2ff0bedd",
+    "deployment/staging/nginx.conf": "33ed74a5e8878e2e26724313870dedb66234d329aae67fdc76a4faae7d4e6793",
+    "deployment/scripts/health_check.sh": "8232b841f77c1d9767d033f77d8f3313abd5c5305ea66a0f1c6bedc818487d90"
+  }
+}
