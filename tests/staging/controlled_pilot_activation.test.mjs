@@ -33,6 +33,7 @@ test("activation command fails closed with safe categories when provider is miss
   assert.match(result.stdout, /BLOCKED_WITH_REASON/);
   assert.match(result.stdout, /CODE=TB_PROVIDER_MANIFEST_MISSING/);
   assert.match(result.stdout, /CODE=TB_PROVIDER_NOT_CONFIGURED/);
+  assert.match(result.stdout, /CODE=TB_RUNTIME_UNAVAILABLE/);
   assert.match(result.stdout, /CODE=TB_IMAGE_IDENTITY_INVALID/);
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, /secret-token-do-not-print/);
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, /password|cookie|authorization/i);

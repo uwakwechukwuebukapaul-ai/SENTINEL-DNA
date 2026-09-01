@@ -4,6 +4,11 @@ This runbook is executed only on the approved private staging/operator host.
 It does not install a browser, create a provider, handle credentials, or
 override a failed check.
 
+Complete [`GATE4_EXTERNAL_ARTIFACT_ONBOARDING_CHECKLIST.md`](GATE4_EXTERNAL_ARTIFACT_ONBOARDING_CHECKLIST.md)
+alongside this runbook. The current Gate 4 decision is **BLOCKED**. The
+runbook prepares activation; it does not create or accept external custody
+artifacts.
+
 ## 1. Obtain the approved runtime
 
 Obtain the separately reviewed Playwright/RPC runtime module from the approved
@@ -67,13 +72,17 @@ Expected success output includes `STATUS=PASS`. Missing artifacts must instead
 produce `STATUS=BLOCKED_WITH_REASON` with the safe variable, artifact class,
 diagnostic, and next action. No path or secret should be printed.
 
-## 5. Verify the certified origin and deployment controls
+## 5. Verify the certified origin and deployment evidence
 
 Confirm the approved private TLS path reaches exactly
 `https://sentinel-dna-staging:18443`. Confirm the deployed service, not merely
 the operator shell, has secure cookies, debug disabled, pilot access gating,
 tenant isolation, audit logging, synthetic-only scope, and no production data
 or public exposure.
+
+Retain non-secret tenant-isolation evidence (including cross-tenant denial) and
+audit evidence (including the audit/evidence sink references) under approved
+custody. Environment flags alone do not replace that evidence.
 
 ## 6. Run validation in order
 
@@ -102,6 +111,19 @@ Every provider sub-check must also be `PASS`. Expected activation result:
 The readiness report must be `READY_FOR_ANALYST_PILOT` with all checks `PASS`.
 Provider verification discovers `browserAuth` but does not invoke it.
 
+The four relevant blocker mappings are:
+
+| Condition | Diagnostic | Required action |
+| --- | --- | --- |
+| Reviewed provider/client module is absent or unloadable | `TB_PROVIDER_MODULE_MISSING` | Restore the reviewed provider module from approved custody. |
+| Reviewed runtime module, runtime setup, RPC bridge, or runtime contract is unavailable | `TB_RUNTIME_UNAVAILABLE` | Restore/reconcile the reviewed runtime and rerun its custody-bound checks. |
+| Activation custody manifest is absent or not configured | `TB_PROVIDER_MANIFEST_MISSING` | Obtain the external approved manifest; never use the checked-in fixture. |
+| Exact certified origin cannot be reached over approved private TLS | `TB_ORIGIN_UNREACHABLE` | Repair the approved staging path and validate `https://sentinel-dna-staging:18443`. |
+
+Manifest content or digest mismatches are `TB_PROVIDER_MANIFEST_INVALID`, and
+an origin value inside a manifest that is not the exact certified origin is
+`TB_ORIGIN_REJECTED`. Any one of these diagnostics keeps activation blocked.
+
 Only after human release approval:
 
 ```powershell
@@ -115,9 +137,16 @@ node .\deployment\staging\scripts\validate_manual_analyst_pilot_evidence.mjs <ev
 absent, unavailable, or contract-invalid. Keep the pilot blocked and consult
 the runtime custody owner. Do not substitute a local runtime.
 
+`TB_PROVIDER_MODULE_MISSING` means a reviewed provider/client module is absent
+or cannot be loaded. Restore the reviewed module from approved custody.
+
 `TB_PROVIDER_MANIFEST_MISSING` means the external activation manifest is not
 configured or cannot be loaded. Obtain it from approved custody and rerun the
 manifest/readiness checks. Do not use the checked-in validation fixture.
+
+`TB_ORIGIN_UNREACHABLE` means the exact certified origin is unavailable from
+the approved host. Keep the gate blocked and repair private-TLS reachability;
+do not use an alternate origin, localhost, CDP, or a browser mock.
 
 ## 8. Rollback
 

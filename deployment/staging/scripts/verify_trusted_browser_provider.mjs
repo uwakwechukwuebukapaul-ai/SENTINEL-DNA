@@ -29,6 +29,7 @@ const SAFE_CATEGORIES = new Set([
   "TB_BROWSER_CONTRACT_FAILED",
   "TB_AUTH_CAPABILITY_MISSING",
   "TB_ORIGIN_REJECTED",
+  "TB_ORIGIN_UNREACHABLE",
 ]);
 
 function diagnosticError(code) {

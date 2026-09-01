@@ -43,6 +43,7 @@ const SAFE_FAILURE_CODES = new Set([
   "TB_ORIGIN_REJECTED",
   "TB_PROVIDER_MANIFEST_MISSING",
   "TB_PROVIDER_MANIFEST_INVALID",
+  "TB_ORIGIN_UNREACHABLE",
 ]);
 
 function result(name, status, reason) {
@@ -208,7 +209,7 @@ export async function checkControlledPilotReadiness({
   checks.push(result(
     "certified_origin",
     originPass ? "PASS" : "BLOCKED",
-    originPass ? "certified staging origin is reachable" : "certified staging origin is not reachable",
+    originPass ? "certified staging origin is reachable" : "TB_ORIGIN_UNREACHABLE",
   ));
 
   const securityControls = [

@@ -22,8 +22,13 @@ import {
 } from "./trusted_browser_service/providers/playwright-runtime-provider.mjs";
 
 export const EXTERNAL_ARTIFACT_EVIDENCE_SCHEMA_VERSION = "1.0";
+const GATE4_EVIDENCE_DIRECTORY = resolve(
+  fileURLToPath(new URL("../../../pilot-evidence/gate4/", import.meta.url)),
+);
+const UTC_EVIDENCE_STAMP = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 export const DEFAULT_EXTERNAL_ARTIFACT_EVIDENCE_PATH = resolve(
-  fileURLToPath(new URL("../../../pilot-evidence/gate4/gate4-external-artifact-verification-20260901.json", import.meta.url)),
+  GATE4_EVIDENCE_DIRECTORY,
+  `gate4-external-artifact-verification-${UTC_EVIDENCE_STAMP}.json`,
 );
 const IMAGE_DIGEST_ENV = "SENTINEL_DNA_IMAGE_DIGEST";
 const REPOSITORY_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
@@ -42,6 +47,7 @@ const SAFE_CODES = new Set([
   "TB_PROVIDER_MANIFEST_MISSING",
   "TB_PROVIDER_MANIFEST_INVALID",
   "TB_IMAGE_IDENTITY_INVALID",
+  "TB_ORIGIN_UNREACHABLE",
 ]);
 
 function safeCode(value, fallback = "TB_RUNTIME_UNAVAILABLE") {
@@ -135,6 +141,8 @@ function remediationFor(code) {
       return "Configure the reviewed facade, provider boundary, and externally supplied runtime through the operator helper.";
     case "TB_PROVIDER_MODULE_MISSING":
       return "Confirm the reviewed provider module is present and supplied from the approved deployment package.";
+    case "TB_ORIGIN_UNREACHABLE":
+      return "Validate private-TLS reachability of the exact certified staging origin from the approved operator host; do not use an alternate origin.";
     default:
       return "Keep Gate 4 blocked and consult the approved runtime or release-custody owner before retrying.";
   }
@@ -251,7 +259,7 @@ function outputPathFromArgs(args) {
 }
 
 async function writeEvidence(evidence, outputPath) {
-  const evidenceDirectory = resolve(fileURLToPath(new URL("../../../pilot-evidence/gate4/", import.meta.url)));
+  const evidenceDirectory = GATE4_EVIDENCE_DIRECTORY;
   const target = resolve(outputPath);
   const relativeTarget = relative(evidenceDirectory, target);
   if (isAbsolute(relativeTarget) || relativeTarget.startsWith("..") ||

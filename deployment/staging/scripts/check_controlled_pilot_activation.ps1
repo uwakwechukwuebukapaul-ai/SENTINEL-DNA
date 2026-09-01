@@ -24,10 +24,10 @@ $requiredVariables = @(
 )
 $providerVariables = @(
     "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT",
-    "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT",
-    "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME"
+    "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT"
 )
-$fileVariables = $providerVariables + "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST"
+$runtimeVariable = "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME"
+$fileVariables = $providerVariables + $runtimeVariable + "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST"
 
 function Add-SafeCode([string]$Code) {
     if (-not $safeCodes.Contains($Code)) { $safeCodes.Add($Code) }
@@ -37,6 +37,7 @@ foreach ($name in $requiredVariables) {
     $value = [Environment]::GetEnvironmentVariable($name)
     if ([string]::IsNullOrWhiteSpace($value)) {
         if ($providerVariables -contains $name) { Add-SafeCode "TB_PROVIDER_NOT_CONFIGURED" }
+        elseif ($name -eq $runtimeVariable) { Add-SafeCode "TB_RUNTIME_UNAVAILABLE" }
         elseif ($name -eq "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_MISSING" }
         elseif ($name -eq "SENTINEL_DNA_IMAGE_DIGEST") { Add-SafeCode "TB_IMAGE_IDENTITY_INVALID" }
         else { Add-SafeCode "TB_SECURITY_CONTROL_MISSING" }
@@ -57,6 +58,7 @@ foreach ($name in $fileVariables) {
         try {
             if (-not (Test-Path -LiteralPath $value -PathType Leaf)) {
                 if ($name -eq "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_MISSING" }
+                elseif ($name -eq $runtimeVariable) { Add-SafeCode "TB_RUNTIME_UNAVAILABLE" }
                 else { Add-SafeCode "TB_PROVIDER_MODULE_MISSING" }
             }
             $normalized = $value.Replace("\", "/").ToLowerInvariant()
@@ -65,6 +67,7 @@ foreach ($name in $fileVariables) {
             }
         } catch {
             if ($name -eq "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_MISSING" }
+            elseif ($name -eq $runtimeVariable) { Add-SafeCode "TB_RUNTIME_UNAVAILABLE" }
             else { Add-SafeCode "TB_PROVIDER_MODULE_MISSING" }
         }
     }

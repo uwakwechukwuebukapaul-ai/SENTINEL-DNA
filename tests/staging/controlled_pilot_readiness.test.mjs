@@ -229,6 +229,10 @@ test("readiness blocks failed certified-origin reachability without leaking secr
     });
     assert.equal(readiness.status, "BLOCKED_WITH_REASON");
     assert.equal(readiness.checks.find((item) => item.name === "certified_origin").status, "BLOCKED");
+    assert.equal(
+      readiness.checks.find((item) => item.name === "certified_origin").reason,
+      "TB_ORIGIN_UNREACHABLE",
+    );
     assert.doesNotMatch(JSON.stringify(readiness), /secret-token|must-not-escape|Bearer|eyJ/i);
   });
 });

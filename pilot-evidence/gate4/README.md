@@ -19,6 +19,10 @@ The dated audit artifacts record the current controlled blocker:
 - `gate4-activation-validation-20260901.json`
 - `gate4-external-artifact-verification-20260901.json`
 
+The operator intake and activation procedure are documented in
+[`deployment/staging/GATE4_EXTERNAL_ARTIFACT_ONBOARDING_CHECKLIST.md`](../../deployment/staging/GATE4_EXTERNAL_ARTIFACT_ONBOARDING_CHECKLIST.md)
+and [`deployment/staging/GATE4_OPERATOR_RUNBOOK.md`](../../deployment/staging/GATE4_OPERATOR_RUNBOOK.md).
+
 Generate the provider evidence after configuring the operator runtime:
 
 ```powershell
@@ -34,6 +38,9 @@ Verify external artifact custody and digest bindings with:
 ```powershell
 node .\deployment\staging\scripts\verify_gate4_external_artifacts.mjs
 ```
+
+The verifier uses a fresh UTC-stamped output filename by default, or an
+approved unique `--output` filename. Historical evidence is never overwritten.
 
 The generator never authenticates, invokes `browserAuth`, launches a local
 browser, connects to CDP, or writes credentials. It exits nonzero when any
