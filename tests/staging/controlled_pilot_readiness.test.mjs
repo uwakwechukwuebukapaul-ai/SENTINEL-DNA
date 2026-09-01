@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -64,11 +65,13 @@ async function withReadinessConfiguration({ runtimeSource = VALID_RUNTIME, provi
   const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-readiness-"));
   const runtimePath = join(directory, "reviewed-runtime.mjs");
   await writeFile(runtimePath, runtimeSource, "utf8");
+  const runtimeDigest = createHash("sha256").update(runtimeSource, "utf8").digest("hex");
   const manifestPath = join(directory, "activation-manifest.json");
   const manifest = {
     schema_version: "1.0",
     provider_identity: "reviewed-provider:test",
     runtime_module_identity: "reviewed-runtime:test",
+    approved_runtime_module_digest: `sha256:${runtimeDigest}`,
     approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
     staging_origin: "https://sentinel-dna-staging:18443",
     activation_timestamp: "2026-09-01T12:00:00Z",
@@ -167,6 +170,7 @@ test("readiness blocks an activation manifest for an invalid origin", { concurre
       schema_version: "1.0",
       provider_identity: "reviewed-provider:test",
       runtime_module_identity: "reviewed-runtime:test",
+      approved_runtime_module_digest: `sha256:${"a".repeat(64)}`,
       approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
       staging_origin: "https://example.invalid:18443",
       activation_timestamp: "2026-09-01T12:00:00Z",
@@ -189,6 +193,7 @@ test("readiness blocks a tampered activation manifest", { concurrency: false }, 
       schema_version: "1.0",
       provider_identity: "reviewed-provider:test",
       runtime_module_identity: "reviewed-runtime:test",
+      approved_runtime_module_digest: `sha256:${"a".repeat(64)}`,
       approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
       staging_origin: "https://sentinel-dna-staging:18443",
       activation_timestamp: "2026-09-01T12:00:00Z",

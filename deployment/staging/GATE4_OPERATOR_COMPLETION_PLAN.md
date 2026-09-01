@@ -22,6 +22,7 @@ The approved operator or custody system must provide all of the following:
 - Reviewer and human operator approval reference.
 - Manifest integrity hash and exact binding to deployed image digest
   `sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653`.
+- Manifest `approved_runtime_module_digest` equal to the exact runtime digest.
 - Certified staging-origin validation for
   `https://sentinel-dna-staging:18443` over approved private TLS.
 - Deployment evidence that secure cookies, debug-disabled mode, pilot access
@@ -58,7 +59,17 @@ browser runtime.
    Expected output includes `STATUS=PASS` and the provider-configuration
    security assertions.
 
-5. Verify the trusted browser provider before any pilot activity:
+5. Verify external artifact custody and digest bindings:
+
+   ```powershell
+   node .\deployment\staging\scripts\verify_gate4_external_artifacts.mjs
+   ```
+
+   Expected completion result is provider `PASS` and activation
+   `READY_FOR_ANALYST_PILOT` with `codes: []`. With missing artifacts the
+   command must remain blocked and list only safe `TB_*` codes.
+
+6. Verify the trusted browser provider before any pilot activity:
 
    ```powershell
    node .\deployment\staging\scripts\verify_trusted_browser_provider.mjs
@@ -82,7 +93,7 @@ browser runtime.
    Verification discovers `browserAuth` but does not call
    `browserAuth.request()`.
 
-6. Run activation and readiness validation:
+7. Run activation and readiness validation:
 
    ```powershell
    .\deployment\staging\scripts\check_controlled_pilot_activation.ps1 -Json -DryRun
@@ -98,7 +109,7 @@ browser runtime.
    The readiness result must be `READY_FOR_ANALYST_PILOT` and every check must
    be `PASS`. Any `BLOCKED_WITH_REASON` result is final for that attempt.
 
-7. Generate non-secret provider/readiness evidence:
+8. Generate non-secret provider/readiness evidence:
 
    ```powershell
    node .\deployment\staging\scripts\generate_gate4_evidence.mjs
@@ -109,7 +120,7 @@ browser runtime.
    credentials, cookies, tokens, browser sessions, customer data, or raw
    upstream exceptions.
 
-8. After human release approval, run the controlled pilot with a non-secret
+9. After human release approval, run the controlled pilot with a non-secret
    operator run ID and validate its resulting evidence:
 
    ```powershell

@@ -24,6 +24,7 @@ const REQUIRED_FIELDS = [
   "schema_version",
   "provider_identity",
   "runtime_module_identity",
+  "approved_runtime_module_digest",
   "approved_image_runtime_digest",
   "staging_origin",
   "activation_timestamp",
@@ -73,6 +74,9 @@ export function validateActivationManifest(manifest) {
     throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
   }
   if (!isSafeIdentifier(manifest.provider_identity) || !isSafeIdentifier(manifest.runtime_module_identity)) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!IMAGE_DIGEST.test(manifest.approved_runtime_module_digest || "")) {
     throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
   }
   if (!IMAGE_DIGEST.test(manifest.approved_image_runtime_digest || "")) {

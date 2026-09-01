@@ -136,6 +136,7 @@ outside the repository. Its required format is:
   "schema_version": "1.0",
   "provider_identity": "reviewed-provider:provider-2026-09",
   "runtime_module_identity": "reviewed-runtime:runtime-2026-09",
+  "approved_runtime_module_digest": "sha256:<64-hex-runtime-digest>",
   "approved_image_runtime_digest": "sha256:<64-hex-digest>",
   "staging_origin": "https://sentinel-dna-staging:18443",
   "activation_timestamp": "2026-09-01T12:00:00Z",
@@ -152,6 +153,10 @@ custody system uses a detached signature, it may add a `signature` object with
 `scheme: "detached-external"`, a non-secret `key_reference`, and a
 `signature_reference`; signing keys and signature-validation credentials must
 remain outside this repository and runtime input.
+
+The `approved_runtime_module_digest` must be the SHA-256 digest of the exact
+external runtime module supplied to the operator host. Readiness recomputes
+that digest and fails closed on absence or mismatch.
 
 The configuration checker validates these variables and the referenced module
 and manifest files without printing their values:

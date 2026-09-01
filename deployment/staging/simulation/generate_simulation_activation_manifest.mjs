@@ -22,6 +22,9 @@ export const SIMULATION_MODE = "NON-PRODUCTION_SIMULATION";
 export const SIMULATION_IMAGE_DIGEST = `sha256:${createHash("sha256")
   .update("SENTINEL-DNA-NON-PRODUCTION-SIMULATION-IMAGE", "utf8")
   .digest("hex")}`;
+export const SIMULATION_RUNTIME_DIGEST = `sha256:${createHash("sha256")
+  .update("SENTINEL-DNA-NON-PRODUCTION-SIMULATION-RUNTIME", "utf8")
+  .digest("hex")}`;
 export const SIMULATION_OUTPUT_DIRECTORY = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "output",
@@ -61,6 +64,7 @@ function simulationManifest() {
     schema_version: "1.0",
     provider_identity: "simulation-reviewed-provider:non-production",
     runtime_module_identity: "simulation-runtime:ephemeral-contract",
+    approved_runtime_module_digest: SIMULATION_RUNTIME_DIGEST,
     approved_image_runtime_digest: SIMULATION_IMAGE_DIGEST,
     staging_origin: CERTIFIED_STAGING_ORIGIN,
     activation_timestamp: new Date().toISOString().replace(/\.(\d{3})Z$/, ".$1Z"),

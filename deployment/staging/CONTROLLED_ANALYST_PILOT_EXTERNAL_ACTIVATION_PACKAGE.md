@@ -154,6 +154,7 @@ Required format:
   "schema_version": "1.0",
   "provider_identity": "reviewed-provider:provider-2026-09",
   "runtime_module_identity": "reviewed-runtime:runtime-2026-09",
+  "approved_runtime_module_digest": "sha256:<64-hex-runtime-digest>",
   "approved_image_runtime_digest": "sha256:<64-hex-digest>",
   "staging_origin": "https://sentinel-dna-staging:18443",
   "activation_timestamp": "2026-09-01T12:00:00Z",
@@ -178,10 +179,15 @@ verified by the external custody system:
 }
 ```
 
+`approved_runtime_module_digest` must be the SHA-256 digest of the exact
+external runtime module supplied to the operator host. The onboarding verifier
+recomputes that digest and fails closed on absence or mismatch.
+
 The checked-in validator requires:
 
 - schema version `1.0`;
 - safe provider/runtime identities and approval reference;
+- the SHA-256 digest of the exact reviewed runtime module;
 - an image digest matching `sha256:` plus 64 hexadecimal characters;
 - the exact certified origin;
 - a UTC activation timestamp;
@@ -195,18 +201,21 @@ Reconcile two separate identities before activation:
 1. Obtain the immutable digest of the actually deployed staging image from
    the approved deployment system. Do not rely on a mutable tag.
 2. Set `SENTINEL_DNA_IMAGE_DIGEST` to that exact `sha256:<64-hex>` value.
-3. Put the same value in
+3. Obtain the SHA-256 digest of the exact reviewed runtime module and put it
+   in `approved_runtime_module_digest`.
+4. Put the image value in
    `approved_image_runtime_digest` in the externally held manifest.
-4. Compute `integrity.manifest_hash` over the canonical manifest payload with
+5. Compute `integrity.manifest_hash` over the canonical manifest payload with
    the complete `integrity` object excluded. Canonicalization recursively
    sorts object keys; array order is preserved; the result is UTF-8 JSON with
    no added whitespace or newline.
-5. Place the resulting lowercase SHA-256 hex digest in
+6. Place the resulting lowercase SHA-256 hex digest in
    `integrity.manifest_hash`.
-6. If detached signing is required, sign/approve the manifest through the
+7. If detached signing is required, sign/approve the manifest through the
    external custody system after hashing. Keep signing material out of the
    repository and operator reports.
-7. Run readiness. A manifest/image mismatch must produce a blocked result.
+8. Run onboarding and readiness. A manifest/image or runtime-digest mismatch
+   must produce a blocked result.
 
 The repository validator performs the manifest hash check and compares the
 manifest image digest to `SENTINEL_DNA_IMAGE_DIGEST` when the configured image

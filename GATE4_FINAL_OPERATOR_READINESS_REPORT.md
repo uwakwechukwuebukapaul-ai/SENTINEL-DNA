@@ -3,7 +3,8 @@
 Audit date: 2026-09-01
 Repository: `SENTINEL-DNA`
 Branch: `gate4-controlled-analyst-pilot`
-Commit: `bcfd3960bc013b079d5fa373eca6e8bafd109ebf`
+Audit baseline commit: `c913f40c6b18ceeb3d13b48aebf14ad3eaa57b30`
+Audit baseline tree: `35cfd4e27b2eff6ccd6867c2562bb39d5287a907`
 Image digest: `sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653`
 
 ## Executive Decision
@@ -14,6 +15,10 @@ The Gate 4 implementation is **COMPLETE**. Deployment activation is
 **BLOCKED** by the absent externally reviewed Playwright/RPC runtime and
 activation-custody manifest. This is an external deployment prerequisite
 block, not a repository implementation failure.
+
+The ownership and completion sequence are defined in the [Gate 4 dependency
+checklist](deployment/staging/GATE4_DEPENDENCY_CHECKLIST.md) and [deterministic
+operator runbook](deployment/staging/GATE4_OPERATOR_RUNBOOK.md).
 
 ## Architecture
 
@@ -44,6 +49,8 @@ Evidence under `pilot-evidence/gate4/` is non-secret and includes:
 - provider verification blocked at `TB_RUNTIME_UNAVAILABLE`;
 - formal readiness audit bound to the immutable image digest;
 - activation validation blocked at `TB_PROVIDER_MANIFEST_MISSING`.
+- external artifact onboarding evidence blocked at `TB_RUNTIME_UNAVAILABLE` and
+  `TB_PROVIDER_MANIFEST_MISSING`.
 
 Evidence generation is deterministic and exclusive-create. The checked-in
 activation manifest is a validation fixture only and is not accepted as
@@ -57,6 +64,7 @@ The following must be supplied and verified outside the repository:
 - runtime provenance and review metadata;
 - immutable runtime digest;
 - activation custody manifest;
+- activation manifest runtime-module SHA-256 binding;
 - reviewer and human approval reference;
 - manifest integrity and image-digest binding;
 - certified staging-origin/private-TLS validation;
@@ -64,7 +72,7 @@ The following must be supplied and verified outside the repository:
 
 ## Validation results
 
-- Node Gate 4 tests: **58 passed**
+- Node Gate 4 tests: **60 passed**
 - Python staging tests: **38 passed**
 - PowerShell helper syntax validation: **passed**
 - Provider verification with checked-in boundary and absent external runtime:
@@ -72,6 +80,21 @@ The following must be supplied and verified outside the repository:
 - Activation validation without external manifest:
   **BLOCKED_WITH_REASON / TB_PROVIDER_MANIFEST_MISSING**
 - Controlled pilot execution: **not attempted because readiness is blocked**
+
+The required post-custody success states are:
+
+```json
+{"status":"PASS"}
+```
+
+for provider verification, and:
+
+```json
+{"status":"READY_FOR_ANALYST_PILOT","codes":[]}
+```
+
+for activation. These results cannot be asserted until the real external
+artifacts and staging-host prerequisites are present.
 
 ## Release recommendation
 

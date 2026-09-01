@@ -17,6 +17,7 @@ The dated audit artifacts record the current controlled blocker:
 - `gate4-provider-verification-20260901.json`
 - `gate4-readiness-audit-20260901.json`
 - `gate4-activation-validation-20260901.json`
+- `gate4-external-artifact-verification-20260901.json`
 
 Generate the provider evidence after configuring the operator runtime:
 
@@ -26,6 +27,12 @@ Generate the provider evidence after configuring the operator runtime:
   -ActivationManifest 'C:\approved\browser\trusted-browser-activation-manifest.json' `
   -ImageDigest 'sha256:<reviewed-64-hex-digest>'
 node .\deployment\staging\scripts\generate_gate4_evidence.mjs
+```
+
+Verify external artifact custody and digest bindings with:
+
+```powershell
+node .\deployment\staging\scripts\verify_gate4_external_artifacts.mjs
 ```
 
 The generator never authenticates, invokes `browserAuth`, launches a local
