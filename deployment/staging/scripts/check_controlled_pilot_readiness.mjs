@@ -7,7 +7,7 @@
  * authenticate, navigate, or request browserAuth credentials.
  */
 
-import { constants, existsSync } from "node:fs";
+import { constants, existsSync, readFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import https from "node:https";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,6 +31,8 @@ import {
   verifyConfiguredRuntimeDigest,
 } from "./verify_gate4_external_artifacts.mjs";
 const DEFAULT_EVIDENCE_DIR = "C:/ProgramData/Sentinel-DNA/release/evidence";
+const STAGING_TLS_CA_FILE_ENV = "SENTINEL_DNA_STAGING_TLS_CA_FILE";
+const STAGING_TLS_DIR_ENV = "SENTINEL_DNA_STAGING_TLS_DIR";
 export const READINESS_READY_STATUS = "READY_FOR_ANALYST_PILOT";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +78,16 @@ function isValidImageDigest(value) {
   return typeof value === "string" && /^sha256:[0-9a-f]{64}$/i.test(value.trim());
 }
 
+function configuredStagingCaFile() {
+  const configuredCaFile = process.env?.[STAGING_TLS_CA_FILE_ENV]?.trim();
+  if (configuredCaFile) return configuredCaFile;
+
+  const configuredTlsDirectory = process.env?.[STAGING_TLS_DIR_ENV]?.trim();
+  return configuredTlsDirectory
+    ? join(configuredTlsDirectory, "staging-ca.crt")
+    : undefined;
+}
+
 async function isWritableDirectory(directory) {
   try {
     await access(directory, constants.W_OK);
@@ -93,13 +105,25 @@ function certifiedOriginReachable(origin) {
     return Promise.resolve(false);
   }
 
+  const caFile = configuredStagingCaFile();
+  if (!caFile) return Promise.resolve(false);
+
+  let ca;
+  try {
+    ca = readFileSync(caFile);
+  } catch {
+    return Promise.resolve(false);
+  }
+
   return new Promise((resolve) => {
     const request = https.request({
       protocol: parsed.protocol,
       hostname: parsed.hostname,
       port: parsed.port,
-      path: "/",
-      method: "HEAD",
+      servername: parsed.hostname,
+      path: "/ready",
+      method: "GET",
+      ca,
       rejectUnauthorized: true,
       timeout: 5000,
     }, (response) => {
