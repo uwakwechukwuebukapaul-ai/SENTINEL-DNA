@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentinel-dna.invalid/schemas/controlled-analyst-pilot-evidence-1.0.json",
+  "title": "Sentinel DNA Authenticated Controlled Analyst Pilot Evidence",
+  "description": "Secret-free, human-captured evidence for one bounded non-production analyst pilot. Rehearsal evidence is a different class and must not validate against this schema.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "evidence_class",
+    "status",
+    "run_id",
+    "source_commit",
+    "started_at_utc",
+    "completed_at_utc",
+    "scope",
+    "boundary",
+    "controls",
+    "gates",
+    "audit",
+    "revocation",
+    "decision"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "evidence_class": { "const": "authenticated_controlled_analyst_pilot" },
+    "status": { "const": "VERIFIED" },
+    "run_id": { "$ref": "#/$defs/safeIdentifier" },
+    "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "started_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "completed_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "scope": {
+      "type": "object",
+      "required": ["synthetic_data_only", "synthetic_tenant_count", "synthetic_analyst_count", "tenant_id", "analyst_id", "role", "production_data_used"],
+      "properties": {
+        "synthetic_data_only": { "const": true },
+        "synthetic_tenant_count": { "const": 1 },
+        "synthetic_analyst_count": { "const": 1 },
+        "tenant_id": { "$ref": "#/$defs/safeIdentifier" },
+        "analyst_id": { "$ref": "#/$defs/safeIdentifier" },
+        "role": { "const": "analyst" },
+        "production_data_used": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "boundary": {
+      "type": "object",
+      "required": ["edge_binding", "private_edge_verified", "public_exposure", "tls_san_verified", "app_postgres_redis_host_ports", "docker_network_isolation"],
+      "properties": {
+        "edge_binding": { "const": "127.0.0.1:18443->443/tcp" },
+        "private_edge_verified": { "const": "PASS" },
+        "public_exposure": { "const": false },
+        "tls_san_verified": { "const": "PASS" },
+        "app_postgres_redis_host_ports": { "const": "PASS" },
+        "docker_network_isolation": { "const": "PASS" }
+      },
+      "additionalProperties": false
+    },
+    "controls": {
+      "type": "object",
+      "required": ["private_edge", "public_exposure", "secret_free_evidence", "credentials_or_tokens_in_evidence", "customer_data_in_evidence"],
+      "properties": {
+        "private_edge": { "const": "PASS" },
+        "public_exposure": { "const": false },
+        "secret_free_evidence": { "const": true },
+        "credentials_or_tokens_in_evidence": { "const": false },
+        "customer_data_in_evidence": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "gates": {
+      "type": "object",
+      "required": ["manager_authentication", "csrf_protection", "analyst_rbac", "tenant_isolation", "audit_logging", "provenance_verification", "investigation_workflow", "ai_advisory_only", "deny_cross_tenant", "deny_admin_escalation", "deny_database", "deny_shell_container", "deny_destructive", "session_revocation"],
+      "additionalProperties": false,
+      "patternProperties": {},
+      "properties": {
+        "manager_authentication": { "$ref": "#/$defs/gate" },
+        "csrf_protection": { "$ref": "#/$defs/gate" },
+        "analyst_rbac": { "$ref": "#/$defs/gate" },
+        "tenant_isolation": { "$ref": "#/$defs/tenantGate" },
+        "audit_logging": { "$ref": "#/$defs/gate" },
+        "provenance_verification": { "$ref": "#/$defs/gate" },
+        "investigation_workflow": { "$ref": "#/$defs/gate" },
+        "ai_advisory_only": { "$ref": "#/$defs/gate" },
+        "deny_cross_tenant": { "$ref": "#/$defs/gate" },
+        "deny_admin_escalation": { "$ref": "#/$defs/gate" },
+        "deny_database": { "$ref": "#/$defs/gate" },
+        "deny_shell_container": { "$ref": "#/$defs/gate" },
+        "deny_destructive": { "$ref": "#/$defs/gate" },
+        "session_revocation": { "$ref": "#/$defs/gate" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": ["action_references", "audit_references", "provenance_references", "all_sensitive_actions_audited"],
+      "properties": {
+        "action_references": { "$ref": "#/$defs/referenceList" },
+        "audit_references": { "$ref": "#/$defs/referenceList" },
+        "provenance_references": { "$ref": "#/$defs/referenceList" },
+        "all_sensitive_actions_audited": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "revocation": {
+      "type": "object",
+      "required": ["authorization_revoked", "analyst_deactivated", "sessions_invalidated", "post_revocation_fail_closed"],
+      "properties": {
+        "authorization_revoked": { "const": "PASS" },
+        "analyst_deactivated": { "const": "PASS" },
+        "sessions_invalidated": { "const": "PASS" },
+        "post_revocation_fail_closed": { "const": "PASS" }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["human_release_approval", "analyst_url_issued"],
+      "properties": {
+        "human_release_approval": { "const": "PASS" },
+        "analyst_url_issued": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "evidence_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "custody_reference": { "$ref": "#/$defs/reference" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "safeIdentifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "reference": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$" },
+    "referenceList": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reference" } },
+    "gate": {
+      "type": "object",
+      "required": ["status", "observed_at_utc", "evidence_reference", "observation"],
+      "properties": {
+        "status": { "const": "PASS" },
+        "observed_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+        "evidence_reference": { "$ref": "#/$defs/reference" },
+        "observation": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      },
+      "additionalProperties": true
+    },
+    "tenantGate": {
+      "allOf": [
+        { "$ref": "#/$defs/gate" },
+        {
+          "required": ["details"],
+          "properties": {
+            "details": {
+              "type": "object",
+              "required": ["foreign_tenant_denied", "foreign_data_leakage"],
+              "properties": {
+                "foreign_tenant_denied": { "const": true },
+                "foreign_data_leakage": { "const": false }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentinel-dna.invalid/schemas/gate5-analyst-access-evidence-1.0.json",
+  "title": "Sentinel DNA Gate 5 Analyst Access Evidence",
+  "description": "Secret-free evidence for remote access preflight or one real bounded analyst pilot. This schema never authorizes access and does not make rehearsal evidence equivalent to pilot evidence.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "evidence_class",
+    "status",
+    "run_id",
+    "source_commit",
+    "access_method",
+    "origin",
+    "started_at_utc",
+    "scope",
+    "controls",
+    "observations"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "evidence_class": { "enum": ["rehearsal", "remote_access_preflight", "authenticated_controlled_analyst_pilot"] },
+    "status": { "enum": ["NOT_EXECUTED", "NOT_MEASURED", "CAPTURED", "VERIFIED", "BLOCKED_WITH_REASON"] },
+    "run_id": { "$ref": "#/$defs/safeIdentifier" },
+    "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "access_method": { "enum": ["cloudflare_one_private_application", "wireguard_private_overlay"] },
+    "origin": { "const": "https://sentinel-dna-staging:18443" },
+    "started_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "completed_at_utc": { "anyOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }] },
+    "scope": {
+      "type": "object",
+      "required": ["synthetic_data_only", "production_data_used", "synthetic_tenant_count", "synthetic_analyst_count"],
+      "properties": {
+        "synthetic_data_only": { "const": true },
+        "production_data_used": { "const": false },
+        "synthetic_tenant_count": { "const": 1 },
+        "synthetic_analyst_count": { "const": 1 },
+        "tenant_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] },
+        "analyst_identity_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] },
+        "authorization_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] },
+        "expiry_at_utc": { "anyOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "controls": {
+      "type": "object",
+      "required": ["private_access", "public_exposure", "tls_verified", "same_origin_verified", "secret_free_evidence", "credentials_or_tokens_in_evidence", "customer_data_in_evidence"],
+      "properties": {
+        "private_access": { "const": true },
+        "public_exposure": { "const": false },
+        "tls_verified": { "const": true },
+        "same_origin_verified": { "const": true },
+        "secret_free_evidence": { "const": true },
+        "credentials_or_tokens_in_evidence": { "const": false },
+        "customer_data_in_evidence": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "observations": {
+      "type": "object",
+      "required": ["authenticated_analyst_access", "rbac_enforcement", "tenant_isolation", "audit_trail", "session_revocation"],
+      "properties": {
+        "authenticated_analyst_access": { "$ref": "#/$defs/observation" },
+        "rbac_enforcement": { "$ref": "#/$defs/observation" },
+        "tenant_isolation": { "$ref": "#/$defs/observation" },
+        "audit_trail": { "$ref": "#/$defs/observation" },
+        "session_revocation": { "$ref": "#/$defs/observation" }
+      },
+      "additionalProperties": false
+    },
+    "backup_restore_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] },
+    "custody_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] },
+    "evidence_sha256": { "anyOf": [{ "type": "string", "pattern": "^[a-f0-9]{64}$" }, { "type": "null" }] },
+    "human_review": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["NOT_MEASURED", "PASS", "BLOCKED"] },
+        "review_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "VERIFIED" } }
+      },
+      "then": {
+        "required": ["completed_at_utc", "custody_reference", "evidence_sha256", "human_review"],
+        "properties": {
+          "completed_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+          "custody_reference": { "$ref": "#/$defs/safeReference" },
+          "evidence_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "human_review": {
+            "properties": { "status": { "const": "PASS" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "evidence_class": { "const": "authenticated_controlled_analyst_pilot" } }
+      },
+      "then": {
+        "properties": {
+          "observations": {
+            "properties": {
+              "authenticated_analyst_access": { "$ref": "#/$defs/passObservation" },
+              "rbac_enforcement": { "$ref": "#/$defs/passObservation" },
+              "tenant_isolation": { "$ref": "#/$defs/passObservation" },
+              "audit_trail": { "$ref": "#/$defs/passObservation" },
+              "session_revocation": { "$ref": "#/$defs/passObservation" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "safeIdentifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "safeReference": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$" },
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "observation": {
+      "type": "object",
+      "required": ["status", "observed_at_utc"],
+      "properties": {
+        "status": { "enum": ["PASS", "NOT_MEASURED", "BLOCKED"] },
+        "observed_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+        "evidence_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] },
+        "observation_reference": { "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "passObservation": {
+      "allOf": [
+        { "$ref": "#/$defs/observation" },
+        {
+          "required": ["evidence_reference", "observation_reference"],
+          "properties": {
+            "status": { "const": "PASS" },
+            "evidence_reference": { "$ref": "#/$defs/safeReference" },
+            "observation_reference": { "$ref": "#/$defs/safeReference" }
+          }
+        }
+      ]
+    }
+  }
+}

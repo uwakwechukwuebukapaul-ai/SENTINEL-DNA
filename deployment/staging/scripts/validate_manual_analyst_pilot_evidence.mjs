@@ -57,6 +57,9 @@ export function validateEvidence(evidence) {
     return ["evidence must be a JSON object"];
   }
 
+  if (evidence.evidence_class !== "authenticated_controlled_analyst_pilot") {
+    addFailure(failures, "evidence_class must identify authenticated controlled analyst pilot evidence");
+  }
   if (evidence.status !== "VERIFIED") addFailure(failures, "evidence status must be VERIFIED");
   if (!nonEmpty(evidence.run_id) || evidence.run_id.includes("REPLACE_WITH")) addFailure(failures, "run_id is missing or still a placeholder");
   if (evidence.scope?.synthetic_data_only !== true) addFailure(failures, "synthetic_data_only must be true");
@@ -116,8 +119,8 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     const status = failures.length === 0 ? "READY_FOR_CONTROLLED_ANALYST_PILOT" : "BLOCKED_WITH_REASON";
     console.log(JSON.stringify({ status, analyst_url_issued: false, failures }));
     process.exit(failures.length === 0 ? 0 : 2);
-  } catch (error) {
-    console.error(JSON.stringify({ status: "BLOCKED_WITH_REASON", reason: `cannot validate evidence: ${error.message}` }));
+  } catch {
+    console.error(JSON.stringify({ status: "BLOCKED_WITH_REASON", reason: "cannot validate evidence" }));
     process.exit(2);
   }
 }
