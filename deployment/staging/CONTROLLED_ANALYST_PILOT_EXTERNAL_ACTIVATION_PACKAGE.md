@@ -80,8 +80,17 @@ Before registration, record in the security change or approval system:
 - approved teardown, session invalidation, and incident contacts.
 
 Install the reviewed runtime only on the approved private operator/trusted
-browser host. Keep signing keys, credentials, cookies, tokens, session state,
-and any runtime secrets outside the repository and outside readiness reports.
+browser host. The custody deliverable is an external runtime bundle, not a
+single copied module: keep the unchanged runtime `.mjs` beside its exact
+`package.json`, `package-lock.json`, and installed `node_modules` tree. Build
+that tree with the lockfile (`npm ci` in the custody bundle) and distribute it
+as one reviewed unit or inside the image bound by the activation manifest.
+Node's native ESM resolution then resolves bare imports from the external
+bundle's ancestor `node_modules`; `NODE_PATH`, import rewriting, repository
+symlinks, and dependency installation from this checkout are not permitted.
+
+Keep signing keys, credentials, cookies, tokens, session state, and any runtime
+secrets outside the repository and outside readiness reports.
 
 The installed runtime module must export exactly the reviewed entrypoint:
 
@@ -116,6 +125,7 @@ $repoRoot = "C:\path\to\sentinel-dna-postmerge-ssh"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_CLIENT = "$repoRoot\deployment\staging\scripts\trusted_browser_service\browser-client.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT = "$repoRoot\deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs"
 $env:SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME = "C:\approved\browser\playwright-runtime.mjs"
+$env:SENTINEL_DNA_APPROVED_RUNTIME_DIGEST = "sha256:<64-hex-runtime-digest>"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST = "C:\approved\browser\trusted-browser-activation-manifest.json"
 $env:SENTINEL_DNA_IMAGE_DIGEST = "sha256:<64-hex-deployed-staging-image-digest>"
 $env:SENTINEL_DNA_ENV = "staging"
@@ -179,6 +189,21 @@ verified by the external custody system:
 }
 ```
 
+For a production runtime bundle, include the lockfile identity in the
+externally held manifest:
+
+```json
+{
+  "approved_runtime_dependency_lockfile_digest": "sha256:<64-hex-lockfile-digest>"
+}
+```
+
+This value is the SHA-256 digest of the exact UTF-8 `package-lock.json` beside
+the runtime. The onboarding verifier also checks that the lockfile root agrees
+with `package.json`, every declared dependency resolves under that external
+bundle's `node_modules`, and each installed package version matches the
+lockfile. A missing or mismatched closure remains blocked.
+
 `approved_runtime_module_digest` must be the SHA-256 digest of the exact
 external runtime module supplied to the operator host. The onboarding verifier
 recomputes that digest and fails closed on absence or mismatch.
@@ -190,6 +215,8 @@ The checked-in validator requires:
 - the SHA-256 digest of the exact reviewed runtime module;
 - an image digest matching `sha256:` plus 64 hexadecimal characters;
 - the exact certified origin;
+- when a production dependency bundle is used, the SHA-256 digest of its
+  lockfile and the native external dependency closure;
 - a UTC activation timestamp;
 - `integrity.algorithm` equal to `sha256`;
 - a 64-hex `integrity.manifest_hash` matching the canonical payload.

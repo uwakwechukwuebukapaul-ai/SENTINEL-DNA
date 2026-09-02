@@ -515,7 +515,17 @@ export async function setupBrowserRuntime(options = {}) {
             "trusted Playwright browser could not select the certified staging origin",
           );
         }
-        return createRestrictedBrowser(browser);
+        try {
+          return createRestrictedBrowser(browser);
+        } catch (error) {
+          // A custody runtime that returns a non-conforming browser may have
+          // launched a real process. Close it before propagating the bounded
+          // contract failure; never leave an unowned browser alive.
+          if (browser && typeof browser.close === "function") {
+            await browser.close().catch(() => {});
+          }
+          throw error;
+        }
       },
     }),
   };

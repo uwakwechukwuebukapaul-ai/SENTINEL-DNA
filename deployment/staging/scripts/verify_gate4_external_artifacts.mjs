@@ -7,8 +7,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -16,7 +16,13 @@ import {
   ACTIVATION_MANIFEST_ENV,
   loadActivationManifest,
 } from "./trusted_browser_activation_manifest.mjs";
+import {
+  APPROVED_RUNTIME_DIGEST_ENV,
+  validateRuntimeModuleCustody,
+} from "./trusted_browser_runtime_custody.mjs";
 import { verifyTrustedBrowserProvider } from "./verify_trusted_browser_provider.mjs";
+import { TRUSTED_BROWSER_CLIENT_ENV } from "./trusted_browser_execution_adapter.mjs";
+import { TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV } from "./trusted_browser_service/browser-client.mjs";
 import {
   APPROVED_PLAYWRIGHT_RUNTIME_ENV,
 } from "./trusted_browser_service/providers/playwright-runtime-provider.mjs";
@@ -64,10 +70,6 @@ function safeCode(value, fallback = "TB_RUNTIME_UNAVAILABLE") {
   return SAFE_CODES.has(value) ? value : fallback;
 }
 
-function digest(value) {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
-
 function canonicalJson(value) {
   if (Array.isArray(value)) return value.map(canonicalJson);
   if (!value || typeof value !== "object") return value;
@@ -92,30 +94,54 @@ function configuredPath(environmentName) {
 }
 
 function isRepositoryArtifact(url) {
-  const artifactPath = resolve(fileURLToPath(url));
-  const repositoryRelative = relative(REPOSITORY_ROOT, artifactPath);
-  return !isAbsolute(repositoryRelative) && !repositoryRelative.startsWith("..");
-}
-
-async function sha256File(url) {
   try {
-    return digest(await readFile(url));
+    const artifactPath = resolve(realpathSync(fileURLToPath(url)));
+    const repositoryPath = resolve(realpathSync(REPOSITORY_ROOT));
+    const repositoryRelative = relative(repositoryPath, artifactPath);
+    return !isAbsolute(repositoryRelative) && !repositoryRelative.startsWith("..");
   } catch {
-    return null;
+    return true;
   }
 }
 
-export async function verifyConfiguredRuntimeDigest(manifest) {
-  const runtimeUrl = configuredPath(APPROVED_PLAYWRIGHT_RUNTIME_ENV);
-  if (!runtimeUrl || isRepositoryArtifact(runtimeUrl)) {
+export async function verifyConfiguredRuntimeDigest(
+  manifest,
+  { requireOperatorDigest = false, requireDependencyClosure = false } = {},
+) {
+  const configured = process.env?.[APPROVED_PLAYWRIGHT_RUNTIME_ENV];
+  if (typeof configured !== "string" || !configured.trim()) {
     return { status: "BLOCKED", code: "TB_RUNTIME_UNAVAILABLE" };
   }
-  const runtimeDigest = await sha256File(runtimeUrl);
-  if (!runtimeDigest) return { status: "BLOCKED", code: "TB_RUNTIME_UNAVAILABLE" };
-  if (runtimeDigest.toLowerCase() !== manifest?.approved_runtime_module_digest?.toLowerCase()) {
+  const operatorDigest = process.env?.[APPROVED_RUNTIME_DIGEST_ENV];
+  if (requireOperatorDigest && (typeof operatorDigest !== "string" || !operatorDigest.trim())) {
     return { status: "BLOCKED", code: "TB_PROVIDER_MANIFEST_INVALID" };
   }
-  return { status: "PASS", digest: runtimeDigest };
+  if (
+    requireDependencyClosure &&
+    (typeof manifest?.approved_runtime_dependency_lockfile_digest !== "string" ||
+      !manifest.approved_runtime_dependency_lockfile_digest.trim())
+  ) {
+    return { status: "BLOCKED", code: "TB_PROVIDER_MANIFEST_INVALID" };
+  }
+  try {
+    const result = await validateRuntimeModuleCustody({
+      modulePath: configured,
+      expectedDigest: manifest?.approved_runtime_module_digest,
+      operatorDigest,
+      expectedLockfileDigest: manifest?.approved_runtime_dependency_lockfile_digest,
+      requireDependencyClosure: requireDependencyClosure,
+    });
+    return {
+      status: "PASS",
+      digest: result.digest,
+      ...(result.dependencyClosure ? { dependencyClosure: result.dependencyClosure } : {}),
+    };
+  } catch (error) {
+    const code = error?.code === "TB_PROVIDER_MANIFEST_INVALID"
+      ? error.code
+      : "TB_RUNTIME_UNAVAILABLE";
+    return { status: "BLOCKED", code };
+  }
 }
 
 function blockedCheck(name, code) {
@@ -126,9 +152,17 @@ function passCheck(name) {
   return { name, status: "PASS" };
 }
 
+function providerConfigurationCode() {
+  return [TRUSTED_BROWSER_CLIENT_ENV, TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV]
+    .some((name) => typeof process.env?.[name] !== "string" || !process.env[name].trim())
+    ? "TB_PROVIDER_NOT_CONFIGURED"
+    : undefined;
+}
+
 function activationStatus(checks, providerVerification) {
-    const allArtifactsValid = checks.runtime_module_exists.status === "PASS" &&
+  const allArtifactsValid = checks.runtime_module_exists.status === "PASS" &&
     checks.runtime_digest_matches_manifest.status === "PASS" &&
+    checks.runtime_dependency_bundle.status === "PASS" &&
     checks.manifest_integrity.status === "PASS" &&
     checks.image_digest_binding.status === "PASS" &&
     checks.certified_origin_binding?.status === "PASS";
@@ -164,14 +198,12 @@ export async function verifyGate4ExternalArtifacts() {
   const checks = {
     runtime_module_exists: runtimeUsable ? passCheck("runtime_module_exists") : blockedCheck("runtime_module_exists", "TB_RUNTIME_UNAVAILABLE"),
     runtime_digest_matches_manifest: { name: "runtime_digest_matches_manifest", status: "NOT_RUN" },
+    runtime_dependency_bundle: { name: "runtime_dependency_bundle", status: "NOT_RUN" },
     manifest_integrity: { name: "manifest_integrity", status: "NOT_RUN" },
     image_digest_binding: { name: "image_digest_binding", status: "NOT_RUN" },
   };
   let runtimeDigest;
-  if (runtimeUsable) {
-    runtimeDigest = await sha256File(runtimeUrl);
-    if (!runtimeDigest) checks.runtime_module_exists = blockedCheck("runtime_module_exists", "TB_RUNTIME_UNAVAILABLE");
-  }
+  let runtimeCustody;
 
   let manifest;
   let manifestIntegrityCode;
@@ -190,13 +222,28 @@ export async function verifyGate4ExternalArtifacts() {
     }
   }
 
-  if (manifest && runtimeDigest) {
-    checks.runtime_digest_matches_manifest = runtimeDigest.toLowerCase() ===
-      manifest.approved_runtime_module_digest.toLowerCase()
-      ? passCheck("runtime_digest_matches_manifest")
-      : blockedCheck("runtime_digest_matches_manifest", "TB_PROVIDER_MANIFEST_INVALID");
+  if (manifest && runtimeUsable) {
+    runtimeCustody = await verifyConfiguredRuntimeDigest(manifest, {
+      requireOperatorDigest: true,
+      requireDependencyClosure: true,
+    });
+    if (runtimeCustody.status === "PASS") {
+      runtimeDigest = runtimeCustody.digest;
+      checks.runtime_digest_matches_manifest = passCheck("runtime_digest_matches_manifest");
+      checks.runtime_dependency_bundle = passCheck("runtime_dependency_bundle");
+    } else {
+      checks.runtime_digest_matches_manifest = blockedCheck(
+        "runtime_digest_matches_manifest",
+        runtimeCustody.code,
+      );
+      checks.runtime_dependency_bundle = blockedCheck(
+        "runtime_dependency_bundle",
+        runtimeCustody.code,
+      );
+    }
   } else if (!runtimeUsable || !runtimeDigest) {
     checks.runtime_digest_matches_manifest = blockedCheck("runtime_digest_matches_manifest", "TB_RUNTIME_UNAVAILABLE");
+    checks.runtime_dependency_bundle = blockedCheck("runtime_dependency_bundle", "TB_RUNTIME_UNAVAILABLE");
   }
 
   const configuredImage = process.env?.[IMAGE_DIGEST_ENV]?.trim();
@@ -214,11 +261,31 @@ export async function verifyGate4ExternalArtifacts() {
       manifestIntegrityCode || (manifest ? "TB_ORIGIN_REJECTED" : "TB_PROVIDER_MANIFEST_MISSING"),
     );
 
+  const custodyBlocker = [
+    checks.runtime_module_exists,
+    checks.runtime_digest_matches_manifest,
+    checks.runtime_dependency_bundle,
+    checks.manifest_integrity,
+    checks.image_digest_binding,
+    checks.certified_origin_binding,
+  ].find((check) => check.status !== "PASS");
+  const providerConfigurationFailure = providerConfigurationCode();
   let providerVerification;
-  try {
-    providerVerification = await verifyTrustedBrowserProvider();
-  } catch {
-    providerVerification = { status: BLOCKED_STATUS, failure_category: "TB_RUNTIME_UNAVAILABLE", checks: {} };
+  if (providerConfigurationFailure || custodyBlocker) {
+    // Do not import or execute any operator runtime until its exact bytes,
+    // custody manifest, deployed image, and certified origin are reconciled.
+    providerVerification = {
+      status: BLOCKED_STATUS,
+      failure_category: providerConfigurationFailure ||
+        safeCode(custodyBlocker.code, "TB_RUNTIME_UNAVAILABLE"),
+      checks: {},
+    };
+  } else {
+    try {
+      providerVerification = await verifyTrustedBrowserProvider();
+    } catch {
+      providerVerification = { status: BLOCKED_STATUS, failure_category: "TB_RUNTIME_UNAVAILABLE", checks: {} };
+    }
   }
   const providerCode = providerVerification.status === "PASS"
     ? undefined
@@ -247,6 +314,7 @@ export async function verifyGate4ExternalArtifacts() {
     },
     artifact_identity: {
       runtime_module_digest: runtimeDigest || null,
+      runtime_dependency_lockfile_digest: runtimeCustody?.dependencyClosure?.lockfileDigest || null,
       image_digest: isImageDigest(configuredImage) ? configuredImage.toLowerCase() : null,
       certified_origin: CERTIFIED_ORIGIN,
     },

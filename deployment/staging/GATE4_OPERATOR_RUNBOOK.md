@@ -11,10 +11,14 @@ artifacts.
 
 ## 1. Obtain the approved runtime
 
-Obtain the separately reviewed Playwright/RPC runtime module from the approved
-internal distribution or custody system. Do not obtain it by adding a
-repository dependency, installing standalone Playwright, using a test fixture,
-or connecting to CDP/debugging ports.
+Obtain the separately reviewed Playwright/RPC runtime bundle from the approved
+internal distribution or custody system. The bundle must contain the unchanged
+runtime module, a private `package.json`, its exact `package-lock.json`, and a
+non-symlinked `node_modules` closure beside the module. This is the native Node
+ESM resolution boundary for bare runtime imports. Do not obtain it by adding a
+repository dependency, setting `NODE_PATH`, rewriting the module, using a
+repository symlink, installing standalone Playwright, using a test fixture, or
+connecting to CDP/debugging ports.
 
 Record outside Git, without secrets:
 
@@ -22,6 +26,7 @@ Record outside Git, without secrets:
 - supplier/release and security review reference;
 - reviewer and review date;
 - exact artifact SHA-256 digest;
+- exact dependency lockfile SHA-256 digest and package-manager provenance;
 - approved staging image/runtime scope;
 - trusted RPC and teardown/revocation procedure;
 - runtime custody owner and incident contact.
@@ -30,6 +35,9 @@ Record outside Git, without secrets:
 
 Independently verify that the digest is for the exact reviewed module supplied
 to the operator host. Reconcile it with the external review/custody record.
+Run the bundle's locked install in custody and record the lockfile digest; the
+onboarding verifier checks that installed direct dependencies resolve inside
+the same external bundle and match the lockfile versions.
 Do not place the runtime module, credentials, signing keys, or session state in
 this repository.
 
@@ -64,8 +72,9 @@ From the repository root, dot-source the helper with the external artifacts:
 ```powershell
 . .\deployment\staging\scripts\configure_gate4_provider_environment.ps1 `
   -ApprovedRuntimeModule 'C:\approved\browser\playwright-runtime.mjs' `
+  -RuntimeDigest 'sha256:<64-hex-runtime-digest>' `
   -ActivationManifest 'C:\approved\browser\trusted-browser-activation-manifest.json' `
-  -ImageDigest 'sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653'
+  -ImageDigest 'sha256:<64-hex-deployed-staging-image-digest>'
 ```
 
 Expected success output includes `STATUS=PASS`. Missing artifacts must instead
