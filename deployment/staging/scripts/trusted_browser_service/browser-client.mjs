@@ -183,6 +183,85 @@ function assertUpstreamBrowser(browser) {
   }
 }
 
+function createNativePlaywrightBrowserAdapter(browser) {
+  if (
+    !browser ||
+    typeof browser.newContext !== "function" ||
+    typeof browser.close !== "function"
+  ) {
+    return null;
+  }
+
+  return {
+    tabs: {
+      new: async () => {
+        const context = await browser.newContext();
+        let page;
+        let closed = false;
+        const close = async () => {
+          if (closed) return;
+          closed = true;
+          let closeError;
+          try {
+            if (page && typeof page.close === "function") await page.close();
+          } catch (error) {
+            closeError = error;
+          }
+          try {
+            if (typeof context.close === "function") await context.close();
+          } catch (error) {
+            closeError ||= error;
+          }
+          if (closeError) throw closeError;
+        };
+
+        try {
+          page = await context.newPage();
+          return {
+            goto: async (url) => page.goto(url),
+            close,
+            playwright: {
+              locator: (selector) => page.locator(selector),
+              evaluate: async (expression, ...args) => {
+                assertNoCredentialFields(args);
+                return page.evaluate(expression, ...args);
+              },
+            },
+            dom_cua: {
+              get_visible_dom: async () => page.evaluate(() => {
+                const root = document.body || document.documentElement;
+                if (!root) return "";
+                const clone = root.cloneNode(true);
+                for (const element of clone.querySelectorAll(
+                  "script, style, noscript, template",
+                )) {
+                  element.remove();
+                }
+                return clone.innerHTML;
+              }),
+            },
+            capabilities: {
+              get: async (name) => {
+                if (name === "browserAuth") {
+                  throw trustedBrowserError(
+                    "TB_AUTH_CAPABILITY_MISSING",
+                    "approved browserAuth capability is unavailable",
+                  );
+                }
+                return undefined;
+              },
+            },
+          };
+        } catch (error) {
+          await close().catch(() => {});
+          throw error;
+        }
+      },
+    },
+    close: () => browser.close(),
+  };
+}
+
 function assertUpstreamTab(tab) {
   if (!tab || typeof tab.goto !== "function") {
     throw trustedBrowserError(
@@ -406,13 +485,16 @@ function createRestrictedTab(tab) {
 }
 
 function createRestrictedBrowser(browser) {
-  assertUpstreamBrowser(browser);
+  const adaptedBrowser = browser?.tabs?.new
+    ? browser
+    : createNativePlaywrightBrowserAdapter(browser);
+  assertUpstreamBrowser(adaptedBrowser);
   const restricted = {
     tabs: Object.freeze({
       new: async (...args) => {
         if (args.length !== 0) throw new Error("trusted browser tabs.new does not accept options");
         try {
-          return createRestrictedTab(await browser.tabs.new());
+          return createRestrictedTab(await adaptedBrowser.tabs.new());
         } catch (error) {
           if (SAFE_TAB_DIAGNOSTIC_CODES.has(error?.code)) throw error;
           throw trustedBrowserError(
@@ -423,8 +505,8 @@ function createRestrictedBrowser(browser) {
       },
     }),
   };
-  if (typeof browser.close === "function") {
-    restricted.close = async () => browser.close();
+  if (typeof adaptedBrowser.close === "function") {
+    restricted.close = async () => adaptedBrowser.close();
   }
   return Object.freeze(restricted);
 }

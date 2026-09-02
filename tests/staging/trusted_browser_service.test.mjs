@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -13,6 +14,9 @@ import {
   createTrustedRuntimeProvider,
   TRUSTED_BROWSER_ENVIRONMENT,
 } from "../../deployment/staging/scripts/trusted_browser_service/runtime-provider.mjs";
+
+const EXTERNAL_CUSTODY_RUNTIME =
+  "C:\\sentinel-dna-gate4-custody\\approved-playwright-runtime.mjs";
 
 async function withFakeUpstream(source, callback) {
   const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-trusted-browser-"));
@@ -113,6 +117,36 @@ test("creates a runtime from the repository's staging-only adapter stub", async 
   assert.equal(typeof tab.playwright.locator, "function");
   assert.equal(typeof tab.playwright.evaluate, "function");
   assert.equal(typeof (await tab.capabilities.get("browserAuth")).request, "function");
+});
+
+test("adapts the operator custody runtime's native Playwright browser contract", {
+  skip: !existsSync(EXTERNAL_CUSTODY_RUNTIME),
+}, async () => {
+  const runtime = await setupBrowserRuntime({
+    upstreamClientModule: EXTERNAL_CUSTODY_RUNTIME,
+  });
+  let browser;
+  let tab;
+
+  try {
+    browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+    tab = await browser.tabs.new();
+
+    assert.equal(typeof tab.goto, "function");
+    assert.equal(typeof tab.playwright.locator, "function");
+    assert.equal(typeof tab.playwright.evaluate, "function");
+    assert.equal(typeof tab.dom_cua.get_visible_dom, "function");
+    assert.equal(typeof tab.capabilities.get, "function");
+    assert.equal(await tab.playwright.evaluate(() => document.title), "");
+    await assert.rejects(
+      tab.capabilities.get("browserAuth"),
+      (error) => error.code === "TB_AUTH_CAPABILITY_MISSING",
+    );
+  } finally {
+    if (tab) await tab.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+    if (typeof runtime.close === "function") await runtime.close().catch(() => {});
+  }
 });
 
 test("selects only the certified origin and exposes the runner contract", async () => {
