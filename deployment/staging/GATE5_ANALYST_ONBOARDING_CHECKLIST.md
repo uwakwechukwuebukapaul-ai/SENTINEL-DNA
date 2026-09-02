@@ -3,6 +3,37 @@
 This checklist governs one approved analyst in the non-production staging
 pilot. It does not create an identity or assert that a pilot occurred.
 
+## Minimum operator sequence
+
+Run these steps in order. Stop at the first unchecked item; do not continue by
+using a bypass, alternate origin, or inferred PASS.
+
+1. Verify Gate 4 readiness, current staging custody identities, private TLS,
+   loopback-only edge publication, and fresh backup/isolated-restore evidence.
+2. Obtain external approval for this analyst, one synthetic tenant, the
+   scenario scope, expiry, remote access method, and rollback owner.
+3. Create a unique external run ID and open an append-only evidence record with
+   class `remote_access_preflight` and status `NOT_EXECUTED`.
+4. Validate the private remote path without authentication. Confirm the exact
+   origin, certificate/SNI, same-origin behavior, and denial of all internal
+   service ports. If any check fails, leave the record blocked.
+5. Have the manager authenticate through the approved browser-auth flow,
+   verify manager role/session and CSRF denial, then provision only the
+   approved synthetic analyst scope if authorized.
+6. Have the analyst authenticate through the approved channel. Verify the
+   server-derived analyst role, tenant, authorization expiry, and workspace;
+   record only opaque references, never credentials or session values.
+7. Execute the bounded synthetic workflow and directly observe RBAC denials,
+   foreign-tenant denial/no leakage, audit/provenance references, and
+   advisory-only AI handling. Mark anything unperformed `NOT_MEASURED`.
+8. Revoke authorization, deactivate the analyst, invalidate sessions, verify
+   post-revocation denial, disable/narrow the remote access policy, seal the
+   external evidence, and run every required validator.
+
+The record may use class `authenticated_controlled_analyst_pilot` only after
+the analyst actually completes the approved workflow. Rehearsal and access
+preflight records remain separate and cannot satisfy pilot completion.
+
 ## Approval and scope
 
 - [ ] Security/release owner approved the specific analyst, environment,
