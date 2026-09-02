@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "controlled_analyst_pilot_readiness_reference",
+  "source_commit": "b24d0cf5dad78f9848ed1300d48236e48092e3e9",
+  "status": "READY_FOR_ANALYST_PILOT",
+  "certified_origin": "https://sentinel-dna-staging:18443",
+  "checks": {
+    "image_digest": "PASS",
+    "staging_environment": "PASS",
+    "activation_manifest": "PASS",
+    "provider_configured": "PASS",
+    "provider_verification": "PASS",
+    "evidence_directory": "PASS",
+    "validation_scripts": "PASS",
+    "certified_origin": "PASS",
+    "secure_cookies": "PASS",
+    "debug_disabled": "PASS",
+    "pilot_access_gate": "PASS",
+    "tenant_isolation": "PASS",
+    "audit_logging": "PASS"
+  },
+  "artifact_bindings": {
+    "runtime_module_digest": "sha256:42530c78b4d15f591d090d4da71ee2485dd20247104fdb2464705879a071831b",
+    "runtime_dependency_lockfile_digest": "sha256:bfe418c7e4c3ae90aed3b0637584b4a995f7a1f3ae3e2d3833d9fb936b4f3529",
+    "browser_auth_bridge_identity": "sentinel-dna-browser-auth-bridge:1.0.0",
+    "browser_auth_bridge_digest": "sha256:6419e45dd2256cde8e0b982e6137b951cb9ff63c78577a31fb35e2782d656498",
+    "image_digest": "sha256:0ce1ef605201f5f8e2d5b47c0bffae3eaa13da68952a14229faf2c97477bacec"
+  },
+  "evidence_references": {
+    "provider_verification": {
+      "file": "gate4-provider-verification-20260902-final.json",
+      "evidence_sha256": "8b10a192ab262c478399a0f23c511631162eef84bebeff06e6ff19ec0cbe573b"
+    },
+    "external_artifact_verification": {
+      "file": "gate4-external-artifact-verification-20260902T163527Z.json",
+      "evidence_sha256": "2a162a5fb5f0198ddca7033705cf0f20004c5f4049164d60edcb9517de06f778"
+    },
+    "activation_manifest": {
+      "custody": "external-approved-custody",
+      "manifest_integrity": "PASS"
+    }
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "fake_runtime_used": false,
+    "synthetic_approval_created": false,
+    "security_controls_bypassed": false,
+    "browser_auth_invoked_by_evidence_generator": false
+  },
+  "evidence_sha256": "b623171257833c536a5ae3c6c82a8a75768c1f3b67a708460c645a9b8434dd00"
+}
