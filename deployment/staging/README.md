@@ -197,6 +197,41 @@ staging runtime's authoritative database remains the private PostgreSQL
 `DATABASE_URL`, so the SQLite path is not a fallback when PostgreSQL is
 configured or unavailable.
 
+## Test topology
+
+Run ordinary host-side unit, security, and authentication tests with the
+default host topology:
+
+```powershell
+python -m pytest tests/database -q
+python -m pytest tests/security tests/auth -q
+```
+
+Host pytest defaults to `SENTINEL_DNA_TEST_TOPOLOGY=host` and removes inherited
+application `DATABASE_URL` configuration for each test. This prevents the
+Docker-only `postgres` hostname from being treated as a Windows-host endpoint.
+Tests that validate PostgreSQL itself are opt-in and never infer credentials
+from staging or production configuration.
+
+Run PostgreSQL integration coverage inside the running staging `app` service,
+where `postgres:5432` is resolvable and the existing Docker secret is mounted.
+The command supplies no password; the test backend reads it from the mounted
+secret file:
+
+```powershell
+docker compose --project-name sentinel-dna-staging `
+  --env-file $env:STAGING_ENV_FILE `
+  --file .\deployment\staging\docker-compose.yml `
+  exec -T `
+  -e SENTINEL_DNA_TEST_TOPOLOGY=container `
+  -e SENTINEL_DNA_TEST_POSTGRES_URL=postgresql://sentinel@postgres:5432/sentinel_dna `
+  -e SENTINEL_DNA_TEST_POSTGRES_PASSWORD_FILE=/run/secrets/sentinel_dna_postgres_password `
+  app python -m pytest tests/database -m postgresql -q
+```
+
+The staging Compose contract must continue to publish only the reviewed edge;
+do not add a PostgreSQL or Redis host port to accommodate pytest.
+
 ## Health and rollback gates
 
 After an approved operator starts the staging runtime, verify `/health` and

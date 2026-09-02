@@ -183,6 +183,21 @@ test("selects only the certified origin and exposes the runner contract", async 
     assert.deepEqual(result, { status: "submitted" });
     assert.deepEqual(Object.keys(result), ["status"]);
     assert.equal(Object.prototype.hasOwnProperty.call(result, "password"), false);
+    assert.equal(typeof upstream.state.authRequests[0].fields[0].selector, "string");
+    assert.equal(typeof upstream.state.authRequests[0].submit.selector, "string");
+
+    await assert.rejects(
+      auth.request({
+        origin: CERTIFIED_ORIGIN,
+        fields: [{
+          id: "password",
+          label: "Password",
+          type: "password",
+          selector: { locator: "#password" },
+        }],
+      }),
+      /field descriptor is invalid/,
+    );
   });
 });
 

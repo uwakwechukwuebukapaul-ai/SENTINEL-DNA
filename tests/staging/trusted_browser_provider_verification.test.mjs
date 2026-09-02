@@ -159,6 +159,33 @@ test("reports missing browserAuth separately from the browser contract", async (
   });
 });
 
+test("closes the selected browser after provider verification", async () => {
+  await withConfiguration({
+    runtimeSource: `
+      export const state = { closed: 0 };
+      const tab = {
+        goto: async () => {},
+        close: async () => {},
+        playwright: { locator: () => ({}), evaluate: async () => ({}) },
+        dom_cua: { get_visible_dom: async () => ({}) },
+        capabilities: { get: async () => ({ request: async () => ({ status: "not-called" }) }) },
+      };
+      const browser = {
+        tabs: { new: async () => tab },
+        close: async () => { state.closed += 1; },
+      };
+      export async function setupBrowserRuntime() {
+        return { browsers: { getForUrl: async () => browser } };
+      }
+    `,
+  }, async ({ runtimePath }) => {
+    const runtime = await import(pathToFileURL(runtimePath).href);
+    const result = await verifyTrustedBrowserProvider();
+    assert.equal(result.status, "PASS");
+    assert.equal(runtime.state.closed, 1);
+  });
+});
+
 test("provider rejects a non-certified origin", async () => {
   await withConfiguration({}, async () => {
     const runtime = await setupProviderRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT });

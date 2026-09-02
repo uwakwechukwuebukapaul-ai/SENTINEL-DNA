@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "controlled_analyst_pilot_recovery_validation",
+  "captured_at_utc": "2026-09-02T13:25:28Z",
+  "status": "BLOCKED_WITH_REASON",
+  "repository": {
+    "branch": "gate4-controlled-analyst-pilot",
+    "head": "c34a0707d2ef7a51e2cf9d90ccc933adaec300dd",
+    "head_tree": "c1c0ebd345248206d234cee3033fcf800690d85c",
+    "working_tree": "MODIFIED_AND_UNTRACKED_CHANGES_PRESERVED",
+    "git_diff_check": "PASS"
+  },
+  "image_provenance": {
+    "requested_current_image": "staging-app:974e3275bc678851e3979a5cbb95ff7d2e9dc4c9",
+    "requested_current_digest": "sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+    "requested_current_labels": {
+      "com.sentinel-dna.git.revision.full": "974e3275bc678851e3979a5cbb95ff7d2e9dc4c9",
+      "org.opencontainers.image.created": "2026-08-31T17:13:21Z",
+      "org.opencontainers.image.revision": "974e3275bc678851e3979a5cbb95ff7d2e9dc4c9",
+      "org.opencontainers.image.version": "974e3275bc678851e3979a5cbb95ff7d2e9dc4c9"
+    },
+    "current_candidate_reconciliation": "BLOCKED",
+    "current_candidate_reason": "image labels identify 974e3275bc678851e3979a5cbb95ff7d2e9dc4c9, not the current HEAD c34a0707d2ef7a51e2cf9d90ccc933adaec300dd",
+    "external_staging_env_image": {
+      "tag": "pilot-staging-certified-974e327",
+      "revision_full": "974e3275bc678851e3979a5cbb95ff7d2e9dc4c9",
+      "created": "2026-08-31T17:13:21Z",
+      "digest": "sha256:f065ce859b6b349d5ee9a159768197ee773e45ab92295a6f298fd862a9cc286e"
+    },
+    "external_manifest_image_binding": "sha256:f065ce859b6b349d5ee9a159768197ee773e45ab92295a6f298fd862a9cc286e",
+    "image_digest_gate": "BLOCKED"
+  },
+  "staging_environment": {
+    "external_env_file_present": "PASS",
+    "external_env_file_contract": "BLOCKED",
+    "external_env_file_reason": "configured certified base URL is https://sentinel-dna-staging:8443 and its image metadata is stale for this candidate",
+    "secret_file_paths_resolve": "PASS",
+    "edge_config_path_resolves": "PASS",
+    "tls_directory_resolves": "PASS",
+    "docker_compose_executable": "BLOCKED",
+    "docker_compose_reason": "docker command is not installed or available in this execution environment",
+    "compose_config": "BLOCKED",
+    "compose_ps": "BLOCKED",
+    "container_state": "NOT RUN",
+    "private_service_health": "NOT RUN",
+    "static_boundary_assertions": {
+      "app_host_port_5000": "PASS",
+      "edge_loopback_18443": "PASS",
+      "postgres_host_port": "PASS",
+      "redis_host_port": "PASS",
+      "staging_internal_network": "PASS",
+      "nginx_cert_and_key_mount_contract": "PASS",
+      "nginx_proxy_to_private_app_5000": "PASS"
+    }
+  },
+  "tls_and_origin": {
+    "certificate_artifacts_present": "PASS",
+    "certificate_identity_inspection": "PASS",
+    "certificate_subject": "CN=sentinel-dna-staging",
+    "certificate_issuer": "CN=Sentinel DNA Staging Root CA",
+    "certificate_san_observed": [
+      "DNS:sentinel-dna-staging",
+      "DNS:localhost",
+      "IP:127.0.0.1"
+    ],
+    "certified_dns": "PASS",
+    "tcp_127_0_0_1_18443": "BLOCKED",
+    "certified_origin_tls": "BLOCKED",
+    "certified_origin_health": "BLOCKED",
+    "certified_origin_ready": "BLOCKED",
+    "origin_failure": "TB_ORIGIN_UNREACHABLE",
+    "private_ports_5000_5432_6379": "PASS",
+    "private_ports_reason": "no host listeners were present"
+  },
+  "trusted_browser": {
+    "repository_facade_and_boundary": "PASS",
+    "external_runtime_file_hash": "sha256:42530c78b4d15f591d090d4da71ee2485dd20247104fdb2464705879a071831b",
+    "runtime_digest_matches_manifest_independently": "BLOCKED",
+    "runtime_digest_binding_reason": "runtime digest sha256:42530c78b4d15f591d090d4da71ee2485dd20247104fdb2464705879a071831b does not equal supplied custody manifest digest sha256:b242d9baaa890342c4b7032e6daaa0505a47c47e10bc1466c39358b15dea0665",
+    "runtime_contract_and_setup": "BLOCKED",
+    "runtime_failure": "TB_RUNTIME_UNAVAILABLE",
+    "runtime_custody_reason": "external artifact imports standalone playwright, requires an unavailable package, launches chromium directly, and returns no required tabs.new contract; it is not a valid Gate 4 RPC/browser provider",
+    "activation_manifest_file_hash": "sha256:1993a0fc4c305a738937f8de60464afd62014bc398df87d3c67005c620b57a7d",
+    "activation_manifest_integrity": "PASS",
+    "activation_manifest_stored_hash": "2741ecc48a74bc89904b32c82cc6adda73f20dd6103b40b09d4b400f94eee3a9",
+    "activation_manifest_computed_hash": "b6ec3f8d8fb8a360994968cd6361b1c206f497efcc82632819a21c18e4e9cdd0",
+    "activation_manifest_binding": "BLOCKED",
+    "activation_manifest_binding_reason": "manifest image digest sha256:f065ce859b6b349d5ee9a159768197ee773e45ab92295a6f298fd862a9cc286e does not equal requested image digest sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+    "approved_browser_auth_bridge_hash": "sha256:6419e45dd2256cde8e0b982e6137b951cb9ff63c78577a31fb35e2782d656498",
+    "approved_browser_auth_bridge_validation": "PASS",
+    "provider_verification": "BLOCKED",
+    "provider_failure": "TB_RUNTIME_UNAVAILABLE",
+    "browser_contract": "NOT RUN",
+    "browser_auth_capability": "NOT RUN",
+    "credentials_or_sessions_used": false,
+    "browser_auth_invoked": false,
+    "forbidden_transport_used": false
+  },
+  "structural_validation": {
+    "node_staging_tests": "PASS",
+    "node_staging_tests_detail": "75/75",
+    "python_staging_security_contract": "PASS",
+    "python_staging_security_contract_detail": "19/19",
+    "live_staging_validation": "BLOCKED",
+    "live_staging_validation_reason": "external runtime and Docker are unavailable/invalid"
+  },
+  "readiness": {
+    "checker": "BLOCKED_WITH_REASON",
+    "image_digest": "BLOCKED",
+    "image_digest_reason": "format is valid, but immutable image provenance is not reconciled to the current candidate",
+    "staging_environment": "BLOCKED",
+    "staging_environment_reason": "process assertion was set for read-only checker execution, but no live staging environment was validated",
+    "activation_manifest": "BLOCKED",
+    "provider_configured": "PASS",
+    "provider_verification": "BLOCKED",
+    "evidence_directory": "PASS",
+    "validation_scripts": "PASS",
+    "certified_origin": "BLOCKED",
+    "secure_cookies": "PASS",
+    "debug_disabled": "PASS",
+    "pilot_access_gate": "PASS",
+    "tenant_isolation": "PASS",
+    "audit_logging": "PASS",
+    "final_decision": "BLOCKED_WITH_REASON",
+    "analyst_pilot_status": "BLOCKED"
+  },
+  "human_release_approval": "NOT RUN",
+  "preserved_artifacts": {
+    "external_artifact_verification": "pilot-evidence/gate4/gate4-external-artifact-verification-20260902T132528Z.json",
+    "external_artifact_verification_sha256": "30f0b1884fe9eb988387229a161def094a09f4eec1298d0681b06fba4957b22a",
+    "readiness_report": "pilot-evidence/controlled-pilot-readiness-report-20260902T132528Z.json",
+    "recovery_validation": "pilot-evidence/gate4/gate4-recovery-validation-20260902T131609Z.json"
+  },
+  "safe_next_action": "Release custody must supply an integrity-valid activation manifest bound to the approved image and a separately reviewed restricted RPC/browser runtime implementing the required contract; infrastructure must provide Docker Compose and reconcile a certified 18443 staging environment before rerunning Gate 4.",
+  "secrets_included": false
+}

@@ -49,6 +49,34 @@ provide `tabs.new()`. Each returned tab must provide:
 - `dom_cua.get_visible_dom()`;
 - `capabilities.get("browserAuth")` returning the external capability.
 
+### Browser authentication bridge contract
+
+The operator environment must set the non-secret module path
+`SENTINEL_DNA_BROWSER_AUTH_BRIDGE` to a separately reviewed local module. The
+module must export a callable `requestBrowserAuth` function with this shape:
+
+```js
+export async function requestBrowserAuth({ page, request, environment }) {
+  // Use the approved browser UI to obtain credentials; never accept them in
+  // this request or return them to Sentinel DNA.
+  return { status: "submitted" };
+}
+```
+
+The adapter supplies only `environment: "codex-app"`, the certified origin,
+visible login-field descriptors, and selector strings. A valid bridge must
+perform credential entry through the browser-mediated handoff and return only
+a non-secret string `status`. Passwords, tokens, cookies, headers, CSRF
+values, session values, and richer bridge results must not enter Sentinel DNA
+arguments, logs, evidence, or provider options.
+
+The bridge is validated before `browserAuth` is exposed. Missing or
+unresolvable configuration returns `TB_AUTH_BRIDGE_MISSING`; a module without
+`requestBrowserAuth()` returns `TB_AUTH_BRIDGE_EXPORT_INVALID`; and a bridge
+load or execution error returns `TB_AUTH_BRIDGE_RUNTIME_FAILED`. Every result
+is fail-closed. Test, fixture, mock, stub, and simulation modules are not
+approved capabilities.
+
 The checked-in provider boundary and browser facade perform the final origin,
 surface, capability, and redaction checks. A provider must not rely on the
 runner to make an unsafe runtime safe.
@@ -58,6 +86,19 @@ provider-boundary paths. To apply those paths reproducibly in an operator
 PowerShell scope, dot-source `scripts/configure_gate4_provider_environment.ps1`
 with the separately reviewed runtime module, activation manifest, and reviewed
 image digest. The helper does not set credentials or provide a runtime.
+
+Before provider verification, the bridge contract can be checked with the
+read-only acceptance harness:
+
+```powershell
+node .\deployment\staging\scripts\validate_trusted_browser_auth_bridge.mjs
+```
+
+The harness reads `SENTINEL_DNA_BROWSER_AUTH_BRIDGE`, imports the supplied
+module only to validate its export, and never calls `requestBrowserAuth()`.
+It emits only `PASS` or a fail-closed `BLOCKED_WITH_REASON` result. Structural
+acceptance is not operator approval; the module must still come from approved
+external custody.
 
 ## Runtime lifecycle
 
@@ -112,6 +153,7 @@ repository and must point to the separately reviewed runtime module:
 $env:SENTINEL_DNA_TRUSTED_BROWSER_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\browser-client.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs"
 $env:SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME = "C:\approved\browser\playwright-runtime.mjs"
+$env:SENTINEL_DNA_BROWSER_AUTH_BRIDGE = "C:\approved\browser\browser-auth-bridge.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST = "C:\approved\browser\trusted-browser-activation-manifest.json"
 $env:SENTINEL_DNA_IMAGE_DIGEST = "sha256:<reviewed-64-hex-digest>"
 $env:SENTINEL_DNA_ENV = "staging"
@@ -210,6 +252,9 @@ credentials, environment secrets, or stack traces:
 | `TB_BROWSER_SELECTION_FAILED` | Certified browser selection failed | Keep the pilot blocked and inspect the trusted runtime |
 | `TB_BROWSER_CONTRACT_FAILED` | Browser/tab/Playwright/DOM surface is incomplete | Keep the pilot blocked; repair the reviewed provider contract |
 | `TB_AUTH_CAPABILITY_MISSING` | External `browserAuth` capability is unavailable | Keep the pilot blocked; do not pass credentials another way |
+| `TB_AUTH_BRIDGE_MISSING` | The reviewed browser authentication bridge is not configured or cannot be resolved | Supply the separately reviewed bridge module; do not use a fixture or alternate provider |
+| `TB_AUTH_BRIDGE_EXPORT_INVALID` | The configured bridge does not export callable `requestBrowserAuth()` | Return the bridge for review and repair its interface |
+| `TB_AUTH_BRIDGE_RUNTIME_FAILED` | The bridge failed to load or complete its browser-mediated handoff | Keep the pilot blocked and inspect the reviewed bridge without exposing its error or credentials |
 
 Any unrecognized error is treated as the relevant safe category and remains a
 blocker. Do not print the original exception or inspect it by adding logging.

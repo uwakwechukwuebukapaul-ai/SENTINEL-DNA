@@ -77,6 +77,7 @@ from services.pilot_reports.service import PilotReportService
 from services.pilot_management.service import PilotManagementService
 from services.pilot_management.authorization import PilotAuthorizationService
 from services.pilot_management.provisioning import PilotAccountProvisioningService
+from services.controlled_analyst_pilot import ControlledAnalystPilotService
 from services.support.service import SupportService
 from services.exercises.service import ExerciseService
 from services.case_studies.service import CaseStudyService
@@ -312,6 +313,12 @@ def build_container() -> ServiceRegistry:
         pilot_authorization_service=pilot_authorization_service,
         audit_service=audit_service,
     )
+    controlled_analyst_pilot_service = ControlledAnalystPilotService(
+        database,
+        canonical_authority=canonical_authority,
+        audit_service=audit_service,
+        provisioning_service=pilot_account_provisioning_service,
+    )
     support_service = SupportService()
     exercise_service = ExerciseService(); case_study_service = CaseStudyService()
     readiness_service = ReadinessService(service_lookup=lambda name: registry.get(name) if registry.has(name) else None)
@@ -434,6 +441,7 @@ def build_container() -> ServiceRegistry:
     registry.register("pilot_management_service", pilot_management_service)
     registry.register("pilot_authorization_service", pilot_authorization_service)
     registry.register("pilot_account_provisioning_service", pilot_account_provisioning_service)
+    registry.register("controlled_analyst_pilot_service", controlled_analyst_pilot_service)
     registry.register("support_service", support_service)
     registry.register("exercise_service", exercise_service); registry.register("case_study_service", case_study_service)
     registry.register("readiness_service", readiness_service)

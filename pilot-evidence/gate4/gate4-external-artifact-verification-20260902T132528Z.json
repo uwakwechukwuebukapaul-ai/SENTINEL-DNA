@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "external_artifact_onboarding_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_verification": {
+    "status": "BLOCKED_WITH_REASON",
+    "failure_category": "TB_RUNTIME_UNAVAILABLE"
+  },
+  "activation": {
+    "status": "BLOCKED_WITH_REASON",
+    "codes": [
+      "TB_PROVIDER_MANIFEST_INVALID",
+      "TB_RUNTIME_UNAVAILABLE"
+    ]
+  },
+  "checks": {
+    "runtime_module_exists": {
+      "name": "runtime_module_exists",
+      "status": "PASS"
+    },
+    "runtime_digest_matches_manifest": {
+      "name": "runtime_digest_matches_manifest",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "manifest_integrity": {
+      "name": "manifest_integrity",
+      "status": "PASS"
+    },
+    "image_digest_binding": {
+      "name": "image_digest_binding",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "certified_origin_binding": {
+      "name": "certified_origin_binding",
+      "status": "PASS"
+    },
+    "provider_verification": {
+      "name": "provider_verification",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    }
+  },
+  "artifact_identity": {
+    "runtime_module_digest": "sha256:42530c78b4d15f591d090d4da71ee2485dd20247104fdb2464705879a071831b",
+    "image_digest": "sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "browserAuth_invoked": false,
+    "security_controls_bypassed": false
+  },
+  "blockers": [
+    "TB_PROVIDER_MANIFEST_INVALID",
+    "TB_RUNTIME_UNAVAILABLE"
+  ],
+  "remediation": [
+    "Return the activation manifest to custody for integrity, origin, approval, and digest reconciliation.",
+    "Obtain the reviewed Playwright/RPC runtime from approved custody, verify its SHA-256 digest, and rerun onboarding."
+  ],
+  "evidence_sha256": "30f0b1884fe9eb988387229a161def094a09f4eec1298d0681b06fba4957b22a"
+}

@@ -25,8 +25,9 @@ the separately reviewed Playwright runtime module:
 
 ```powershell
 $env:SENTINEL_DNA_TRUSTED_BROWSER_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\browser-client.mjs"
-$env:SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs"
+  $env:SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs"
 $env:SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME = "C:\approved\browser\playwright-runtime.mjs"
+$env:SENTINEL_DNA_BROWSER_AUTH_BRIDGE = "C:\approved\browser\browser-auth-bridge.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST = "C:\approved\browser\trusted-browser-activation-manifest.json"
 ```
 
@@ -63,13 +64,32 @@ The test-only contract stub at
 for local staging contract tests. It is not a runtime provider and must never
 be configured for an authenticated pilot.
 
+The reviewed authentication bridge is configured separately through
+`SENTINEL_DNA_BROWSER_AUTH_BRIDGE`. It must export:
+
+```js
+export async function requestBrowserAuth({ page, request, environment }) {
+  return { status: "submitted" };
+}
+```
+
+`request` contains only the certified origin and visible field/submit
+descriptors. Credential entry is browser-mediated and stays outside Sentinel
+DNA orchestration data. The bridge must not accept or return passwords,
+tokens, cookies, headers, CSRF values, session values, or credential-bearing
+options. The verifier rejects an absent bridge, an invalid export, and bridge
+runtime failures with `TB_AUTH_BRIDGE_MISSING`,
+`TB_AUTH_BRIDGE_EXPORT_INVALID`, or `TB_AUTH_BRIDGE_RUNTIME_FAILED`.
+Fixture, mock, stub, and simulation modules are never valid bridge providers.
+
 If setup fails, the diagnostic code identifies the fail-closed layer without
 printing paths, upstream exception text, or secrets. Common codes are
 `TB_PROVIDER_NOT_CONFIGURED`, `TB_PROVIDER_MODULE_MISSING`,
 `TB_PROVIDER_EXPORT_INVALID`, `TB_RUNTIME_UNAVAILABLE`,
 `TB_BROWSER_SELECTION_FAILED`, `TB_BROWSER_CONTRACT_FAILED`, and
-`TB_AUTH_CAPABILITY_MISSING`. A missing or untrusted provider remains a pilot
-blocker.
+`TB_AUTH_CAPABILITY_MISSING`, `TB_AUTH_BRIDGE_MISSING`,
+`TB_AUTH_BRIDGE_EXPORT_INVALID`, and `TB_AUTH_BRIDGE_RUNTIME_FAILED`. A
+missing, invalid, or untrusted provider/bridge remains a pilot blocker.
 
 The expected runtime contract is:
 

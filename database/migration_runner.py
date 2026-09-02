@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from .backend import DatabaseBackend
-from .migrations.registry import MIGRATIONS, STAGING_MIGRATIONS, Migration
+from .migrations.registry import (
+    CONTROLLED_ANALYST_PILOT_MIGRATIONS,
+    MIGRATIONS,
+    STAGING_MIGRATIONS,
+    Migration,
+)
 
 
 # Backward-compatible public name retained for existing callers.
@@ -66,4 +71,4 @@ class MigrationRunner:
         return tuple(applied_now)
 
 
-__all__ = ["CORE_MIGRATIONS", "MIGRATIONS", "STAGING_MIGRATIONS", "Migration", "MigrationRunner"]
+__all__ = ["CORE_MIGRATIONS", "MIGRATIONS", "STAGING_MIGRATIONS", "CONTROLLED_ANALYST_PILOT_MIGRATIONS", "Migration", "MigrationRunner"]

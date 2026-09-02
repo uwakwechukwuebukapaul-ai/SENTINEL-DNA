@@ -1,5 +1,6 @@
 services:
 
+  # Run schema migrations once before the application accepts traffic.
   migration:
     image: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196
     restart: "no"
@@ -42,6 +43,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
 
     volumes:
       - sentinel_data:/var/lib/sentinel

@@ -49,6 +49,14 @@ STAGING_MIGRATION_MODULES = MIGRATION_MODULES + (
     "database.migrations.009_favp_staging",
 )
 
+# The controlled analyst pilot is a separately selected overlay.  Keeping it
+# out of both default chains preserves the existing Gate 4/FAVP migration
+# contract and prevents a production process from silently enabling pilot
+# state.  Deployment tooling may compose this tuple explicitly.
+CONTROLLED_ANALYST_PILOT_MIGRATION_MODULES = STAGING_MIGRATION_MODULES + (
+    "database.migrations.010_controlled_analyst_pilot",
+)
+
 
 def migration_registry() -> tuple[Migration, ...]:
     """Load and validate the checked-in migration chain deterministically."""
@@ -90,15 +98,37 @@ def staging_migration_registry() -> tuple[Migration, ...]:
     return ordered
 
 
+def controlled_analyst_pilot_migration_registry() -> tuple[Migration, ...]:
+    """Load the optional staging/FAVP chain plus the pilot overlay."""
+    migrations: list[Migration] = []
+    for module_name in CONTROLLED_ANALYST_PILOT_MIGRATION_MODULES:
+        module = import_module(module_name)
+        version = getattr(module, "VERSION", None)
+        upgrade = getattr(module, "upgrade", None)
+        if not isinstance(version, int) or not callable(upgrade):
+            raise ValueError(f"invalid_migration_module:{module_name}")
+        name = str(getattr(module, "DESCRIPTION", module_name.rsplit(".", 1)[-1]))
+        migrations.append(Migration(version=version, name=name, upgrade=upgrade))
+    ordered = tuple(sorted(migrations, key=lambda item: item.version))
+    versions = [migration.version for migration in ordered]
+    if len(set(versions)) != len(versions) or versions != list(range(1, len(versions) + 1)):
+        raise ValueError("migration_versions_must_be_contiguous")
+    return ordered
+
+
 MIGRATIONS = migration_registry()
 STAGING_MIGRATIONS = staging_migration_registry()
+CONTROLLED_ANALYST_PILOT_MIGRATIONS = controlled_analyst_pilot_migration_registry()
 
 __all__ = [
     "MIGRATIONS",
     "MIGRATION_MODULES",
     "STAGING_MIGRATIONS",
+    "CONTROLLED_ANALYST_PILOT_MIGRATIONS",
     "STAGING_MIGRATION_MODULES",
+    "CONTROLLED_ANALYST_PILOT_MIGRATION_MODULES",
     "Migration",
     "migration_registry",
     "staging_migration_registry",
+    "controlled_analyst_pilot_migration_registry",
 ]

@@ -18,6 +18,10 @@ import {
   CERTIFIED_ORIGIN,
   TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
 } from "./trusted_browser_service/browser-client.mjs";
+import {
+  createTrustedBrowserDiagnostics,
+  TRUSTED_BROWSER_TIMEOUTS,
+} from "./trusted_browser_diagnostics.mjs";
 
 const CHECK_NAMES = ["provider", "runtime", "origin", "browser_contract", "browser_auth"];
 const SAFE_CATEGORIES = new Set([
@@ -28,8 +32,18 @@ const SAFE_CATEGORIES = new Set([
   "TB_BROWSER_SELECTION_FAILED",
   "TB_BROWSER_CONTRACT_FAILED",
   "TB_AUTH_CAPABILITY_MISSING",
+  "TB_AUTH_BRIDGE_MISSING",
+  "TB_AUTH_BRIDGE_EXPORT_INVALID",
+  "TB_AUTH_BRIDGE_RUNTIME_FAILED",
   "TB_ORIGIN_REJECTED",
   "TB_ORIGIN_UNREACHABLE",
+  "TB_PROVIDER_LOAD_TIMEOUT",
+  "TB_RUNTIME_SETUP_TIMEOUT",
+  "TB_BROWSER_SELECTION_TIMEOUT",
+  "TB_BROWSER_CREATE_TIMEOUT",
+  "TB_AUTH_BRIDGE_TIMEOUT",
+  "TB_AUTH_CAPABILITY_TIMEOUT",
+  "TB_TAB_CLOSE_TIMEOUT",
 ]);
 
 function diagnosticError(code) {
@@ -86,10 +100,15 @@ function configuredModuleUrl(environmentName) {
   return url;
 }
 
-async function loadConfiguredModule(environmentName) {
+async function loadConfiguredModule(environmentName, diagnostics) {
   const url = configuredModuleUrl(environmentName);
   try {
-    const module = await import(url.href);
+    const module = await diagnostics.run(
+      "PROVIDER_LOAD",
+      "configured_module.load",
+      () => import(url.href),
+      { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.PROVIDER_LOAD },
+    );
     if (typeof module.setupBrowserRuntime !== "function") {
       throw diagnosticError("TB_PROVIDER_EXPORT_INVALID");
     }
@@ -126,19 +145,36 @@ function assertTabContract(tab) {
   }
 }
 
+async function closeResource(resource, operation, diagnostics, result) {
+  if (!resource || typeof resource.close !== "function") return;
+  try {
+    await diagnostics.run(
+      "TAB_CLOSE",
+      operation,
+      () => resource.close(),
+      { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.TAB_CLOSE },
+    );
+  } catch (error) {
+    if (!result.failure_category) {
+      result.failure_category = categoryFor(error, "TB_TAB_CLOSE_TIMEOUT");
+    }
+  }
+}
+
 /**
  * Verify the configured trusted browser provider without performing auth.
  * The returned object contains only statuses and an allowlisted category.
  */
 export async function verifyTrustedBrowserProvider() {
   const result = resultTemplate();
+  const diagnostics = createTrustedBrowserDiagnostics();
   let trustedClient;
   let runtime;
   let tab;
 
   try {
-    await loadConfiguredModule(TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV);
-    trustedClient = await loadConfiguredModule(TRUSTED_BROWSER_CLIENT_ENV);
+    await loadConfiguredModule(TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV, diagnostics);
+    trustedClient = await loadConfiguredModule(TRUSTED_BROWSER_CLIENT_ENV, diagnostics);
     markPass(result, "provider");
   } catch (error) {
     markFailure(result, "provider", categoryFor(error, "TB_PROVIDER_MODULE_MISSING"));
@@ -146,9 +182,14 @@ export async function verifyTrustedBrowserProvider() {
   }
 
   try {
-    runtime = await trustedClient.setupBrowserRuntime({
-      environment: TRUSTED_BROWSER_RUNTIME_ENVIRONMENT,
-    });
+    runtime = await diagnostics.run(
+      "RUNTIME_SETUP",
+      "configured_runtime.setup",
+      () => trustedClient.setupBrowserRuntime({
+        environment: TRUSTED_BROWSER_RUNTIME_ENVIRONMENT,
+      }),
+      { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.RUNTIME_SETUP },
+    );
     assertRuntimeContract(runtime);
     markPass(result, "runtime");
   } catch (error) {
@@ -158,26 +199,43 @@ export async function verifyTrustedBrowserProvider() {
 
   let browser;
   try {
-    browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+    browser = await diagnostics.run(
+      "BROWSER_SELECTION",
+      "certified_origin.select",
+      () => runtime.browsers.getForUrl(CERTIFIED_ORIGIN),
+      { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.BROWSER_SELECTION },
+    );
     markPass(result, "origin");
   } catch (error) {
     markFailure(result, "origin", categoryFor(error, "TB_BROWSER_SELECTION_FAILED"));
+    await closeResource(runtime, "runtime.close_after_selection_failure", diagnostics, result);
     return result;
   }
 
   try {
     assertBrowserContract(browser);
-    tab = await browser.tabs.new();
+    tab = await diagnostics.run(
+      "BROWSER_CREATE",
+      "contract_probe_tab",
+      () => browser.tabs.new(),
+      { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.BROWSER_CREATE },
+    );
     assertTabContract(tab);
     markPass(result, "browser_contract");
   } catch (error) {
     markFailure(result, "browser_contract", categoryFor(error, "TB_BROWSER_CONTRACT_FAILED"));
-    if (tab && typeof tab.close === "function") await tab.close().catch(() => {});
+    await closeResource(tab, "contract_probe_close_after_failure", diagnostics, result);
+    await closeResource(browser, "browser.close_after_contract_failure", diagnostics, result);
     return result;
   }
 
   try {
-    const browserAuth = await tab.capabilities.get("browserAuth");
+    const browserAuth = await diagnostics.run(
+      "AUTH_CAPABILITY",
+      "browserAuth.get",
+      () => tab.capabilities.get("browserAuth"),
+      { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.AUTH_CAPABILITY },
+    );
     if (!browserAuth || typeof browserAuth.request !== "function") {
       throw diagnosticError("TB_AUTH_CAPABILITY_MISSING");
     }
@@ -185,7 +243,15 @@ export async function verifyTrustedBrowserProvider() {
   } catch (error) {
     markFailure(result, "browser_auth", categoryFor(error, "TB_AUTH_CAPABILITY_MISSING"));
   } finally {
-    if (tab && typeof tab.close === "function") await tab.close().catch(() => {});
+    if (tab && typeof tab.close === "function") {
+      await diagnostics.run(
+        "TAB_CLOSE",
+        "contract_probe_close",
+        () => tab.close(),
+        { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.TAB_CLOSE },
+      ).catch(() => {});
+    }
+    await closeResource(browser, "browser.close", diagnostics, result);
   }
 
   if (Object.values(result.checks).every((status) => status === "PASS")) {

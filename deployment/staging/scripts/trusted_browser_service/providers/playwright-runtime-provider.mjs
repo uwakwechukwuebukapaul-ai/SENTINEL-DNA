@@ -18,6 +18,16 @@ export const TRUSTED_BROWSER_ENVIRONMENT = "codex-app";
 export const APPROVED_PLAYWRIGHT_RUNTIME_ENV =
   "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME";
 
+const REJECTED_RUNTIME_PATH_MARKERS = [
+  "/tests/",
+  "/test/",
+  "/fixtures/",
+  "/fixture/",
+  "stub",
+  "mock",
+  "fake",
+];
+
 const SECRET_KEY_PARTS = new Set([
   "password",
   "secret",
@@ -86,7 +96,15 @@ function configuredRuntimeModule() {
       `${APPROVED_PLAYWRIGHT_RUNTIME_ENV} must point to the reviewed Playwright runtime`,
     );
   }
-  return configured.trim();
+  const modulePath = configured.trim();
+  const normalized = modulePath.replaceAll("\\", "/").toLowerCase();
+  if (REJECTED_RUNTIME_PATH_MARKERS.some((marker) => normalized.includes(marker))) {
+    throw trustedProviderError(
+      "TB_PROVIDER_MODULE_MISSING",
+      "approved Playwright runtime must be an operator-approved module",
+    );
+  }
+  return modulePath;
 }
 
 function localModuleUrl(modulePath) {
@@ -197,7 +215,7 @@ export async function setupBrowserRuntime(options = {}) {
     );
   }
 
-  return Object.freeze({
+  const exposedRuntime = {
     browsers: Object.freeze({
       getForUrl: async (origin) => {
         assertCertifiedOrigin(origin);
@@ -211,5 +229,9 @@ export async function setupBrowserRuntime(options = {}) {
         }
       },
     }),
-  });
+  };
+  if (typeof runtime.close === "function") {
+    exposedRuntime.close = async () => runtime.close();
+  }
+  return Object.freeze(exposedRuntime);
 }

@@ -81,6 +81,7 @@ def create_app():
         pilot_management_api,
         pilot_provisioning_api,
     )
+    from services.controlled_analyst_pilot.routes import controlled_analyst_pilot_api
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
@@ -114,6 +115,7 @@ def create_app():
     app.register_blueprint(pilot_management_api)
     app.register_blueprint(pilot_authorization_api)
     app.register_blueprint(pilot_provisioning_api)
+    app.register_blueprint(controlled_analyst_pilot_api)
     app.register_blueprint(support_api)
     app.register_blueprint(exercise_api)
 

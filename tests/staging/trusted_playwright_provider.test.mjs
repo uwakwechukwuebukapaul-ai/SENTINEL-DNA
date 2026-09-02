@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import {
   APPROVED_PLAYWRIGHT_RUNTIME_ENV,
@@ -10,6 +11,10 @@ import {
   setupBrowserRuntime,
   TRUSTED_BROWSER_ENVIRONMENT,
 } from "../../deployment/staging/scripts/trusted_browser_service/providers/playwright-runtime-provider.mjs";
+import {
+  BROWSER_AUTH_BRIDGE_ENV,
+  setupBrowserRuntime as setupApprovedPlaywrightRuntime,
+} from "../../deployment/staging/scripts/trusted_browser_service/providers/approved-playwright-runtime.mjs";
 
 async function withRuntime(source, callback) {
   const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-approved-runtime-"));
@@ -90,6 +95,212 @@ test("fails closed when the approved runtime is missing", async () => {
   } finally {
     if (previous === undefined) delete process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV];
     else process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV] = previous;
+  }
+});
+
+test("rejects a fixture runtime even when it exports the required contract", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-runtime-fixture-test-"));
+  const fixtureDirectory = join(directory, "fixtures");
+  const fixturePath = join(fixtureDirectory, "runtime.mjs");
+  const previous = process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV];
+  await mkdir(fixtureDirectory);
+  await writeFile(
+    fixturePath,
+    "export async function setupBrowserRuntime() { return { browsers: { getForUrl: async () => ({}) } }; }\n",
+    "utf8",
+  );
+  process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV] = fixturePath;
+  try {
+    await assert.rejects(
+      setupBrowserRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT }),
+      (error) => {
+        assert.equal(error.code, "TB_PROVIDER_MODULE_MISSING");
+        assert.doesNotMatch(error.message, /fixtures|runtime\.mjs/);
+        return true;
+      },
+    );
+  } finally {
+    if (previous === undefined) delete process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV];
+    else process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV] = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("exposes browserAuth through the approved runtime when its reviewed bridge supports it", { concurrency: false }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-auth-bridge-"));
+  const bridgePath = join(directory, "browser-auth-bridge.mjs");
+  const previous = process.env[BROWSER_AUTH_BRIDGE_ENV];
+  await writeFile(
+    bridgePath,
+    `
+      export const state = { requests: [] };
+      export async function requestBrowserAuth({ page, request, environment }) {
+        state.requests.push({ hasPage: Boolean(page), request, environment });
+        return { status: "submitted", token: "never-returned" };
+      }
+    `,
+    "utf8",
+  );
+  process.env[BROWSER_AUTH_BRIDGE_ENV] = bridgePath;
+
+  let runtime;
+  try {
+    runtime = await setupApprovedPlaywrightRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT });
+    const browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+    const tab = await browser.tabs.new();
+    const browserAuth = await tab.capabilities.get("browserAuth");
+
+    assert.equal(typeof browserAuth.request, "function");
+    assert.deepEqual(
+      await browserAuth.request({
+        origin: CERTIFIED_ORIGIN,
+        fields: [{
+          id: "password",
+          label: "Password",
+          type: "password",
+          selector: "#password",
+        }],
+        submit: { selector: "#submit" },
+      }),
+      { status: "submitted" },
+    );
+
+    const bridge = await import(pathToFileURL(bridgePath).href);
+    assert.deepEqual(bridge.state.requests, [{
+      hasPage: true,
+      request: {
+        origin: CERTIFIED_ORIGIN,
+        fields: [{
+          id: "password",
+          label: "Password",
+          type: "password",
+          selector: "#password",
+        }],
+        submit: { selector: "#submit" },
+      },
+      environment: TRUSTED_BROWSER_ENVIRONMENT,
+    }]);
+    assert.doesNotMatch(JSON.stringify(bridge.state), /never-returned|credential-value|bearer/i);
+  } finally {
+    if (runtime) await runtime.close().catch(() => {});
+    if (previous === undefined) delete process.env[BROWSER_AUTH_BRIDGE_ENV];
+    else process.env[BROWSER_AUTH_BRIDGE_ENV] = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("keeps the approved runtime blocked when its authentication bridge is missing", { concurrency: false }, async () => {
+  const previous = process.env[BROWSER_AUTH_BRIDGE_ENV];
+  delete process.env[BROWSER_AUTH_BRIDGE_ENV];
+  let runtime;
+  try {
+    runtime = await setupApprovedPlaywrightRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT });
+    const browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+    const tab = await browser.tabs.new();
+    await assert.rejects(
+      tab.capabilities.get("browserAuth"),
+      (error) => {
+        assert.equal(error.code, "TB_AUTH_BRIDGE_MISSING");
+        assert.doesNotMatch(error.message, /password|token|cookie|authorization/i);
+        return true;
+      },
+    );
+  } finally {
+    if (runtime) await runtime.close().catch(() => {});
+    if (previous === undefined) delete process.env[BROWSER_AUTH_BRIDGE_ENV];
+    else process.env[BROWSER_AUTH_BRIDGE_ENV] = previous;
+  }
+});
+
+test("rejects a bridge without requestBrowserAuth", { concurrency: false }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-auth-bridge-invalid-"));
+  const bridgePath = join(directory, "browser-auth-bridge.mjs");
+  const previous = process.env[BROWSER_AUTH_BRIDGE_ENV];
+  await writeFile(bridgePath, "export const notTheAuthBridge = true;\n", "utf8");
+  process.env[BROWSER_AUTH_BRIDGE_ENV] = bridgePath;
+  let runtime;
+  try {
+    runtime = await setupApprovedPlaywrightRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT });
+    const tab = await (await runtime.browsers.getForUrl(CERTIFIED_ORIGIN)).tabs.new();
+    await assert.rejects(
+      tab.capabilities.get("browserAuth"),
+      (error) => {
+        assert.equal(error.code, "TB_AUTH_BRIDGE_EXPORT_INVALID");
+        assert.doesNotMatch(error.message, /browser-auth-bridge|notTheAuthBridge/i);
+        return true;
+      },
+    );
+  } finally {
+    if (runtime) await runtime.close().catch(() => {});
+    if (previous === undefined) delete process.env[BROWSER_AUTH_BRIDGE_ENV];
+    else process.env[BROWSER_AUTH_BRIDGE_ENV] = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects a fixture path configured as the browser authentication bridge", { concurrency: false }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-auth-bridge-fixture-"));
+  const fixtureDirectory = join(directory, "fixtures");
+  const bridgePath = join(fixtureDirectory, "browser-auth-bridge.mjs");
+  const previous = process.env[BROWSER_AUTH_BRIDGE_ENV];
+  await mkdir(fixtureDirectory);
+  await writeFile(
+    bridgePath,
+    "export async function requestBrowserAuth() { return { status: 'submitted' }; }\n",
+    "utf8",
+  );
+  process.env[BROWSER_AUTH_BRIDGE_ENV] = bridgePath;
+  let runtime;
+  try {
+    runtime = await setupApprovedPlaywrightRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT });
+    const tab = await (await runtime.browsers.getForUrl(CERTIFIED_ORIGIN)).tabs.new();
+    await assert.rejects(
+      tab.capabilities.get("browserAuth"),
+      (error) => {
+        assert.equal(error.code, "TB_AUTH_BRIDGE_MISSING");
+        assert.doesNotMatch(error.message, /fixtures|browser-auth-bridge/i);
+        return true;
+      },
+    );
+  } finally {
+    if (runtime) await runtime.close().catch(() => {});
+    if (previous === undefined) delete process.env[BROWSER_AUTH_BRIDGE_ENV];
+    else process.env[BROWSER_AUTH_BRIDGE_ENV] = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("maps bridge execution errors to a safe runtime failure", { concurrency: false }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-auth-bridge-failure-"));
+  const bridgePath = join(directory, "browser-auth-bridge.mjs");
+  const previous = process.env[BROWSER_AUTH_BRIDGE_ENV];
+  await writeFile(
+    bridgePath,
+    "export async function requestBrowserAuth() { throw new Error('password=must-not-escape'); }\n",
+    "utf8",
+  );
+  process.env[BROWSER_AUTH_BRIDGE_ENV] = bridgePath;
+  let runtime;
+  try {
+    runtime = await setupApprovedPlaywrightRuntime({ environment: TRUSTED_BROWSER_ENVIRONMENT });
+    const tab = await (await runtime.browsers.getForUrl(CERTIFIED_ORIGIN)).tabs.new();
+    const browserAuth = await tab.capabilities.get("browserAuth");
+    await assert.rejects(
+      browserAuth.request({
+        origin: CERTIFIED_ORIGIN,
+        fields: [{ id: "username", label: "Username", type: "text", selector: "#username" }],
+      }),
+      (error) => {
+        assert.equal(error.code, "TB_AUTH_BRIDGE_RUNTIME_FAILED");
+        assert.doesNotMatch(error.message, /password|must-not-escape/i);
+        return true;
+      },
+    );
+  } finally {
+    if (runtime) await runtime.close().catch(() => {});
+    if (previous === undefined) delete process.env[BROWSER_AUTH_BRIDGE_ENV];
+    else process.env[BROWSER_AUTH_BRIDGE_ENV] = previous;
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

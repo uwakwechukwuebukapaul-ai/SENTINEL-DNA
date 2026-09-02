@@ -216,7 +216,31 @@ function assertUpstreamTab(tab) {
 const SAFE_TAB_DIAGNOSTIC_CODES = new Set([
   "TB_BROWSER_CONTRACT_FAILED",
   "TB_AUTH_CAPABILITY_MISSING",
+  "TB_AUTH_BRIDGE_MISSING",
+  "TB_AUTH_BRIDGE_EXPORT_INVALID",
+  "TB_AUTH_BRIDGE_RUNTIME_FAILED",
 ]);
+
+const SAFE_AUTH_DIAGNOSTIC_CODES = new Set([
+  "TB_AUTH_CAPABILITY_MISSING",
+  "TB_AUTH_BRIDGE_MISSING",
+  "TB_AUTH_BRIDGE_EXPORT_INVALID",
+  "TB_AUTH_BRIDGE_RUNTIME_FAILED",
+  "TB_AUTH_CAPABILITY_TIMEOUT",
+  "TB_AUTH_BRIDGE",
+  "TB_AUTH_BRIDGE_TIMEOUT",
+  "TB_AUTH_COMPLETE",
+  "TB_AUTH_COMPLETE_TIMEOUT",
+  "TB_AUTH_REQUEST_INVALID",
+  "TB_CREDENTIAL_FIELD_REJECTED",
+  "TB_ORIGIN_REJECTED",
+]);
+
+function authCapabilityCode(error) {
+  return SAFE_AUTH_DIAGNOSTIC_CODES.has(error?.code)
+    ? error.code
+    : "TB_AUTH_CAPABILITY_MISSING";
+}
 
 function createPlaywrightSurface(tab) {
   const playwright = tab.playwright;
@@ -256,6 +280,14 @@ function createBrowserAuthCapability(tab) {
       if (request === null || typeof request !== "object") {
         throw new Error("browserAuth request must be an object");
       }
+      try {
+        assertNoCredentialFields(request);
+      } catch {
+        throw trustedBrowserError(
+          "TB_CREDENTIAL_FIELD_REJECTED",
+          "credential-bearing browser data is not accepted",
+        );
+      }
       // The credential bridge receives field descriptors and Playwright
       // selectors, never credential values.  Keep this allowlist narrow so a
       // caller cannot smuggle a password, cookie, or token into the bridge.
@@ -273,7 +305,8 @@ function createBrowserAuthCapability(tab) {
           typeof field.id !== "string" ||
           typeof field.label !== "string" ||
           typeof field.type !== "string" ||
-          typeof field.selector !== "string" && typeof field.selector !== "object"
+          typeof field.selector !== "string" ||
+          !field.selector.trim()
         ) {
           throw new Error("browserAuth field descriptor is invalid");
         }
@@ -291,7 +324,12 @@ function createBrowserAuthCapability(tab) {
         fields,
       };
       if (request.submit !== undefined) {
-        if (request.submit === null || typeof request.submit !== "object") {
+        if (
+          request.submit === null ||
+          typeof request.submit !== "object" ||
+          typeof request.submit.selector !== "string" ||
+          !request.submit.selector.trim()
+        ) {
           throw new Error("browserAuth submit descriptor is invalid");
         }
         safeRequest.submit = {
@@ -301,15 +339,29 @@ function createBrowserAuthCapability(tab) {
       }
 
       if (!capabilityPromise) capabilityPromise = tab.capabilities.get("browserAuth");
-      const capability = await capabilityPromise;
+      let capability;
+      try {
+        capability = await capabilityPromise;
+      } catch (error) {
+        throw trustedBrowserError(
+          authCapabilityCode(error),
+          "approved browserAuth capability is unavailable",
+        );
+      }
       if (!capability || typeof capability.request !== "function") {
-        throw new Error("approved browserAuth capability is unavailable");
+        throw trustedBrowserError(
+          "TB_AUTH_CAPABILITY_MISSING",
+          "approved browserAuth capability is unavailable",
+        );
       }
       let result;
       try {
         result = await capability.request(safeRequest);
-      } catch {
-        throw new Error("external browserAuth handoff failed");
+      } catch (error) {
+        const code = SAFE_AUTH_DIAGNOSTIC_CODES.has(error?.code)
+          ? error.code
+          : "TB_AUTH_BRIDGE";
+        throw trustedBrowserError(code, "external browserAuth handoff failed");
       }
       // Deliberately return only the protocol status.  The external bridge
       // owns credential entry and any richer result is not runner-visible.
@@ -333,12 +385,19 @@ function createRestrictedTab(tab) {
         let capability;
         try {
           capability = await tab.capabilities.get("browserAuth");
-        } catch {
-          return undefined;
+        } catch (error) {
+          throw trustedBrowserError(
+            authCapabilityCode(error),
+            "approved browserAuth capability is unavailable",
+          );
         }
-        return capability && typeof capability.request === "function"
-          ? browserAuth
-          : undefined;
+        if (!capability || typeof capability.request !== "function") {
+          throw trustedBrowserError(
+            "TB_AUTH_CAPABILITY_MISSING",
+            "approved browserAuth capability is unavailable",
+          );
+        }
+        return browserAuth;
       },
     }),
   };
@@ -348,7 +407,7 @@ function createRestrictedTab(tab) {
 
 function createRestrictedBrowser(browser) {
   assertUpstreamBrowser(browser);
-  return Object.freeze({
+  const restricted = {
     tabs: Object.freeze({
       new: async (...args) => {
         if (args.length !== 0) throw new Error("trusted browser tabs.new does not accept options");
@@ -363,7 +422,11 @@ function createRestrictedBrowser(browser) {
         }
       },
     }),
-  });
+  };
+  if (typeof browser.close === "function") {
+    restricted.close = async () => browser.close();
+  }
+  return Object.freeze(restricted);
 }
 
 /**
@@ -439,7 +502,7 @@ export async function setupBrowserRuntime(options = {}) {
     );
   }
 
-  return Object.freeze({
+  const exposedRuntime = {
     browsers: Object.freeze({
       getForUrl: async (origin) => {
         assertCertifiedOrigin(origin);
@@ -455,5 +518,9 @@ export async function setupBrowserRuntime(options = {}) {
         return createRestrictedBrowser(browser);
       },
     }),
-  });
+  };
+  if (typeof runtime.close === "function") {
+    exposedRuntime.close = async () => runtime.close();
+  }
+  return Object.freeze(exposedRuntime);
 }

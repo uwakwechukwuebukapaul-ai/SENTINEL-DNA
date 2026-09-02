@@ -168,7 +168,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert 'test: ["CMD", "redis-cli", "ping"]' in compose
     assert "staging_internal:" in compose
     assert "internal: true" in compose
-    assert "ports" not in rendered["services"]["edge"]
+    assert rendered["services"]["edge"]["ports"] == ["127.0.0.1:18443:443"]
     assert "ports" not in rendered["services"]["app"]
     assert rendered["services"]["app"]["expose"] == ["5000"]
     edge_volumes = rendered["services"]["edge"]["volumes"]
@@ -186,7 +186,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert set(rendered["services"]["redis"]["networks"]) == {"staging_internal"}
     assert rendered["networks"]["staging_internal"]["internal"] is True
     override_rendered = yaml.load(override, Loader=ComposeLoader)
-    assert override_rendered["services"]["edge"]["ports"] == ["127.0.0.1:18443:443"]
+    assert "edge" not in override_rendered["services"]
     assert override_rendered["services"]["app"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["migration"]["image"] == "${SENTINEL_DNA_PILOT_IMAGE_REFERENCE:?set inspected pilot image reference}"
     assert override_rendered["services"]["app"]["build"] is None

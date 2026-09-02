@@ -3,6 +3,7 @@ services:
   favp-volume-init:
     image: staging-app:974e3275bc678851e3979a5cbb95ff7d2e9dc4c9
     user: "0:0"
+    network_mode: "none"
     command:
       - sh
       - -c
@@ -17,28 +18,24 @@ services:
   edge:
     image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set external staging edge image}
     restart: unless-stopped
-
+    ports:
+      - "127.0.0.1:18443:443"
     depends_on:
       app:
         condition: service_healthy
-
     volumes:
-
       - type: bind
         source: ${SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE:?set external edge configuration}
         target: /etc/nginx/conf.d/default.conf
         read_only: true
-
       - type: bind
         source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}/staging-server-fullchain.crt
         target: /etc/nginx/tls/staging-server.crt
         read_only: true
-
       - type: bind
         source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}/staging-server.key
         target: /etc/nginx/tls/staging-server.key
         read_only: true
-
     networks:
       - staging_edge
 
@@ -74,9 +71,6 @@ services:
       SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
       SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
-      # The named volume is mounted at /var/lib/sentinel. Keep the SQLite
-      # compatibility path at that mount root; staging's authoritative
-      # backend remains the private PostgreSQL DATABASE_URL below.
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
       SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password

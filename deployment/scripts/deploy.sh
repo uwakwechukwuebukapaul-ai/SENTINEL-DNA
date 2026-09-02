@@ -32,10 +32,10 @@ if [ ! -f "$STAGING_OVERRIDE" ]; then
   echo "Pilot staging Compose override was not found" >&2
   exit 1
 fi
-case "$SENTINEL_DNA_BASE_URL" in
-  https://*) ;;
-  *) echo "SENTINEL_DNA_BASE_URL must use HTTPS" >&2; exit 1 ;;
-esac
+if [ "$SENTINEL_DNA_BASE_URL" != "https://sentinel-dna-staging:18443" ]; then
+  echo "SENTINEL_DNA_BASE_URL must use HTTPS and be the certified staging origin" >&2
+  exit 1
+fi
 
 actual_revision=$(git -C "$REPOSITORY_ROOT" rev-parse HEAD 2>/dev/null || true)
 if [ "$actual_revision" != "$SENTINEL_DNA_IMAGE_REVISION_FULL" ]; then

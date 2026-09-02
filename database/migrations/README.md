@@ -33,3 +33,12 @@ patterns, campaign memories, analyst knowledge, detection learning, response
 playbook memories, and append-only memory audit evidence. Records retain their
 source investigation, evidence provenance, attribution, confidence, timestamps,
 and immutable content hashes. The records are advisory only.
+
+## Optional Version 010
+
+`010_controlled_analyst_pilot.py` is an explicitly selected controlled
+analyst-pilot overlay. It adds tenant lifecycle events, analyst membership
+events, immutable feedback, review events, and a hash-linked pilot audit
+stream. It is intentionally absent from `MIGRATIONS`, `STAGING_MIGRATIONS`,
+and the Gate 4 custody chain. Select
+`CONTROLLED_ANALYST_PILOT_MIGRATIONS` only for a controlled pilot deployment.

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "external_artifact_onboarding_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_verification": {
+    "status": "BLOCKED_WITH_REASON",
+    "failure_category": "TB_RUNTIME_UNAVAILABLE"
+  },
+  "activation": {
+    "status": "BLOCKED_WITH_REASON",
+    "codes": [
+      "TB_PROVIDER_MANIFEST_INVALID",
+      "TB_PROVIDER_MANIFEST_MISSING",
+      "TB_RUNTIME_UNAVAILABLE"
+    ]
+  },
+  "checks": {
+    "runtime_module_exists": {
+      "name": "runtime_module_exists",
+      "status": "PASS"
+    },
+    "runtime_digest_matches_manifest": {
+      "name": "runtime_digest_matches_manifest",
+      "status": "NOT_RUN"
+    },
+    "manifest_integrity": {
+      "name": "manifest_integrity",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "image_digest_binding": {
+      "name": "image_digest_binding",
+      "status": "NOT_RUN"
+    },
+    "certified_origin_binding": {
+      "name": "certified_origin_binding",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_MISSING"
+    },
+    "provider_verification": {
+      "name": "provider_verification",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    }
+  },
+  "artifact_identity": {
+    "runtime_module_digest": "sha256:42530c78b4d15f591d090d4da71ee2485dd20247104fdb2464705879a071831b",
+    "image_digest": "sha256:f065ce859b6b349d5ee9a159768197ee773e45ab92295a6f298fd862a9cc286e",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "browserAuth_invoked": false,
+    "security_controls_bypassed": false
+  },
+  "blockers": [
+    "TB_PROVIDER_MANIFEST_INVALID",
+    "TB_PROVIDER_MANIFEST_MISSING",
+    "TB_RUNTIME_UNAVAILABLE"
+  ],
+  "remediation": [
+    "Return the activation manifest to custody for integrity, origin, approval, and digest reconciliation.",
+    "Obtain the approved activation custody manifest and configure its non-secret path; do not use the checked-in fixture.",
+    "Obtain the reviewed Playwright/RPC runtime from approved custody, verify its SHA-256 digest, and rerun onboarding."
+  ],
+  "evidence_sha256": "9131a62cccb89b5d73c2bf0a24571278f41bb61cf9044f6a4b20d76391be2e60"
+}

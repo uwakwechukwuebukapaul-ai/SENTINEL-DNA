@@ -43,11 +43,21 @@ const SAFE_CODES = new Set([
   "TB_BROWSER_SELECTION_FAILED",
   "TB_BROWSER_CONTRACT_FAILED",
   "TB_AUTH_CAPABILITY_MISSING",
+  "TB_AUTH_BRIDGE_MISSING",
+  "TB_AUTH_BRIDGE_EXPORT_INVALID",
+  "TB_AUTH_BRIDGE_RUNTIME_FAILED",
   "TB_ORIGIN_REJECTED",
   "TB_PROVIDER_MANIFEST_MISSING",
   "TB_PROVIDER_MANIFEST_INVALID",
   "TB_IMAGE_IDENTITY_INVALID",
   "TB_ORIGIN_UNREACHABLE",
+  "TB_PROVIDER_LOAD_TIMEOUT",
+  "TB_RUNTIME_SETUP_TIMEOUT",
+  "TB_BROWSER_SELECTION_TIMEOUT",
+  "TB_BROWSER_CREATE_TIMEOUT",
+  "TB_AUTH_CAPABILITY_TIMEOUT",
+  "TB_AUTH_BRIDGE_TIMEOUT",
+  "TB_TAB_CLOSE_TIMEOUT",
 ]);
 
 function safeCode(value, fallback = "TB_RUNTIME_UNAVAILABLE") {
@@ -164,15 +174,18 @@ export async function verifyGate4ExternalArtifacts() {
   }
 
   let manifest;
+  let manifestIntegrityCode;
   const manifestUrl = configuredPath(ACTIVATION_MANIFEST_ENV);
   if (!manifestUrl || isRepositoryArtifact(manifestUrl)) {
-    checks.manifest_integrity = blockedCheck("manifest_integrity", "TB_PROVIDER_MANIFEST_MISSING");
+    manifestIntegrityCode = "TB_PROVIDER_MANIFEST_MISSING";
+    checks.manifest_integrity = blockedCheck("manifest_integrity", manifestIntegrityCode);
   } else {
     try {
       manifest = await loadActivationManifest();
       checks.manifest_integrity = passCheck("manifest_integrity");
     } catch (error) {
       const code = safeCode(error?.code, "TB_PROVIDER_MANIFEST_MISSING");
+      manifestIntegrityCode = code;
       checks.manifest_integrity = blockedCheck("manifest_integrity", code);
     }
   }
@@ -196,7 +209,10 @@ export async function verifyGate4ExternalArtifacts() {
   }
   checks.certified_origin_binding = manifest?.staging_origin === CERTIFIED_ORIGIN
     ? passCheck("certified_origin_binding")
-    : blockedCheck("certified_origin_binding", manifest ? "TB_ORIGIN_REJECTED" : "TB_PROVIDER_MANIFEST_MISSING");
+    : blockedCheck(
+      "certified_origin_binding",
+      manifestIntegrityCode || (manifest ? "TB_ORIGIN_REJECTED" : "TB_PROVIDER_MANIFEST_MISSING"),
+    );
 
   let providerVerification;
   try {

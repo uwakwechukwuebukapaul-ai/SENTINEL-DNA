@@ -1,27 +1,8 @@
-"""Opt-in PostgreSQL integration coverage for the Phase 2 boundary.
-
-The test suite never infers credentials from production configuration. Set
-SENTINEL_DNA_TEST_POSTGRES_URL explicitly to run these tests against a
-disposable PostgreSQL database.
-"""
-
-import os
+"""Opt-in PostgreSQL integration coverage for the Phase 2 boundary."""
 
 import pytest
 
-from database.backend import PostgreSQLBackend
 from database.migration_runner import MigrationRunner
-
-
-@pytest.fixture
-def postgres_backend():
-    url = os.getenv("SENTINEL_DNA_TEST_POSTGRES_URL", "").strip()
-    if not url:
-        pytest.skip("SENTINEL_DNA_TEST_POSTGRES_URL is not configured")
-    backend = PostgreSQLBackend(url, connect_timeout=5)
-    if not backend.health_check():
-        pytest.fail("configured disposable PostgreSQL test database is unavailable")
-    return backend
 
 
 @pytest.mark.postgresql
