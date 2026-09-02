@@ -12,9 +12,9 @@
  * repository.  It must export setupBrowserRuntime(), as does this module.
  */
 
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   createTrustedRuntimeProvider,
@@ -26,6 +26,17 @@ export { TRUSTED_BROWSER_ENVIRONMENT } from "./runtime-provider.mjs";
 export const CERTIFIED_ORIGIN = "https://sentinel-dna-staging:18443";
 export const TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV =
   "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT";
+export const BROWSER_AUTH_BRIDGE_ENV = "SENTINEL_DNA_BROWSER_AUTH_BRIDGE";
+
+const REJECTED_BRIDGE_PATH_MARKERS = [
+  "/tests/",
+  "/test/",
+  "/fixtures/",
+  "/fixture/",
+  "stub",
+  "mock",
+  "fake",
+];
 
 function trustedBrowserError(code, message) {
   const error = new Error(`[${code}] ${message}`);
@@ -174,6 +185,58 @@ function configuredUpstreamClient(explicitPath) {
   );
 }
 
+function repositoryRoot() {
+  return resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
+}
+
+function configuredBrowserAuthBridgeUrl() {
+  const configured = process.env?.[BROWSER_AUTH_BRIDGE_ENV];
+  if (typeof configured !== "string" || !configured.trim()) {
+    return { failureCode: "TB_AUTH_BRIDGE_MISSING" };
+  }
+
+  const normalized = configured.replaceAll("\\", "/").toLowerCase();
+  if (REJECTED_BRIDGE_PATH_MARKERS.some((marker) => normalized.includes(marker))) {
+    return { failureCode: "TB_AUTH_BRIDGE_MISSING" };
+  }
+
+  try {
+    const source = configured.trim().startsWith("file:")
+      ? new URL(configured.trim())
+      : pathToFileURL(resolve(configured.trim()));
+    if (source.protocol !== "file:" || source.search || source.hash || !existsSync(source)) {
+      return { failureCode: "TB_AUTH_BRIDGE_MISSING" };
+    }
+    if (lstatSync(source).isSymbolicLink()) {
+      return { failureCode: "TB_AUTH_BRIDGE_MISSING" };
+    }
+    const target = realpathSync(fileURLToPath(source));
+    const repository = realpathSync(repositoryRoot());
+    const repositoryRelative = relative(repository, target);
+    if (!isAbsolute(repositoryRelative) && !repositoryRelative.startsWith("..")) {
+      return { failureCode: "TB_AUTH_BRIDGE_MISSING" };
+    }
+    return { url: pathToFileURL(target).href };
+  } catch {
+    return { failureCode: "TB_AUTH_BRIDGE_MISSING" };
+  }
+}
+
+async function loadBrowserAuthBridge() {
+  const configured = configuredBrowserAuthBridgeUrl();
+  if (configured.failureCode) return configured;
+
+  try {
+    const bridge = await import(configured.url);
+    if (typeof bridge.requestBrowserAuth !== "function") {
+      return { failureCode: "TB_AUTH_BRIDGE_EXPORT_INVALID" };
+    }
+    return { bridge };
+  } catch {
+    return { failureCode: "TB_AUTH_BRIDGE_RUNTIME_FAILED" };
+  }
+}
+
 function assertUpstreamBrowser(browser) {
   if (!browser || typeof browser.tabs?.new !== "function") {
     throw trustedBrowserError(
@@ -183,7 +246,7 @@ function assertUpstreamBrowser(browser) {
   }
 }
 
-function createNativePlaywrightBrowserAdapter(browser) {
+function createNativePlaywrightBrowserAdapter(browser, authBridgeState) {
   if (
     !browser ||
     typeof browser.newContext !== "function" ||
@@ -243,10 +306,19 @@ function createNativePlaywrightBrowserAdapter(browser) {
             capabilities: {
               get: async (name) => {
                 if (name === "browserAuth") {
-                  throw trustedBrowserError(
-                    "TB_AUTH_CAPABILITY_MISSING",
-                    "approved browserAuth capability is unavailable",
-                  );
+                  if (authBridgeState.failureCode) {
+                    throw trustedBrowserError(
+                      authBridgeState.failureCode,
+                      "approved browserAuth capability is unavailable",
+                    );
+                  }
+                  return {
+                    request: (request) => authBridgeState.bridge.requestBrowserAuth({
+                      page,
+                      request,
+                      environment: TRUSTED_BROWSER_ENVIRONMENT,
+                    }),
+                  };
                 }
                 return undefined;
               },
@@ -484,10 +556,10 @@ function createRestrictedTab(tab) {
   return Object.freeze(restricted);
 }
 
-function createRestrictedBrowser(browser) {
+function createRestrictedBrowser(browser, authBridgeState) {
   const adaptedBrowser = browser?.tabs?.new
     ? browser
-    : createNativePlaywrightBrowserAdapter(browser);
+    : createNativePlaywrightBrowserAdapter(browser, authBridgeState);
   assertUpstreamBrowser(adaptedBrowser);
   const restricted = {
     tabs: Object.freeze({
@@ -539,6 +611,7 @@ export async function setupBrowserRuntime(options = {}) {
     configuredUpstreamClient(upstreamClientModule),
     TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
   );
+  const authBridgeState = await loadBrowserAuthBridge();
   let client;
   try {
     client = await import(upstreamUrl);
@@ -598,7 +671,7 @@ export async function setupBrowserRuntime(options = {}) {
           );
         }
         try {
-          return createRestrictedBrowser(browser);
+          return createRestrictedBrowser(browser, authBridgeState);
         } catch (error) {
           // A custody runtime that returns a non-conforming browser may have
           // launched a real process. Close it before propagating the bounded

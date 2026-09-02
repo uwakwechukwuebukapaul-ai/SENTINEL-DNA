@@ -51,6 +51,7 @@ checklist.
 ```powershell
 . .\deployment\staging\scripts\configure_gate4_provider_environment.ps1 `
   -ApprovedRuntimeModule 'C:\approved\custody\reviewed-runtime.mjs' `
+  -RuntimeDigest 'sha256:<64-hex-runtime-digest>' `
   -ActivationManifest 'C:\approved\custody\activation-manifest.json' `
   -ImageDigest 'sha256:<64-hex-deployed-image-digest>'
 ```

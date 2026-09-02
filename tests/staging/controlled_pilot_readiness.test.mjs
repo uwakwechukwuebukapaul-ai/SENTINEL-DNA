@@ -17,6 +17,9 @@ import {
   APPROVED_PLAYWRIGHT_RUNTIME_ENV,
 } from "../../deployment/staging/scripts/trusted_browser_service/providers/playwright-runtime-provider.mjs";
 import {
+  APPROVED_RUNTIME_DIGEST_ENV,
+} from "../../deployment/staging/scripts/trusted_browser_runtime_custody.mjs";
+import {
   ACTIVATION_MANIFEST_ENV,
   computeManifestHash,
 } from "../../deployment/staging/scripts/trusted_browser_activation_manifest.mjs";
@@ -43,6 +46,7 @@ const ENVIRONMENT_VARIABLES = [
   TRUSTED_BROWSER_CLIENT_ENV,
   TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
   APPROVED_PLAYWRIGHT_RUNTIME_ENV,
+  APPROVED_RUNTIME_DIGEST_ENV,
 ];
 
 const VALID_RUNTIME = `
@@ -93,6 +97,7 @@ async function withReadinessConfiguration({ runtimeSource = VALID_RUNTIME, provi
     process.env[TRUSTED_BROWSER_CLIENT_ENV] = SERVICE_MODULE;
     process.env[TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV] = providerPath;
     process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV] = runtimePath;
+    process.env[APPROVED_RUNTIME_DIGEST_ENV] = `sha256:${runtimeDigest}`;
   }
   try {
     return await callback({ directory, manifestPath });

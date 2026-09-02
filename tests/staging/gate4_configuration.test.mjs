@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import { validateActivationManifest } from "../../deployment/staging/scripts/trusted_browser_activation_manifest.mjs";
+import {
+  computeManifestHash,
+  validateActivationManifest,
+} from "../../deployment/staging/scripts/trusted_browser_activation_manifest.mjs";
 
 const CONFIG_HELPER = new URL(
   "../../deployment/staging/scripts/configure_gate4_provider_environment.ps1",
@@ -40,4 +43,29 @@ test("Gate 4 activation manifest is integrity-bound to the certified origin", as
   const validated = validateActivationManifest(manifest);
   assert.equal(validated.staging_origin, "https://sentinel-dna-staging:18443");
   assert.equal(validated.integrity.algorithm, "sha256");
+});
+
+test("Gate 4 activation manifest binds the external browserAuth bridge digest", async () => {
+  const manifest = JSON.parse(await readFile(ACTIVATION_MANIFEST, "utf8"));
+  const bound = {
+    ...manifest,
+    approved_browser_auth_bridge_identity: "sentinel-dna-browser-auth-bridge:1.0.0",
+    approved_browser_auth_bridge_digest: `sha256:${"a".repeat(64)}`,
+  };
+  bound.integrity = {
+    ...bound.integrity,
+    manifest_hash: computeManifestHash(bound),
+  };
+
+  const validated = validateActivationManifest(bound);
+  assert.equal(validated.approved_browser_auth_bridge_identity, "sentinel-dna-browser-auth-bridge:1.0.0");
+  assert.equal(validated.approved_browser_auth_bridge_digest, `sha256:${"a".repeat(64)}`);
+  assert.throws(
+    () => validateActivationManifest({
+      ...bound,
+      approved_browser_auth_bridge_digest: undefined,
+      integrity: { ...bound.integrity },
+    }),
+    /TB_PROVIDER_MANIFEST_INVALID/,
+  );
 });

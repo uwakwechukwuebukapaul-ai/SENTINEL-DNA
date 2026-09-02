@@ -153,6 +153,7 @@ repository and must point to the separately reviewed runtime module:
 $env:SENTINEL_DNA_TRUSTED_BROWSER_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\browser-client.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT = "C:\Users\HP\Documents\sentinel-dna-postmerge-ssh\deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs"
 $env:SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME = "C:\approved\browser\playwright-runtime.mjs"
+$env:SENTINEL_DNA_APPROVED_RUNTIME_DIGEST = "sha256:<64-hex-runtime-digest>"
 $env:SENTINEL_DNA_BROWSER_AUTH_BRIDGE = "C:\approved\browser\browser-auth-bridge.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST = "C:\approved\browser\trusted-browser-activation-manifest.json"
 $env:SENTINEL_DNA_IMAGE_DIGEST = "sha256:<reviewed-64-hex-digest>"

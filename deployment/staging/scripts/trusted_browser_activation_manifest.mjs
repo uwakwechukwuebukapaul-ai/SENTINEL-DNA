@@ -31,7 +31,11 @@ const REQUIRED_FIELDS = [
   "operator_approval_reference",
 ];
 const ALLOWED_TOP_LEVEL_FIELDS = new Set([...REQUIRED_FIELDS, "integrity", "signature"]);
-const OPTIONAL_RUNTIME_FIELDS = new Set(["approved_runtime_dependency_lockfile_digest"]);
+const OPTIONAL_RUNTIME_FIELDS = new Set([
+  "approved_runtime_dependency_lockfile_digest",
+  "approved_browser_auth_bridge_identity",
+  "approved_browser_auth_bridge_digest",
+]);
 
 function manifestError(code) {
   const error = new Error(`[${code}] trusted browser activation manifest is invalid`);
@@ -88,6 +92,17 @@ export function validateActivationManifest(manifest) {
     manifest.approved_runtime_dependency_lockfile_digest !== undefined &&
     !IMAGE_DIGEST.test(manifest.approved_runtime_dependency_lockfile_digest)
   ) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  const bridgeIdentity = manifest.approved_browser_auth_bridge_identity;
+  const bridgeDigest = manifest.approved_browser_auth_bridge_digest;
+  if ((bridgeIdentity === undefined) !== (bridgeDigest === undefined)) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (bridgeIdentity !== undefined && !isSafeIdentifier(bridgeIdentity)) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (bridgeDigest !== undefined && !IMAGE_DIGEST.test(bridgeDigest)) {
     throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
   }
   if (manifest.staging_origin !== CERTIFIED_STAGING_ORIGIN) {

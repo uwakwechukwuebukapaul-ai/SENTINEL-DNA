@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,6 +10,7 @@ import {
   TRUSTED_BROWSER_CLIENT_ENV,
 } from "../../deployment/staging/scripts/trusted_browser_execution_adapter.mjs";
 import {
+  BROWSER_AUTH_BRIDGE_ENV,
   TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
 } from "../../deployment/staging/scripts/trusted_browser_service/browser-client.mjs";
 import {
@@ -27,6 +29,8 @@ const PROVIDER_MODULE = fileURLToPath(new URL(
   "../../deployment/staging/scripts/trusted_browser_service/providers/playwright-runtime-provider.mjs",
   import.meta.url,
 ));
+const EXTERNAL_RUNTIME = "C:\\sentinel-dna-gate4-custody\\approved-playwright-runtime.mjs";
+const EXTERNAL_BRIDGE = "C:\\Sentinel-DNA-Custody\\browser-auth-bridge\\browser-auth-bridge.mjs";
 
 const VALID_RUNTIME = `
   export async function setupBrowserRuntime({ environment }) {
@@ -83,6 +87,40 @@ test("verifies a complete configured provider chain", async () => {
       },
     });
   });
+});
+
+test("verifies the external custody provider with the operator browserAuth bridge", {
+  concurrency: false,
+  skip: !existsSync(EXTERNAL_RUNTIME) || !existsSync(EXTERNAL_BRIDGE),
+}, async () => {
+  const names = [
+    TRUSTED_BROWSER_CLIENT_ENV,
+    TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
+    APPROVED_PLAYWRIGHT_RUNTIME_ENV,
+    BROWSER_AUTH_BRIDGE_ENV,
+  ];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env[TRUSTED_BROWSER_CLIENT_ENV] = SERVICE_MODULE;
+  process.env[TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV] = PROVIDER_MODULE;
+  process.env[APPROVED_PLAYWRIGHT_RUNTIME_ENV] = EXTERNAL_RUNTIME;
+  process.env[BROWSER_AUTH_BRIDGE_ENV] = EXTERNAL_BRIDGE;
+  try {
+    assert.deepEqual(await verifyTrustedBrowserProvider(), {
+      status: "PASS",
+      checks: {
+        provider: "PASS",
+        runtime: "PASS",
+        origin: "PASS",
+        browser_contract: "PASS",
+        browser_auth: "PASS",
+      },
+    });
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
 });
 
 test("reports a missing provider without exposing configuration paths", async () => {

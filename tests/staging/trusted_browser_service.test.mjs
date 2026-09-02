@@ -140,7 +140,7 @@ test("adapts the operator custody runtime's native Playwright browser contract",
     assert.equal(await tab.playwright.evaluate(() => document.title), "");
     await assert.rejects(
       tab.capabilities.get("browserAuth"),
-      (error) => error.code === "TB_AUTH_CAPABILITY_MISSING",
+      (error) => error.code === "TB_AUTH_BRIDGE_MISSING",
     );
   } finally {
     if (tab) await tab.close().catch(() => {});

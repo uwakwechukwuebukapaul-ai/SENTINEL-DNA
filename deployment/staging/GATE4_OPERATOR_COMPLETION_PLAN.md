@@ -46,8 +46,9 @@ browser runtime.
    ```powershell
    . .\deployment\staging\scripts\configure_gate4_provider_environment.ps1 `
      -ApprovedRuntimeModule 'C:\approved\browser\playwright-runtime.mjs' `
+     -RuntimeDigest 'sha256:<64-hex-runtime-digest>' `
      -ActivationManifest 'C:\approved\browser\trusted-browser-activation-manifest.json' `
-     -ImageDigest 'sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653'
+     -ImageDigest 'sha256:<64-hex-deployed-staging-image-digest>'
    ```
 
 4. Run configuration validation:

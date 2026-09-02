@@ -7,7 +7,13 @@ param(
     [string]$ActivationManifest,
 
     [Parameter(Mandatory = $true)]
-    [string]$ImageDigest
+    [string]$ImageDigest,
+
+    [Parameter(Mandatory = $true)]
+    [string]$RuntimeDigest,
+
+    [Parameter(Mandatory = $true)]
+    [string]$BrowserAuthBridge
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,9 +67,28 @@ $manifestPath = Resolve-ExternalArtifact `
     "external Gate 4 activation manifest" `
     "TB_PROVIDER_MANIFEST_MISSING" `
     "Obtain the integrity-checked activation manifest and operator approval record from approved custody"
+$bridgePath = Resolve-ExternalArtifact `
+    $BrowserAuthBridge `
+    "SENTINEL_DNA_BROWSER_AUTH_BRIDGE" `
+    "external browserAuth bridge" `
+    "TB_AUTH_BRIDGE_MISSING" `
+    "Obtain the separately reviewed browserAuth bridge from approved custody"
 
 if ([string]::IsNullOrWhiteSpace($ImageDigest) -or $ImageDigest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
     Add-Failure "TB_IMAGE_IDENTITY_INVALID" "SENTINEL_DNA_IMAGE_DIGEST" "reviewed staging image digest" "Use the immutable sha256 digest of the deployed staging image and reconcile it in the external activation manifest"
+}
+
+if ([string]::IsNullOrWhiteSpace($RuntimeDigest) -or $RuntimeDigest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
+    Add-Failure "TB_PROVIDER_MANIFEST_INVALID" "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST" "SHA-256 digest of the supplied runtime module" "Supply the independently calculated digest of the exact reviewed runtime module"
+} elseif ($null -ne $runtimePath) {
+    try {
+        $actualRuntimeDigest = "sha256:" + (Get-FileHash -LiteralPath $runtimePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+        if ($actualRuntimeDigest -ne $RuntimeDigest.ToLowerInvariant()) {
+            Add-Failure "TB_PROVIDER_MANIFEST_INVALID" "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST" "SHA-256 digest of the supplied runtime module" "Reconcile the supplied runtime digest with the exact runtime bytes and custody manifest"
+        }
+    } catch {
+        Add-Failure "TB_RUNTIME_UNAVAILABLE" "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST" "SHA-256 digest of the supplied runtime module" "Confirm the reviewed runtime is readable on the approved operator host"
+    }
 }
 
 if ($failures.Count -gt 0) {
@@ -86,7 +111,9 @@ $env:SENTINEL_DNA_IMAGE_DIGEST = $ImageDigest
 $env:SENTINEL_DNA_TRUSTED_BROWSER_CLIENT = Join-Path $repoRoot "deployment\staging\scripts\trusted_browser_service\browser-client.mjs"
 $env:SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT = Join-Path $repoRoot "deployment\staging\scripts\trusted_browser_service\providers\playwright-runtime-provider.mjs"
 $env:SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME = $runtimePath
+$env:SENTINEL_DNA_APPROVED_RUNTIME_DIGEST = $RuntimeDigest.ToLowerInvariant()
 $env:SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST = $manifestPath
+$env:SENTINEL_DNA_BROWSER_AUTH_BRIDGE = $bridgePath
 
 Write-Output "STATUS=PASS"
 Write-Output "CHECK=PASS:Gate 4 provider facade and approved provider boundary configured"

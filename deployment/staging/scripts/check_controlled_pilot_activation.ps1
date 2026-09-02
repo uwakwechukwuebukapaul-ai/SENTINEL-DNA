@@ -15,6 +15,8 @@ $requiredVariables = @(
     "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT",
     "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT",
     "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME",
+    "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST",
+    "SENTINEL_DNA_BROWSER_AUTH_BRIDGE",
     "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST",
     "SENTINEL_DNA_PILOT_ACCESS_REQUIRED",
     "SENTINEL_DNA_SECURE_COOKIES",
@@ -27,7 +29,8 @@ $providerVariables = @(
     "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT"
 )
 $runtimeVariable = "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME"
-$fileVariables = $providerVariables + $runtimeVariable + "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST"
+$fileVariables = $providerVariables + $runtimeVariable +
+    "SENTINEL_DNA_BROWSER_AUTH_BRIDGE" + "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST"
 
 function Add-SafeCode([string]$Code) {
     if (-not $safeCodes.Contains($Code)) { $safeCodes.Add($Code) }
@@ -38,6 +41,7 @@ foreach ($name in $requiredVariables) {
     if ([string]::IsNullOrWhiteSpace($value)) {
         if ($providerVariables -contains $name) { Add-SafeCode "TB_PROVIDER_NOT_CONFIGURED" }
         elseif ($name -eq $runtimeVariable) { Add-SafeCode "TB_RUNTIME_UNAVAILABLE" }
+        elseif ($name -eq "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_INVALID" }
         elseif ($name -eq "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_MISSING" }
         elseif ($name -eq "SENTINEL_DNA_IMAGE_DIGEST") { Add-SafeCode "TB_IMAGE_IDENTITY_INVALID" }
         else { Add-SafeCode "TB_SECURITY_CONTROL_MISSING" }
@@ -47,6 +51,10 @@ foreach ($name in $requiredVariables) {
 $imageDigest = [Environment]::GetEnvironmentVariable("SENTINEL_DNA_IMAGE_DIGEST")
 if (-not [string]::IsNullOrWhiteSpace($imageDigest) -and $imageDigest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
     Add-SafeCode "TB_IMAGE_IDENTITY_INVALID"
+}
+$runtimeDigest = [Environment]::GetEnvironmentVariable("SENTINEL_DNA_APPROVED_RUNTIME_DIGEST")
+if (-not [string]::IsNullOrWhiteSpace($runtimeDigest) -and $runtimeDigest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
+    Add-SafeCode "TB_PROVIDER_MANIFEST_INVALID"
 }
 if ([Environment]::GetEnvironmentVariable("SENTINEL_DNA_ENV") -ne "staging") {
     Add-SafeCode "TB_SECURITY_CONTROL_MISSING"
@@ -59,6 +67,7 @@ foreach ($name in $fileVariables) {
             if (-not (Test-Path -LiteralPath $value -PathType Leaf)) {
                 if ($name -eq "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_MISSING" }
                 elseif ($name -eq $runtimeVariable) { Add-SafeCode "TB_RUNTIME_UNAVAILABLE" }
+                elseif ($name -eq "SENTINEL_DNA_BROWSER_AUTH_BRIDGE") { Add-SafeCode "TB_AUTH_BRIDGE_MISSING" }
                 else { Add-SafeCode "TB_PROVIDER_MODULE_MISSING" }
             }
             $normalized = $value.Replace("\", "/").ToLowerInvariant()
@@ -68,6 +77,7 @@ foreach ($name in $fileVariables) {
         } catch {
             if ($name -eq "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST") { Add-SafeCode "TB_PROVIDER_MANIFEST_MISSING" }
             elseif ($name -eq $runtimeVariable) { Add-SafeCode "TB_RUNTIME_UNAVAILABLE" }
+            elseif ($name -eq "SENTINEL_DNA_BROWSER_AUTH_BRIDGE") { Add-SafeCode "TB_AUTH_BRIDGE_MISSING" }
             else { Add-SafeCode "TB_PROVIDER_MODULE_MISSING" }
         }
     }

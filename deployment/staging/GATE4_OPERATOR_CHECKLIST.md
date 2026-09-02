@@ -27,6 +27,7 @@ rejects missing artifacts and repository-local runtime/manifest files:
 ```powershell
 . .\deployment\staging\scripts\configure_gate4_provider_environment.ps1 `
   -ApprovedRuntimeModule 'C:\approved\browser\playwright-runtime.mjs' `
+  -RuntimeDigest 'sha256:<64-hex-runtime-digest>' `
   -ActivationManifest 'C:\approved\browser\trusted-browser-activation-manifest.json' `
   -ImageDigest 'sha256:<64-hex-deployed-staging-image-digest>'
 ```

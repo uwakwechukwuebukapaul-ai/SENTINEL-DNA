@@ -27,7 +27,9 @@ import { verifyTrustedBrowserProvider } from "./verify_trusted_browser_provider.
 import {
   loadActivationManifest,
 } from "./trusted_browser_activation_manifest.mjs";
-import { verifyConfiguredRuntimeDigest } from "./verify_gate4_external_artifacts.mjs";
+import {
+  verifyConfiguredRuntimeDigest,
+} from "./verify_gate4_external_artifacts.mjs";
 const DEFAULT_EVIDENCE_DIR = "C:/ProgramData/Sentinel-DNA/release/evidence";
 export const READINESS_READY_STATUS = "READY_FOR_ANALYST_PILOT";
 
@@ -168,7 +170,9 @@ export async function checkControlledPilotReadiness({
     const simulationOnly = process.env?.SENTINEL_DNA_SIMULATION_MODE === "1" &&
       process.env?.SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME === "NON-PRODUCTION_SIMULATION_ONLY";
     if (!simulationOnly) {
-      const runtimeDigest = await verifyConfiguredRuntimeDigest(activationManifest);
+      const runtimeDigest = await verifyConfiguredRuntimeDigest(activationManifest, {
+        requireOperatorDigest: true,
+      });
       if (runtimeDigest.status !== "PASS") {
         const error = new Error("configured runtime digest does not match the activation manifest");
         error.code = runtimeDigest.code;

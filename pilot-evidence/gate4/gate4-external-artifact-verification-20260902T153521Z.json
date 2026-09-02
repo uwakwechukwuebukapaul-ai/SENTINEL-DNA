@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "external_artifact_onboarding_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_verification": {
+    "status": "BLOCKED_WITH_REASON",
+    "failure_category": "TB_RUNTIME_UNAVAILABLE"
+  },
+  "activation": {
+    "status": "BLOCKED_WITH_REASON",
+    "codes": [
+      "TB_PROVIDER_MANIFEST_INVALID",
+      "TB_RUNTIME_UNAVAILABLE"
+    ]
+  },
+  "checks": {
+    "runtime_module_exists": {
+      "name": "runtime_module_exists",
+      "status": "PASS"
+    },
+    "runtime_digest_matches_manifest": {
+      "name": "runtime_digest_matches_manifest",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    },
+    "manifest_integrity": {
+      "name": "manifest_integrity",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "image_digest_binding": {
+      "name": "image_digest_binding",
+      "status": "NOT_RUN"
+    },
+    "certified_origin_binding": {
+      "name": "certified_origin_binding",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "provider_verification": {
+      "name": "provider_verification",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    }
+  },
+  "artifact_identity": {
+    "runtime_module_digest": null,
+    "image_digest": "sha256:0ce1ef605201f5f8e2d5b47c0bffae3eaa13da68952a14229faf2c97477bacec",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "browserAuth_invoked": false,
+    "security_controls_bypassed": false
+  },
+  "blockers": [
+    "TB_PROVIDER_MANIFEST_INVALID",
+    "TB_RUNTIME_UNAVAILABLE"
+  ],
+  "remediation": [
+    "Return the activation manifest to custody for integrity, origin, approval, and digest reconciliation.",
+    "Obtain the reviewed Playwright/RPC runtime from approved custody, verify its SHA-256 digest, and rerun onboarding."
+  ],
+  "evidence_sha256": "40e177b67ca8d2f90d0cfbe4eea10984e1a49476d5a3b2f4b9afc50262695604"
+}

@@ -11,6 +11,8 @@ $requiredVariables = @(
     "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT",
     "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT",
     "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME",
+    "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST",
+    "SENTINEL_DNA_BROWSER_AUTH_BRIDGE",
     "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST",
     "SENTINEL_DNA_PILOT_ACCESS_REQUIRED",
     "SENTINEL_DNA_SECURE_COOKIES",
@@ -23,6 +25,7 @@ $fileVariables = @(
     "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT",
     "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT",
     "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME",
+    "SENTINEL_DNA_BROWSER_AUTH_BRIDGE",
     "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST"
 )
 
@@ -44,6 +47,10 @@ foreach ($name in $requiredVariables) {
 $imageDigest = [Environment]::GetEnvironmentVariable("SENTINEL_DNA_IMAGE_DIGEST")
 if (-not [string]::IsNullOrWhiteSpace($imageDigest) -and $imageDigest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
     $failures.Add("SENTINEL_DNA_IMAGE_DIGEST is invalid")
+}
+$runtimeDigest = [Environment]::GetEnvironmentVariable("SENTINEL_DNA_APPROVED_RUNTIME_DIGEST")
+if (-not [string]::IsNullOrWhiteSpace($runtimeDigest) -and $runtimeDigest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
+    $failures.Add("SENTINEL_DNA_APPROVED_RUNTIME_DIGEST is invalid")
 }
 
 if ([Environment]::GetEnvironmentVariable("SENTINEL_DNA_ENV") -ne "staging") {

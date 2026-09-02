@@ -7,8 +7,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -22,7 +22,11 @@ import {
 } from "./trusted_browser_runtime_custody.mjs";
 import { verifyTrustedBrowserProvider } from "./verify_trusted_browser_provider.mjs";
 import { TRUSTED_BROWSER_CLIENT_ENV } from "./trusted_browser_execution_adapter.mjs";
-import { TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV } from "./trusted_browser_service/browser-client.mjs";
+import {
+  BROWSER_AUTH_BRIDGE_ENV,
+  TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
+} from "./trusted_browser_service/browser-client.mjs";
+import { validateConfiguredBrowserAuthBridge } from "./validate_trusted_browser_auth_bridge.mjs";
 import {
   APPROVED_PLAYWRIGHT_RUNTIME_ENV,
 } from "./trusted_browser_service/providers/playwright-runtime-provider.mjs";
@@ -80,13 +84,22 @@ function isImageDigest(value) {
   return typeof value === "string" && /^sha256:[0-9a-f]{64}$/i.test(value.trim());
 }
 
+async function sha256File(url) {
+  try {
+    const bytes = await readFile(url);
+    return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  } catch {
+    return null;
+  }
+}
+
 function configuredPath(environmentName) {
   const configured = process.env?.[environmentName];
   if (typeof configured !== "string" || !configured.trim()) return null;
   const value = configured.trim();
   try {
     const url = value.startsWith("file:") ? new URL(value) : pathToFileURL(resolve(value));
-    if (url.protocol !== "file:" || url.search || url.hash || !existsSync(url)) return null;
+    if (url.protocol !== "file:" || url.search || url.hash || !existsSync(url) || lstatSync(url).isSymbolicLink()) return null;
     return url;
   } catch {
     return null;
@@ -165,6 +178,7 @@ function activationStatus(checks, providerVerification) {
     checks.runtime_dependency_bundle.status === "PASS" &&
     checks.manifest_integrity.status === "PASS" &&
     checks.image_digest_binding.status === "PASS" &&
+    checks.browser_auth_bridge_binding?.status === "PASS" &&
     checks.certified_origin_binding?.status === "PASS";
   return allArtifactsValid && providerVerification?.status === "PASS"
     ? READY_STATUS
@@ -185,6 +199,10 @@ function remediationFor(code) {
       return "Configure the reviewed facade, provider boundary, and externally supplied runtime through the operator helper.";
     case "TB_PROVIDER_MODULE_MISSING":
       return "Confirm the reviewed provider module is present and supplied from the approved deployment package.";
+    case "TB_AUTH_BRIDGE_MISSING":
+    case "TB_AUTH_BRIDGE_EXPORT_INVALID":
+    case "TB_AUTH_BRIDGE_RUNTIME_FAILED":
+      return "Obtain the separately reviewed browserAuth bridge, reconcile its digest in the activation manifest, and rerun onboarding.";
     case "TB_ORIGIN_UNREACHABLE":
       return "Validate private-TLS reachability of the exact certified staging origin from the approved operator host; do not use an alternate origin.";
     default:
@@ -201,6 +219,7 @@ export async function verifyGate4ExternalArtifacts() {
     runtime_dependency_bundle: { name: "runtime_dependency_bundle", status: "NOT_RUN" },
     manifest_integrity: { name: "manifest_integrity", status: "NOT_RUN" },
     image_digest_binding: { name: "image_digest_binding", status: "NOT_RUN" },
+    browser_auth_bridge_binding: { name: "browser_auth_bridge_binding", status: "NOT_RUN" },
   };
   let runtimeDigest;
   let runtimeCustody;
@@ -261,12 +280,55 @@ export async function verifyGate4ExternalArtifacts() {
       manifestIntegrityCode || (manifest ? "TB_ORIGIN_REJECTED" : "TB_PROVIDER_MANIFEST_MISSING"),
     );
 
+  const configuredBridge = configuredPath(BROWSER_AUTH_BRIDGE_ENV);
+  if (!manifest) {
+    checks.browser_auth_bridge_binding = blockedCheck(
+      "browser_auth_bridge_binding",
+      manifestIntegrityCode || "TB_PROVIDER_MANIFEST_MISSING",
+    );
+  } else if (!configuredBridge || isRepositoryArtifact(configuredBridge)) {
+    checks.browser_auth_bridge_binding = blockedCheck(
+      "browser_auth_bridge_binding",
+      "TB_AUTH_BRIDGE_MISSING",
+    );
+  } else if (
+    typeof manifest.approved_browser_auth_bridge_identity !== "string" ||
+    typeof manifest.approved_browser_auth_bridge_digest !== "string"
+  ) {
+    checks.browser_auth_bridge_binding = blockedCheck(
+      "browser_auth_bridge_binding",
+      "TB_PROVIDER_MANIFEST_INVALID",
+    );
+  } else {
+    const actualBridgeDigest = await sha256File(configuredBridge);
+    if (
+      !actualBridgeDigest ||
+      actualBridgeDigest !== manifest.approved_browser_auth_bridge_digest.toLowerCase()
+    ) {
+      checks.browser_auth_bridge_binding = blockedCheck(
+        "browser_auth_bridge_binding",
+        "TB_PROVIDER_MANIFEST_INVALID",
+      );
+    } else {
+      const bridgeContract = await validateConfiguredBrowserAuthBridge({
+        modulePath: fileURLToPath(configuredBridge),
+      });
+      checks.browser_auth_bridge_binding = bridgeContract.status === "PASS"
+        ? passCheck("browser_auth_bridge_binding")
+        : blockedCheck(
+          "browser_auth_bridge_binding",
+          safeCode(bridgeContract.failure_category, "TB_AUTH_BRIDGE_RUNTIME_FAILED"),
+        );
+    }
+  }
+
   const custodyBlocker = [
     checks.runtime_module_exists,
     checks.runtime_digest_matches_manifest,
     checks.runtime_dependency_bundle,
     checks.manifest_integrity,
     checks.image_digest_binding,
+    checks.browser_auth_bridge_binding,
     checks.certified_origin_binding,
   ].find((check) => check.status !== "PASS");
   const providerConfigurationFailure = providerConfigurationCode();
@@ -315,6 +377,10 @@ export async function verifyGate4ExternalArtifacts() {
     artifact_identity: {
       runtime_module_digest: runtimeDigest || null,
       runtime_dependency_lockfile_digest: runtimeCustody?.dependencyClosure?.lockfileDigest || null,
+      browser_auth_bridge_identity: manifest?.approved_browser_auth_bridge_identity || null,
+      browser_auth_bridge_digest: checks.browser_auth_bridge_binding.status === "PASS"
+        ? manifest.approved_browser_auth_bridge_digest.toLowerCase()
+        : null,
       image_digest: isImageDigest(configuredImage) ? configuredImage.toLowerCase() : null,
       certified_origin: CERTIFIED_ORIGIN,
     },
