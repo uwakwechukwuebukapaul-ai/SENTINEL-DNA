@@ -45,7 +45,7 @@ test("creates an approved browser only through the trusted runtime and checks br
 
     assert.strictEqual(browser, expected.browser);
     assert.deepEqual(browser.setupEnvironments, [TRUSTED_BROWSER_RUNTIME_ENVIRONMENT]);
-    assert.deepEqual(browser.selectedOrigins, ["https://sentinel-dna-staging:18443"]);
+    assert.deepEqual(browser.selectedOrigins, ["https://uwakwe-desktop.taile388cc.ts.net"]);
     assert.equal(browser.closedProbeTabs, 1);
   });
 });

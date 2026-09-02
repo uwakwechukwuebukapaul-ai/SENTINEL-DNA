@@ -23,8 +23,8 @@
     "status": { "enum": ["NOT_EXECUTED", "NOT_MEASURED", "CAPTURED", "VERIFIED", "BLOCKED_WITH_REASON"] },
     "run_id": { "$ref": "#/$defs/safeIdentifier" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-    "access_method": { "enum": ["cloudflare_one_private_application", "wireguard_private_overlay"] },
-    "origin": { "const": "https://sentinel-dna-staging:18443" },
+    "access_method": { "enum": ["tailscale_private_overlay", "cloudflare_one_private_application", "wireguard_private_overlay"] },
+    "origin": { "const": "https://uwakwe-desktop.taile388cc.ts.net" },
     "started_at_utc": { "$ref": "#/$defs/utcTimestamp" },
     "completed_at_utc": { "anyOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }] },
     "scope": {

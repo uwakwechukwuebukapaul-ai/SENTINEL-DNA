@@ -23,7 +23,7 @@ import {
 
 export { TRUSTED_BROWSER_ENVIRONMENT } from "./runtime-provider.mjs";
 
-export const CERTIFIED_ORIGIN = "https://sentinel-dna-staging:18443";
+export const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 export const TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV =
   "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT";
 export const BROWSER_AUTH_BRIDGE_ENV = "SENTINEL_DNA_BROWSER_AUTH_BRIDGE";

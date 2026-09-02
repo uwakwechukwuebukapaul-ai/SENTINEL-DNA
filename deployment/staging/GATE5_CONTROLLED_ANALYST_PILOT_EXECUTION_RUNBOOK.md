@@ -50,8 +50,8 @@ Use the existing Gate 4 readiness checklist and manual runbook as prerequisites:
 
    ```powershell
    docker compose ps
-   curl.exe --cacert <approved-staging-ca.crt> https://sentinel-dna-staging:18443/health
-   curl.exe --cacert <approved-staging-ca.crt> https://sentinel-dna-staging:18443/ready
+   curl.exe --cacert <approved-staging-ca.crt> https://uwakwe-desktop.taile388cc.ts.net/health
+   curl.exe --cacert <approved-staging-ca.crt> https://uwakwe-desktop.taile388cc.ts.net/ready
    ```
 
    Verify only `127.0.0.1:18443->443/tcp` is published. Do not use `-k` as

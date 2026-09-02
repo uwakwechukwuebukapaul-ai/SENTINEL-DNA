@@ -11,7 +11,7 @@
  *
  * It accepts only:
  *   - environment: "codex-app"
- *   - origin: https://sentinel-dna-staging:18443
+ *   - origin: https://uwakwe-desktop.taile388cc.ts.net
  *
  * It does not:
  *   - accept arbitrary browser launch options
@@ -43,7 +43,7 @@ export const APPROVED_PLAYWRIGHT_RUNTIME_ENV =
 export const TRUSTED_BROWSER_ENVIRONMENT = "codex-app";
 
 export const CERTIFIED_ORIGIN =
-  "https://sentinel-dna-staging:18443";
+  "https://uwakwe-desktop.taile388cc.ts.net";
 
 export const BROWSER_AUTH_BRIDGE_ENV =
   "SENTINEL_DNA_BROWSER_AUTH_BRIDGE";

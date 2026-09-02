@@ -43,7 +43,7 @@ const VALID_RUNTIME = `
       capabilities: { get: async (name) => name === "browserAuth" ? { request: async () => ({ status: "not-called" }) } : undefined },
     };
     return { browsers: { getForUrl: async (origin) => {
-      if (origin !== "https://sentinel-dna-staging:18443") throw new Error("origin rejected");
+      if (origin !== "https://uwakwe-desktop.taile388cc.ts.net") throw new Error("origin rejected");
       return { tabs: { new: async () => tab } };
     } } };
   }

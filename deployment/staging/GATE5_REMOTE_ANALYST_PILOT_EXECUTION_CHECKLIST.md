@@ -18,26 +18,24 @@ Target decision:
 
 ## Architecture recommendation
 
-Use a private access overlay to the existing staging host. The preferred
-managed option is a Cloudflare One private self-hosted application backed by a
-Cloudflare Tunnel, using WARP/Cloudflare One Client or approved clientless
-private-browser access. Configure a private hostname route to the staging
-surface and an explicit deny-by-default Access policy for the single approved
-analyst. Cloudflare documents private applications for private IPs/hostnames
-and states that Access applications require a matching Allow policy; private
-network access requires the client and a Tunnel/Mesh/WAN connection.
+Use the selected Tailscale private overlay to the existing staging host.
+Configure a deny-by-default Tailscale grant/ACL for the single approved
+analyst, allowing only TCP `443` to the tagged staging node. Use raw TCP
+Tailscale Serve forwarding to `tcp://127.0.0.1:18443`, so the existing
+Sentinel DNA TLS edge and exact MagicDNS origin remain
+authoritative. Do not add a subnet router, exit node, Tailscale SSH rule, or
+public Funnel route.
 
 Do not use a normal public-hostname Tunnel route for this pilot. That mode
 creates a public DNS hostname and changes the browser-visible origin. Do not
 accept that change by adding an alternate origin to the application or
 validators.
 
-If the organization does not already operate Cloudflare One private access,
-use a temporary WireGuard private overlay as the fallback. Permit only the
-staging host and application port over the overlay, keep the Docker edge bound
-to `127.0.0.1:18443`, and use host-level forwarding only if the network owner
-has reviewed it. Do not expose SSH, Docker, PostgreSQL, Redis, management, or
-debug ports to the analyst.
+Cloudflare One private access is paused and must not be used for this run. A
+separately approved narrowly routed WireGuard overlay is also not selected for
+this run. Any future alternate path requires a reopened architecture decision
+and fresh external approval. Do not expose SSH, Docker, PostgreSQL, Redis,
+management, or debug ports to the analyst.
 
 PythonAnywhere is not suitable: its documented web-app/custom-domain model
 does not preserve this repository's Docker Compose, internal PostgreSQL/Redis,
@@ -46,18 +44,16 @@ temporary VPS is a last resort only for a separately rebuilt disposable
 staging deployment; copying the current database, secrets, browser runtime,
 or production configuration to it is prohibited.
 
-Reference material for the access decision: [Cloudflare private
-applications](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/self-hosted-private-app/),
-[Cloudflare private-app
-setup](https://developers.cloudflare.com/cloudflare-one/setup/secure-private-apps/),
-[Cloudflare Tunnel routing](https://developers.cloudflare.com/tunnel/routing/),
+Reference material for the access decision: [Tailscale grants](https://tailscale.com/docs/features/access-control/grants),
+[Tailscale policy syntax](https://tailscale.com/docs/reference/syntax/policy-file),
+[Tailscale Serve TCP forwarding](https://tailscale.com/docs/reference/tailscale-cli/serve),
 [PythonAnywhere custom-domain web apps](https://help.pythonanywhere.com/pages/CustomDomains),
 and [WireGuard quick start](https://www.wireguard.com/quickstart/).
 
 ## Remote access hard gate
 
-- [ ] Security owner selects either Cloudflare One private access or WireGuard
-      and records the decision outside Git.
+- [ ] Security owner selects Tailscale private access for this run and records
+      the decision outside Git.
 - [ ] The access path is private and identity-restricted; no public DNS route,
       public wildcard listener, or unauthenticated tunnel exists.
 - [ ] The path reaches only the staging browser surface. PostgreSQL, Redis,
@@ -66,15 +62,15 @@ and [WireGuard quick start](https://www.wireguard.com/quickstart/).
 - [ ] The connector/tunnel runs under external custody and has no repository
       copy of its token, private key, or configuration secret.
 - [ ] The remote browser still uses exactly
-      `https://sentinel-dna-staging:18443`.
+      `https://uwakwe-desktop.taile388cc.ts.net`.
 - [ ] The certificate is validated with the approved CA and the
-      `sentinel-dna-staging` SNI/SAN; no `-k`, TLS-ignore, alternate hostname,
+      `uwakwe-desktop.taile388cc.ts.net` SNI/SAN; no `-k`, TLS-ignore, alternate hostname,
       or alternate port is accepted.
 - [ ] No redirect, Host header, Origin header, cookie domain, CSRF scope, or
       application base URL changes across the remote path.
-- [ ] If Cloudflare clientless browser isolation is used, the trusted-browser
-      custody owner explicitly approves that browser boundary before pilot
-      authentication. Otherwise use the already reviewed browser/provider.
+- [ ] The analyst device uses the already reviewed browser/provider after
+      Tailscale connectivity is established; Tailscale is only the network
+      boundary and does not replace Sentinel DNA authentication.
 - [ ] A remote smoke test passes without authenticating or mutating state.
       Failure blocks the pilot and does not justify weakening origin checks.
 
@@ -84,7 +80,7 @@ and [WireGuard quick start](https://www.wireguard.com/quickstart/).
 - [ ] Reconcile runtime, lockfile, browser-auth bridge, image, activation
       manifest, TLS, and certified-origin identities with external custody.
 - [ ] Confirm populated environment files, TLS keys, browser sessions,
-      runtime bundles, backup artifacts, and tunnel/WireGuard keys are outside
+      runtime bundles, backup artifacts, and Tailscale/WireGuard keys are outside
       Git and outside the evidence record.
 - [ ] Confirm the staging deployment is disposable and has no production route,
       production volume, production backup, or production credential.
@@ -215,7 +211,8 @@ backup/restore failure, unmeasured gates, or provider/runtime drift.
 1. Stop analyst activity and preserve the opaque run ID and UTC time.
 2. Revoke authorization, deactivate the analyst, invalidate sessions, and
    verify post-revocation denial.
-3. Disable the private access policy/tunnel or WireGuard peer.
+3. Disable the Tailscale grant/Serve listener or the separately approved
+   private-access peer.
 4. Preserve only safe references and hashes in external custody.
 5. Notify the release/security owner; restart only with a new run ID and fresh
    approval.

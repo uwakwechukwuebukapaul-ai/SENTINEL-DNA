@@ -9,6 +9,7 @@ from .oauth import GoogleOIDC
 from .phone import country_options, normalize_phone
 from .providers import email_provider
 from .security import csrf_token
+from .onboarding import OnboardingState
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
@@ -42,6 +43,14 @@ def _csrf_ok():
 def _ensure_csrf():
     if "csrf_token" not in session: session["csrf_token"] = csrf_token()
     return session["csrf_token"]
+
+def _otp_binding():
+    """Bind browser OTP challenges to the current signed auth flow."""
+    binding = session.get("auth_otp_binding")
+    if not binding:
+        binding = secrets.token_urlsafe(32)
+        session["auth_otp_binding"] = binding
+    return binding
 def _bind(user):
     authority = current_app.container.require("canonical_authority")
     identity = authority.identities.get_by_email(user.email) or authority.identities.create(user.email, display_name=user.username, actor_id=user.actor_id or f"user-{user.id}")
@@ -107,21 +116,40 @@ def register():
         if not legacy_api:
             email_challenge_id = data.get("email_challenge_id")
             if email_challenge_id == "pending": email_challenge_id = session.get("registration_email_challenge_id")
+            expected_email = str(data.get("email", "")).strip().lower()
+            if session.get("registration_email_verified") != expected_email:
+                raise ValueError("verification_required")
+            if session.get("registration_phone_verified") != phone:
+                raise ValueError("verification_required")
             with _service().db.session() as connection:
-                verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND consumed_at IS NOT NULL AND destination=?", (data.get("phone_challenge_id"), phone)).fetchone()
-                email_verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_email' AND consumed_at IS NOT NULL AND destination=?", (email_challenge_id, str(data.get("email", "")).strip().lower())).fetchone()
+                binding = _otp_binding()
+                verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (data.get("phone_challenge_id"), phone, binding)).fetchone()
+                email_verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_email' AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (email_challenge_id, expected_email, binding)).fetchone()
             if not verified or not email_verified: raise ValueError("verification_required")
             email_verified_at = datetime.now(timezone.utc).isoformat()
-        user = _service().register(data.get("username", ""), data.get("email", ""), data.get("password", ""), "analyst", phone_number=phone, date_of_birth=dob, email_verified_at=email_verified_at)
+        user = _service().register(
+            data.get("username", ""), data.get("email", ""), data.get("password", ""),
+            "analyst", phone_number=phone, date_of_birth=dob,
+            email_verified_at=email_verified_at,
+            phone_verified_at=(datetime.now(timezone.utc).isoformat() if not legacy_api else None),
+            onboarding_state=(OnboardingState.AUTHENTICATED if legacy_api else OnboardingState.NEW),
+        )
     except DatabaseError: return jsonify({"error": "registration_unavailable"}), 409
     except Exception as exc:
         if integrity_error(exc): return jsonify({"error": "registration_unavailable"}), 409
         _audit("signup_failed", method="password", outcome="failure", reason="invalid_registration")
         return jsonify({"error": "invalid_registration"}), 400
-    try: _bind(user)
+    try:
+        _bind(user)
+        if not legacy_api:
+            user = _service().complete_verified_onboarding(user.id)
+            if user is None or user.onboarding_state != OnboardingState.AUTHENTICATED:
+                raise RuntimeError("onboarding_completion_failed")
     except Exception:
         with _service().db.session() as connection: connection.execute("DELETE FROM users WHERE id=?", (user.id,))
         return jsonify({"error": "registration_unavailable"}), 500
+    for key in ("auth_otp_binding", "registration_email_challenge_id", "registration_email_verified", "registration_phone_verified"):
+        session.pop(key, None)
     _audit("signup_verified", user_id=user.id, method="password", outcome="success")
     return jsonify(user.public()), 201
 
@@ -197,7 +225,10 @@ def email_send_code():
         user = _service().get_by_id(None)
         with _service().db.session() as connection:
             row = connection.execute("SELECT id FROM users WHERE email=? AND is_active=1", (destination,)).fetchone()
-        challenge, code = _service().issue_otp(destination, "login_email_otp", user_id=row["id"] if row else None, secret=current_app.secret_key)
+        challenge, code = _service().issue_otp(destination, "login_email_otp", user_id=row["id"] if row else None, secret=current_app.secret_key, session_binding=_otp_binding())
+        # Keep the opaque challenge server-side.  The response remains generic
+        # to avoid account enumeration and never exposes a challenge handle.
+        session["login_email_challenge_id"] = challenge
         delivery = provider.send_code(destination, code, "login_email_otp")
         if not delivery.accepted: raise RuntimeError("email_delivery_failed")
         with _service().db.session() as connection: connection.execute("UPDATE otp_challenges SET provider_request_id=? WHERE id=?", (delivery.provider_request_id, challenge))
@@ -212,7 +243,7 @@ def email_send_registration_code():
     if not _allowed(f"email-registration|{destination}", 5, 3600): return jsonify({"message": "If eligible, a verification code has been sent."}), 202
     try:
         provider = current_app.config.get("EMAIL_PROVIDER") or email_provider(testing=current_app.testing)
-        challenge, code = _service().issue_otp(destination, "registration_email", secret=current_app.secret_key)
+        challenge, code = _service().issue_otp(destination, "registration_email", secret=current_app.secret_key, session_binding=_otp_binding())
         delivery = provider.send_code(destination, code, "registration_email")
         if not delivery.accepted: raise RuntimeError("email_delivery_failed")
         with _service().db.session() as connection: connection.execute("UPDATE otp_challenges SET provider_request_id=? WHERE id=?", (delivery.provider_request_id, challenge))
@@ -226,8 +257,8 @@ def email_verify_registration_code():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     data = request.get_json(silent=True) or {}; challenge_id = data.get("challenge_id") or session.get("registration_email_challenge_id")
     if not _allowed("email-registration-verify", 10, 600): return jsonify({"error": "verification_failed"}), 400
-    _service().verify_otp(challenge_id, data.get("code", ""), secret=current_app.secret_key)
-    with _service().db.session() as connection: row = connection.execute("SELECT destination,consumed_at FROM otp_challenges WHERE id=? AND purpose='registration_email'", (challenge_id,)).fetchone()
+    _service().verify_otp(challenge_id, data.get("code", ""), secret=current_app.secret_key, session_binding=_otp_binding())
+    with _service().db.session() as connection: row = connection.execute("SELECT destination,consumed_at FROM otp_challenges WHERE id=? AND purpose='registration_email' AND session_binding=?", (challenge_id, _otp_binding())).fetchone()
     verified = bool(row and row["consumed_at"])
     if verified: session["registration_email_verified"] = row["destination"]; _audit("email_verified", method="email_otp", outcome="success")
     else: _audit("email_verification_failed", method="email_otp", outcome="failure", reason="invalid_or_expired")
@@ -237,12 +268,14 @@ def email_verify_registration_code():
 def email_verify_code():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     if not _allowed("email-otp-verify", 10, 600): return jsonify({"error": "verification_failed"}), 400
-    data = request.get_json(silent=True) or {}; user_id = _service().verify_otp(data.get("challenge_id"), data.get("code", ""), secret=current_app.secret_key)
+    data = request.get_json(silent=True) or {}; challenge_id = data.get("challenge_id") or session.get("login_email_challenge_id"); user_id = _service().verify_otp(challenge_id, data.get("code", ""), secret=current_app.secret_key, session_binding=_otp_binding())
     if not user_id: return jsonify({"error": "verification_failed"}), 400
     user = _service().get_by_id(user_id)
     if not user: _audit("email_otp_failed", method="email_otp", outcome="failure", reason="invalid_or_expired")
     else: _audit("email_otp_verified", user_id=user.id, method="email_otp", outcome="success")
-    return jsonify(_login_session(user, bool(data.get("remember_me")))) if user else (jsonify({"error": "verification_failed"}), 400)
+    if not user: return jsonify({"error": "verification_failed"}), 400
+    session.pop("login_email_challenge_id", None)
+    return jsonify(_login_session(user, bool(data.get("remember_me"))))
 
 @auth_api.post("/password-reset/request")
 def password_reset_request():
@@ -252,7 +285,7 @@ def password_reset_request():
     try:
         with _service().db.session() as connection: row = connection.execute("SELECT id FROM users WHERE email=? AND is_active=1", (destination,)).fetchone()
         provider = current_app.config.get("EMAIL_PROVIDER") or email_provider(testing=current_app.testing)
-        challenge, code = _service().issue_otp(destination, "password_reset", user_id=row["id"] if row else None, secret=current_app.secret_key)
+        challenge, code = _service().issue_otp(destination, "password_reset", user_id=row["id"] if row else None, secret=current_app.secret_key, session_binding=_otp_binding())
         session["recovery_challenge_id"] = challenge
         delivery = provider.send_code(destination, code, "password_reset")
         with _service().db.session() as connection: connection.execute("UPDATE otp_challenges SET provider_request_id=? WHERE id=?", (delivery.provider_request_id, challenge))
@@ -264,7 +297,7 @@ def password_reset_request():
 def password_reset_confirm():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     if not _allowed("password-reset-verify", 10, 600): return jsonify({"error": "recovery_failed"}), 400
-    data = request.get_json(silent=True) or {}; user_id = _service().verify_otp(data.get("challenge_id") or session.get("recovery_challenge_id"), data.get("code", ""), secret=current_app.secret_key)
+    data = request.get_json(silent=True) or {}; user_id = _service().verify_otp(data.get("challenge_id") or session.get("recovery_challenge_id"), data.get("code", ""), secret=current_app.secret_key, session_binding=_otp_binding())
     if not user_id: return jsonify({"error": "recovery_failed"}), 400
     try: _service().reset_password(user_id, data.get("password", ""))
     except ValueError: return jsonify({"error": "recovery_failed"}), 400
@@ -283,7 +316,7 @@ def phone_send_code():
     try:
         phone = normalize_phone(data.get("country", ""), data.get("phone", "")); provider = current_app.config.get("SMS_PROVIDER")
         if provider is None: from .providers import sms_provider; provider = sms_provider(testing=current_app.testing)
-        challenge, code = _service().issue_otp(phone, "registration_phone", secret=current_app.secret_key)
+        challenge, code = _service().issue_otp(phone, "registration_phone", secret=current_app.secret_key, session_binding=_otp_binding())
         delivery = provider.send_code(phone, code, "registration_phone")
         with _service().db.session() as connection: connection.execute("UPDATE otp_challenges SET provider_request_id=? WHERE id=?", (delivery.provider_request_id, challenge))
         return jsonify({"challenge_id": challenge, "phone": phone}), 202
@@ -293,9 +326,10 @@ def phone_send_code():
 def phone_verify_code():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     if not _allowed("phone-otp-verify", 10, 600): return jsonify({"error": "verification_failed"}), 400
-    data = request.get_json(silent=True) or {}; _service().verify_otp(data.get("challenge_id"), data.get("code", ""), secret=current_app.secret_key)
-    with _service().db.session() as connection: row = connection.execute("SELECT consumed_at FROM otp_challenges WHERE id=? AND purpose='registration_phone'", (data.get("challenge_id"),)).fetchone()
+    data = request.get_json(silent=True) or {}; _service().verify_otp(data.get("challenge_id"), data.get("code", ""), secret=current_app.secret_key, session_binding=_otp_binding())
+    with _service().db.session() as connection: row = connection.execute("SELECT destination,consumed_at FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND session_binding=?", (data.get("challenge_id"), _otp_binding())).fetchone()
     verified = bool(row and row["consumed_at"])
+    if verified: session["registration_phone_verified"] = row["destination"]
     _audit("phone_otp_success" if verified else "phone_otp_failed", method="phone_otp", outcome="success" if verified else "failure")
     return jsonify({"verified": verified}), 200 if verified else 400
 

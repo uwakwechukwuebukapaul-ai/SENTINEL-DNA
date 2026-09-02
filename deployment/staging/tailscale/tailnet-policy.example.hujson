@@ -1,0 +1,20 @@
+{
+  // Secret-free Gate 5 example. Populate the analyst identity externally and
+  // submit the policy through the approved Tailscale admin/custody process.
+  // Keep the policy deny-by-default: do not omit grants/acls.
+  "groups": {
+    "group:sentinel-dna-gate5-analysts": [
+      "__APPROVED_ANALYST_IDENTITY__"
+    ]
+  },
+  "tagOwners": {
+    "tag:sentinel-dna-staging": ["autogroup:admin"]
+  },
+  "grants": [
+    {
+      "src": ["group:sentinel-dna-gate5-analysts"],
+      "dst": ["tag:sentinel-dna-staging"],
+      "ip": ["tcp:443"]
+    }
+  ]
+}

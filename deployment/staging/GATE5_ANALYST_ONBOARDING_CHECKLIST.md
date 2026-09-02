@@ -3,6 +3,25 @@
 This checklist governs one approved analyst in the non-production staging
 pilot. It does not create an identity or assert that a pilot occurred.
 
+For the selected Tailscale implementation path, use the companion
+[`GATE5_TAILSCALE_ANALYST_ACCESS_RUNBOOK.md`](GATE5_TAILSCALE_ANALYST_ACCESS_RUNBOOK.md),
+the secret-free
+[`tailscale/tailnet-policy.example.hujson`](tailscale/tailnet-policy.example.hujson),
+and the read-only
+[`scripts/validate_tailscale_private_access.ps1`](scripts/validate_tailscale_private_access.ps1).
+The populated tailnet policy, Tailscale device state, host forwarding state,
+CA/private keys, and external approvals remain outside the repository.
+
+The Cloudflare implementation path is paused and must not be used for the
+current run; its documentation is retained as a future reference only:
+[`GATE5_CLOUDFLARE_ANALYST_ACCESS_RUNBOOK.md`](GATE5_CLOUDFLARE_ANALYST_ACCESS_RUNBOOK.md),
+the secret-free
+[`cloudflare/tunnel-config.yml.example`](cloudflare/tunnel-config.yml.example),
+and the read-only
+[`scripts/validate_cloudflare_private_access.ps1`](scripts/validate_cloudflare_private_access.ps1).
+The populated tunnel configuration, tunnel credentials, CA/private keys, and
+Cloudflare policy state remain outside the repository.
+
 ## Minimum operator sequence
 
 Run these steps in order. Stop at the first unchecked item; do not continue by
@@ -52,15 +71,53 @@ preflight records remain separate and cannot satisfy pilot completion.
 - [ ] Gate 4 returns `READY_FOR_ANALYST_PILOT` with all 13 checks PASS.
 - [ ] Current runtime/image/bridge/manifest/TLS identities match custody.
 - [ ] Fresh staging backup and isolated restore evidence is PASS.
-- [ ] Private access method is approved: Cloudflare One private application or
-      narrowly routed WireGuard overlay.
+- [ ] Private access method is approved: narrowly routed Tailscale private
+      overlay (recorded as `tailscale_private_overlay`). Cloudflare remains
+      paused reference material and is not part of the current run.
 - [ ] No public hostname route or wildcard listener exists.
 - [ ] Analyst can reach only the certified browser surface.
 - [ ] Database, Redis, SSH, Docker, shell, metrics, management, repository,
       and production routes are denied or unroutable.
-- [ ] Remote request uses exactly `https://sentinel-dna-staging:18443`.
-- [ ] Approved CA validates the certificate and `sentinel-dna-staging` SNI.
+- [ ] Remote request uses exactly `https://uwakwe-desktop.taile388cc.ts.net`.
+- [ ] Approved CA validates the certificate and `uwakwe-desktop.taile388cc.ts.net` SNI.
 - [ ] Cookies, CSRF, Host, Origin, and redirects remain same-origin.
+
+### Cloudflare-specific checks
+
+These checks are retained for a future Cloudflare resumption only. They are
+not an approved path for the current analyst login.
+
+- [ ] Tunnel uses `warp-routing.enabled: true` and has no `ingress`, public
+      hostname, public DNS, quick-tunnel, wildcard, or broad CIDR route.
+- [ ] Private-hostname route and self-hosted/private Access application target
+      only the historical loopback staging origin; this paused section is not
+      executed for the current Tailscale run.
+- [ ] Cloudflare One Client enrollment, MFA/device posture, short session
+      duration, and external UTC expiry are verified for the approved analyst.
+- [ ] Connector reaches the existing loopback edge without changing Docker's
+      `127.0.0.1:18443->443/tcp` publication.
+- [ ] Origin TLS is CA-verified with the historical staging SNI; `noTLSVerify`
+      is absent/false and `-k` is not used.
+- [ ] Cloudflare perimeter logs and Sentinel DNA application audit events are
+      retained as separate evidence sources.
+
+### Tailscale-specific checks
+
+- [ ] Tailscale grants/ACLs explicitly allow only the approved analyst selector
+      to the tagged staging node on TCP `443`; no default-allow policy,
+      wildcard source/destination, broad CIDR, exit-node, subnet route, or
+      Tailscale SSH rule is in scope.
+- [ ] The staging node is online in the approved tailnet, the analyst device
+      is enrolled/MFA-protected, and access expires at the approved UTC time.
+- [ ] Tailscale Serve uses raw TCP forwarding only from the tailnet listener to
+      `tcp://127.0.0.1:18443`; HTTPS/TLS termination, `https+insecure`, and
+      Funnel/public exposure are absent.
+- [ ] MagicDNS resolves `uwakwe-desktop.taile388cc.ts.net` only to the staging node's
+      Tailscale address for enrolled devices; no public DNS record exists.
+- [ ] Connector/forwarding reaches the existing loopback edge without changing
+      Docker's `127.0.0.1:18443->443/tcp` publication.
+- [ ] Tailscale network logs and Sentinel DNA application audit events are
+      retained as separate evidence sources.
 
 ## Manager approval and onboarding
 

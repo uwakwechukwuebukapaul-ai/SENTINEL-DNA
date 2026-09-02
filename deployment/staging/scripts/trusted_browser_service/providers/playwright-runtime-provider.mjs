@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const CERTIFIED_ORIGIN = "https://sentinel-dna-staging:18443";
+export const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 export const TRUSTED_BROWSER_ENVIRONMENT = "codex-app";
 export const APPROVED_PLAYWRIGHT_RUNTIME_ENV =
   "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME";

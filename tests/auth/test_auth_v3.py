@@ -36,6 +36,7 @@ def test_v3_signup_phone_dob_and_analyst_binding(app):
     assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
     created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
     assert created.status_code == 201 and created.get_json()["role"] == "analyst"
+    assert created.get_json()["onboarding_state"] == "AUTHENTICATED"
     assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
 
 def test_v3_csrf_and_dob_rejection(app):
@@ -58,6 +59,48 @@ def test_v3_email_otp_authentication_and_replay_protection(app):
     code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
     assert client.post("/api/auth/email/verify-code", json={"challenge_id":challenge,"code":code}, headers={"X-CSRF-Token":csrf}).status_code == 200
     assert client.post("/api/auth/email/verify-code", json={"challenge_id":challenge,"code":code}, headers={"X-CSRF-Token":csrf}).status_code == 400
+
+def test_v3_registration_otp_cannot_cross_signed_auth_flows(app):
+    first = app.test_client(); first_csrf = token(first)
+    sent = first.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "bound@example.test"},
+        headers={"X-CSRF-Token": first_csrf},
+    )
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
+
+    second = app.test_client(); second_csrf = token(second)
+    denied = second.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": challenge, "code": code},
+        headers={"X-CSRF-Token": second_csrf},
+    )
+    assert denied.status_code == 400
+
+    accepted = first.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": challenge, "code": code},
+        headers={"X-CSRF-Token": first_csrf},
+    )
+    assert accepted.status_code == 200
+
+def test_onboarding_state_is_server_owned_and_invalid_transitions_fail_closed(app):
+    service = app.container.require("auth_service")
+    user = service.register(
+        "state-user", "state@example.test", PASSWORD,
+        onboarding_state="NEW",
+    )
+    assert service.authenticate("state@example.test", PASSWORD) is None
+    with pytest.raises(ValueError, match="invalid_onboarding_transition"):
+        service.transition_onboarding(user.id, "AUTHENTICATED")
+    assert service.complete_verified_onboarding(user.id) is None
+
+def test_password_strength_is_enforced_by_the_server(app):
+    service = app.container.require("auth_service")
+    with pytest.raises(ValueError, match="invalid_user_registration"):
+        service.register("weak-user", "weak@example.test", "longpassword")
 
 def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):

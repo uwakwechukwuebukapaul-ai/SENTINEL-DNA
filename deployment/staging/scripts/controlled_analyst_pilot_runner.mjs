@@ -18,7 +18,7 @@ import {
   TRUSTED_BROWSER_TIMEOUTS,
 } from "./trusted_browser_diagnostics.mjs";
 
-export const DEFAULT_ORIGIN = "https://sentinel-dna-staging:18443";
+export const DEFAULT_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 export const DEFAULT_EVIDENCE_DIR = "C:/ProgramData/Sentinel-DNA/release/evidence";
 
 const SECRET_KEYS = new Set([
@@ -62,8 +62,8 @@ function requireRunId(runId) {
 function validateOrigin(origin) {
   const parsed = new URL(origin);
   if (parsed.protocol !== "https:") throw new Error("pilot origin must use HTTPS");
-  if (parsed.hostname !== "sentinel-dna-staging") throw new Error("pilot origin hostname is not the certified staging host");
-  if (parsed.port !== "18443") throw new Error("pilot origin must use the certified loopback staging port");
+  if (parsed.hostname !== "uwakwe-desktop.taile388cc.ts.net") throw new Error("pilot origin hostname is not the certified Tailscale staging host");
+  if (parsed.port !== "") throw new Error("pilot origin must use the certified HTTPS port");
   if (parsed.pathname !== "/" || parsed.search || parsed.hash) throw new Error("pilot origin must not contain a path, query, or fragment");
   return parsed.origin;
 }
@@ -110,8 +110,8 @@ async function requestCredentials(tab, origin, diagnostics) {
   await run("STAGING_NAVIGATION", "tab.visible_dom_login", () => tab.dom_cua.get_visible_dom(), {
     timeoutMs: TRUSTED_BROWSER_TIMEOUTS.DOM_INSPECTION,
   });
-  const username = tab.playwright.locator("#username");
-  const password = tab.playwright.locator("#password");
+  const username = tab.playwright.locator("#login-username");
+  const password = tab.playwright.locator("#login-password");
   const submit = tab.playwright.locator("#login-form button[type='submit']");
   await visibleAndEnabled(username, "manager username", diagnostics);
   await visibleAndEnabled(password, "manager password", diagnostics);
@@ -129,8 +129,8 @@ async function requestCredentials(tab, origin, diagnostics) {
   const result = await run("AUTH_BRIDGE", "browserAuth.request", () => browserAuth.request({
     origin,
     fields: [
-      { id: "username", label: "Email or username", type: "text", autocomplete: "username", required: true, selector: "#username" },
-      { id: "password", label: "Password", type: "password", autocomplete: "current-password", required: true, selector: "#password" },
+      { id: "username", label: "Email or username", type: "text", autocomplete: "username", required: true, selector: "#login-username" },
+      { id: "password", label: "Password", type: "password", autocomplete: "current-password", required: true, selector: "#login-password" },
     ],
     submit: { selector: "#login-form button[type='submit']", action: "click" },
   }), { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.AUTH_BRIDGE });

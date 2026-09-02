@@ -186,7 +186,7 @@ test("remote access evidence schema separates preflight, rehearsal, and authenti
     "remote_access_preflight",
     "authenticated_controlled_analyst_pilot",
   ]);
-  assert.equal(schema.properties.origin.const, "https://sentinel-dna-staging:18443");
+  assert.equal(schema.properties.origin.const, "https://uwakwe-desktop.taile388cc.ts.net");
   assert.deepEqual(schema.properties.observations.required, [
     "authenticated_analyst_access",
     "rbac_enforcement",

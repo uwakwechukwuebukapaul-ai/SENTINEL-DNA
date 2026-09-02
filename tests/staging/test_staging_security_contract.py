@@ -289,7 +289,7 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():
     env_example = (ROOT / "deployment" / "staging" / ".env.example").read_text()
-    assert "SENTINEL_DNA_BASE_URL=https://sentinel-dna-staging:18443" in env_example
+    assert "SENTINEL_DNA_BASE_URL=https://uwakwe-desktop.taile388cc.ts.net" in env_example
     assert "SENTINEL_DNA_STAGING_TLS_IP=192.168.1.115" in env_example
     assert "SENTINEL_DNA_SECRET_KEY=__INJECT_NON_PRODUCTION_SECRET__" in env_example
     assert "SENTINEL_DNA_POSTGRES_PASSWORD=__INJECT_DISPOSABLE_STAGING_PASSWORD__" in env_example
@@ -357,7 +357,7 @@ def test_staging_certificate_generator_emits_required_sans_and_valid_key_pair(tm
     assert certificate.extensions.get_extension_for_class(x509.BasicConstraints).value.ca is False
     assert certificate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
     sans = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-    assert sans.get_values_for_type(x509.DNSName) == ["sentinel-dna-staging", "localhost"]
+    assert sans.get_values_for_type(x509.DNSName) == ["sentinel-dna-staging", "localhost", "uwakwe-desktop.taile388cc.ts.net"]
     assert {str(value) for value in sans.get_values_for_type(x509.IPAddress)} == {
         "192.168.1.115",
         "127.0.0.1",
@@ -443,7 +443,7 @@ def test_staging_secret_hygiene_contract_has_no_tracked_runtime_tls_or_secret_fi
 
 def test_staging_certificate_configuration_is_explicit_and_non_secret():
     config = json.loads((ROOT / "deployment" / "staging" / "staging-cert-config.json").read_text())
-    assert config["dns_sans"] == ["sentinel-dna-staging", "localhost"]
+    assert config["dns_sans"] == ["sentinel-dna-staging", "localhost", "uwakwe-desktop.taile388cc.ts.net"]
     assert config["fixed_ip_sans"] == ["127.0.0.1"]
     assert config["lan_ip_environment_variable"] == "SENTINEL_DNA_STAGING_TLS_IP"
     assert config["ca_certificate_filename"] == "staging-ca.crt"

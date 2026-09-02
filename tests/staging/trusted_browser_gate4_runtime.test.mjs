@@ -84,7 +84,7 @@ test("pilot completes navigation and manager handoff only with a supplied auth c
   const browser = {
     tabs: {
       new: async () => ({
-        goto: async (url) => assert.equal(url, "https://sentinel-dna-staging:18443/login"),
+        goto: async (url) => assert.equal(url, "https://uwakwe-desktop.taile388cc.ts.net/login"),
         close: async () => { closed += 1; },
         dom_cua: { get_visible_dom: async () => ({ login: true }) },
         playwright: {

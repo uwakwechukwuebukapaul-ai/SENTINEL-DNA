@@ -3,7 +3,7 @@
 ## Purpose and status
 
 This runbook prepares the first real authenticated analyst login through
-Cloudflare Zero Trust private access. It is limited to the existing staging
+Tailscale private access. It is limited to the existing staging
 deployment and does not modify production architecture. Current status remains
 `READY_FOR_ANALYST_PILOT`; it must not be changed to a completed-pilot status
 until real evidence is captured and reviewed.
@@ -16,8 +16,8 @@ Do not start authentication until all of these are complete:
 - Current provider, runtime, browser bridge, image, manifest, TLS, and lockfile
   identities match external custody.
 - Fresh staging backup and isolated restore evidence is PASS.
-- Cloudflare private application, private route, policy, client enrollment,
-  MFA, and expiry are approved.
+- Tailscale private overlay, least-privilege policy, enrolled analyst device,
+  MFA, raw TCP forwarding, and expiry are approved.
 - The exact origin is reachable from the enrolled analyst device with approved
   CA/SNI validation.
 - One analyst, one synthetic tenant, one scenario set, and rollback owners are
@@ -33,7 +33,7 @@ Any missing precondition is `BLOCKED_WITH_REASON`; do not continue.
 2. Open an append-only record using
    `GATE5_ANALYST_ACCESS_EVIDENCE.schema.json` with:
    `evidence_class: remote_access_preflight` and `status: NOT_EXECUTED`.
-3. Bind the external Cloudflare policy, route, device, and custody references
+3. Bind the external Tailscale policy, node/device, forwarding, and custody references
    to the run without copying their secret values.
 4. Review the existing Gate 4 evidence and retain historical blocked records;
    do not overwrite them.
@@ -46,26 +46,26 @@ Run on the approved operator host, then on the enrolled analyst device:
 node deployment/staging/scripts/check_controlled_pilot_readiness.mjs
 docker compose -f deployment/staging/docker-compose.yml ps
 docker compose -f deployment/staging/docker-compose.yml port edge 443
-Resolve-DnsName sentinel-dna-staging
-Test-NetConnection sentinel-dna-staging -Port 18443
-curl.exe --cacert <approved-staging-ca.crt> https://sentinel-dna-staging:18443/health
-curl.exe --cacert <approved-staging-ca.crt> https://sentinel-dna-staging:18443/ready
+Resolve-DnsName uwakwe-desktop.taile388cc.ts.net
+Test-NetConnection uwakwe-desktop.taile388cc.ts.net -Port 443
+curl.exe --cacert <approved-staging-ca.crt> https://uwakwe-desktop.taile388cc.ts.net/health
+curl.exe --cacert <approved-staging-ca.crt> https://uwakwe-desktop.taile388cc.ts.net/ready
 ```
 
 Confirm:
 
-- URL, SNI, Host, and Origin remain `sentinel-dna-staging`;
+- URL, SNI, Host, and Origin remain `uwakwe-desktop.taile388cc.ts.net`;
 - certificate verification succeeds with the approved CA;
 - there is no redirect to a public or alternate hostname;
 - the edge remains `127.0.0.1:18443->443/tcp`;
 - database, Redis, Docker, SSH, shell, management, and production routes are
   unavailable;
-- Cloudflare private-access logs and Sentinel health evidence are distinct.
+- Tailscale network evidence and Sentinel health evidence are distinct.
 
-If the Cloudflare path uses clientless Browser Isolation for port `18443`,
-stop. Use the approved Cloudflare One Client/private-network path instead, or
-obtain a separately reviewed compatibility decision without changing Sentinel
-DNA origin enforcement.
+If Tailscale Serve is configured for HTTPS/TLS termination, `https+insecure`,
+Funnel, a subnet route, or any destination other than
+`tcp://127.0.0.1:18443`, stop. Use the raw TCP forwarding path so Sentinel DNA
+continues to validate its own certificate and `sentinel-dna-staging` SNI.
 
 ## 3. Manager setup
 
@@ -88,7 +88,7 @@ or session identifiers in commands, logs, tickets, screenshots, or evidence.
 1. Confirm the analyst has been approved externally and the remote policy Allow
    rule matches only that identity.
 2. Analyst uses the approved enrolled device and opens exactly
-   `https://sentinel-dna-staging:18443`.
+   `https://uwakwe-desktop.taile388cc.ts.net`.
 3. Analyst authenticates through the approved channel; the operator does not
    request or handle the analyst's password or one-time activation value.
 4. Verify and record safe references for:
@@ -126,8 +126,8 @@ handling, authorization revocation, deactivation, and session invalidation.
 For each reference, verify the deployed audit contract provides actor, role,
 tenant, action/denial, correlation ID, UTC time, and integrity linkage. Verify
 provenance links the synthetic input, execution path, result, tenant, and
-human/AI decision separation. Cloudflare access logs may corroborate network
-entry but do not replace Sentinel DNA application audit events.
+human/AI decision separation. Tailscale network evidence may corroborate private
+network entry but does not replace Sentinel DNA application audit events.
 
 ## 7. Revocation and closeout
 
@@ -135,7 +135,8 @@ entry but do not replace Sentinel DNA application audit events.
 2. Deactivate the analyst and invalidate all active sessions.
 3. Verify login renewal, workspace reads, investigation reads, and feedback or
    action writes fail closed from the analyst device.
-4. Disable or narrow the Cloudflare policy/route for the analyst.
+4. Disable or narrow the Tailscale grant/ACL, Serve listener, and analyst
+   device access.
 5. Seal the external evidence record and record its SHA-256/custody receipt.
 6. Mark evidence `VERIFIED` only after human review and complete direct
    observations. Otherwise retain `NOT_MEASURED` or `BLOCKED_WITH_REASON`.

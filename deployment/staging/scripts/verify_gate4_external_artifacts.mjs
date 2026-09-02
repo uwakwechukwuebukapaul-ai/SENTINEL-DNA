@@ -44,7 +44,7 @@ const IMAGE_DIGEST_ENV = "SENTINEL_DNA_IMAGE_DIGEST";
 const REPOSITORY_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const READY_STATUS = "READY_FOR_ANALYST_PILOT";
 const BLOCKED_STATUS = "BLOCKED_WITH_REASON";
-const CERTIFIED_ORIGIN = "https://sentinel-dna-staging:18443";
+const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 const SAFE_CODES = new Set([
   "TB_PROVIDER_NOT_CONFIGURED",
   "TB_PROVIDER_MODULE_MISSING",

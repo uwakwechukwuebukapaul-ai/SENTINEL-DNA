@@ -41,7 +41,7 @@ test("Gate 4 validator requires the exact reviewed facade and provider boundary"
 test("Gate 4 activation manifest is integrity-bound to the certified origin", async () => {
   const manifest = JSON.parse(await readFile(ACTIVATION_MANIFEST, "utf8"));
   const validated = validateActivationManifest(manifest);
-  assert.equal(validated.staging_origin, "https://sentinel-dna-staging:18443");
+  assert.equal(validated.staging_origin, "https://uwakwe-desktop.taile388cc.ts.net");
   assert.equal(validated.integrity.algorithm, "sha256");
 });
 

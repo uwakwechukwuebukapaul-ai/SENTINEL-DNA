@@ -3,7 +3,8 @@
   "server_common_name": "sentinel-dna-staging",
   "dns_sans": [
     "sentinel-dna-staging",
-    "localhost"
+    "localhost",
+    "uwakwe-desktop.taile388cc.ts.net"
   ],
   "fixed_ip_sans": [
     "127.0.0.1"

@@ -107,7 +107,7 @@ external custody.
 2. The verification command imports the modules and calls setup with only
    `{ environment: "codex-app" }`.
 3. The provider returns the runtime; URL selection is limited to
-   `https://sentinel-dna-staging:18443`.
+   `https://uwakwe-desktop.taile388cc.ts.net`.
 4. Verification creates one temporary tab to inspect the contract and closes
    it when possible. It never authenticates or invokes `browserAuth.request()`.
 5. The pilot execution adapter performs its own browser contract and
@@ -181,7 +181,7 @@ outside the repository. Its required format is:
   "runtime_module_identity": "reviewed-runtime:runtime-2026-09",
   "approved_runtime_module_digest": "sha256:<64-hex-runtime-digest>",
   "approved_image_runtime_digest": "sha256:<64-hex-digest>",
-  "staging_origin": "https://sentinel-dna-staging:18443",
+  "staging_origin": "https://uwakwe-desktop.taile388cc.ts.net",
   "activation_timestamp": "2026-09-01T12:00:00Z",
   "operator_approval_reference": "APPROVAL-2026-09-001",
   "integrity": {

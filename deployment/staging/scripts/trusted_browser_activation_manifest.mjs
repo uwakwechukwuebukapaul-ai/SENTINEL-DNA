@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 export const ACTIVATION_MANIFEST_ENV =
   "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST";
 export const ACTIVATION_MANIFEST_SCHEMA_VERSION = "1.0";
-export const CERTIFIED_STAGING_ORIGIN = "https://sentinel-dna-staging:18443";
+export const CERTIFIED_STAGING_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{2,127}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;

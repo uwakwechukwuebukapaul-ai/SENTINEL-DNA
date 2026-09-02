@@ -37,7 +37,27 @@ Stop if any of the following is true:
 
 ## B. Configure private remote access
 
-### Preferred: Cloudflare One private application
+### Selected: Tailscale private overlay
+
+1. Enroll the staging host and the single approved analyst device in the
+   externally managed tailnet. Do not add a subnet router, exit node, or
+   Tailscale SSH permission for this run.
+2. Apply a least-privilege Tailscale grant/ACL allowing only the approved
+   analyst selector to the staging-node selector on TCP `443`. A missing
+   policy is a hard stop because an unconfigured tailnet can be default-allow.
+3. Configure raw TCP Tailscale Serve forwarding from the tailnet listener to
+   `tcp://127.0.0.1:18443`; do not terminate TLS, use `https+insecure`, or
+   enable Funnel. Keep Docker's edge publication unchanged.
+4. Use MagicDNS `uwakwe-desktop.taile388cc.ts.net`, resolving only to the
+   staging node's Tailscale address for enrolled devices.
+5. Record only node/device, policy, forwarding, route scope, expiry, and safe
+   verification references externally.
+
+### Paused: Cloudflare One private application
+
+Cloudflare Zero Trust is paused for the current Gate 5 run. Do not configure
+or use this path unless the architecture decision is explicitly reopened and
+fresh approval is recorded externally.
 
 1. Create or select a private self-hosted application for the staging target;
    do not create a public published hostname route.
@@ -54,7 +74,7 @@ Stop if any of the following is true:
 7. Obtain the connector/policy reference and hash in external custody. Do not
    copy connector tokens or policy secrets into the repository.
 
-### Fallback: WireGuard private overlay
+### Fallback: narrowly routed WireGuard private overlay
 
 1. Provision one externally held peer for the approved analyst device.
 2. Route only the reviewed staging application path; do not advertise a broad
@@ -76,10 +96,10 @@ the approved analyst device. Do not substitute `-k` for CA verification.
 node deployment/staging/scripts/check_controlled_pilot_readiness.mjs
 docker compose -f deployment/staging/docker-compose.yml ps
 docker compose -f deployment/staging/docker-compose.yml port edge 443
-Resolve-DnsName sentinel-dna-staging
-Test-NetConnection sentinel-dna-staging -Port 18443
-curl.exe --cacert <approved-staging-ca.crt> https://sentinel-dna-staging:18443/health
-curl.exe --cacert <approved-staging-ca.crt> https://sentinel-dna-staging:18443/ready
+Resolve-DnsName uwakwe-desktop.taile388cc.ts.net
+Test-NetConnection uwakwe-desktop.taile388cc.ts.net -Port 443
+curl.exe --cacert <approved-staging-ca.crt> https://uwakwe-desktop.taile388cc.ts.net/health
+curl.exe --cacert <approved-staging-ca.crt> https://uwakwe-desktop.taile388cc.ts.net/ready
 ```
 
 Require the exact origin, valid certificate/SNI, no redirect, no public

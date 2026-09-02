@@ -84,7 +84,7 @@
           "properties": {
             "mode": { "const": "NON-PRODUCTION_SIMULATION" },
             "status": { "const": "PASS" },
-            "origin": { "const": "https://sentinel-dna-staging:18443" },
+            "origin": { "const": "https://uwakwe-desktop.taile388cc.ts.net" },
             "tls_verified": { "const": true },
             "public_exposure": { "const": false },
             "network_listener_created": { "const": false }

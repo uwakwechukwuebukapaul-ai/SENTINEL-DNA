@@ -50,7 +50,11 @@ def forgot_password_page():
 @_authenticated
 def home(principal):
     _ensure_demo_scenario(principal["tenant_id"])
-    snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(principal["tenant_id"])
+    try:
+        snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(principal["tenant_id"])
+    except Exception:
+        current_app.logger.exception("dashboard_snapshot_unavailable", extra={"tenant_id": principal["tenant_id"]})
+        return render_template("error.html", message="Dashboard data is temporarily unavailable."), 503
     return render_template("browser_dashboard.html", **principal, **snapshot)
 
 
@@ -64,7 +68,11 @@ def profile(principal):
 @_authenticated
 def workspace(principal):
     _ensure_demo_scenario(principal["tenant_id"])
-    snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(principal["tenant_id"])
+    try:
+        snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(principal["tenant_id"])
+    except Exception:
+        current_app.logger.exception("workspace_snapshot_unavailable", extra={"tenant_id": principal["tenant_id"]})
+        return render_template("error.html", message="Workspace data is temporarily unavailable."), 503
     return render_template("workspace_v2.html", **principal, **snapshot)
 
 
@@ -146,6 +154,9 @@ def investigation_feedback(principal=None, investigation_id=None):
         return jsonify({"error": "investigation_not_found"}), 404
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception:
+        current_app.logger.exception("investigation_feedback_unavailable", extra={"tenant_id": principal["tenant_id"], "investigation_id": str(investigation_id)})
+        return jsonify({"error": "feedback_unavailable"}), 503
     if request.is_json:
         return jsonify({"success": True, "feedback": feedback.to_dict()}), 201
     return redirect(url_for("browser.investigation_detail", investigation_id=investigation_id) + "#feedback")
@@ -154,7 +165,11 @@ def investigation_feedback(principal=None, investigation_id=None):
 @browser.get("/workspace/investigation/<investigation_id>/report")
 @_authenticated
 def investigation_report(principal, investigation_id):
-    report = AIInvestigatorReportService().build(current_app.container.require("investigation_coordinator"), investigation_id, principal["tenant_id"], request_context())
+    try:
+        report = AIInvestigatorReportService().build(current_app.container.require("investigation_coordinator"), investigation_id, principal["tenant_id"], request_context())
+    except Exception:
+        current_app.logger.exception("investigation_report_unavailable", extra={"tenant_id": principal["tenant_id"], "investigation_id": str(investigation_id)})
+        return render_template("error.html", message="Investigation report is temporarily unavailable."), 503
     if report is None:
         return render_template("error.html", message="Investigation not found."), 404
     return render_template("investigation_report_v4.html", **principal, report=report.to_dict())
@@ -185,16 +200,20 @@ def start_investigation(investigation_id):
         )
         if not allowed:
             return jsonify({"error": error}), 403
-        current_app.container.require("investigation_coordinator").investigate(
-            case_id=demo_input["case_id"],
-            alert=demo_input["alert"],
-            artifacts=demo_input["artifacts"],
-            evidence=demo_input["evidence"],
-            iocs=demo_input["iocs"],
-            tenant_id=principal["tenant_id"],
-            actor_id=principal["analyst"]["actor_id"],
-            correlation_id=request_context().correlation_id,
-        )
+        try:
+            current_app.container.require("investigation_coordinator").investigate(
+                case_id=demo_input["case_id"],
+                alert=demo_input["alert"],
+                artifacts=demo_input["artifacts"],
+                evidence=demo_input["evidence"],
+                iocs=demo_input["iocs"],
+                tenant_id=principal["tenant_id"],
+                actor_id=principal["analyst"]["actor_id"],
+                correlation_id=request_context().correlation_id,
+            )
+        except Exception:
+            current_app.logger.exception("investigation_execution_unavailable", extra={"tenant_id": principal["tenant_id"], "investigation_id": str(investigation_id)})
+            return jsonify({"error": "investigation_unavailable"}), 503
         _record_pilot_investigation_audit(
             principal["tenant_id"], principal["analyst"]["actor_id"],
             investigation_id, demo_input["alert"].get("metadata") or {}, request_context(),
@@ -210,7 +229,11 @@ def start_investigation(investigation_id):
     evidence = report.get("evidence") or intelligence.get("evidence") or evidence_summary.get("items") or []
     iocs = report.get("iocs") or intelligence.get("iocs") or []
     timeline = report.get("timeline") or intelligence.get("timeline") or []
-    current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity"), "metadata": metadata}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
+    try:
+        current_app.container.require("investigation_coordinator").investigate(case_id=investigation_id, alert={"case_id": investigation_id, "source": "analyst_workspace", "title": report.get("title"), "severity": report.get("severity"), "metadata": metadata}, artifacts=evidence, evidence=evidence, iocs=iocs, timeline=timeline, tenant_id=principal["tenant_id"], actor_id=principal["analyst"]["actor_id"], correlation_id=request_context().correlation_id)
+    except Exception:
+        current_app.logger.exception("investigation_execution_unavailable", extra={"tenant_id": principal["tenant_id"], "investigation_id": str(investigation_id)})
+        return jsonify({"error": "investigation_unavailable"}), 503
     _record_pilot_investigation_audit(
         principal["tenant_id"], principal["analyst"]["actor_id"],
         investigation_id, metadata, request_context(),

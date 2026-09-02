@@ -59,7 +59,7 @@ const VALID_RUNTIME = `
       capabilities: { get: async (name) => name === "browserAuth" ? { request: async () => ({ status: "not-called" }) } : undefined },
     };
     return { browsers: { getForUrl: async (origin) => {
-      if (origin !== "https://sentinel-dna-staging:18443") throw new Error("origin rejected");
+      if (origin !== "https://uwakwe-desktop.taile388cc.ts.net") throw new Error("origin rejected");
       return { tabs: { new: async () => tab } };
     } } };
   }
@@ -77,7 +77,7 @@ async function withReadinessConfiguration({ runtimeSource = VALID_RUNTIME, provi
     runtime_module_identity: "reviewed-runtime:test",
     approved_runtime_module_digest: `sha256:${runtimeDigest}`,
     approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
-    staging_origin: "https://sentinel-dna-staging:18443",
+    staging_origin: "https://uwakwe-desktop.taile388cc.ts.net",
     activation_timestamp: "2026-09-01T12:00:00Z",
     operator_approval_reference: "APPROVAL-TEST-001",
   };
@@ -200,7 +200,7 @@ test("readiness blocks a tampered activation manifest", { concurrency: false }, 
       runtime_module_identity: "reviewed-runtime:test",
       approved_runtime_module_digest: `sha256:${"a".repeat(64)}`,
       approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
-      staging_origin: "https://sentinel-dna-staging:18443",
+      staging_origin: "https://uwakwe-desktop.taile388cc.ts.net",
       activation_timestamp: "2026-09-01T12:00:00Z",
       operator_approval_reference: "APPROVAL-TEST-001",
       integrity: { algorithm: "sha256", manifest_hash: "b".repeat(64) },
@@ -219,7 +219,7 @@ test("readiness succeeds with an isolated reviewed-runtime test fixture", { conc
   await withReadinessConfiguration({}, async ({ directory }) => {
     const readiness = await checkControlledPilotReadiness({
       evidenceDir: directory,
-      originReachability: async (origin) => origin === "https://sentinel-dna-staging:18443",
+      originReachability: async (origin) => origin === "https://uwakwe-desktop.taile388cc.ts.net",
     });
     assert.equal(readiness.status, "READY_FOR_ANALYST_PILOT", JSON.stringify(readiness));
     assert.ok(readiness.checks.every((item) => item.status === "PASS"));

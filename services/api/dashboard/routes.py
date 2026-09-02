@@ -64,72 +64,12 @@ def investigation_dashboard():
     if not context.tenant_id:
         return jsonify({"error": "organization_context_required"}), 403
 
-    service = get_dashboard_service()
-
-
-    investigation = {
+    # Do not synthesize a dashboard record here.  The browser workspace and
+    # the API must expose the same tenant-scoped persisted read model.
+    snapshot = current_app.container.require("investigation_coordinator").get_workspace_snapshot(context.tenant_id)
+    return jsonify({
         "tenant_id": context.tenant_id,
-
-        "case_id": "CASE-001",
-
-        "investigation_id": "INV-001",
-
-        "status": "completed",
-
-
-        "risk": {
-
-            "level": "high",
-
-            "score": 90,
-
-        },
-
-
-        "confidence": 0.95,
-
-
-        "findings": [
-
-            "Suspicious authentication activity",
-
-        ],
-
-
-        "indicators": [
-
-            "evil.com",
-
-        ],
-
-
-        "mitre": [
-
-            "T1566",
-
-        ],
-
-
-        "timeline": [],
-
-
-        "recommendations": [
-
-            "Reset credentials",
-
-        ],
-
-
-        "report": {},
-
-    }
-
-
-    result = service.build(
-        investigation
-    )
-
-
-    return jsonify(
-        result
-    ), 200
+        "overview": snapshot["overview"],
+        "investigations": snapshot["investigations"],
+        "visualizations": snapshot["visualizations"],
+    }), 200

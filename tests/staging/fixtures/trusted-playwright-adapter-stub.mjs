@@ -14,7 +14,7 @@ export const state = {
   authRequests: [],
 };
 
-const CERTIFIED_ORIGIN = "https://sentinel-dna-staging:18443";
+const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 
 function assertCertifiedUrl(url) {
   const parsed = new URL(url);

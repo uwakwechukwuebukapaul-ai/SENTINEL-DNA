@@ -6,7 +6,7 @@
  * origin.
  */
 
-export const CERTIFIED_ORIGIN = "https://sentinel-dna-staging:18443";
+export const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 export const SIMULATION_MODE = "NON-PRODUCTION_SIMULATION";
 
 export function isSyntheticCertifiedOriginReachable(origin) {
