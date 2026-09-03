@@ -19,7 +19,7 @@ from typing import Any, Mapping, Protocol
 from urllib.parse import urlencode
 
 
-DEFAULT_OWNER = "uwakwechukwuebukpaul-ai"
+DEFAULT_OWNER = "uwakwechukwuebukapaul-ai"
 DEFAULT_REPOSITORY = "SENTINEL-DNA"
 DEFAULT_REPOSITORY_ID = 1315476770
 DEFAULT_BRANCH: str | None = None

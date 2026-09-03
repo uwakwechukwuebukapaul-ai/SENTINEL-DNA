@@ -149,7 +149,7 @@ def test_diagnostics_use_canonical_actions_route_and_keep_ci_evidence_exact():
     result = make_diagnostic(api).collect()
 
     assert api.calls[0].startswith(
-        "repos/uwakwechukwuebukpaul-ai/SENTINEL-DNA/actions/runs?"
+        "repos/uwakwechukwuebukapaul-ai/SENTINEL-DNA/actions/runs?"
     )
     assert not any(
         call.startswith("repositories/1315476770/actions/runs?") for call in api.calls
@@ -324,9 +324,9 @@ def test_unresolved_repository_identity_is_fail_closed_and_contextual():
 
     message = str(raised.value)
     assert "repository_id=1315476770" in message
-    assert "repository=uwakwechukwuebukpaul-ai/SENTINEL-DNA" in message
+    assert "repository=uwakwechukwuebukapaul-ai/SENTINEL-DNA" in message
     assert f"target_sha={TARGET_SHA}" in message
-    assert "repos/uwakwechukwuebukpaul-ai/SENTINEL-DNA/actions/runs" in message
+    assert "repos/uwakwechukwuebukapaul-ai/SENTINEL-DNA/actions/runs" in message
     assert "http_status=404" in message
     assert token not in message
     assert token.removeprefix("gho_") not in message
