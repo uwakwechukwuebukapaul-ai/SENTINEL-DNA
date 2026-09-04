@@ -63,6 +63,8 @@ def _bind(user):
         connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, membership.tenant_id, user.id))
     return identity, membership
 def _login_session(user, remember=False, auth_method="password"):
+    if user.onboarding_state != OnboardingState.AUTHENTICATED:
+        raise ValueError("onboarding_required")
     identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
     if remember:
         raw = secrets.token_urlsafe(48); sid = secrets.token_urlsafe(18); expires = datetime.now(timezone.utc) + timedelta(days=30)
@@ -389,18 +391,15 @@ def google_callback():
         if not user:
             existing = _service().get_by_email(claims.email)
             if existing: return jsonify({"error": "account_linking_required"}), 409
-            base = "".join(ch.lower() if ch.isalnum() else "-" for ch in claims.name).strip("-") or "analyst"
-            username = base[:24]
-            suffix = 1
-            while True:
-                try:
-                    user = _service().register(username if suffix == 1 else f"{username[:20]}-{suffix}", claims.email, secrets.token_urlsafe(32), "analyst")
-                    break
-                except IntegrityError:
-                    suffix += 1
-            _service().add_identity(user.id, "google", claims.subject, claims.email)
-            _audit("google_login_success", user_id=user.id, method="google", outcome="account_created")
-            return redirect("/") if _login_session(user) else (jsonify({"error": "authentication_failed"}), 401)
+            # Google proves the provider identity, but it does not complete
+            # Sentinel DNA's required email/phone/password onboarding flow.
+            # Do not create a passwordless pending user or establish a
+            # session from an incomplete onboarding state.
+            _audit("google_login_failure", method="google", outcome="failure", reason="onboarding_required")
+            return jsonify({"error": "onboarding_required"}), 403
+        if user.onboarding_state != OnboardingState.AUTHENTICATED:
+            _audit("google_login_failure", user_id=user.id, method="google", outcome="failure", reason="onboarding_required")
+            return jsonify({"error": "onboarding_required"}), 403
         return redirect("/") if _login_session(user) else (jsonify({"error": "authentication_failed"}), 401)
     except Exception:
         _audit("google_login_failure", method="google", outcome="failure", reason="oidc_validation_failed")

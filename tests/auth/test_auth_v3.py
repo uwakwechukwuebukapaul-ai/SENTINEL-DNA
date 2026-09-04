@@ -125,7 +125,7 @@ def test_v3_password_recovery_is_single_use_and_revokes_sessions(app):
     assert app.container.require("auth_service").authenticate("recovery@example.test", NEW_PASSWORD) is not None
     assert client.post("/api/auth/password-reset/confirm", json={"challenge_id":challenge,"code":code,"password":ANOTHER_PASSWORD}, headers={"X-CSRF-Token":token(client)}).status_code == 400
 
-def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
+def test_v3_google_first_cannot_bypass_verified_onboarding(monkeypatch, app):
     class StubGoogle:
         def complete(self, *args): return GoogleClaims("google-sub-1", "google-first@example.test", "Google Analyst")
     monkeypatch.setattr("services.auth.routes.GoogleOIDC", StubGoogle)
@@ -133,10 +133,24 @@ def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
     with client.session_transaction() as state:
         state["google_state"] = "state-1"; state["google_nonce"] = "nonce-1"
     response = client.get("/api/auth/google/callback?code=one&state=state-1")
-    assert response.status_code == 302 and response.headers["Location"].endswith("/")
-    user = app.container.require("auth_service").get_by_email("google-first@example.test")
-    assert user and user.role == "analyst" and user.actor_id is not None
-    assert app.container.require("auth_service").identity_user("google", "google-sub-1").id == user.id
+    assert response.status_code == 403
+    assert response.get_json() == {"error": "onboarding_required"}
+    assert app.container.require("auth_service").get_by_email("google-first@example.test") is None
+    with client.session_transaction() as state:
+        assert "user_id" not in state
+
+def test_v3_google_begin_provider_failure_is_unavailable(monkeypatch, app):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", random_secret())
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "https://staging.example.test/api/auth/google/callback")
+
+    class FailedResponse:
+        def raise_for_status(self): raise ValueError("malformed discovery")
+
+    monkeypatch.setattr("services.auth.oauth.requests.get", lambda *args, **kwargs: FailedResponse())
+    response = app.test_client().get("/api/auth/google/start")
+    assert response.status_code == 503
+    assert response.get_json() == {"error": "google_authentication_unavailable"}
 
 def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
     client = app.test_client(); csrf = token(client)

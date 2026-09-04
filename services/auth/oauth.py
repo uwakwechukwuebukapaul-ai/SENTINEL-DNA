@@ -25,10 +25,16 @@ class GoogleOIDC:
 
     def begin(self):
         if not self.configured: raise RuntimeError("google_oidc_not_configured")
-        discovery = requests.get(GOOGLE_DISCOVERY, timeout=5).json()
+        try:
+            response = requests.get(GOOGLE_DISCOVERY, timeout=5)
+            response.raise_for_status()
+            discovery = response.json()
+            authorization_endpoint = discovery["authorization_endpoint"]
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            raise RuntimeError("google_oidc_provider_unavailable") from exc
         state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         params = {"client_id": self.client_id, "response_type": "code", "scope": "openid email profile", "redirect_uri": self.redirect_uri, "state": state, "nonce": nonce, "access_type": "online", "prompt": "select_account"}
-        return discovery["authorization_endpoint"] + "?" + urlencode(params), state, nonce
+        return authorization_endpoint + "?" + urlencode(params), state, nonce
 
     def complete(self, code, state, expected_state, nonce, expected_nonce):
         if not code or not state or not secrets.compare_digest(state, expected_state or "") or not secrets.compare_digest(nonce, expected_nonce or ""): raise ValueError("oauth_state_invalid")
