@@ -3,7 +3,7 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { csrf: null, emailChallenge: null, phoneChallenge: null, verificationChallenge: null, verificationMethod: null };
+  const state = { csrf: null, verificationChallenge: null, verificationMethod: null };
 
   async function csrf() {
     if (state.csrf) return state.csrf;
@@ -231,70 +231,51 @@
     }
     password.addEventListener("input", updateStrength);
 
-    $("[data-signup-email-send]")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget;
-      let sent = false;
-      busy(button, true);
-      try {
-        const { response, body } = await request("/api/auth/email/send-registration-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("#signup-email").value.trim() }) });
-        if (response.ok) { state.emailChallenge = body.challenge_id || "pending"; setStatus("If eligible, an email verification code has been sent.", "progress"); $("#signup-email-code")?.focus(); sent = true; }
-        else setStatus("Email verification is temporarily unavailable.");
-      } catch (_) { setStatus("Email verification is temporarily unavailable."); }
-      busy(button, false, "Send code");
-      if (sent) cooldown(button, 60);
-    });
-    $("[data-signup-email-verify]")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget; busy(button, true);
-      try {
-        const { response } = await request("/api/auth/email/verify-registration-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: state.emailChallenge, code: $("#signup-email-code").value.trim() }) });
-        setStatus(response.ok ? "Email verified." : "Email verification failed or expired.", response.ok ? "success" : "");
-      } catch (_) { setStatus("Email verification is temporarily unavailable."); }
-      busy(button, false, "Verify");
-    });
-    $("[data-signup-phone-send]")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget; let sent = false; busy(button, true);
-      try {
-        const { response, body } = await request("/api/auth/phone/send-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ country: country.value, phone: $("#signup-phone").value.trim() }) });
-        if (response.ok) { state.phoneChallenge = body.challenge_id; setStatus("Phone code sent.", "progress"); $("#signup-phone-code")?.focus(); sent = true; }
-        else setStatus("Unable to send a phone code.");
-      } catch (_) { setStatus("Phone verification is temporarily unavailable."); }
-      busy(button, false, "Send code");
-      if (sent) cooldown(button, 60);
-    });
-    $("[data-signup-phone-verify]")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget; busy(button, true);
-      try {
-        const { response } = await request("/api/auth/phone/verify-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: state.phoneChallenge, code: $("#signup-phone-code").value.trim() }) });
-        setStatus(response.ok ? "Phone verified." : "Phone verification failed or expired.", response.ok ? "success" : "");
-      } catch (_) { setStatus("Phone verification is temporarily unavailable."); }
-      busy(button, false, "Verify");
-    });
     const methodInputs = $$('input[name="verification_method"]');
     const selectedMethod = () => methodInputs.find((input) => input.checked)?.value || "";
     const phoneInput = $("#signup-phone");
     const countryPicker = $("#signup-country");
-    methodInputs.forEach((input) => input.addEventListener("change", () => {
-      const phoneSelected = selectedMethod() === "phone";
-      phoneInput.required = phoneSelected; countryPicker.required = phoneSelected;
-    }));
+    const phonePanel = $("[data-verification-panel='phone']");
+    const phoneField = phoneInput.closest(".auth-field");
+    const countryField = countryPicker.closest(".auth-field");
+    const verificationCode = $("#signup-verification-code");
+    function selectVerificationMethod(method) {
+      const phoneSelected = method === "phone";
+      phonePanel.hidden = !phoneSelected;
+      phonePanel.setAttribute("aria-hidden", String(!phoneSelected));
+      phoneField.hidden = !phoneSelected;
+      countryField.hidden = !phoneSelected;
+      methodInputs.forEach((input) => input.setAttribute("aria-selected", String(input.value === method)));
+      phoneInput.required = phoneSelected;
+      countryPicker.required = phoneSelected;
+      state.verificationChallenge = null;
+      state.verificationMethod = null;
+      verificationCode.value = "";
+      setStatus("");
+    }
+    methodInputs.forEach((input) => input.addEventListener("change", () => selectVerificationMethod(selectedMethod())));
+    selectVerificationMethod(selectedMethod());
     const sendVerification = $("[data-signup-verification-send]");
     sendVerification?.addEventListener("click", async () => {
       const method = selectedMethod();
+      if (!method) { setStatus("Choose a verification method first."); return; }
       const payload = method === "email" ? { method, email: $("#signup-email").value.trim() } : { method, country: country.value, phone: $("#signup-phone").value.trim() };
       let sent = false;
       busy(sendVerification, true);
       try {
         const { response, body } = await request("/api/auth/verification/send-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-        if (response.ok) { state.verificationMethod = method; state.verificationChallenge = body.challenge_id; setStatus("Verification code sent.", "progress"); $("#signup-verification-code")?.focus(); sent = true; }
-        else setStatus(body.error === "verification_rate_limited" ? "Too many requests. Try again later." : "Verification is temporarily unavailable.");
-      } catch (_) { setStatus("Verification is temporarily unavailable."); }
+        if (response.ok) { state.verificationMethod = method; state.verificationChallenge = body.challenge_id; setStatus("Verification code sent.", "progress"); verificationCode.focus(); sent = true; }
+        else setStatus(method === "phone" ? "Unable to send a phone code." : "Unable to send an email code.");
+      } catch (_) { setStatus(method === "phone" ? "Unable to send a phone code." : "Unable to send an email code."); }
       busy(sendVerification, false, "Send verification code");
       if (sent) cooldown(sendVerification, 60, "Send verification code");
     });
     $("[data-signup-verification-verify]")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget; busy(button, true);
+      const button = event.currentTarget;
+      if (state.verificationMethod !== selectedMethod() || !state.verificationChallenge) { setStatus("Send a new verification code first."); return; }
+      busy(button, true);
       try {
-        const { response } = await request("/api/auth/verification/verify-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: state.verificationChallenge, code: $("#signup-verification-code").value.trim() }) });
+        const { response } = await request("/api/auth/verification/verify-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: state.verificationChallenge, code: verificationCode.value.trim() }) });
         setStatus(response.ok ? "Contact verified. Complete your account to continue to MFA enrollment." : "Verification failed or expired.", response.ok ? "success" : "");
       } catch (_) { setStatus("Verification is temporarily unavailable."); }
       busy(button, false, "Verify");
@@ -302,9 +283,11 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (password.value !== confirm.value) { setStatus("Passwords do not match."); confirm.focus(); return; }
+      const method = selectedMethod();
       const button = $("[type='submit']", form); busy(button, true);
       try {
-        const payload = { username: $("#signup-username").value.trim(), email: $("#signup-email").value.trim(), password: password.value, date_of_birth: $("#signup-dob").value, country: country.value, phone: $("#signup-phone").value.trim() };
+        const payload = { username: $("#signup-username").value.trim(), email: $("#signup-email").value.trim(), password: password.value, date_of_birth: $("#signup-dob").value };
+        if (method === "phone") { payload.country = country.value; payload.phone = phoneInput.value.trim(); }
         const { response } = await request("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (response.ok) { setStatus("Account created. Continue to sign in.", "success"); window.location.assign("/login?registered=true"); }
         else setStatus("Unable to create the account. Check the information and verification status.");

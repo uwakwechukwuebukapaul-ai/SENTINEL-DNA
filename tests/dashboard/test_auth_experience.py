@@ -91,6 +91,28 @@ def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
     assert b"name=\"tenant_id\"" not in response.data
 
 
+def test_signup_page_exposes_one_accessible_unified_verification_flow(auth_client):
+    response = auth_client.get("/signup")
+    page = response.data
+    script = auth_client.get("/static/js/sentinel-dna-auth.js").data
+
+    assert page.count(b"data-signup-verification-send") == 1
+    assert page.count(b"data-signup-verification-verify") == 1
+    assert b"name=\"verification_method\"" in page
+    assert b"aria-controls=\"signup-email-verification\"" in page
+    assert b"aria-controls=\"signup-phone-verification\"" in page
+    assert b"data-signup-email-send" not in page
+    assert b"data-signup-phone-send" not in page
+    assert b"data-signup-email-verify" not in page
+    assert b"data-signup-phone-verify" not in page
+    assert script.count(b"/api/auth/verification/send-code") == 1
+    assert script.count(b"/api/auth/verification/verify-code") == 1
+    assert b"/api/auth/email/send-registration-code" not in script
+    assert b"/api/auth/phone/send-code" not in script
+    assert b"state.verificationChallenge = null" in script
+    assert b"if (method === \"phone\")" in script
+
+
 def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):
     payload = {
         "username": "new-analyst",
