@@ -141,3 +141,98 @@ body.auth-body::before {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
+
+/* Login visual QA: keep the existing shell and behavior, but use a flat,
+   high-signal action hierarchy with no decorative glow or shadow. */
+.auth-login {
+  --auth-accent: #3373f2;
+  --auth-intelligence: #f2a93b;
+  --auth-success: #3fd8c7;
+  --auth-muted: #8b93a3;
+  --auth-dim: #8b93a3;
+}
+.auth-login,
+.auth-login .auth-panel {
+  background: #06101d;
+}
+.auth-login .auth-panel {
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.auth-login .auth-button,
+.auth-login .auth-oauth {
+  min-height: 46px;
+  border-radius: 46px;
+  box-shadow: none;
+}
+.auth-login form[data-auth-form="login"] > .auth-button {
+  width: 100%;
+  color: #fff;
+  background: #3373f2;
+}
+.auth-login form[data-auth-form="login"] > .auth-button:hover {
+  color: #fff;
+  background: #285fcf;
+  transform: none;
+}
+.auth-login .auth-oauth {
+  color: var(--auth-ink);
+  border-color: #4d5563;
+  background: transparent;
+}
+.auth-login .auth-oauth:hover {
+  border-color: #8b93a3;
+  background: rgba(139, 147, 163, .08);
+  transform: none;
+}
+.auth-login [data-login-mode] {
+  border-color: transparent;
+  color: #8b93a3;
+  background: transparent;
+}
+.auth-login [data-login-mode].is-selected {
+  border-color: #3373f2;
+  color: #fff;
+  background: rgba(51, 115, 242, .1);
+}
+.auth-login [data-login-mode]:focus-visible,
+.auth-login .auth-button:focus-visible,
+.auth-login .auth-oauth:focus-visible,
+.auth-login a:focus-visible,
+.auth-login input:focus-visible {
+  outline: 2px solid #3373f2;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.auth-login .auth-field input:focus,
+.auth-login .auth-field select:focus {
+  border-color: #3373f2;
+  box-shadow: none;
+  outline: 2px solid #3373f2;
+  outline-offset: 2px;
+}
+.auth-login .auth-state::before {
+  background: #3fd8c7;
+  box-shadow: none;
+}
+.auth-login .auth-mark,
+.auth-login .auth-principles li::before {
+  box-shadow: none;
+}
+.auth-login .auth-mark::before,
+.auth-login .auth-mark::after {
+  box-shadow: none;
+}
+.auth-login .auth-eyebrow {
+  color: #f2a93b;
+}
+.auth-login .auth-row a,
+.auth-login .auth-footer a,
+.auth-login .auth-password button {
+  color: #3373f2;
+}
+.auth-login .auth-row a:hover,
+.auth-login .auth-footer a:hover,
+.auth-login .auth-password button:hover {
+  color: #8b93a3;
+}

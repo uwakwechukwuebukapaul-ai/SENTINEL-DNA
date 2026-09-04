@@ -67,6 +67,20 @@ def test_login_page_is_available(auth_client):
     assert b"/api/auth/login" in response.data
 
 
+def test_login_page_exposes_scoped_visual_priority_and_accessible_mode_tabs(auth_client):
+    response = auth_client.get("/login")
+
+    assert b"auth-login" in response.data
+    assert b"id=\"login-password-mode\"" in response.data
+    assert b"aria-controls=\"login-password-panel\"" in response.data
+    assert b"id=\"login-email-mode\"" in response.data
+    assert b"aria-controls=\"login-email-panel\"" in response.data
+    css = auth_client.get("/static/css/sentinel-dna-auth.css")
+    assert css.status_code == 200
+    assert b"#3373f2" in css.data
+    assert b"border-radius: 46px" in css.data
+
+
 def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
     response = auth_client.get("/signup")
 

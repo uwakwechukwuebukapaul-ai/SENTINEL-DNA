@@ -8,7 +8,7 @@
   <title>Sign in | Sentinel DNA</title>
   <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-auth.css') }}">
 </head>
-<body class="auth-body">
+<body class="auth-body auth-login">
   <div class="auth-frame">
     <section class="auth-context" aria-labelledby="auth-context-title">
       <div class="auth-lockup"><span class="auth-mark" aria-hidden="true">SD</span><span>Sentinel DNA</span></div>
@@ -20,7 +20,6 @@
         <li><div><strong>Understand the context</strong><span>Separate intelligence from automated inference.</span></div></li>
         <li><div><strong>Make the decision</strong><span>Give analysts the final, attributable say.</span></div></li>
       </ul>
-      <div class="auth-signal" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
     </section>
 
     <main class="auth-panel" aria-labelledby="login-title">
@@ -38,16 +37,16 @@
         <a class="auth-button auth-oauth" href="/api/auth/google/start">Continue with Google</a>
         <div class="auth-divider"><span>or use a verified identity</span></div>
         <div class="auth-row" role="tablist" aria-label="Sign-in method">
-          <button class="auth-link-button is-selected" type="button" data-login-mode="password" role="tab" aria-selected="true">Password</button>
-          <button class="auth-link-button" type="button" data-login-mode="email" role="tab" aria-selected="false">Email code</button>
+          <button id="login-password-mode" class="auth-link-button is-selected" type="button" data-login-mode="password" role="tab" aria-selected="true" aria-controls="login-password-panel">Password</button>
+          <button id="login-email-mode" class="auth-link-button" type="button" data-login-mode="email" role="tab" aria-selected="false" aria-controls="login-email-panel">Email code</button>
         </div>
 
         <form data-auth-form="login" novalidate>
-          <section data-login-panel="password" class="auth-step" role="tabpanel">
+          <section id="login-password-panel" data-login-panel="password" class="auth-step" role="tabpanel" aria-labelledby="login-password-mode">
             <div class="auth-field"><label for="login-username">Email or username</label><input id="login-username" autocomplete="username" required></div>
             <div class="auth-field"><label for="login-password">Password</label><div class="auth-password"><input id="login-password" type="password" autocomplete="current-password" required><button type="button" data-password-toggle="login-password" aria-label="Show password">Show</button></div></div>
           </section>
-          <section data-login-panel="email" class="auth-step" role="tabpanel" hidden>
+          <section id="login-email-panel" data-login-panel="email" class="auth-step" role="tabpanel" aria-labelledby="login-email-mode" hidden>
             <p class="auth-step-label">Passwordless verification</p>
             <div class="auth-field"><label for="login-email">Account email</label><input id="login-email" type="email" autocomplete="email"></div>
             <div class="auth-inline"><div class="auth-field"><label for="login-code">Verification code</label><input id="login-code" class="auth-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div><button class="auth-link-button" type="button" data-login-send-code>Send code</button></div>
