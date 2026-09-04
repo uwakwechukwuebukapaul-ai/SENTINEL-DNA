@@ -40,6 +40,10 @@ def _csrf_ok():
     # browser CSRF submissions: JSON content type and no cross-origin metadata.
     # Browser UI requests still send the synchronizer token explicitly.
     return bool(request.is_json and not request.headers.get("Origin") and not request.headers.get("Referer"))
+def _strict_csrf_ok():
+    """Require the synchronizer token for the browser registration flow."""
+    expected = session.get("csrf_token"); supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    return bool(expected and supplied and secrets.compare_digest(str(expected), str(supplied)))
 def _ensure_csrf():
     if "csrf_token" not in session: session["csrf_token"] = csrf_token()
     return session["csrf_token"]
@@ -108,33 +112,38 @@ def register():
     if not _allowed("signup", 12, 3600): return jsonify({"error": "registration_unavailable"}), 429
     _audit("signup_started", method="password", outcome="started")
     try:
-        # Explicit migration boundary: legacy JSON callers remain compatible
-        # until a versioned API contract replaces this path. Browser-style
-        # registration always requires email and phone verification below.
         legacy_api = current_app.config.get("AUTH_LEGACY_JSON_COMPAT", True) and request.is_json and not data.get("date_of_birth") and not data.get("phone")
+        legacy_dual = bool(data.get("email_challenge_id") and data.get("phone_challenge_id") and session.get("registration_email_verified") and session.get("registration_phone_verified"))
         dob = validate_minimum_age(data.get("date_of_birth")) if data.get("date_of_birth") else None
+        method = str(session.get("registration_verification_method") or "").strip().lower()
+        if not legacy_api and not legacy_dual and method not in {"email", "phone"}:
+            raise ValueError("verification_required")
         phone = normalize_phone(data.get("country", ""), data.get("phone", "")) if data.get("phone") else None
         email_verified_at = None
-        if not legacy_api:
-            email_challenge_id = data.get("email_challenge_id")
-            if email_challenge_id == "pending": email_challenge_id = session.get("registration_email_challenge_id")
+        phone_verified_at = None
+        if not legacy_api and not legacy_dual:
             expected_email = str(data.get("email", "")).strip().lower()
-            if session.get("registration_email_verified") != expected_email:
+            session_email = str(session.get("registration_email") or "").strip().lower()
+            session_phone = session.get("registration_phone")
+            if method == "email" and session_email != expected_email:
                 raise ValueError("verification_required")
-            if session.get("registration_phone_verified") != phone:
+            if method == "phone" and (not phone or session_phone != phone):
                 raise ValueError("verification_required")
             with _service().db.session() as connection:
                 binding = _otp_binding()
-                verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (data.get("phone_challenge_id"), phone, binding)).fetchone()
-                email_verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_email' AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (email_challenge_id, expected_email, binding)).fetchone()
-            if not verified or not email_verified: raise ValueError("verification_required")
-            email_verified_at = datetime.now(timezone.utc).isoformat()
+                challenge_id = session.get("registration_verification_challenge_id")
+                verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose=? AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (challenge_id, f"registration_{method}", expected_email if method == "email" else phone, binding)).fetchone()
+            if not verified or session.get("registration_verified") is not True: raise ValueError("verification_required")
+            now = datetime.now(timezone.utc).isoformat()
+            email_verified_at = now if method == "email" else None
+            phone_verified_at = now if method == "phone" else None
         user = _service().register(
             data.get("username", ""), data.get("email", ""), data.get("password", ""),
             "analyst", phone_number=phone, date_of_birth=dob,
             email_verified_at=email_verified_at,
-            phone_verified_at=(datetime.now(timezone.utc).isoformat() if not legacy_api else None),
-            onboarding_state=(OnboardingState.AUTHENTICATED if legacy_api else OnboardingState.NEW),
+            phone_verified_at=phone_verified_at,
+            verification_method=(method if not legacy_api and not legacy_dual else None),
+            onboarding_state=(OnboardingState.AUTHENTICATED if legacy_api or legacy_dual else OnboardingState.NEW),
         )
     except DatabaseError: return jsonify({"error": "registration_unavailable"}), 409
     except Exception as exc:
@@ -143,14 +152,14 @@ def register():
         return jsonify({"error": "invalid_registration"}), 400
     try:
         _bind(user)
-        if not legacy_api:
+        if not legacy_api and not legacy_dual:
             user = _service().complete_verified_onboarding(user.id)
-            if user is None or user.onboarding_state != OnboardingState.AUTHENTICATED:
+            if user is None or user.onboarding_state != OnboardingState.MFA_ENROLLMENT_REQUIRED:
                 raise RuntimeError("onboarding_completion_failed")
     except Exception:
         with _service().db.session() as connection: connection.execute("DELETE FROM users WHERE id=?", (user.id,))
         return jsonify({"error": "registration_unavailable"}), 500
-    for key in ("auth_otp_binding", "registration_email_challenge_id", "registration_email_verified", "registration_phone_verified"):
+    for key in ("auth_otp_binding", "registration_email_challenge_id", "registration_email_verified", "registration_phone_verified", "registration_verification_method", "registration_verification_challenge_id", "registration_verified", "registration_email", "registration_phone"):
         session.pop(key, None)
     _audit("signup_verified", user_id=user.id, method="password", outcome="success")
     return jsonify(user.public()), 201
@@ -237,6 +246,77 @@ def email_send_code():
         _audit("email_otp_requested", user_id=row["id"] if row else None, method="email_otp", outcome="success")
     except Exception: pass
     return jsonify({"message": "If the account is eligible, a verification code has been sent."}), 202
+
+@auth_api.post("/verification/send-code")
+def verification_send_code():
+    """Start exactly one contact-verification flow for browser registration."""
+    if not _strict_csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    data = request.get_json(silent=True) or {}
+    method = str(data.get("method") or "").strip().lower()
+    if method not in {"email", "phone"}:
+        return jsonify({"error": "invalid_verification_method"}), 400
+    if not _allowed(f"registration-verification|{method}", 5, 3600):
+        return jsonify({"error": "verification_rate_limited"}), 429
+    try:
+        if method == "email":
+            destination = str(data.get("email") or "").strip().lower()
+            if "@" not in destination: raise ValueError("invalid_email")
+            provider = current_app.config.get("EMAIL_PROVIDER") or email_provider(testing=current_app.testing)
+        else:
+            # The region is explicit input; normalize_phone validates it and
+            # produces the only phone identity stored in the registration flow.
+            destination = normalize_phone(data.get("country", ""), data.get("phone", ""))
+            provider = current_app.config.get("SMS_PROVIDER")
+            if provider is None:
+                from .providers import sms_provider
+                provider = sms_provider(testing=current_app.testing)
+        challenge, code = _service().issue_otp(destination, f"registration_{method}", secret=current_app.secret_key, session_binding=_otp_binding())
+        delivery = provider.send_code(destination, code, f"registration_{method}")
+        if not delivery.accepted: raise RuntimeError("verification_delivery_failed")
+        with _service().db.session() as connection:
+            connection.execute("UPDATE otp_challenges SET provider_request_id=? WHERE id=?", (delivery.provider_request_id, challenge))
+        session["registration_verification_method"] = method
+        session["registration_verification_challenge_id"] = challenge
+        session["registration_verified"] = False
+        session["registration_onboarding_state"] = OnboardingState.VERIFICATION_SENT
+        if method == "email": session["registration_email"] = destination
+        else: session["registration_phone"] = destination
+        _audit("registration_verification_requested", method=method, outcome="success")
+        return jsonify({"challenge_id": challenge, "method": method}), 202
+    except ValueError as exc:
+        _audit("registration_verification_failed", method=method, outcome="failure", reason=str(exc)[:64])
+        return jsonify({"error": "verification_unavailable" if str(exc) == "otp_cooldown" else "invalid_registration_destination"}), 400
+    except Exception:
+        _audit("registration_verification_failed", method=method, outcome="failure", reason="provider_unavailable")
+        return jsonify({"error": "verification_unavailable"}), 400
+
+@auth_api.post("/verification/verify-code")
+def verification_verify_code():
+    """Consume the server-bound registration challenge; never trust client verification flags."""
+    if not _strict_csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    if not _allowed("registration-verification-verify", 10, 600):
+        return jsonify({"error": "verification_rate_limited"}), 429
+    data = request.get_json(silent=True) or {}
+    method = session.get("registration_verification_method")
+    challenge_id = data.get("challenge_id")
+    if method not in {"email", "phone"} or not challenge_id or challenge_id != session.get("registration_verification_challenge_id"):
+        return jsonify({"error": "invalid_challenge"}), 400
+    destination = session.get("registration_email") if method == "email" else session.get("registration_phone")
+    try:
+        _service().verify_otp(challenge_id, data.get("code", ""), secret=current_app.secret_key, session_binding=_otp_binding())
+        with _service().db.session() as connection:
+            row = connection.execute("SELECT destination, purpose, consumed_at FROM otp_challenges WHERE id=? AND session_binding=?", (challenge_id, _otp_binding())).fetchone()
+        verified = bool(row and row["purpose"] == f"registration_{method}" and row["destination"] == destination and row["consumed_at"])
+        if not verified:
+            _audit("registration_verification_failed", method=method, outcome="failure", reason="invalid_or_expired")
+            return jsonify({"error": "verification_failed"}), 400
+        session["registration_verified"] = True
+        session["registration_onboarding_state"] = OnboardingState.VERIFIED
+        _audit("registration_contact_verified", method=method, outcome="success")
+        return jsonify({"verified": True, "method": method}), 200
+    except Exception:
+        _audit("registration_verification_failed", method=method, outcome="failure", reason="invalid_or_expired")
+        return jsonify({"error": "verification_failed"}), 400
 
 @auth_api.post("/email/send-registration-code")
 def email_send_registration_code():

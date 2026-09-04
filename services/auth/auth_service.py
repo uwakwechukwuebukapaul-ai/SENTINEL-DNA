@@ -39,6 +39,7 @@ class AuthService:
                 "email_verified_at",
                 "expires_at",
                 "audit_correlation_id",
+                "verification_method",
             ):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
@@ -83,7 +84,7 @@ class AuthService:
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
-    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, onboarding_state=None, connection=None) -> User:
+    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, verification_method=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, onboarding_state=None, connection=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email):
             raise ValueError("invalid_user_registration")
         try:
@@ -101,9 +102,9 @@ class AuthService:
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             row = connection.execute(
-                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,onboarding_state)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, normalized_state),
+                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,verification_method,session_version,expires_at,revocation_status,audit_correlation_id,is_active,onboarding_state)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, verification_method, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, normalized_state),
             ).fetchone()
             user_id = row["id"]
             connection.execute(
@@ -386,25 +387,28 @@ class AuthService:
     def complete_verified_onboarding(self, user_id: int) -> User | None:
         """Atomically complete the verified browser registration lifecycle."""
         sequence = (
-            OnboardingState.EMAIL_VERIFICATION_REQUIRED,
-            OnboardingState.EMAIL_VERIFIED,
-            OnboardingState.PHONE_VERIFICATION_REQUIRED,
-            OnboardingState.PHONE_VERIFIED,
+            OnboardingState.VERIFICATION_METHOD_SELECTED,
+            OnboardingState.VERIFICATION_SENT,
+            OnboardingState.VERIFIED,
             OnboardingState.PROFILE_REQUIRED,
             OnboardingState.PROFILE_COMPLETED,
             OnboardingState.WORKSPACE_PROVISIONING,
             OnboardingState.WORKSPACE_READY,
-            OnboardingState.AUTHENTICATED,
+            OnboardingState.MFA_ENROLLMENT_REQUIRED,
         )
         with self.db.session() as connection:
             row = connection.execute(
                 """SELECT onboarding_state, email_verified_at, phone_verified_at,
-                          phone_number, date_of_birth
+                          phone_number, date_of_birth, verification_method
                      FROM users WHERE id=?""",
                 (user_id,),
             ).fetchone()
-            if not row or not row["email_verified_at"] or not row["phone_verified_at"] or not row["phone_number"] or not row["date_of_birth"]:
+            if not row or not row["verification_method"] or not row["date_of_birth"]:
                 return None
+            method = str(row["verification_method"])
+            if method == "email" and not row["email_verified_at"]: return None
+            if method == "phone" and not row["phone_verified_at"]: return None
+            if method not in {"email", "phone"}: return None
             current = str(row["onboarding_state"] or OnboardingState.NEW)
             if current == OnboardingState.AUTHENTICATED:
                 row = connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
@@ -459,4 +463,5 @@ class AuthService:
             int(row["session_version"] or 0), row["expires_at"],
             str(row["revocation_status"] or "active"), row["audit_correlation_id"],
             str(row["onboarding_state"] or OnboardingState.AUTHENTICATED),
+            row["verification_method"] if "verification_method" in row.keys() else None,
         )

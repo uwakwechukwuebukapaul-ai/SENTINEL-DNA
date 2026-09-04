@@ -3,7 +3,7 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { csrf: null, emailChallenge: null, phoneChallenge: null };
+  const state = { csrf: null, emailChallenge: null, phoneChallenge: null, verificationChallenge: null, verificationMethod: null };
 
   async function csrf() {
     if (state.csrf) return state.csrf;
@@ -159,13 +159,18 @@
     let countries = [];
     let highlighted = -1;
     const flagFor = (region) => [...String(region || "")].map((letter) => String.fromCodePoint(letter.charCodeAt(0) + 127397)).join("");
-    const displayName = (region) => {
+    const displayName = (item) => {
+      if (item && typeof item === "object") {
+        if (item.display_name && item.display_name !== item.region) return item.display_name;
+        if (item.name && item.name !== item.region) return item.name;
+      }
+      const region = item && typeof item === "object" ? item.region : item;
       try { return new Intl.DisplayNames([navigator.language || "en"], { type: "region" }).of(region) || region; }
       catch (_) { return region; }
     };
     function renderCountries() {
       const query = (search?.value || "").trim().toLowerCase();
-      const visible = countries.filter((item) => `${displayName(item.region)} ${item.calling_code} ${item.region}`.toLowerCase().includes(query));
+      const visible = countries.filter((item) => `${displayName(item)} ${item.calling_code} ${item.region}`.toLowerCase().includes(query));
       options.replaceChildren();
       highlighted = visible.length ? 0 : -1;
       visible.forEach((item, index) => {
@@ -173,7 +178,7 @@
         option.type = "button"; option.className = "country-option"; option.setAttribute("role", "option");
         option.dataset.region = item.region; option.setAttribute("aria-selected", String(index === highlighted));
         const flag = document.createElement("span"); flag.className = "country-flag"; flag.setAttribute("aria-hidden", "true"); flag.textContent = flagFor(item.region);
-        const text = document.createElement("span"); text.textContent = `${displayName(item.region)} ${item.calling_code}`;
+        const text = document.createElement("span"); text.textContent = `${displayName(item)} (${item.calling_code})`;
         option.append(flag, text); option.addEventListener("click", () => chooseCountry(item)); options.append(option);
       });
       if (!visible.length) { const empty = document.createElement("div"); empty.className = "country-empty"; empty.textContent = "No matching country."; options.append(empty); }
@@ -181,7 +186,7 @@
     }
     function chooseCountry(item) {
       country.value = item.region;
-      label.textContent = `${flagFor(item.region)} ${displayName(item.region)} (${item.calling_code})`;
+      label.textContent = `${flagFor(item.region)} ${displayName(item)} (${item.calling_code})`;
       menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); trigger.focus();
     }
     function openCountries() { menu.hidden = false; trigger.setAttribute("aria-expanded", "true"); renderCountries(); search.focus(); }
@@ -202,7 +207,7 @@
     }).then((data) => {
       countries = data.countries || [];
       country.replaceChildren(new Option("Select country", ""));
-      countries.forEach((item) => country.add(new Option(`${displayName(item.region)} (${item.calling_code})`, item.region)));
+      countries.forEach((item) => country.add(new Option(`${displayName(item)} (${item.calling_code})`, item.region)));
       label.textContent = "Select country";
     }).catch(() => { country.replaceChildren(new Option("Country list unavailable", "")); setStatus("Country selection is temporarily unavailable."); });
 
@@ -256,12 +261,42 @@
       } catch (_) { setStatus("Phone verification is temporarily unavailable."); }
       busy(button, false, "Verify");
     });
+    const methodInputs = $$('input[name="verification_method"]');
+    const selectedMethod = () => methodInputs.find((input) => input.checked)?.value || "";
+    const phoneInput = $("#signup-phone");
+    const countryPicker = $("#signup-country");
+    methodInputs.forEach((input) => input.addEventListener("change", () => {
+      const phoneSelected = selectedMethod() === "phone";
+      phoneInput.required = phoneSelected; countryPicker.required = phoneSelected;
+    }));
+    const sendVerification = $("[data-signup-verification-send]");
+    sendVerification?.addEventListener("click", async () => {
+      const method = selectedMethod();
+      const payload = method === "email" ? { method, email: $("#signup-email").value.trim() } : { method, country: country.value, phone: $("#signup-phone").value.trim() };
+      let sent = false;
+      busy(sendVerification, true);
+      try {
+        const { response, body } = await request("/api/auth/verification/send-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (response.ok) { state.verificationMethod = method; state.verificationChallenge = body.challenge_id; setStatus("Verification code sent.", "progress"); $("#signup-verification-code")?.focus(); sent = true; }
+        else setStatus(body.error === "verification_rate_limited" ? "Too many requests. Try again later." : "Verification is temporarily unavailable.");
+      } catch (_) { setStatus("Verification is temporarily unavailable."); }
+      busy(sendVerification, false, "Send verification code");
+      if (sent) cooldown(sendVerification, 60, "Send verification code");
+    });
+    $("[data-signup-verification-verify]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget; busy(button, true);
+      try {
+        const { response } = await request("/api/auth/verification/verify-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: state.verificationChallenge, code: $("#signup-verification-code").value.trim() }) });
+        setStatus(response.ok ? "Contact verified. Complete your account to continue to MFA enrollment." : "Verification failed or expired.", response.ok ? "success" : "");
+      } catch (_) { setStatus("Verification is temporarily unavailable."); }
+      busy(button, false, "Verify");
+    });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (password.value !== confirm.value) { setStatus("Passwords do not match."); confirm.focus(); return; }
       const button = $("[type='submit']", form); busy(button, true);
       try {
-        const payload = { username: $("#signup-username").value.trim(), email: $("#signup-email").value.trim(), password: password.value, date_of_birth: $("#signup-dob").value, country: country.value, phone: $("#signup-phone").value.trim(), phone_challenge_id: state.phoneChallenge, email_challenge_id: state.emailChallenge || "pending" };
+        const payload = { username: $("#signup-username").value.trim(), email: $("#signup-email").value.trim(), password: password.value, date_of_birth: $("#signup-dob").value, country: country.value, phone: $("#signup-phone").value.trim() };
         const { response } = await request("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (response.ok) { setStatus("Account created. Continue to sign in.", "success"); window.location.assign("/login?registered=true"); }
         else setStatus("Unable to create the account. Check the information and verification status.");

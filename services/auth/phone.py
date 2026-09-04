@@ -2,6 +2,15 @@
 import phonenumbers
 from phonenumbers import NumberParseException
 
+# Calling codes and supported regions remain sourced from phonenumbers.  This
+# small presentation map only supplies stable English labels where the library
+# intentionally exposes ISO region identifiers rather than UI names.
+_DISPLAY_NAMES = {
+    "NG": "Nigeria", "GH": "Ghana", "US": "United States",
+    "GB": "United Kingdom", "CA": "Canada", "DE": "Germany",
+    "FR": "France", "IN": "India", "KE": "Kenya", "ZA": "South Africa",
+}
+
 def normalize_phone(country: str, local_number: str) -> str:
     try:
         parsed = phonenumbers.parse(str(local_number or "").strip(), str(country or "").upper())
@@ -16,5 +25,6 @@ def country_options() -> list[dict[str, str]]:
     for region in sorted(phonenumbers.SUPPORTED_REGIONS):
         code = phonenumbers.country_code_for_region(region)
         if code:
-            rows.append({"region": region, "calling_code": f"+{code}", "name": region})
+            name = _DISPLAY_NAMES.get(region, region)
+            rows.append({"region": region, "calling_code": f"+{code}", "name": name, "display_name": name})
     return rows

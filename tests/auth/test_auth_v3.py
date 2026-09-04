@@ -152,6 +152,58 @@ def test_v3_google_begin_provider_failure_is_unavailable(monkeypatch, app):
     assert response.status_code == 503
     assert response.get_json() == {"error": "google_authentication_unavailable"}
 
+def test_registration_email_only_uses_one_contact_verification_and_stops_for_mfa(app):
+    client = app.test_client(); csrf = token(client)
+    sent = client.post("/api/auth/verification/send-code", json={"method": "email", "email": "email-only@example.test"}, headers={"X-CSRF-Token": csrf})
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
+    assert client.post("/api/auth/verification/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).get_json() == {"verified": True, "method": "email"}
+    created = client.post("/api/auth/register", json={"username": "email-only", "email": "email-only@example.test", "password": PASSWORD, "date_of_birth": "2000-01-02"}, headers={"X-CSRF-Token": csrf})
+    assert created.status_code == 201
+    body = created.get_json()
+    assert body["email_verified"] is True and body["phone_verified"] is False
+    assert body["verification_method"] == "email"
+    assert body["onboarding_state"] == "MFA_ENROLLMENT_REQUIRED"
+    assert client.get("/api/auth/me").status_code == 401
+
+def test_registration_phone_only_normalizes_and_does_not_require_email_otp(app):
+    client = app.test_client(); csrf = token(client)
+    sent = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    code = app.config["SMS_PROVIDER"].messages[-1]["code"]
+    assert client.post("/api/auth/verification/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
+    created = client.post("/api/auth/register", json={"username": "phone-only", "email": "phone-only@example.test", "password": PASSWORD, "date_of_birth": "2000-01-02", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert created.status_code == 201
+    body = created.get_json()
+    assert body["phone_verified"] is True and body["email_verified"] is False
+    assert body["verification_method"] == "phone"
+    row = app.container.require("auth_service").db.connect().execute("SELECT phone_number FROM users WHERE email=?", ("phone-only@example.test",)).fetchone()
+    assert row["phone_number"] == "+2348031234567"
+
+def test_unified_registration_verification_rejects_missing_or_invalid_method(app):
+    client = app.test_client(); csrf = token(client)
+    for payload in ({}, {"method": "sms"}):
+        response = client.post("/api/auth/verification/send-code", json=payload, headers={"X-CSRF-Token": csrf})
+        assert response.status_code == 400
+        assert response.get_json()["error"] == ("invalid_verification_method")
+
+def test_country_contract_is_authoritative_and_phone_region_mismatch_fails_closed(app):
+    countries = app.test_client().get("/api/auth/countries")
+    assert countries.status_code == 200
+    by_region = {item["region"]: item for item in countries.get_json()["countries"]}
+    assert by_region["NG"]["calling_code"] == "+234" and by_region["NG"]["name"] == "Nigeria"
+    assert by_region["GH"]["calling_code"] == "+233" and by_region["US"]["calling_code"] == "+1"
+    assert by_region["GB"]["calling_code"] == "+44"
+    client = app.test_client(); csrf = token(client)
+    response = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "US", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 400 and response.get_json()["error"] == "invalid_registration_destination"
+
+def test_unified_registration_verification_requires_csrf(app):
+    response = app.test_client().post("/api/auth/verification/send-code", json={"method": "email", "email": "csrf@example.test"})
+    assert response.status_code == 403 and response.get_json() == {"error": "csrf_validation_failed"}
+
 def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
     client = app.test_client(); csrf = token(client)
     assert client.post("/api/auth/register", json={"username":"cookie-user","email":"cookie@example.test","password":PASSWORD}).status_code == 201
