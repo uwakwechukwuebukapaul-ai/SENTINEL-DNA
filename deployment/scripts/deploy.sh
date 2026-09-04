@@ -66,7 +66,7 @@ docker compose \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
   --file "$STAGING_OVERRIDE" \
-  up -d --build app edge
+  up -d --build --force-recreate app edge
 
 staging_ca_file="${SENTINEL_DNA_STAGING_TLS_CA_FILE:-$SENTINEL_DNA_STAGING_TLS_DIR/staging-ca.crt}"
 SENTINEL_DNA_TLS_CA_FILE="$staging_ca_file" \

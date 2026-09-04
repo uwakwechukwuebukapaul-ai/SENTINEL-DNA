@@ -1,7 +1,7 @@
 services:
 
   favp-volume-init:
-    image: staging-app:974e3275bc678851e3979a5cbb95ff7d2e9dc4c9
+    image: staging-app:${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
     user: "0:0"
     network_mode: "none"
     command:

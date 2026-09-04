@@ -208,6 +208,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "git -C \"$REPOSITORY_ROOT\" status --porcelain --untracked-files=all" in deploy
     assert "up -d --build postgres redis" in deploy
     assert "run --rm --build migration" in deploy
+    assert "up -d --build --force-recreate app edge" in deploy
     assert "docker compose up -d --build" not in deploy
     assert "Missing .env" not in deploy
     root_rendered = yaml.safe_load(root_compose)
