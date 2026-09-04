@@ -113,6 +113,32 @@ def test_signup_page_exposes_one_accessible_unified_verification_flow(auth_clien
     assert b"if (method === \"phone\")" in script
 
 
+def test_signup_verification_controls_follow_active_method_contract(auth_client):
+    page = auth_client.get("/signup").data.decode()
+    script = auth_client.get("/static/js/sentinel-dna-auth.js").data.decode()
+
+    choice = page.index('class="auth-field auth-field-wide verification-choice"')
+    country = page.index('for="signup-country-search"')
+    assert choice < country
+    assert '<div class="auth-field" hidden><label for="signup-country-search">Country</label>' in page
+    assert 'data-verification-panel="phone" hidden' in page
+    assert 'const phoneSelected = method === "phone"' in script
+    assert 'countryField.hidden = !phoneSelected' in script
+    assert 'phoneInput.required = phoneSelected' in script
+    assert 'countryPicker.required = phoneSelected' in script
+
+
+def test_signup_payload_only_adds_phone_contact_in_phone_mode(auth_client):
+    script = auth_client.get("/static/js/sentinel-dna-auth.js").data.decode()
+
+    assert 'const payload = { username:' in script
+    assert 'if (method === "phone") { payload.country = country.value; payload.phone = phoneInput.value.trim(); }' in script
+    assert 'payload.email_challenge_id' not in script
+    assert 'payload.phone_challenge_id' not in script
+    assert 'cancelVerificationCooldown?.();' in script
+    assert 'verificationCode.value = "";' in script
+
+
 def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):
     payload = {
         "username": "new-analyst",

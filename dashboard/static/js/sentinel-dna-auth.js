@@ -53,6 +53,7 @@
       if (remaining <= 0) { window.clearInterval(timer); button.disabled = false; button.textContent = label; return; }
       button.textContent = `${label} in ${remaining}s`;
     }, 1000);
+    return () => { window.clearInterval(timer); button.disabled = false; button.textContent = label; };
   }
 
   function enablePasswordToggles() {
@@ -239,8 +240,11 @@
     const phoneField = phoneInput.closest(".auth-field");
     const countryField = countryPicker.closest(".auth-field");
     const verificationCode = $("#signup-verification-code");
+    let cancelVerificationCooldown = null;
     function selectVerificationMethod(method) {
       const phoneSelected = method === "phone";
+      cancelVerificationCooldown?.();
+      cancelVerificationCooldown = null;
       phonePanel.hidden = !phoneSelected;
       phonePanel.setAttribute("aria-hidden", String(!phoneSelected));
       phoneField.hidden = !phoneSelected;
@@ -268,7 +272,7 @@
         else setStatus(method === "phone" ? "Unable to send a phone code." : "Unable to send an email code.");
       } catch (_) { setStatus(method === "phone" ? "Unable to send a phone code." : "Unable to send an email code."); }
       busy(sendVerification, false, "Send verification code");
-      if (sent) cooldown(sendVerification, 60, "Send verification code");
+      if (sent) cancelVerificationCooldown = cooldown(sendVerification, 60, "Send verification code");
     });
     $("[data-signup-verification-verify]")?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
