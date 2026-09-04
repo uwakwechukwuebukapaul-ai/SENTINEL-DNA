@@ -80,6 +80,24 @@ def _login_session(user, remember=False, auth_method="password"):
     _audit("login_success", user_id=user.id, method=auth_method, outcome="success")
     return user.public()
 
+def _mfa_pending_session(user):
+    """Create a non-authorized pre-auth session for MFA ceremony only."""
+    identity, membership = _bind(user)
+    session.clear()
+    session.update(mfa_pending_user_id=user.id, mfa_pending_session_version=user.session_version,
+                   actor_id=identity.actor_id, organization_id=membership.tenant_id,
+                   canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id},
+                   auth_otp_binding=secrets.token_urlsafe(32), csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
+    return {"status": "mfa_required", "mfa_enrollment_required": user.onboarding_state == OnboardingState.MFA_ENROLLMENT_REQUIRED}
+
+def _mfa_pending_user():
+    user = _service().get_by_id(session.get("mfa_pending_user_id"))
+    if (not user or not user.is_active or user.revocation_status != "active" or
+            user.session_version != session.get("mfa_pending_session_version") or
+            user.actor_id != session.get("actor_id") or user.tenant_id != session.get("organization_id")):
+        return None
+    return user
+
 def restore_persistent_session():
     if session.get("user_id") or not request.cookies.get(REMEMBER_COOKIE): return
     value = request.cookies.get(REMEMBER_COOKIE, "")
@@ -173,7 +191,54 @@ def login():
     if not user:
         _audit("login_failure", method="password", outcome="failure", reason="invalid_credentials")
         return jsonify({"error": "invalid_credentials"}), 401
+    if user.onboarding_state == OnboardingState.MFA_ENROLLMENT_REQUIRED:
+        return jsonify(_mfa_pending_session(user)), 200
+    if user.mfa_enabled:
+        return jsonify(_mfa_pending_session(user)), 200
     return jsonify(_login_session(user, bool(data.get("remember_me"))))
+
+@auth_api.post("/mfa/enroll")
+def mfa_enroll():
+    if not _strict_csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_pending_user()
+    if not user or user.onboarding_state != OnboardingState.MFA_ENROLLMENT_REQUIRED:
+        return jsonify({"error": "mfa_enrollment_required"}), 403
+    if not _allowed(f"mfa-enroll|{user.id}", 5, 3600): return jsonify({"error": "mfa_rate_limited"}), 429
+    try:
+        challenge_id, uri = _service().create_mfa_enrollment(user.id, session_binding=_otp_binding(), secret=current_app.secret_key)
+        _audit("mfa_enrollment_started", user_id=user.id, method="totp", outcome="success")
+        return jsonify({"challenge_id": challenge_id, "provisioning_uri": uri, "method": "totp"}), 201
+    except ValueError:
+        return jsonify({"error": "mfa_enrollment_unavailable"}), 409
+
+@auth_api.post("/mfa/enroll/verify")
+def mfa_enroll_verify():
+    if not _strict_csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_pending_user(); data = request.get_json(silent=True) or {}
+    if not user or user.onboarding_state != OnboardingState.MFA_ENROLLMENT_REQUIRED: return jsonify({"error": "mfa_enrollment_required"}), 403
+    if not _allowed(f"mfa-enroll-verify|{user.id}", 10, 600): return jsonify({"error": "mfa_rate_limited"}), 429
+    codes = _service().verify_mfa_enrollment(data.get("challenge_id"), user.id, data.get("code", ""), secret=current_app.secret_key, session_binding=_otp_binding())
+    if not codes:
+        _audit("mfa_enrollment_failed", user_id=user.id, method="totp", outcome="failure", reason="invalid_or_expired")
+        return jsonify({"error": "mfa_verification_failed"}), 400
+    user = _service().get_by_id(user.id)
+    result = _login_session(user, auth_method="totp_enrollment")
+    _audit("mfa_enrollment_success", user_id=user.id, method="totp", outcome="success")
+    return jsonify({"account": result, "recovery_codes": codes}), 200
+
+@auth_api.post("/mfa/verify")
+def mfa_verify():
+    if not _strict_csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_pending_user(); data = request.get_json(silent=True) or {}
+    if not user or not user.mfa_enabled: return jsonify({"error": "mfa_verification_required"}), 403
+    if not _allowed(f"mfa-verify|{user.id}", 10, 600): return jsonify({"error": "mfa_rate_limited"}), 429
+    recovery = str(data.get("recovery_code") or "").strip()
+    valid = _service().consume_mfa_recovery_code(user.id, recovery, secret=current_app.secret_key) if recovery else _service().verify_mfa_code(user.id, data.get("code", ""), secret=current_app.secret_key)
+    if not valid:
+        _audit("mfa_recovery_failed" if recovery else "mfa_verification_failed", user_id=user.id, method="recovery_code" if recovery else "totp", outcome="failure", reason="invalid")
+        return jsonify({"error": "mfa_verification_failed"}), 401
+    _audit("mfa_recovery_success" if recovery else "mfa_verification_success", user_id=user.id, method="recovery_code" if recovery else "totp", outcome="success")
+    return jsonify(_login_session(user, auth_method="recovery_code" if recovery else "totp")), 200
 
 @auth_api.get("/csrf")
 def csrf(): return jsonify({"csrf_token": _ensure_csrf()})
@@ -480,6 +545,10 @@ def google_callback():
         if user.onboarding_state != OnboardingState.AUTHENTICATED:
             _audit("google_login_failure", user_id=user.id, method="google", outcome="failure", reason="onboarding_required")
             return jsonify({"error": "onboarding_required"}), 403
+        if user.mfa_enabled:
+            _mfa_pending_session(user)
+            _audit("mfa_challenge_started", user_id=user.id, method="google", outcome="success")
+            return redirect("/mfa/verify")
         return redirect("/") if _login_session(user) else (jsonify({"error": "authentication_failed"}), 401)
     except Exception:
         _audit("google_login_failure", method="google", outcome="failure", reason="oidc_validation_failed")

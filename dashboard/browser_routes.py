@@ -41,6 +41,14 @@ def login_page():
 def signup_page():
     return redirect(url_for("browser.home")) if _principal() else render_template("signup.html")
 
+@browser.get("/mfa/enroll")
+def mfa_enroll_page():
+    return render_template("mfa_enroll.html") if session.get("mfa_pending_user_id") else redirect(url_for("browser.login_page"))
+
+@browser.get("/mfa/verify")
+def mfa_verify_page():
+    return render_template("mfa_verify.html") if session.get("mfa_pending_user_id") else redirect(url_for("browser.login_page"))
+
 @browser.get("/forgot-password")
 def forgot_password_page():
     return redirect(url_for("browser.home")) if _principal() else render_template("forgot_password.html")

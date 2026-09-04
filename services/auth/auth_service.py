@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import base64
+import hashlib
+import secrets
+from cryptography.fernet import Fernet, InvalidToken
 
 from database.connection import DatabaseConnection, database
 from database.portability import identity_primary_key, table_columns
@@ -15,6 +19,7 @@ from .phone import normalize_phone
 from .rate_limit import DatabaseRateLimitBackend
 from services.rate_limiting import RateLimitPolicy, RateLimitRequest, RateLimitService
 from .onboarding import OnboardingState, initial_state
+from .totp import verify_code as verify_totp
 
 
 class AuthService:
@@ -43,6 +48,11 @@ class AuthService:
             ):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            if "mfa_enabled" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0")
+            for name in ("mfa_secret_ciphertext", "mfa_enrolled_at"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
             if "revocation_status" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
@@ -66,6 +76,16 @@ class AuthService:
             otp_columns = table_columns(connection, self.db.backend_name, "otp_challenges")
             if "session_binding" not in otp_columns:
                 connection.execute("ALTER TABLE otp_challenges ADD COLUMN session_binding TEXT")
+            connection.execute("""CREATE TABLE IF NOT EXISTS mfa_enrollment_challenges (
+                id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, secret_ciphertext TEXT NOT NULL,
+                session_binding TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL,
+                consumed_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id)
+            )""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS mfa_recovery_codes (
+                id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, code_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL, used_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id)
+            )""")
             connection.execute("""CREATE TABLE IF NOT EXISTS persistent_sessions (
                 id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT UNIQUE NOT NULL,
                 tenant_id TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
@@ -122,7 +142,7 @@ class AuthService:
 
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
-            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active' AND COALESCE(onboarding_state, 'AUTHENTICATED')='AUTHENTICATED'", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
+            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active' AND COALESCE(onboarding_state, 'AUTHENTICATED') IN ('AUTHENTICATED','MFA_ENROLLMENT_REQUIRED')", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
             if not row or not verify_password(row["password_hash"], password):
                 return None
             now = datetime.now(timezone.utc).isoformat()
@@ -358,6 +378,63 @@ class AuthService:
                 return None
         return row["user_id"]
 
+    @staticmethod
+    def _mfa_fernet(secret: str) -> Fernet:
+        key = base64.urlsafe_b64encode(hashlib.sha256(str(secret).encode()).digest())
+        return Fernet(key)
+
+    def create_mfa_enrollment(self, user_id: int, *, session_binding: str, secret: str):
+        """Create a short-lived, single-use TOTP enrollment ceremony."""
+        from .totp import generate_secret, provisioning_uri
+        now = utcnow()
+        enrollment_secret = generate_secret()
+        challenge_id = secrets.token_urlsafe(24)
+        encrypted = self._mfa_fernet(secret).encrypt(enrollment_secret.encode()).decode()
+        with self.db.session() as connection:
+            row = connection.execute("SELECT onboarding_state, mfa_enabled, email FROM users WHERE id=?", (user_id,)).fetchone()
+            if not row or row["onboarding_state"] != OnboardingState.MFA_ENROLLMENT_REQUIRED or row["mfa_enabled"]:
+                raise ValueError("mfa_enrollment_not_allowed")
+            connection.execute("UPDATE mfa_enrollment_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL", (now.isoformat(), user_id))
+            connection.execute("INSERT INTO mfa_enrollment_challenges(id,user_id,secret_ciphertext,session_binding,created_at,expires_at,attempts,max_attempts) VALUES(?,?,?,?,?,?,?,?)", (challenge_id, user_id, encrypted, session_binding, now.isoformat(), (now + timedelta(minutes=10)).isoformat(), 0, 5))
+        return challenge_id, provisioning_uri(enrollment_secret, row["email"])
+
+    def verify_mfa_enrollment(self, challenge_id: str, user_id: int, code: str, *, secret: str, session_binding: str):
+        """Confirm a TOTP ceremony and atomically enable MFA plus recovery codes."""
+        now = utcnow()
+        with self.db.session() as connection:
+            row = connection.execute("SELECT * FROM mfa_enrollment_challenges WHERE id=? AND user_id=?", (challenge_id, user_id)).fetchone()
+            if not row or row["consumed_at"] or row["session_binding"] != session_binding or datetime.fromisoformat(row["expires_at"]) <= now or row["attempts"] >= row["max_attempts"]:
+                return None
+            try:
+                totp_secret = self._mfa_fernet(secret).decrypt(row["secret_ciphertext"].encode(), ttl=900).decode()
+            except (InvalidToken, ValueError):
+                return None
+            if not verify_totp(totp_secret, code):
+                connection.execute("UPDATE mfa_enrollment_challenges SET attempts=attempts+1 WHERE id=? AND attempts < max_attempts", (challenge_id,))
+                return None
+            connection.execute("UPDATE mfa_enrollment_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL", (now.isoformat(), challenge_id))
+            updated = connection.execute("UPDATE users SET mfa_enabled=1, mfa_secret_ciphertext=?, mfa_enrolled_at=?, onboarding_state=? WHERE id=? AND onboarding_state=? AND COALESCE(mfa_enabled,0)=0", (row["secret_ciphertext"], now.isoformat(), OnboardingState.AUTHENTICATED, user_id, OnboardingState.MFA_ENROLLMENT_REQUIRED))
+            if updated.rowcount != 1: return None
+            recovery_codes = [secrets.token_hex(8).upper() for _ in range(8)]
+            for value in recovery_codes:
+                connection.execute("INSERT INTO mfa_recovery_codes(id,user_id,code_hash,created_at) VALUES(?,?,?,?)", (secrets.token_urlsafe(16), user_id, code_hash(value, secret), now.isoformat()))
+        return recovery_codes
+
+    def verify_mfa_code(self, user_id: int, code: str, *, secret: str) -> bool:
+        with self.db.session() as connection:
+            row = connection.execute("SELECT mfa_secret_ciphertext, mfa_enabled FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row or not row["mfa_enabled"] or not row["mfa_secret_ciphertext"]: return False
+        try:
+            totp_secret = self._mfa_fernet(secret).decrypt(row["mfa_secret_ciphertext"].encode()).decode()
+        except InvalidToken: return False
+        return verify_totp(totp_secret, code)
+
+    def consume_mfa_recovery_code(self, user_id: int, value: str, *, secret: str) -> bool:
+        submitted = code_hash(str(value or "").strip().upper(), secret)
+        with self.db.session() as connection:
+            cursor = connection.execute("UPDATE mfa_recovery_codes SET used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL", (utcnow().isoformat(), user_id, submitted))
+            return cursor.rowcount == 1
+
     def transition_onboarding(self, user_id: int, target: str, *, connection=None) -> User | None:
         """Advance one user through a valid server-side onboarding transition."""
         target = OnboardingState.validate(target)
@@ -369,6 +446,10 @@ class AuthService:
             if not row:
                 return None
             current = str(row["onboarding_state"] or OnboardingState.AUTHENTICATED)
+            if current == OnboardingState.MFA_ENROLLMENT_REQUIRED and target == OnboardingState.AUTHENTICATED:
+                enabled = owned_connection.execute("SELECT mfa_enabled FROM users WHERE id=?", (user_id,)).fetchone()
+                if not enabled or not enabled["mfa_enabled"]:
+                    raise ValueError("mfa_enrollment_required")
             next_state = OnboardingState.next(current, target)
             owned_connection.execute(
                 "UPDATE users SET onboarding_state=? WHERE id=?",
@@ -464,4 +545,5 @@ class AuthService:
             str(row["revocation_status"] or "active"), row["audit_correlation_id"],
             str(row["onboarding_state"] or OnboardingState.AUTHENTICATED),
             row["verification_method"] if "verification_method" in row.keys() else None,
+            bool(row["mfa_enabled"]) if "mfa_enabled" in row.keys() else False,
         )

@@ -131,7 +131,8 @@
           ? { challenge_id: state.emailChallenge || undefined, code: $("#login-code").value.trim(), remember_me: remember.checked }
           : { username: $("#login-username").value.trim(), password: password.value, remember_me: remember.checked };
         const endpoint = isEmail ? "/api/auth/email/verify-code" : "/api/auth/login";
-        const { response } = await request(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const { response, body } = await request(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (response.ok && (body.mfa_enrollment_required || body.status === "mfa_required")) { window.location.assign(body.mfa_enrollment_required ? "/mfa/enroll" : "/mfa/verify"); return; }
         if (response.ok) { statusFor(status, "Identity verified. Opening your workspace…", "success"); window.location.assign("/"); }
         else statusFor(status, isEmail ? "Verification failed or expired. Request a new code and try again." : "Sign-in failed. Check your credentials and try again.");
       } catch (_) { statusFor(status, "Sign-in is temporarily unavailable. Try again shortly."); }
@@ -329,9 +330,39 @@
     });
   }
 
+  function initMfa() {
+    const enrollForm = $("[data-mfa-enroll-form]");
+    const verifyForm = $("[data-mfa-verify-form]");
+    if (enrollForm) {
+      const message = $("[data-auth-status]"); const uri = $("[data-mfa-uri]");
+      request("/api/auth/mfa/enroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then(({ response, body }) => {
+        if (!response.ok) throw new Error(body.error || "mfa_enrollment_unavailable");
+        uri.href = body.provisioning_uri; uri.textContent = "Open provisioning URI in your authenticator"; uri.hidden = false; enrollForm.dataset.challengeId = body.challenge_id;
+      }).catch(() => statusFor(message, "MFA enrollment is temporarily unavailable."));
+      enrollForm.addEventListener("submit", async (event) => {
+        event.preventDefault(); const button = $("[type='submit']", enrollForm); busy(button, true);
+        try {
+          const { response, body } = await request("/api/auth/mfa/enroll/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: enrollForm.dataset.challengeId, code: $("#mfa-enroll-code").value.trim() }) });
+          if (!response.ok) throw new Error("mfa_verification_failed");
+          $("[data-mfa-enrollment]").hidden = true; $("[data-mfa-recovery]").hidden = false; $("[data-mfa-recovery-codes]").textContent = body.recovery_codes.join("\n"); statusFor(message, "MFA enabled. Save your recovery codes.", "success");
+        } catch (_) { statusFor(message, "Invalid or expired authenticator code."); }
+        busy(button, false, "Verify and enable MFA");
+      });
+    }
+    if (verifyForm) verifyForm.addEventListener("submit", async (event) => {
+      event.preventDefault(); const button = $("[type='submit']", verifyForm); busy(button, true);
+      try {
+        const recovery = $("#mfa-recovery-code").value.trim(); const { response } = await request("/api/auth/mfa/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: $("#mfa-code").value.trim(), recovery_code: recovery || undefined }) });
+        if (!response.ok) throw new Error("mfa_verification_failed"); window.location.assign("/");
+      } catch (_) { statusFor($("[data-auth-status]"), "MFA verification failed."); }
+      busy(button, false, "Verify and continue");
+    });
+  }
+
   enablePasswordToggles();
   showSignedOut();
   initLogin();
   initSignup();
   initRecovery();
+  initMfa();
 })();
