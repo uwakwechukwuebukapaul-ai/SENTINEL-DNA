@@ -335,7 +335,7 @@ export async function runControlledAnalystPilot({
   if (!browser || typeof browser.tabs?.new !== "function") throw new Error("approved trusted browser object is required");
   const safeOrigin = validateOrigin(origin);
   const safeRunId = requireRunId(runId);
-  const production = process.env?.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION === "true";
+  const production = Boolean(securityContext);
   let boundSecurityContext = null;
   if (securityContext) boundSecurityContext = createTenantContext(securityContext);
   if (production) {

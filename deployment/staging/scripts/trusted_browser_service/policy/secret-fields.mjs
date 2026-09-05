@@ -1,10 +1,11 @@
 const SECRET_PARTS = [
   "password", "passwd", "secret", "token", "api_key", "apikey",
-  "authorization", "cookie", "credential", "privatekey", "sessionid", "jwt",
+  "authorization", "cookie", "credential", "privatekey", "jwt",
 ];
 
 export function isSecretFieldName(key) {
   const normalized = String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normalized === "sessionid") return key !== "sessionId";
   return SECRET_PARTS.some((part) => normalized.includes(part.replace(/[^a-z0-9]/g, "")));
 }
 

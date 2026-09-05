@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   createApprovedBrowser,
+  createVerificationBrowser,
   TRUSTED_BROWSER_RUNTIME_ENVIRONMENT,
 } from "../../deployment/staging/scripts/trusted_browser_execution_adapter.mjs";
 
@@ -41,7 +42,7 @@ test("creates an approved browser only through the trusted runtime and checks br
     }
   `, async (modulePath) => {
     const expected = await import(pathToFileURL(modulePath).href);
-    const browser = await createApprovedBrowser({ browserClientModule: modulePath });
+    const browser = await createVerificationBrowser({ browserClientModule: modulePath });
 
     assert.strictEqual(browser, expected.browser);
     assert.deepEqual(browser.setupEnvironments, [TRUSTED_BROWSER_RUNTIME_ENVIRONMENT]);
@@ -60,7 +61,7 @@ test("exposes the missing upstream layer through the adapter without secrets", a
   delete process.env[envName];
   try {
     await assert.rejects(
-      createApprovedBrowser({ browserClientModule: serviceModule }),
+      createVerificationBrowser({ browserClientModule: serviceModule }),
       (error) => {
         assert.equal(error.code, "TB_PROVIDER_NOT_CONFIGURED");
         assert.match(error.message, /runtime setup failed at TB_PROVIDER_NOT_CONFIGURED/);
@@ -77,7 +78,7 @@ test("exposes the missing upstream layer through the adapter without secrets", a
 test("reports an upstream export failure without forwarding upstream error text", async () => {
   await withFakeClient(`export const notSetupBrowserRuntime = true;`, async (modulePath) => {
     await assert.rejects(
-      createApprovedBrowser({ browserClientModule: modulePath }),
+      createVerificationBrowser({ browserClientModule: modulePath }),
       (error) => {
         assert.equal(error.code, "TB_PROVIDER_EXPORT_INVALID");
         assert.match(error.message, /does not export setupBrowserRuntime/);
@@ -94,7 +95,7 @@ test("reports Playwright setup and browser selection failures by layer", async (
     }
   `, async (modulePath) => {
     await assert.rejects(
-      createApprovedBrowser({ browserClientModule: modulePath }),
+      createVerificationBrowser({ browserClientModule: modulePath }),
       (error) => {
         assert.equal(error.code, "TB_RUNTIME_UNAVAILABLE");
         assert.doesNotMatch(error.message, /password|must-not-escape/i);
@@ -109,7 +110,7 @@ test("reports Playwright setup and browser selection failures by layer", async (
     }
   `, async (modulePath) => {
     await assert.rejects(
-      createApprovedBrowser({ browserClientModule: modulePath }),
+      createVerificationBrowser({ browserClientModule: modulePath }),
       (error) => {
         assert.equal(error.code, "TB_BROWSER_SELECTION_FAILED");
         assert.doesNotMatch(error.message, /token|must-not-escape/i);
@@ -134,7 +135,7 @@ test("fails closed when the selected browser has no browserAuth capability", asy
     }
   `, async (modulePath) => {
     await assert.rejects(
-      createApprovedBrowser({ browserClientModule: modulePath }),
+      createVerificationBrowser({ browserClientModule: modulePath }),
       /browserAuth capability/,
     );
   });
@@ -142,7 +143,7 @@ test("fails closed when the selected browser has no browserAuth capability", asy
 
 test("rejects an origin outside the certified staging contract", async () => {
   await assert.rejects(
-    createApprovedBrowser({ origin: "https://example.invalid:18443", browserClientModule: "unused" }),
+    createVerificationBrowser({ origin: "https://example.invalid:18443", browserClientModule: "unused" }),
     /certified origin/,
   );
 });
@@ -152,6 +153,60 @@ test("wrapper delegates browser creation and has no credential CLI inputs", asyn
   assert.match(wrapper, /createApprovedBrowser/);
   assert.match(wrapper, /checkControlledPilotReadiness/);
   assert.match(wrapper, /TB_PILOT_READINESS_BLOCKED/);
-  assert.match(wrapper, /runControlledAnalystPilot\(\{ browser, runId \}/);
+  assert.match(wrapper, /runControlledAnalystPilot\(\{ browser, runId, securityContext \}/);
   assert.doesNotMatch(wrapper, /password|activation[_-]?token|csrf[_-]?token|cookie|authorization/i);
+});
+
+test("production caller is RPC-only when the legacy routing flag is absent", async () => {
+  const names = ["SENTINEL_DNA_ENV", "SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION", "SENTINEL_DNA_CERTIFIED_ORIGIN", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT"];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.SENTINEL_DNA_ENV = "production";
+  delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION;
+  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+  delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY;
+  delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST;
+  delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT;
+  try {
+    await assert.rejects(
+      createApprovedBrowser({
+        tenantContext: { tenantId: "tenant-a", subjectId: "subject-a", sessionId: "session-a", authorizationContext: "analyst" },
+        browserClientModule: fileURLToPath(new URL("./fixtures/trusted-playwright-adapter-stub.mjs", import.meta.url)),
+      }),
+      (error) => error.code === "TB_RPC_CONFIGURATION_INVALID",
+    );
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name];
+    }
+  }
+});
+
+test("configured production caller selects RPC and never imports the local client", async () => {
+  const names = ["SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION", "SENTINEL_DNA_CERTIFIED_ORIGIN", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT"];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+  delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION;
+  process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY = "c".repeat(32);
+  process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST = "trusted-browser";
+  process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT = "3000";
+  const calls = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    calls.push(JSON.parse(Buffer.from(options.body).toString("utf8")));
+    const operation = calls.at(-1).operation;
+    return { ok: true, status: 200, json: async () => ({ ok: true, result: operation === "health" ? { serviceEpoch: "rpc-epoch", status: "ok" } : operation === "create_session" ? { sessionId: "rpc-session", identityBinding: "rpc-identity", serviceEpoch: "rpc-epoch" } : { closed: true } }) };
+  };
+  try {
+    const browser = await createApprovedBrowser({
+      tenantContext: { tenantId: "tenant-a", subjectId: "subject-a", sessionId: "session-a", authorizationContext: "analyst" },
+      browserClientModule: "this-must-not-be-loaded.mjs",
+    });
+    assert.equal(calls.find((operation) => operation.operation === "create_session").operation, "create_session");
+    await browser.close();
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name];
+    }
+  }
 });

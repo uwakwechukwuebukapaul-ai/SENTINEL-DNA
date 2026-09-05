@@ -11,8 +11,8 @@ function operatorRunId() {
   return "pilot-manual-001";
 }
 
-export async function executeControlledAnalystPilot({ runId = operatorRunId() } = {}) {
-  const readiness = await checkControlledPilotReadiness();
+export async function executeControlledAnalystPilot({ runId = operatorRunId(), securityContext = undefined } = {}) {
+  const readiness = await checkControlledPilotReadiness({ requireRpc: true });
   if (readiness.status !== READINESS_READY_STATUS) {
     const blocker = readiness.checks.find((check) => check.status !== "PASS");
     const error = new Error("controlled analyst pilot readiness is blocked");
@@ -23,8 +23,8 @@ export async function executeControlledAnalystPilot({ runId = operatorRunId() } 
     };
     throw error;
   }
-  const browser = await createApprovedBrowser();
-  return runControlledAnalystPilot({ browser, runId });
+  const browser = await createApprovedBrowser({ tenantContext: securityContext });
+  return runControlledAnalystPilot({ browser, runId, securityContext });
 }
 
 function safeSummary(result) {

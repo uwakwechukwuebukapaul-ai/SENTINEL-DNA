@@ -182,6 +182,7 @@ export async function setupBrowserRuntime(options = {}) {
   let runtime;
   try {
     const runtimeOptions = { environment: TRUSTED_BROWSER_ENVIRONMENT };
+    if (options.securityMode) runtimeOptions.securityMode = options.securityMode;
     if (options.certifiedOrigin) runtimeOptions.certifiedOrigin = options.certifiedOrigin;
     if (options.tenantContext) runtimeOptions.tenantContext = options.tenantContext;
     runtime = await runtimeModule.setupBrowserRuntime(runtimeOptions);

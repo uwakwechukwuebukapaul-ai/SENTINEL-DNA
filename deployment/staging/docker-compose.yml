@@ -69,6 +69,11 @@ services:
       SENTINEL_DNA_FAVP_OPERATIONS_ENABLED: ${SENTINEL_DNA_FAVP_OPERATIONS_ENABLED:-0}
       SENTINEL_DNA_FAVP_SYNTHETIC_ONLY: ${SENTINEL_DNA_FAVP_SYNTHETIC_ONLY:-1}
       SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY:?set external trusted-browser service key}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST:?set trusted-browser service host}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT:?set trusted-browser service port}
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE: single-instance
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLICA_COUNT: "1"
       SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
@@ -93,8 +98,47 @@ services:
     networks:
       - staging_edge
       - staging_internal
+      - trusted_browser_control
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  trusted-browser:
+    image: ${SENTINEL_DNA_TRUSTED_BROWSER_IMAGE:?set immutable trusted-browser image}
+    restart: "no"
+    init: true
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    shm_size: "1gb"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./trusted_browser_runtime/seccomp-chromium.json
+    environment:
+      SENTINEL_DNA_ENV: staging
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY:?set external trusted-browser service key}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST:?set trusted-browser service host}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT:?set trusted-browser service port}
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE: single-instance
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLICA_COUNT: "1"
+      SENTINEL_DNA_CERTIFIED_ORIGIN: ${SENTINEL_DNA_CERTIFIED_ORIGIN:?set certified origin}
+      SENTINEL_DNA_APPROVED_RUNTIME_DIGEST: ${SENTINEL_DNA_APPROVED_RUNTIME_DIGEST:?set approved runtime digest}
+      SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST: ${SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST:?set activation manifest}
+      SENTINEL_DNA_IMAGE_DIGEST: ${SENTINEL_DNA_IMAGE_DIGEST:?set immutable image digest}
+      SENTINEL_DNA_EGRESS_POLICY_REFERENCE: ${SENTINEL_DNA_EGRESS_POLICY_REFERENCE:?set egress policy reference}
+      SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY:?set egress readiness}
+    expose:
+      - "3000"
+    networks:
+      - trusted_browser_control
+      - trusted_browser_egress
+    healthcheck:
+      test: ["CMD", "node", "deployment/staging/trusted_browser_runtime/healthcheck.mjs"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -185,6 +229,11 @@ networks:
   staging_edge:
   staging_internal:
     internal: true
+  trusted_browser_control:
+    internal: true
+  trusted_browser_egress:
+    name: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_NETWORK:?set controlled browser egress network}
+    external: true
 
 secrets:
   staging_app_secret_key:

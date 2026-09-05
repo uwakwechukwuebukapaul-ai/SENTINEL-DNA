@@ -1,0 +1,12 @@
+{
+  "comment": "Sentinel DNA Gate 4 Chromium sandbox profile; review against the deployed Docker default profile before activation.",
+  "names": [
+    "clone",
+    "setns",
+    "unshare"
+  ],
+  "action": "SCMP_ACT_ALLOW",
+  "args": [],
+  "includes": {},
+  "excludes": {}
+}

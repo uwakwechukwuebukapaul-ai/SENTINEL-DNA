@@ -36,7 +36,7 @@ export function createTrustedRuntimeProvider(provider) {
   }
 
   return Object.freeze({
-    setupBrowserRuntime: async ({ environment, certifiedOrigin, tenantContext } = {}) => {
+    setupBrowserRuntime: async ({ environment, certifiedOrigin, tenantContext, securityMode } = {}) => {
       if (environment !== TRUSTED_BROWSER_ENVIRONMENT) {
         throw trustedBrowserError(
           "TB_RUNTIME_UNAVAILABLE",
@@ -48,6 +48,7 @@ export function createTrustedRuntimeProvider(provider) {
           environment: TRUSTED_BROWSER_ENVIRONMENT,
           ...(certifiedOrigin === undefined ? {} : { certifiedOrigin }),
           ...(tenantContext === undefined ? {} : { tenantContext }),
+          ...(securityMode === undefined ? {} : { securityMode }),
         });
       } catch {
         throw trustedBrowserError(

@@ -339,11 +339,22 @@ function createPlaywrightSurface(page) {
           !["GET", "POST"].includes(method) || typeof csrfRequired !== "boolean") {
         throw trustedBrowserError("TB_REQUEST_INVALID", "same-origin request is restricted");
       }
+      if (method === "POST" && csrfRequired !== true) {
+        throw trustedBrowserError("TB_CSRF_REQUIRED", "same-origin writes require CSRF protection");
+      }
       return page.evaluate(async (input) => {
+        const headers = { Accept: "application/json" };
+        if (input.body !== undefined) headers["Content-Type"] = "application/json";
+        if (input.csrfRequired) {
+          const csrfResponse = await fetch("/api/auth/csrf", { credentials: "same-origin" });
+          const csrfPayload = await csrfResponse.json().catch(() => ({}));
+          if (typeof csrfPayload.csrf_token !== "string") throw new Error("TB_CSRF_UNAVAILABLE");
+          headers["X-CSRF-Token"] = csrfPayload.csrf_token;
+        }
         const response = await fetch(input.path, {
           method: input.method,
           credentials: "same-origin",
-          headers: { Accept: "application/json" },
+          headers,
           body: input.body === undefined ? undefined : JSON.stringify(input.body),
         });
         return { status: response.status, body: await response.json().catch(() => null) };
@@ -555,7 +566,7 @@ function createTrustedBrowser(browser, authBridgeState, diagnostics, policy) {
   });
 }
 
-export async function setupBrowserRuntime({ environment, certifiedOrigin = CERTIFIED_ORIGIN, tenantContext } = {}) {
+export async function setupBrowserRuntime({ environment, certifiedOrigin = CERTIFIED_ORIGIN, tenantContext, securityMode } = {}) {
   assertEnvironment(environment);
 
   assertNoCredentialFields({ environment, certifiedOrigin });
@@ -563,7 +574,7 @@ export async function setupBrowserRuntime({ environment, certifiedOrigin = CERTI
   const policy = createRuntimePolicy({
     certifiedOrigin: expectedOrigin,
     tenantContext,
-    production: process.env?.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION === "true",
+    production: securityMode === "trusted-rpc",
   });
 
   const diagnostics = createTrustedBrowserDiagnostics();

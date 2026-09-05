@@ -14,16 +14,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
 import {
-  TRUSTED_BROWSER_CLIENT_ENV,
-} from "./trusted_browser_execution_adapter.mjs";
-import {
-  CERTIFIED_ORIGIN,
-  APPROVED_PLAYWRIGHT_RUNTIME_ENV,
-} from "./trusted_browser_service/providers/playwright-runtime-provider.mjs";
-import {
-  TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
-} from "./trusted_browser_service/browser-client.mjs";
-import { verifyTrustedBrowserProvider } from "./verify_trusted_browser_provider.mjs";
+  SERVICE_KEY_ENV as TRUSTED_BROWSER_SERVICE_KEY_ENV,
+  SERVICE_HOST_ENV as TRUSTED_BROWSER_SERVICE_HOST_ENV,
+  SERVICE_PORT_ENV as TRUSTED_BROWSER_SERVICE_PORT_ENV,
+} from "../trusted_browser_runtime/rpc-client.mjs";
+import { configuredCertifiedOrigin } from "./trusted_browser_service/policy/origin-policy.mjs";
 import {
   loadActivationManifest,
 } from "./trusted_browser_activation_manifest.mjs";
@@ -33,6 +28,9 @@ import {
 const DEFAULT_EVIDENCE_DIR = "C:/ProgramData/Sentinel-DNA/release/evidence";
 const STAGING_TLS_CA_FILE_ENV = "SENTINEL_DNA_STAGING_TLS_CA_FILE";
 const STAGING_TLS_DIR_ENV = "SENTINEL_DNA_STAGING_TLS_DIR";
+const TRUSTED_BROWSER_CLIENT_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT";
+const TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT";
+const APPROVED_PLAYWRIGHT_RUNTIME_ENV = "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME";
 export const READINESS_READY_STATUS = "READY_FOR_ANALYST_PILOT";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -136,20 +134,26 @@ function certifiedOriginReachable(origin) {
   });
 }
 
-async function providerConfigured() {
+async function providerConfigured(requireRpc = false) {
+  if (requireRpc) return hasValue(TRUSTED_BROWSER_SERVICE_KEY_ENV) && hasValue(TRUSTED_BROWSER_SERVICE_HOST_ENV) && hasValue(TRUSTED_BROWSER_SERVICE_PORT_ENV);
   return hasValue(TRUSTED_BROWSER_CLIENT_ENV) &&
     hasValue(TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV) &&
     hasValue(APPROVED_PLAYWRIGHT_RUNTIME_ENV);
 }
 
-async function checkProvider(providerVerification) {
-  if (!(await providerConfigured())) {
+async function checkProvider(providerVerification, requireRpc = false) {
+  if (!(await providerConfigured(requireRpc))) {
     return result("provider_configured", "BLOCKED", "required trusted browser provider configuration is missing");
+  }
+
+  if (requireRpc) {
+    return result("rpc_configured", "PASS", "authenticated trusted-browser RPC configuration is present");
   }
 
   let verification;
   try {
-    verification = providerVerification || await verifyTrustedBrowserProvider();
+    if (providerVerification) verification = providerVerification;
+    else verification = await (await import("./verify_trusted_browser_provider.mjs")).verifyTrustedBrowserProvider();
   } catch {
     return result("provider_verification", "BLOCKED", "TB_RUNTIME_UNAVAILABLE");
   }
@@ -167,6 +171,7 @@ export async function checkControlledPilotReadiness({
   evidenceDir = DEFAULT_EVIDENCE_DIR,
   originReachability = certifiedOriginReachable,
   providerVerification = undefined,
+  requireRpc = false,
 } = {}) {
   const checks = [];
   checks.push(result(
@@ -209,7 +214,7 @@ export async function checkControlledPilotReadiness({
     checks.push(result("activation_manifest", "BLOCKED", code));
   }
 
-  const configured = await providerConfigured();
+  const configured = await providerConfigured(requireRpc);
   checks.push(result(
     "provider_configured",
     configured ? "PASS" : "BLOCKED",
@@ -217,7 +222,7 @@ export async function checkControlledPilotReadiness({
       ? "trusted browser provider configuration is present"
       : "required trusted browser provider configuration is missing",
   ));
-  if (configured) checks.push(await checkProvider(providerVerification));
+  if (configured) checks.push(await checkProvider(providerVerification, requireRpc));
   else checks.push(result("provider_verification", "BLOCKED", "TB_PROVIDER_NOT_CONFIGURED"));
 
   const evidenceWritable = await isWritableDirectory(evidenceDir);
@@ -242,7 +247,7 @@ export async function checkControlledPilotReadiness({
 
   let originPass = false;
   try {
-    originPass = await originReachability(CERTIFIED_ORIGIN);
+    originPass = await originReachability(configuredCertifiedOrigin());
   } catch {
     originPass = false;
   }
@@ -273,7 +278,7 @@ export async function checkControlledPilotReadiness({
 
 const invokedAsMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedAsMain) {
-  const readiness = await checkControlledPilotReadiness();
+  const readiness = await checkControlledPilotReadiness({ requireRpc: true });
   console.log(JSON.stringify(readiness, null, 2));
   process.exitCode = readiness.status === READINESS_READY_STATUS ? 0 : 1;
 }

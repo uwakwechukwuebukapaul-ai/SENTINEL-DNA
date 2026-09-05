@@ -17,6 +17,7 @@ import {
   TRUSTED_BROWSER_TIMEOUTS,
 } from "./trusted_browser_diagnostics.mjs";
 import { assertRestrictedBrowserSurface } from "./trusted_browser_service/policy/capability-policy.mjs";
+import { createRpcBrowser } from "../trusted_browser_runtime/rpc-client.mjs";
 
 export const TRUSTED_BROWSER_CLIENT_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT";
 export const TRUSTED_BROWSER_RUNTIME_ENVIRONMENT = "codex-app";
@@ -106,7 +107,7 @@ function assertCertifiedOrigin(origin) {
   }
 }
 
-async function assertBrowserContract(browser, diagnostics) {
+async function assertBrowserContract(browser, diagnostics, { strict = true } = {}) {
   assertRestrictedBrowserSurface(browser);
   if (!browser || typeof browser.tabs?.new !== "function") {
     throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "trusted browser service returned an invalid browser");
@@ -130,7 +131,7 @@ async function assertBrowserContract(browser, diagnostics) {
         (typeof probeTab.playwright?.evaluate !== "function" && typeof probeTab.playwright?.getTitle !== "function")) {
       throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "approved browser is missing the runner Playwright surface");
     }
-    if (process.env?.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION === "true" &&
+    if (strict &&
         (typeof probeTab.playwright.getTitle !== "function" ||
          typeof probeTab.playwright.getVisibleText !== "function" ||
          typeof probeTab.playwright.getApprovedAttribute !== "function" ||
@@ -177,6 +178,24 @@ async function assertBrowserContract(browser, diagnostics) {
  * SENTINEL_DNA_TRUSTED_BROWSER_CLIENT.
  */
 export async function createApprovedBrowser({
+  origin = configuredCertifiedOrigin(),
+  tenantContext = undefined,
+} = {}) {
+  assertCertifiedOrigin(origin);
+  if (!tenantContext) throw trustedBrowserError("TB_AUDIT_CONTEXT_MISSING", "trusted-browser RPC requires a bound security context");
+  try {
+    const browser = createRpcBrowser({ origin, tenantContext });
+    await assertBrowserContract(browser, createTrustedBrowserDiagnostics());
+    return browser;
+  } catch (error) {
+    if (error?.code?.startsWith("TB_")) throw error;
+    throw trustedBrowserError("TB_RPC_UNAVAILABLE", "trusted-browser RPC client failed closed");
+  }
+}
+
+// Verification-only local provider adapter. It is not imported by the
+// production pilot entry point.
+export async function createVerificationBrowser({
   origin = configuredCertifiedOrigin(),
   browserClientModule = undefined,
   tenantContext = undefined,
@@ -269,7 +288,7 @@ export async function createApprovedBrowser({
     );
   }
   try {
-    await assertBrowserContract(browser, diagnostics);
+    await assertBrowserContract(browser, diagnostics, { strict: false });
   } catch (error) {
     if (browser && typeof browser.close === "function") {
       await diagnostics.run(
