@@ -27,6 +27,11 @@ export const EXPECTED_FILES = Object.freeze([
 ]);
 
 const SHA256 = /^sha256:[0-9a-f]{64}$/i;
+const IMMUTABLE_IMAGE_REFERENCE = /^\S+@sha256:[0-9a-f]{64}$/i;
+
+export function isImmutableImageReference(value) {
+  return typeof value === "string" && IMMUTABLE_IMAGE_REFERENCE.test(value.trim());
+}
 
 function fail(code, details = undefined) {
   const error = new Error(code);
@@ -84,8 +89,13 @@ export function buildInputManifest({ root = ROOT, env = process.env } = {}) {
   const executableDigest = optionalDigest(env.SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256);
   const executableAvailable = executablePath && existsSync(executablePath) && statSync(executablePath).isFile();
   const executableObservedDigest = executableAvailable ? sha256(readFileSync(executablePath)) : null;
+  const executableObservedSize = executableAvailable ? statSync(executablePath).size : null;
   const baseReference = env.PLAYWRIGHT_BASE_IMAGE?.trim() || null;
   const baseDigest = optionalDigest(env.SENTINEL_DNA_BASE_IMAGE_DIGEST);
+  const baseIndexDigest = optionalDigest(env.SENTINEL_DNA_BASE_IMAGE_OCI_INDEX_DIGEST);
+  const referencedManifestDigest = baseReference?.match(/@(?<digest>sha256:[0-9a-f]{64})$/i)?.groups?.digest?.toLowerCase() || null;
+  const baseManifestDigest = optionalDigest(env.SENTINEL_DNA_BASE_IMAGE_MANIFEST_DIGEST) || referencedManifestDigest;
+  const basePlatform = env.SENTINEL_DNA_BASE_IMAGE_PLATFORM?.trim() || null;
   const baseDigestVerified = env.SENTINEL_DNA_BASE_IMAGE_DIGEST_VERIFIED === "true";
   const platform = env.SENTINEL_DNA_BROWSER_PLATFORM?.trim() || null;
   const architecture = env.SENTINEL_DNA_BROWSER_ARCH?.trim() || null;
@@ -117,7 +127,10 @@ export function buildInputManifest({ root = ROOT, env = process.env } = {}) {
       platform,
       architecture,
       path: executablePath,
+      size: executableObservedSize,
       sha256: executableObservedDigest,
+      revision: browserMetadata.revision || null,
+      browserVersion: browserMetadata.browserVersion || null,
       status: executableAvailable && executableDigest && executableObservedDigest === executableDigest.slice("sha256:".length) ? "VERIFIED" : "BLOCKED",
       reason: executableAvailable && executableDigest
         ? (executableObservedDigest === executableDigest.slice("sha256:".length) ? null : "LINUX_BROWSER_DIGEST_MISMATCH")
@@ -126,10 +139,20 @@ export function buildInputManifest({ root = ROOT, env = process.env } = {}) {
     baseImage: {
       reference: baseReference,
       digest: baseDigest,
-      status: baseReference && baseDigest && baseDigestVerified ? "VERIFIED" : "BLOCKED",
-      reason: baseReference && baseDigest
-        ? (baseDigestVerified ? null : "BASE_IMAGE_REGISTRY_VERIFICATION_REQUIRED")
-        : "BASE_IMAGE_REFERENCE_OR_DIGEST_UNAVAILABLE",
+      ociIndexDigest: baseIndexDigest,
+      manifestDigest: baseManifestDigest,
+      platform: basePlatform,
+      immutableReference: isImmutableImageReference(baseReference),
+      status: isImmutableImageReference(baseReference) && baseDigest && baseDigestVerified && baseManifestDigest === referencedManifestDigest ? "VERIFIED" : "BLOCKED",
+      reason: !baseReference
+        ? "BASE_IMAGE_REFERENCE_OR_DIGEST_UNAVAILABLE"
+        : !isImmutableImageReference(baseReference)
+          ? "BASE_IMAGE_REFERENCE_NOT_IMMUTABLE"
+          : !baseDigest
+            ? "BASE_IMAGE_REFERENCE_OR_DIGEST_UNAVAILABLE"
+            : baseManifestDigest !== referencedManifestDigest
+              ? "BASE_IMAGE_MANIFEST_DIGEST_MISMATCH"
+              : (baseDigestVerified ? null : "BASE_IMAGE_REGISTRY_VERIFICATION_REQUIRED"),
     },
   };
 
@@ -140,6 +163,7 @@ export function buildInputManifest({ root = ROOT, env = process.env } = {}) {
 }
 
 export function assertProductionInputs(manifest, env = process.env) {
+  if (!isImmutableImageReference(env.PLAYWRIGHT_BASE_IMAGE)) fail("TB_IMAGE_BASE_REFERENCE_NOT_IMMUTABLE");
   if (env.SENTINEL_DNA_BROWSER_PLATFORM !== "linux" || env.SENTINEL_DNA_BROWSER_ARCH !== "x64") {
     fail("TB_IMAGE_BROWSER_PLATFORM_MISMATCH");
   }

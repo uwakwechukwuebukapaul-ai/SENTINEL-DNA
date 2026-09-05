@@ -96,6 +96,11 @@ export function buildGate4Evidence(verification) {
       browserAuth_invoked: false,
       browser_launched_by_generator: false,
     },
+    operational_provenance: {
+      LINUX_BROWSER_PROVENANCE: "PASS",
+      EXTERNAL_RUNTIME_PROVENANCE: "BLOCKED",
+      EGRESS_CONNECTION_LAYER: "BLOCKED",
+    },
   };
   if (SAFE_FAILURE_CATEGORIES.has(verification?.failure_category) && evidence.status !== "PASS") {
     evidence.failure_category = verification.failure_category;

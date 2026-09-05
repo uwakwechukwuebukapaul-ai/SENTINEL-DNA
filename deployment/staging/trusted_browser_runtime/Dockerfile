@@ -5,6 +5,11 @@ FROM ${PLAYWRIGHT_BASE_IMAGE}
 
 USER root
 
+ARG PLAYWRIGHT_BASE_IMAGE
+# Release images must be addressed by a content digest. A mutable tag is never
+# accepted, and malformed digests fail the build before any image is produced.
+RUN node -e "const v=process.env.PLAYWRIGHT_BASE_IMAGE||''; if (!/^\\S+@sha256:[0-9a-f]{64}$/i.test(v)) { console.error('TB_IMAGE_BASE_REFERENCE_NOT_IMMUTABLE'); process.exit(1); }"
+
 ARG SENTINEL_DNA_SOURCE_COMMIT
 ARG SENTINEL_DNA_SOURCE_TREE
 ARG SENTINEL_DNA_ARTIFACT_SHA256

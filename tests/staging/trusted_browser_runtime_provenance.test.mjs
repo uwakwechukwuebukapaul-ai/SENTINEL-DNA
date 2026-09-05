@@ -12,6 +12,7 @@ import {
 import {
   buildInputManifest,
   assertProductionInputs,
+  isImmutableImageReference,
 } from "../../deployment/staging/trusted_browser_runtime/verify-image-inputs.mjs";
 
 const ROOT = new URL("../../", import.meta.url);
@@ -32,6 +33,25 @@ test("build-context policy requires explicit sensitive-data exclusions and rejec
   );
 });
 
+test("Playwright base image requires an immutable sha256 reference", () => {
+  assert.equal(isImmutableImageReference("mcr.microsoft.com/playwright:v1.62.1-noble"), false);
+  assert.equal(isImmutableImageReference("mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac"), true);
+  assert.equal(isImmutableImageReference("mcr.microsoft.com/playwright:v1.62.1-noble@sha256:abc"), false);
+});
+
+test("recorded Docker/browser evidence is observed release evidence", () => {
+  const evidence = JSON.parse(readFileSync(new URL("../../provenance/gate4-docker-browser-provenance.json", import.meta.url), "utf8"));
+  assert.equal(evidence.runtime_configuration, false);
+  assert.equal(evidence.docker.linux_amd64_manifest.platform, "linux/amd64");
+  assert.equal(evidence.browser.revision, "1234");
+  assert.equal(evidence.browser.version, "151.0.7922.34");
+  assert.equal(evidence.browser.executable_size, 290614600);
+  assert.equal(evidence.browser.executable_sha256, "0b20b130e7edd9dd51873be867761295fe0cfad490c2b9a64f95bd3cfc08fa71");
+  assert.equal(evidence.gate4_status.LINUX_BROWSER_PROVENANCE, "PASS");
+  assert.equal(evidence.gate4_status.EXTERNAL_RUNTIME_PROVENANCE, "BLOCKED");
+  assert.equal(evidence.gate4_status.EGRESS_CONNECTION_LAYER, "BLOCKED");
+});
+
 test("build-input manifest marks unavailable external and Linux browser identities blocked", () => {
   const manifest = buildInputManifest({
     root: fileURLToPath(ROOT),
@@ -47,12 +67,38 @@ test("build-input manifest marks unavailable external and Linux browser identiti
   assert.equal(manifest.playwright.status, "VERIFIED");
   assert.equal(manifest.playwright.revision, "1234");
   assert.equal(manifest.playwright.browserVersion, "151.0.7922.34");
+  assert.equal(manifest.browserExecutable.revision, "1234");
+  assert.equal(manifest.browserExecutable.browserVersion, "151.0.7922.34");
   assert.equal(manifest.runtimeModule.status, "BLOCKED");
   assert.equal(manifest.browserExecutable.status, "BLOCKED");
   assert.equal(manifest.browserExecutable.platform, "linux");
   assert.equal(manifest.browserExecutable.architecture, "x64");
   assert.equal(manifest.baseImage.status, "BLOCKED");
   assert.ok(manifest.includedSourceFiles.some(({ path }) => path.endsWith("runtime-service.mjs")));
+});
+
+test("observed Linux/amd64 image and browser evidence is represented without runtime configuration", () => {
+  const manifest = buildInputManifest({
+    root: fileURLToPath(ROOT),
+    env: {
+      PLAYWRIGHT_BASE_IMAGE: "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac",
+      SENTINEL_DNA_BASE_IMAGE_DIGEST: "sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac",
+      SENTINEL_DNA_BASE_IMAGE_OCI_INDEX_DIGEST: "sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e",
+      SENTINEL_DNA_BASE_IMAGE_PLATFORM: "linux/amd64",
+      SENTINEL_DNA_BASE_IMAGE_DIGEST_VERIFIED: "true",
+      SENTINEL_DNA_BROWSER_PLATFORM: "linux",
+      SENTINEL_DNA_BROWSER_ARCH: "x64",
+      SENTINEL_DNA_BROWSER_EXECUTABLE: "missing-browser",
+      SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256: "sha256:0b20b130e7edd9dd51873be867761295fe0cfad490c2b9a64f95bd3cfc08fa71",
+    },
+  });
+  assert.equal(manifest.baseImage.status, "VERIFIED");
+  assert.equal(manifest.baseImage.ociIndexDigest, "sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e");
+  assert.equal(manifest.baseImage.manifestDigest, "sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac");
+  assert.equal(manifest.baseImage.platform, "linux/amd64");
+  assert.equal(manifest.browserExecutable.sha256, null);
+  assert.equal(manifest.playwright.revision, "1234");
+  assert.equal(manifest.playwright.browserVersion, "151.0.7922.34");
 });
 
 test("Windows browser identity cannot satisfy the Linux runtime contract", () => {
@@ -71,6 +117,7 @@ test("Windows browser identity cannot satisfy the Linux runtime contract", () =>
   assert.equal(manifest.browserExecutable.reason, "LINUX_BROWSER_BYTES_OR_DIGEST_UNAVAILABLE");
   assert.throws(
     () => assertProductionInputs(manifest, {
+      PLAYWRIGHT_BASE_IMAGE: "example.invalid/browser@sha256:" + "a".repeat(64),
       SENTINEL_DNA_BROWSER_PLATFORM: "windows",
       SENTINEL_DNA_BROWSER_ARCH: "x64",
       SENTINEL_DNA_BROWSER_EXECUTABLE: "C:/browser/chrome-win64/chrome.exe",
