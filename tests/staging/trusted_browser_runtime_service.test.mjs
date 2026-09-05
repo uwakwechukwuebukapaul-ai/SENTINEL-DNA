@@ -60,7 +60,7 @@ test("production service rejects test-injected runtime factories", () => {
   assert.throws(() => createTrustedBrowserService({ runtimeSetup: async () => ({}), testOnly: false }), { code: "TB_TEST_DEPENDENCY_REJECTED" });
 });
 
-function testRuntime() {
+function testRuntime(tabOverrides = {}) {
   const locator = {
     async isVisible() { return true; },
     async innerText() { return "safe text"; },
@@ -76,7 +76,8 @@ function testRuntime() {
       async requestJson(input) { return { status: 200, body: { path: input.path, method: input.method, csrfRequired: input.csrfRequired } }; },
       locator() { return locator; },
     },
-    browserAuth: { async request() { return { status: "submitted" }; } },
+    capabilities: { async get(name) { return name === "browserAuth" ? { async request() { return { status: "submitted" }; } } : undefined; } },
+    ...tabOverrides,
   };
   return {
     async setup() {
@@ -97,9 +98,42 @@ test("service boundary binds context and returns only serializable capabilities"
   await assert.rejects(() => service.handle({ operation: "get_title", sessionId: created.sessionId, securityContext: { ...CONTEXT, tenantId: "tenant-b" } }, "request-b"), { code: "TB_TENANT_CONTEXT_MISMATCH" });
   const title = await service.handle({ operation: "get_title", sessionId: created.sessionId, securityContext: CONTEXT }, "request-c");
   assert.deepEqual(title, { value: "safe title" });
+  const auth = await service.handle({ operation: "browser_auth", sessionId: created.sessionId, securityContext: CONTEXT, fields: [{ id: "username", label: "Username", type: "text", selector: "#username" }] }, "request-auth");
+  assert.deepEqual(auth, { status: "submitted" });
   await assert.rejects(() => service.handle({ operation: "unknown_privileged_operation", sessionId: created.sessionId, securityContext: CONTEXT }, "request-d"), { code: "TB_RPC_OPERATION_UNAUTHORIZED" });
   await assert.rejects(() => service.handle({ operation: "locator_create", selector: "body", password: "secret", securityContext: CONTEXT, sessionId: created.sessionId }, "request-e"), { code: "TB_CREDENTIAL_FIELD_REJECTED" });
   await service.handle({ operation: "close_session", sessionId: created.sessionId, securityContext: CONTEXT }, "request-f");
+});
+
+test("BrowserAuth cannot fall back to the incompatible direct tab.browserAuth surface", async () => {
+  const service = createTrustedBrowserService({
+    runtimeSetup: async () => testRuntime({
+      capabilities: undefined,
+      browserAuth: { async request() { return { status: "must-not-succeed" }; } },
+    }).setup(),
+    testOnly: true,
+    auditSink: async () => {},
+  });
+  const created = await service.handle({ operation: "create_session", certifiedOrigin: ORIGIN, securityContext: CONTEXT }, "old-contract-create");
+  await assert.rejects(
+    () => service.handle({ operation: "browser_auth", sessionId: created.sessionId, securityContext: CONTEXT, fields: [{ id: "username", label: "Username", type: "text", selector: "#username" }] }, "old-contract-auth"),
+    { code: "TB_AUTH_CAPABILITY_MISSING" },
+  );
+});
+
+test("BrowserAuth rejects missing and malformed capabilities", async () => {
+  for (const capabilities of [undefined, { get: async () => undefined }, { get: "not-a-function" }]) {
+    const service = createTrustedBrowserService({
+      runtimeSetup: async () => testRuntime({ capabilities }).setup(),
+      testOnly: true,
+      auditSink: async () => {},
+    });
+    const created = await service.handle({ operation: "create_session", certifiedOrigin: ORIGIN, securityContext: CONTEXT }, "capability-create");
+    await assert.rejects(
+      () => service.handle({ operation: "browser_auth", sessionId: created.sessionId, securityContext: CONTEXT, fields: [{ id: "username", label: "Username", type: "text", selector: "#username" }] }, "capability-auth"),
+      { code: "TB_AUTH_CAPABILITY_MISSING" },
+    );
+  }
 });
 
 test("session security identity binding rejects changed runtime identity", async () => {

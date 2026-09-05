@@ -266,6 +266,21 @@ export function createTrustedBrowserService({
       result = { locatorId: opaqueId("l"), selector };
       session.locators ||= new Map();
       session.locators.set(result.locatorId, session.tab.playwright.locator(selector));
+    } else if (operation === "browser_auth") {
+      const capabilities = session.tab?.capabilities;
+      if (!capabilities || typeof capabilities.get !== "function") throw serviceError("TB_AUTH_CAPABILITY_MISSING");
+      let browserAuth;
+      try {
+        browserAuth = await capabilities.get("browserAuth");
+      } catch {
+        throw serviceError("TB_AUTH_CAPABILITY_MISSING");
+      }
+      if (!browserAuth || typeof browserAuth.request !== "function") throw serviceError("TB_AUTH_CAPABILITY_MISSING");
+      const authResult = await browserAuth.request({
+        securityContext: context,
+        request: { origin: session.origin, fields: request.fields, ...(request.submit ? { submit: request.submit } : {}) },
+      });
+      result = { status: typeof authResult?.status === "string" ? authResult.status : "unknown" };
     } else {
       const locator = request.selector
         ? session.tab.playwright.locator(safeString(request.selector, "TB_LOCATOR_INVALID"))
@@ -276,10 +291,6 @@ export function createTrustedBrowserService({
       else if (operation === "locator_inner_text") result = { value: await locator.innerText() };
       else if (operation === "locator_attribute") result = { value: await locator.getAttribute(safeString(request.attribute, "TB_ATTRIBUTE_INVALID")) };
       else if (operation === "locator_click") result = { value: await locator.click() };
-      else if (operation === "browser_auth") {
-        if (!session.tab.browserAuth || typeof session.tab.browserAuth.request !== "function") throw serviceError("TB_AUTH_CAPABILITY_MISSING");
-        result = await session.tab.browserAuth.request({ securityContext: context, request: { origin: session.origin, fields: request.fields, ...(request.submit ? { submit: request.submit } : {}) } });
-      }
     }
     result = publicResult(result);
     await emitAudit({ requestId, operation, context, outcome: "success" });
