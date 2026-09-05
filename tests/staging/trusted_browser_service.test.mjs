@@ -115,7 +115,7 @@ test("creates a runtime from the repository's staging-only adapter stub", async 
   assert.equal(typeof tab.goto, "function");
   assert.equal(typeof tab.dom_cua.get_visible_dom, "function");
   assert.equal(typeof tab.playwright.locator, "function");
-  assert.equal(typeof tab.playwright.evaluate, "function");
+  assert.equal(typeof tab.playwright.getTitle, "function");
   assert.equal(typeof (await tab.capabilities.get("browserAuth")).request, "function");
 });
 
@@ -134,10 +134,15 @@ test("adapts the operator custody runtime's native Playwright browser contract",
 
     assert.equal(typeof tab.goto, "function");
     assert.equal(typeof tab.playwright.locator, "function");
-    assert.equal(typeof tab.playwright.evaluate, "function");
+    assert.equal(typeof tab.playwright.getTitle, "function");
+    const locator = tab.playwright.locator("#login-username");
+    assert.equal(Object.getPrototypeOf(locator), null);
+    assert.equal(typeof locator.count, "function");
+    assert.equal(locator.evaluate, undefined);
+    assert.equal(locator.context, undefined);
     assert.equal(typeof tab.dom_cua.get_visible_dom, "function");
     assert.equal(typeof tab.capabilities.get, "function");
-    assert.equal(await tab.playwright.evaluate(() => document.title), "");
+    assert.equal(await tab.playwright.getTitle(), "");
     await assert.rejects(
       tab.capabilities.get("browserAuth"),
       (error) => error.code === "TB_AUTH_BRIDGE_MISSING",
@@ -185,7 +190,7 @@ test("selects only the certified origin and exposes the runner contract", async 
 
     assert.deepEqual(upstream.state.selected, [CERTIFIED_ORIGIN]);
     assert.equal(typeof tab.playwright.locator, "function");
-    assert.equal(typeof tab.playwright.evaluate, "function");
+    assert.equal(typeof tab.playwright.getTitle, "function");
     assert.equal(typeof tab.dom_cua.get_visible_dom, "function");
     assert.equal(typeof tab.capabilities.get, "function");
     assert.deepEqual(Object.keys(tab).sort(), [
@@ -269,7 +274,7 @@ test("redacts secret-shaped evaluation and DOM fields", async () => {
           goto: async () => {},
           playwright: {
             locator: () => ({}),
-            evaluate: async () => ({
+            getTitle: async () => ({
               accessToken: "hidden",
               nested: { session_cookie: "hidden", reference: "kept" },
             }),
@@ -282,7 +287,7 @@ test("redacts secret-shaped evaluation and DOM fields", async () => {
   `, async (modulePath) => {
     const runtime = await setupBrowserRuntime({ upstreamClientModule: modulePath });
     const tab = await (await runtime.browsers.getForUrl(CERTIFIED_ORIGIN)).tabs.new();
-    assert.deepEqual(await tab.playwright.evaluate(() => ({})), {
+    assert.deepEqual(await tab.playwright.getTitle(), {
       nested: { reference: "kept" },
     });
     assert.deepEqual(await tab.dom_cua.get_visible_dom(), { label: "Login" });
@@ -319,4 +324,45 @@ test("does not accept credential-shaped setup options", async () => {
     setupBrowserRuntime({ password: "should-not-be-accepted" }),
     /does not accept credential material/,
   );
+});
+
+test("production boundary requires and binds audit security context", { concurrency: false }, async () => {
+  const previous = process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION;
+  process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION = "true";
+  try {
+    await assert.rejects(
+      setupBrowserRuntime({ upstreamClientModule: fileURLToPath(new URL("./fixtures/trusted-playwright-adapter-stub.mjs", import.meta.url)) }),
+      /TB_TENANT_CONTEXT_INVALID/,
+    );
+    await withFakeUpstream(`
+      export async function setupBrowserRuntime() {
+        return { browsers: { getForUrl: async () => ({
+          tabs: { new: async () => ({
+            goto: async () => {},
+            playwright: { locator: () => ({}), evaluate: async () => ({}) },
+            dom_cua: { get_visible_dom: async () => ({}) },
+            capabilities: { get: async () => ({ request: async () => ({ status: "submitted" }) }) },
+          }) },
+        }) } };
+      }
+    `, async (modulePath) => {
+      const runtime = await setupBrowserRuntime({
+        upstreamClientModule: modulePath,
+        tenantContext: { tenantId: "tenant-a", subjectId: "analyst-a", sessionId: "session-a", authorizationContext: "manager" },
+      });
+      const browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+      assert.deepEqual(browser.securityContext, {
+        tenantId: "tenant-a",
+        subjectId: "analyst-a",
+        sessionId: "session-a",
+        authorizationContext: "manager",
+      });
+      assert.equal(Object.getPrototypeOf(browser.securityContext), Object.prototype);
+      await browser.close?.();
+      await runtime.close?.();
+    });
+  } finally {
+    if (previous === undefined) delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION;
+    else process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION = previous;
+  }
 });

@@ -11,11 +11,12 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { DEFAULT_ORIGIN } from "./controlled_analyst_pilot_runner.mjs";
+import { configuredCertifiedOrigin } from "./trusted_browser_service/policy/origin-policy.mjs";
 import {
   createTrustedBrowserDiagnostics,
   TRUSTED_BROWSER_TIMEOUTS,
 } from "./trusted_browser_diagnostics.mjs";
+import { assertRestrictedBrowserSurface } from "./trusted_browser_service/policy/capability-policy.mjs";
 
 export const TRUSTED_BROWSER_CLIENT_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT";
 export const TRUSTED_BROWSER_RUNTIME_ENVIRONMENT = "codex-app";
@@ -97,15 +98,16 @@ function clientModuleUrl(modulePath) {
 }
 
 function assertCertifiedOrigin(origin) {
-  if (origin !== DEFAULT_ORIGIN) {
+  if (origin !== configuredCertifiedOrigin()) {
     throw trustedBrowserError(
       "TB_ORIGIN_REJECTED",
-      `trusted browser adapter only permits the certified origin ${DEFAULT_ORIGIN}`,
+      "trusted browser adapter only permits the configured certified origin",
     );
   }
 }
 
 async function assertBrowserContract(browser, diagnostics) {
+  assertRestrictedBrowserSurface(browser);
   if (!browser || typeof browser.tabs?.new !== "function") {
     throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "trusted browser service returned an invalid browser");
   }
@@ -124,8 +126,18 @@ async function assertBrowserContract(browser, diagnostics) {
     if (typeof probeTab.dom_cua?.get_visible_dom !== "function") {
       throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "approved browser is missing visible DOM inspection");
     }
-    if (typeof probeTab.playwright?.locator !== "function" || typeof probeTab.playwright?.evaluate !== "function") {
+    if (typeof probeTab.playwright?.locator !== "function" ||
+        (typeof probeTab.playwright?.evaluate !== "function" && typeof probeTab.playwright?.getTitle !== "function")) {
       throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "approved browser is missing the runner Playwright surface");
+    }
+    if (process.env?.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION === "true" &&
+        (typeof probeTab.playwright.getTitle !== "function" ||
+         typeof probeTab.playwright.getVisibleText !== "function" ||
+         typeof probeTab.playwright.getApprovedAttribute !== "function" ||
+         typeof probeTab.playwright.readApprovedDOMState !== "function" ||
+         typeof probeTab.playwright.requestJson !== "function" ||
+         typeof probeTab.playwright.evaluate === "function")) {
+      throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "production browser exposes an invalid evaluation surface");
     }
     if (typeof probeTab.capabilities?.get !== "function") {
       throw trustedBrowserError("TB_BROWSER_CONTRACT_FAILED", "approved browser is missing tab capability discovery");
@@ -165,8 +177,9 @@ async function assertBrowserContract(browser, diagnostics) {
  * SENTINEL_DNA_TRUSTED_BROWSER_CLIENT.
  */
 export async function createApprovedBrowser({
-  origin = DEFAULT_ORIGIN,
+  origin = configuredCertifiedOrigin(),
   browserClientModule = undefined,
+  tenantContext = undefined,
 } = {}) {
   assertCertifiedOrigin(origin);
   const diagnostics = createTrustedBrowserDiagnostics();
@@ -203,7 +216,11 @@ export async function createApprovedBrowser({
     runtime = await diagnostics.run(
       "RUNTIME_SETUP",
       "trusted_runtime.setup",
-      () => client.setupBrowserRuntime({ environment: TRUSTED_BROWSER_RUNTIME_ENVIRONMENT }),
+      () => client.setupBrowserRuntime({
+        environment: TRUSTED_BROWSER_RUNTIME_ENVIRONMENT,
+        certifiedOrigin: origin,
+        ...(tenantContext ? { tenantContext } : {}),
+      }),
       { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.RUNTIME_SETUP },
     );
   } catch (error) {

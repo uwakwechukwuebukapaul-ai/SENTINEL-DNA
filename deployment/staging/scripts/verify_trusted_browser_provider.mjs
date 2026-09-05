@@ -137,7 +137,7 @@ function assertTabContract(tab) {
   }
   if (
     typeof tab.playwright?.locator !== "function" ||
-    typeof tab.playwright?.evaluate !== "function" ||
+    (typeof tab.playwright?.evaluate !== "function" && typeof tab.playwright?.getTitle !== "function") ||
     typeof tab.dom_cua?.get_visible_dom !== "function" ||
     typeof tab.capabilities?.get !== "function"
   ) {

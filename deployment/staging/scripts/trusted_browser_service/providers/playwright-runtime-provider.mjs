@@ -12,8 +12,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { configuredCertifiedOrigin, parseTrustedOrigin } from "../policy/origin-policy.mjs";
 
-export const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+export const CERTIFIED_ORIGIN = process.env?.SENTINEL_DNA_CERTIFIED_ORIGIN ||
+  process.env?.SENTINEL_DNA_BASE_URL || "";
 export const TRUSTED_BROWSER_ENVIRONMENT = "codex-app";
 export const APPROVED_PLAYWRIGHT_RUNTIME_ENV =
   "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME";
@@ -125,35 +127,15 @@ function localModuleUrl(modulePath) {
 }
 
 function assertCertifiedOrigin(origin) {
-  if (typeof origin !== "string") {
-    throw trustedProviderError(
-      "TB_ORIGIN_REJECTED",
-      `trusted browser provider only permits ${CERTIFIED_ORIGIN}`,
-    );
-  }
-  let parsed;
   try {
-    parsed = new URL(origin);
+    const configured = configuredCertifiedOrigin();
+    return parseTrustedOrigin(origin, { certifiedOrigin: configured }).origin;
   } catch {
     throw trustedProviderError(
       "TB_ORIGIN_REJECTED",
       `trusted browser provider only permits ${CERTIFIED_ORIGIN}`,
     );
   }
-  if (
-    parsed.origin !== CERTIFIED_ORIGIN ||
-    parsed.username ||
-    parsed.password ||
-    parsed.pathname !== "/" ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    throw trustedProviderError(
-      "TB_ORIGIN_REJECTED",
-      `trusted browser provider only permits ${CERTIFIED_ORIGIN}`,
-    );
-  }
-  return parsed.origin;
 }
 
 async function loadApprovedRuntime() {
@@ -199,9 +181,10 @@ export async function setupBrowserRuntime(options = {}) {
 
   let runtime;
   try {
-    runtime = await runtimeModule.setupBrowserRuntime({
-      environment: TRUSTED_BROWSER_ENVIRONMENT,
-    });
+    const runtimeOptions = { environment: TRUSTED_BROWSER_ENVIRONMENT };
+    if (options.certifiedOrigin) runtimeOptions.certifiedOrigin = options.certifiedOrigin;
+    if (options.tenantContext) runtimeOptions.tenantContext = options.tenantContext;
+    runtime = await runtimeModule.setupBrowserRuntime(runtimeOptions);
   } catch {
     throw trustedProviderError(
       "TB_RUNTIME_UNAVAILABLE",
@@ -220,7 +203,7 @@ export async function setupBrowserRuntime(options = {}) {
       getForUrl: async (origin) => {
         assertCertifiedOrigin(origin);
         try {
-          return await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+          return await runtime.browsers.getForUrl(assertCertifiedOrigin(options.certifiedOrigin || configuredCertifiedOrigin()));
         } catch {
           throw trustedProviderError(
             "TB_BROWSER_SELECTION_FAILED",

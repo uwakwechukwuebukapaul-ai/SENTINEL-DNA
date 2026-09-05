@@ -17,8 +17,10 @@ import {
   safeTrustedBrowserCode,
   TRUSTED_BROWSER_TIMEOUTS,
 } from "./trusted_browser_diagnostics.mjs";
+import { createTenantContext, assertSameTenantContext } from "./trusted_browser_service/policy/tenant-context.mjs";
+import { configuredCertifiedOrigin } from "./trusted_browser_service/policy/origin-policy.mjs";
 
-export const DEFAULT_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+export const DEFAULT_ORIGIN = process.env?.SENTINEL_DNA_CERTIFIED_ORIGIN || process.env?.SENTINEL_DNA_BASE_URL || "";
 export const DEFAULT_EVIDENCE_DIR = "C:/ProgramData/Sentinel-DNA/release/evidence";
 
 const SECRET_KEYS = new Set([
@@ -59,13 +61,15 @@ function requireRunId(runId) {
   return runId;
 }
 
+function requireCorrelationId(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/.test(value)) {
+    throw new Error("TB_AUDIT_CONTEXT_MISSING");
+  }
+  return value;
+}
+
 function validateOrigin(origin) {
-  const parsed = new URL(origin);
-  if (parsed.protocol !== "https:") throw new Error("pilot origin must use HTTPS");
-  if (parsed.hostname !== "uwakwe-desktop.taile388cc.ts.net") throw new Error("pilot origin hostname is not the certified Tailscale staging host");
-  if (parsed.port !== "") throw new Error("pilot origin must use the certified HTTPS port");
-  if (parsed.pathname !== "/" || parsed.search || parsed.hash) throw new Error("pilot origin must not contain a path, query, or fragment");
-  return parsed.origin;
+  return configuredCertifiedOrigin(origin);
 }
 
 function scrub(value, seen = new WeakSet()) {
@@ -145,6 +149,14 @@ async function requestCredentials(tab, origin, diagnostics) {
 
 async function pageJson(tab, path, { method = "GET", body = undefined, csrf = false, diagnostics = undefined } = {}) {
   if (!path.startsWith("/") || path.startsWith("//")) throw new Error("API path must be same-origin and relative");
+  if (typeof tab.playwright.requestJson === "function") {
+    const request = () => tab.playwright.requestJson({ path, method, body, csrfRequired: csrf });
+    return diagnostics
+      ? diagnostics.run("APPLICATION_REQUEST", "page.same_origin_request", request, {
+        timeoutMs: TRUSTED_BROWSER_TIMEOUTS.APPLICATION_REQUEST,
+      })
+      : request();
+  }
   const request = () => tab.playwright.evaluate(async ({ path: requestPath, method: requestMethod, body: requestBody, csrfRequired }) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -290,8 +302,15 @@ export async function runAnalystGates(tab, {
 }
 
 async function writeAppendOnlyEvidence(evidenceDir, runId, payload) {
-  const clean = scrub(payload);
-  assertNoSecrets(clean);
+  let clean;
+  try {
+    clean = scrub(payload);
+    assertNoSecrets(clean);
+  } catch {
+    const error = new Error("trusted-browser audit evidence validation failed");
+    error.code = "TB_AUDIT_EVIDENCE_FAILURE";
+    throw error;
+  }
   const canonical = JSON.stringify(clean);
   const digest = createHash("sha256").update(canonical, "utf8").digest("hex");
   const finalPayload = { ...clean, sha256: digest };
@@ -310,10 +329,20 @@ export async function runControlledAnalystPilot({
   allowProvisioning = false,
   provisioning = undefined,
   analyst = undefined,
+  securityContext = undefined,
+  correlationId = undefined,
 } = {}) {
   if (!browser || typeof browser.tabs?.new !== "function") throw new Error("approved trusted browser object is required");
   const safeOrigin = validateOrigin(origin);
   const safeRunId = requireRunId(runId);
+  const production = process.env?.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION === "true";
+  let boundSecurityContext = null;
+  if (securityContext) boundSecurityContext = createTenantContext(securityContext);
+  if (production) {
+    if (!boundSecurityContext || !browser.securityContext) throw new Error("TB_AUDIT_CONTEXT_MISSING");
+    assertSameTenantContext(browser.securityContext, boundSecurityContext);
+  }
+  const safeCorrelationId = correlationId === undefined ? safeRunId : requireCorrelationId(correlationId);
   const started = new Date().toISOString();
   const results = [];
   const diagnostics = createTrustedBrowserDiagnostics();
@@ -393,6 +422,14 @@ export async function runControlledAnalystPilot({
   const failed = results.filter((item) => item.status === "FAIL").length;
   const notMeasured = results.filter((item) => ["NOT_MEASURED", "NOT_PERFORMED"].includes(item.status)).length;
   const status = failed || notMeasured ? "BLOCKED_WITH_REASON" : "READY_FOR_CONTROLLED_ANALYST_PILOT";
+  const auditContext = boundSecurityContext || browser.securityContext || null;
+  if (production && !auditContext) throw new Error("TB_AUDIT_CONTEXT_MISSING");
+  const auditEvents = results.map((item) => ({
+    operation: item.check,
+    status: item.status,
+    correlation_id: safeCorrelationId,
+    ...(auditContext ? scrub(auditContext) : {}),
+  }));
   const evidence = await writeAppendOnlyEvidence(evidenceDir, safeRunId, {
     schema_version: "1.0",
     generated_at_utc: new Date().toISOString(),
@@ -404,6 +441,7 @@ export async function runControlledAnalystPilot({
     results,
     diagnostics: diagnostics.snapshot(),
     provisioning: provisioningResult ? { ...provisioningResult, activation_token_recorded: false } : { status: "NOT_PERFORMED" },
+    ...(auditContext ? { security_context: scrub(auditContext), audit_events: auditEvents } : {}),
     controls: { synthetic_data_only: true, customer_data: false, credentials_or_tokens: false, production_impact: false, public_exposure: false, human_decision_authority: true, ai_advisory_only_required: true },
     blockers: executionFailure
       ? [executionFailure]

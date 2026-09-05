@@ -20,10 +20,14 @@ import {
   createTrustedRuntimeProvider,
   TRUSTED_BROWSER_ENVIRONMENT,
 } from "./runtime-provider.mjs";
+import { configuredCertifiedOrigin, parseTrustedOrigin, parseTrustedNavigation } from "./policy/origin-policy.mjs";
+import { assertNoSecretFields, isSecretFieldName } from "./policy/secret-fields.mjs";
+import { createRuntimePolicy } from "./policy/runtime-policy.mjs";
 
 export { TRUSTED_BROWSER_ENVIRONMENT } from "./runtime-provider.mjs";
 
-export const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+export const CERTIFIED_ORIGIN = process.env?.SENTINEL_DNA_CERTIFIED_ORIGIN ||
+  process.env?.SENTINEL_DNA_BASE_URL || "";
 export const TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV =
   "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT";
 export const BROWSER_AUTH_BRIDGE_ENV = "SENTINEL_DNA_BROWSER_AUTH_BRIDGE";
@@ -46,52 +50,11 @@ function trustedBrowserError(code, message) {
   return error;
 }
 
-const SECRET_KEY_PARTS = new Set([
-  "password",
-  "passwordhash",
-  "passphrase",
-  "secret",
-  "secrets",
-  "token",
-  "accesstoken",
-  "refreshtoken",
-  "idtoken",
-  "csrftoken",
-  "cookie",
-  "cookies",
-  "setcookie",
-  "authorization",
-  "privatekey",
-  "credential",
-  "credentials",
-  "clientsecret",
-  "apikey",
-  "signingkey",
-  "encryptionkey",
-  "sessionid",
-  "jwt",
-  "bearer",
-]);
-
-function normalizeKey(key) {
-  return String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function isSecretKey(key) {
-  const normalized = normalizeKey(key);
-  return SECRET_KEY_PARTS.has(normalized) ||
-    [...SECRET_KEY_PARTS].some((part) => normalized.endsWith(part));
-}
-
 function assertNoCredentialFields(value, seen = new WeakSet()) {
-  if (value === null || typeof value !== "object") return;
-  if (seen.has(value)) return;
-  seen.add(value);
-  for (const [key, child] of Object.entries(value)) {
-    if (isSecretKey(key)) {
-      throw new Error("trusted browser client does not accept credential material");
-    }
-    assertNoCredentialFields(child, seen);
+  try {
+    assertNoSecretFields(value, seen);
+  } catch {
+    throw new Error("trusted browser client does not accept credential material");
   }
 }
 
@@ -103,53 +66,26 @@ function redact(value, seen = new WeakSet()) {
 
   const result = {};
   for (const [key, child] of Object.entries(value)) {
-    if (isSecretKey(key)) continue;
+    if (isSecretFieldName(key)) continue;
     result[key] = redact(child, seen);
   }
   return result;
 }
 
 function assertCertifiedOrigin(origin) {
-  if (typeof origin !== "string") {
-    throw new Error(`trusted browser only permits ${CERTIFIED_ORIGIN}`);
-  }
-  let parsed;
   try {
-    parsed = new URL(origin);
+    return parseTrustedOrigin(origin, { certifiedOrigin: configuredCertifiedOrigin() }).origin;
   } catch {
-    throw new Error(`trusted browser only permits ${CERTIFIED_ORIGIN}`);
-  }
-  if (
-    parsed.origin !== CERTIFIED_ORIGIN ||
-    parsed.username ||
-    parsed.password ||
-    parsed.pathname !== "/" ||
-    parsed.search ||
-    parsed.hash
-  ) {
     throw new Error(`trusted browser only permits the certified origin ${CERTIFIED_ORIGIN}`);
   }
-  return parsed.origin;
 }
 
 function assertCertifiedUrl(url) {
-  if (typeof url !== "string") {
-    throw new Error(`trusted browser navigation is restricted to ${CERTIFIED_ORIGIN}`);
-  }
-  let parsed;
   try {
-    parsed = new URL(url);
+    return parseTrustedNavigation(url, { certifiedOrigin: configuredCertifiedOrigin() });
   } catch {
     throw new Error(`trusted browser navigation is restricted to ${CERTIFIED_ORIGIN}`);
   }
-  if (
-    parsed.origin !== CERTIFIED_ORIGIN ||
-    parsed.username ||
-    parsed.password
-  ) {
-    throw new Error(`trusted browser navigation is restricted to ${CERTIFIED_ORIGIN}`);
-  }
-  return parsed.href;
 }
 
 function localModuleUrl(modulePath, label) {
@@ -246,7 +182,7 @@ function assertUpstreamBrowser(browser) {
   }
 }
 
-function createNativePlaywrightBrowserAdapter(browser, authBridgeState) {
+function createNativePlaywrightBrowserAdapter(browser, authBridgeState, policy) {
   if (
     !browser ||
     typeof browser.newContext !== "function" ||
@@ -281,7 +217,7 @@ function createNativePlaywrightBrowserAdapter(browser, authBridgeState) {
         try {
           page = await context.newPage();
           return {
-            goto: async (url) => page.goto(url),
+            goto: async (url) => page.goto(await policy.validateNavigation(url)),
             close,
             playwright: {
               locator: (selector) => page.locator(selector),
@@ -343,7 +279,7 @@ function assertUpstreamTab(tab) {
   }
   if (
     typeof tab.playwright?.locator !== "function" ||
-    typeof tab.playwright?.evaluate !== "function"
+    (typeof tab.playwright?.evaluate !== "function" && typeof tab.playwright?.getTitle !== "function")
   ) {
     throw trustedBrowserError(
       "TB_BROWSER_CONTRACT_FAILED",
@@ -393,22 +329,69 @@ function authCapabilityCode(error) {
     : "TB_AUTH_CAPABILITY_MISSING";
 }
 
-function createPlaywrightSurface(tab) {
+function createPlaywrightSurface(tab, policy) {
   const playwright = tab.playwright;
-  return Object.freeze({
-    // Locator objects remain native to the approved Playwright runtime.  This
-    // is required so browserAuth can validate selectors against this tab.
-    locator: (...args) => playwright.locator(...args),
+  const surface = {
+    locator: (selector) => {
+      if (typeof selector !== "string" || !selector.trim()) throw new Error("trusted locator selector is invalid");
+      const native = playwright.locator(selector);
+      if (!native || typeof native !== "object") throw new Error("trusted locator is unavailable");
+      const facade = Object.create(null);
+      facade.count = () => native.count();
+      facade.isVisible = () => native.isVisible();
+      facade.innerText = () => native.innerText();
+      facade.getAttribute = (attribute) => {
+        if (!["aria-label", "name", "role", "type"].includes(attribute)) throw new Error("trusted locator attribute is restricted");
+        return native.getAttribute(attribute);
+      };
+      return Object.freeze(facade);
+    },
     // The runner performs page-local, same-origin fetches.  Only the result
     // crosses this service boundary, and secret-shaped fields are removed.
-    evaluate: async (...args) => {
-      try {
-        return redact(await playwright.evaluate(...args));
-      } catch {
-        throw new Error("trusted Playwright evaluation failed");
+    getTitle: async () => redact(await (playwright.getTitle ? playwright.getTitle() : playwright.evaluate(() => document.title))),
+    getVisibleText: async () => redact(await (playwright.getVisibleText ? playwright.getVisibleText() : playwright.evaluate(() => (document.body || document.documentElement)?.innerText || ""))),
+    getApprovedAttribute: async (selector, attribute) => {
+      if (typeof selector !== "string" || !selector.trim() ||
+          !["aria-label", "name", "role", "type"].includes(attribute)) {
+        throw new Error("trusted attribute inspection is restricted");
       }
+      return redact(await (playwright.getApprovedAttribute
+        ? playwright.getApprovedAttribute(selector, attribute)
+        : playwright.evaluate((input) => document.querySelector(input.selector)?.getAttribute(input.attribute) ?? null, { selector, attribute })));
     },
-  });
+    readApprovedDOMState: async () => redact(playwright.readApprovedDOMState
+      ? await playwright.readApprovedDOMState()
+      : await playwright.evaluate(() => ({
+        title: document.title,
+        visibleText: (document.body || document.documentElement)?.innerText || "",
+      }))),
+    requestJson: async ({ path, method = "GET", body = undefined, csrfRequired = false } = {}) => {
+      if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") ||
+          !["GET", "POST"].includes(method) || typeof csrfRequired !== "boolean") {
+        throw new Error("trusted same-origin request is invalid");
+      }
+      policy.parseNavigation(path);
+      if (playwright.requestJson) return redact(await playwright.requestJson({ path, method, body, csrfRequired }));
+      return redact(await playwright.evaluate(async (input) => {
+        const headers = { Accept: "application/json" };
+        if (input.body !== undefined) headers["Content-Type"] = "application/json";
+        if (input.csrfRequired) {
+          const csrfResponse = await fetch("/api/auth/csrf", { credentials: "same-origin" });
+          const csrfPayload = await csrfResponse.json().catch(() => ({}));
+          if (typeof csrfPayload.csrf_token !== "string") throw new Error("csrf unavailable");
+          headers["X-CSRF-Token"] = csrfPayload.csrf_token;
+        }
+        const response = await fetch(input.path, {
+          method: input.method,
+          credentials: "same-origin",
+          headers,
+          body: input.body === undefined ? undefined : JSON.stringify(input.body),
+        });
+        return { status: response.status, body: await response.json().catch(() => null) };
+      }, { path, method, body, csrfRequired }));
+    },
+  };
+  return Object.freeze(surface);
 }
 
 function createDomCuaSurface(tab) {
@@ -424,7 +407,7 @@ function createDomCuaSurface(tab) {
   });
 }
 
-function createBrowserAuthCapability(tab) {
+function createBrowserAuthCapability(tab, policy) {
   let capabilityPromise;
   return Object.freeze({
     request: async (request) => {
@@ -432,17 +415,26 @@ function createBrowserAuthCapability(tab) {
         throw new Error("browserAuth request must be an object");
       }
       try {
-        assertNoCredentialFields(request);
+        const { securityContext: _securityContext, ...requestWithoutContext } = request;
+        assertNoCredentialFields(requestWithoutContext);
       } catch {
         throw trustedBrowserError(
           "TB_CREDENTIAL_FIELD_REJECTED",
           "credential-bearing browser data is not accepted",
         );
       }
+      if (policy.production && request.securityContext) {
+        try { policy.bindTenant(request.securityContext); } catch {
+          throw trustedBrowserError("TB_TENANT_CONTEXT_MISMATCH", "browser authentication context is not authorized");
+        }
+      }
+      if (policy.production && !policy.securityContext) {
+        throw trustedBrowserError("TB_AUTH_CAPABILITY_MISSING", "browser authentication security context is unavailable");
+      }
       // The credential bridge receives field descriptors and Playwright
       // selectors, never credential values.  Keep this allowlist narrow so a
       // caller cannot smuggle a password, cookie, or token into the bridge.
-      if (request.origin !== CERTIFIED_ORIGIN) {
+      if (request.origin !== policy.origin) {
         throw new Error(`browserAuth is restricted to ${CERTIFIED_ORIGIN}`);
       }
       if (!Array.isArray(request.fields) || request.fields.length === 0) {
@@ -471,8 +463,9 @@ function createBrowserAuthCapability(tab) {
         };
       });
       const safeRequest = {
-        origin: CERTIFIED_ORIGIN,
+        origin: policy.origin,
         fields,
+        ...(policy.securityContext ? { securityContext: policy.securityContext } : {}),
       };
       if (request.submit !== undefined) {
         if (
@@ -521,14 +514,22 @@ function createBrowserAuthCapability(tab) {
   });
 }
 
-function createRestrictedTab(tab) {
+function createRestrictedTab(tab, policy) {
   assertUpstreamTab(tab);
-  const browserAuth = createBrowserAuthCapability(tab);
+  const browserAuth = createBrowserAuthCapability(tab, policy);
   const restricted = {
     ...(tab.id === undefined ? {} : { id: tab.id }),
-    goto: async (url) => tab.goto(assertCertifiedUrl(url)),
+    goto: async (url) => {
+      let validated;
+      try {
+        validated = await policy.validateNavigation(url);
+      } catch {
+        throw new Error(`trusted browser navigation is restricted to ${policy.origin}`);
+      }
+      return tab.goto(validated);
+    },
     close: typeof tab.close === "function" ? (...args) => tab.close(...args) : undefined,
-    playwright: createPlaywrightSurface(tab),
+    playwright: createPlaywrightSurface(tab, policy),
     dom_cua: createDomCuaSurface(tab),
     capabilities: Object.freeze({
       get: async (name) => {
@@ -556,17 +557,18 @@ function createRestrictedTab(tab) {
   return Object.freeze(restricted);
 }
 
-function createRestrictedBrowser(browser, authBridgeState) {
+function createRestrictedBrowser(browser, authBridgeState, policy) {
   const adaptedBrowser = browser?.tabs?.new
     ? browser
-    : createNativePlaywrightBrowserAdapter(browser, authBridgeState);
+    : createNativePlaywrightBrowserAdapter(browser, authBridgeState, policy);
   assertUpstreamBrowser(adaptedBrowser);
   const restricted = {
+    ...(policy.securityContext ? { securityContext: policy.securityContext } : {}),
     tabs: Object.freeze({
       new: async (...args) => {
         if (args.length !== 0) throw new Error("trusted browser tabs.new does not accept options");
         try {
-          return createRestrictedTab(await adaptedBrowser.tabs.new());
+          return createRestrictedTab(await adaptedBrowser.tabs.new(), policy);
         } catch (error) {
           if (SAFE_TAB_DIAGNOSTIC_CODES.has(error?.code)) throw error;
           throw trustedBrowserError(
@@ -595,10 +597,13 @@ export async function setupBrowserRuntime(options = {}) {
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
     throw new Error("trusted browser runtime options must be an object");
   }
-  assertNoCredentialFields(options);
+  const { tenantContext: _tenantContext, ...credentialCheckedOptions } = options;
+  assertNoCredentialFields(credentialCheckedOptions);
   const {
     environment = TRUSTED_BROWSER_ENVIRONMENT,
     upstreamClientModule = undefined,
+    certifiedOrigin = undefined,
+    tenantContext = undefined,
   } = options;
   if (environment !== TRUSTED_BROWSER_ENVIRONMENT) {
     throw trustedBrowserError(
@@ -606,6 +611,12 @@ export async function setupBrowserRuntime(options = {}) {
       `trusted browser runtime requires environment ${TRUSTED_BROWSER_ENVIRONMENT}`,
     );
   }
+
+  const policy = createRuntimePolicy({
+    certifiedOrigin: configuredCertifiedOrigin(certifiedOrigin),
+    tenantContext,
+    production: process.env?.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION === "true",
+  });
 
   const upstreamUrl = localModuleUrl(
     configuredUpstreamClient(upstreamClientModule),
@@ -643,7 +654,11 @@ export async function setupBrowserRuntime(options = {}) {
   try {
     // Do not forward arbitrary options or environment values to the browser
     // runtime.  In particular, this client never forwards credential data.
-    runtime = await provider.setupBrowserRuntime({ environment });
+    runtime = await provider.setupBrowserRuntime({
+      environment,
+      certifiedOrigin: policy.origin,
+      tenantContext,
+    });
   } catch {
     throw trustedBrowserError(
       "TB_RUNTIME_UNAVAILABLE",
@@ -660,10 +675,14 @@ export async function setupBrowserRuntime(options = {}) {
   const exposedRuntime = {
     browsers: Object.freeze({
       getForUrl: async (origin) => {
-        assertCertifiedOrigin(origin);
+        try {
+          policy.parseOrigin(origin);
+        } catch {
+          throw new Error(`trusted browser only permits the certified origin ${policy.origin}`);
+        }
         let browser;
         try {
-          browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
+          browser = await runtime.browsers.getForUrl(policy.origin);
         } catch {
           throw trustedBrowserError(
             "TB_BROWSER_SELECTION_FAILED",
@@ -671,7 +690,7 @@ export async function setupBrowserRuntime(options = {}) {
           );
         }
         try {
-          return createRestrictedBrowser(browser, authBridgeState);
+          return createRestrictedBrowser(browser, authBridgeState, policy);
         } catch (error) {
           // A custody runtime that returns a non-conforming browser may have
           // launched a real process. Close it before propagating the bounded
