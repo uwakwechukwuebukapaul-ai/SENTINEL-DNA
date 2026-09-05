@@ -13,6 +13,9 @@ ARG SENTINEL_DNA_BASE_IMAGE_DIGEST
 ARG SENTINEL_DNA_BUILD_ID
 ARG SENTINEL_DNA_APPROVED_RUNTIME_DIGEST
 ARG SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256
+ARG SENTINEL_DNA_BROWSER_PLATFORM=linux
+ARG SENTINEL_DNA_BROWSER_ARCH=x64
+ARG SENTINEL_DNA_BASE_IMAGE_DIGEST_VERIFIED=false
 
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
@@ -27,7 +30,10 @@ ENV NODE_ENV=production \
     SENTINEL_DNA_BASE_IMAGE_DIGEST=${SENTINEL_DNA_BASE_IMAGE_DIGEST} \
     SENTINEL_DNA_BUILD_ID=${SENTINEL_DNA_BUILD_ID} \
     SENTINEL_DNA_APPROVED_RUNTIME_DIGEST=${SENTINEL_DNA_APPROVED_RUNTIME_DIGEST} \
-    SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256=${SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256}
+    SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256=${SENTINEL_DNA_BROWSER_EXECUTABLE_SHA256} \
+    SENTINEL_DNA_BROWSER_PLATFORM=${SENTINEL_DNA_BROWSER_PLATFORM} \
+    SENTINEL_DNA_BROWSER_ARCH=${SENTINEL_DNA_BROWSER_ARCH} \
+    SENTINEL_DNA_BASE_IMAGE_DIGEST_VERIFIED=${SENTINEL_DNA_BASE_IMAGE_DIGEST_VERIFIED}
 
 WORKDIR /opt/sentinel/trusted-browser
 
@@ -39,6 +45,7 @@ COPY deployment/staging/scripts/trusted_browser_diagnostics.mjs deployment/stagi
 COPY deployment/staging/scripts/trusted_browser_execution_adapter.mjs deployment/staging/scripts/trusted_browser_execution_adapter.mjs
 COPY deployment/staging/scripts/trusted_browser_service deployment/staging/scripts/trusted_browser_service
 COPY deployment/staging/trusted_browser_runtime/runtime-service.mjs deployment/staging/trusted_browser_runtime/runtime-service.mjs
+COPY deployment/staging/trusted_browser_runtime/rpc-client.mjs deployment/staging/trusted_browser_runtime/rpc-client.mjs
 COPY deployment/staging/trusted_browser_runtime/healthcheck.mjs deployment/staging/trusted_browser_runtime/healthcheck.mjs
 COPY deployment/staging/trusted_browser_runtime/verify-image-inputs.mjs deployment/staging/trusted_browser_runtime/verify-image-inputs.mjs
 
