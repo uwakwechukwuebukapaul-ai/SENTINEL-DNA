@@ -5,8 +5,8 @@ import {
   validateReleaseBoundActivationManifest,
 } from "../../deployment/staging/scripts/trusted_browser_activation_manifest.mjs";
 
-const RELEASE_COMMIT = "3002cf0eee896e1385bdc8208d870522794bc673";
-const RELEASE_TREE = "21583edf58ca94058fa7f743e37d5db85fdc7e5c";
+const RELEASE_COMMIT = "8cf91fe0736f5da4521687272ffb10d1dfa0779b";
+const RELEASE_TREE = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf";
 const digest = (letter) => `sha256:${letter.repeat(64)}`;
 
 function manifest() {
