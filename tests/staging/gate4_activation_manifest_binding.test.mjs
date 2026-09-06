@@ -5,8 +5,12 @@ import {
   validateReleaseBoundActivationManifest,
 } from "../../deployment/staging/scripts/trusted_browser_activation_manifest.mjs";
 
-const RELEASE_COMMIT = "8cf91fe0736f5da4521687272ffb10d1dfa0779b";
-const RELEASE_TREE = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf";
+// Historical synthetic activation fixture. Current release authorization is
+// manifest-driven and covered by the signed release-manifest tests.
+const HISTORICAL_RELEASE_COMMIT = "8cf91fe0736f5da4521687272ffb10d1dfa0779b";
+const HISTORICAL_RELEASE_TREE = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf";
+const RELEASE_COMMIT = HISTORICAL_RELEASE_COMMIT;
+const RELEASE_TREE = HISTORICAL_RELEASE_TREE;
 const digest = (letter) => `sha256:${letter.repeat(64)}`;
 
 function manifest() {

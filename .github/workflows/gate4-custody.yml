@@ -3,12 +3,12 @@ name: gate4-custody
 on:
   workflow_dispatch:
     inputs:
-      release_sha:
-        description: Exact reviewed release commit SHA
+      manifest_reference:
+        description: Immutable signed release-manifest reference; transport only
         required: true
         type: string
-      release_tree:
-        description: Exact reviewed release tree SHA
+      manifest_sha256:
+        description: Exact SHA-256 digest of the canonical release manifest
         required: true
         type: string
       registry:
@@ -31,7 +31,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: gate4-custody-${{ inputs.release_sha }}
+  group: gate4-custody-${{ inputs.manifest_sha256 }}
   cancel-in-progress: false
 
 jobs:
@@ -41,8 +41,8 @@ jobs:
     runs-on: ubuntu-24.04
     environment: Gate4-Release
     env:
-      RELEASE_SHA: ${{ inputs.release_sha }}
-      RELEASE_TREE: ${{ inputs.release_tree }}
+      MANIFEST_REFERENCE: ${{ inputs.manifest_reference }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
       REGISTRY: ${{ inputs.registry }}
       NAMESPACE: ${{ inputs.namespace }}
       SIGNER_IDENTITY: ${{ vars.GATE4_SIGNER_IDENTITY }}
@@ -63,6 +63,8 @@ jobs:
       BUILD_TIMESTAMP: ${{ github.run_started_at }}
       CUSTODY_PACKAGE_PATH: ${{ vars.GATE4_EXTERNAL_CUSTODY_PACKAGE_PATH }}
       ACTIVATION_MANIFEST_PATH: ${{ vars.GATE4_ACTIVATION_MANIFEST_PATH }}
+      MANIFEST_SIGNATURE_REFERENCE: ${{ vars.GATE4_RELEASE_MANIFEST_SIGNATURE_REFERENCE }}
+      MANIFEST_TRUST_POLICY_REFERENCE: ${{ vars.GATE4_RELEASE_MANIFEST_TRUST_POLICY_REFERENCE }}
 
     steps:
       - name: Validate external custody configuration
@@ -70,8 +72,10 @@ jobs:
         run: |
           set -euo pipefail
           fail() { echo "::error title=Gate4 custody configuration::$1" >&2; exit 1; }
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "release SHA is malformed"
-          [[ "$RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]] || fail "release tree is malformed"
+          [[ "$MANIFEST_SHA256" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "manifest digest is malformed"
+          [[ -n "$MANIFEST_REFERENCE" ]] || fail "manifest reference is missing"
+          [[ -n "$MANIFEST_SIGNATURE_REFERENCE" ]] || fail "manifest signature reference is missing"
+          [[ -n "$MANIFEST_TRUST_POLICY_REFERENCE" ]] || fail "manifest trust policy reference is missing"
           [[ "$REGISTRY" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || fail "registry identity is malformed"
           [[ "$NAMESPACE" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "registry namespace is malformed"
           [[ -n "$SIGNER_IDENTITY" ]] || fail "approved signer identity is missing"
@@ -94,20 +98,64 @@ jobs:
           [[ -n "$CUSTODY_PACKAGE_PATH" ]] || fail "externally supplied custody package path is missing"
           [[ -n "$ACTIVATION_MANIFEST_PATH" ]] || fail "externally supplied activation manifest path is missing"
 
-      - name: Checkout exact release commit
+      - name: Checkout workflow verifier source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ inputs.release_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Verify exact release commit and tree
+      - name: Pin verifier source before release checkout
         shell: bash
         run: |
           set -euo pipefail
-          test "$RELEASE_SHA" = "59520f21dbbe20f0bef047f64d40bf67f2e2675b"
-          test "$RELEASE_TREE" = "36ca2d9cb7a2a3711f9f14c9a3820539019f83cd"
+          cp deployment/staging/scripts/verify_gate4_release_manifest.py "$RUNNER_TEMP/gate4-verify-release-manifest.py"
+          cp deployment/staging/scripts/validate_gate4_external_custody.py "$RUNNER_TEMP/gate4-validate-external-custody.py"
+          cp deployment/staging/GATE4_EXTERNAL_CUSTODY.schema.json "$RUNNER_TEMP/gate4-external-custody.schema.json"
+          printf 'GATE4_VERIFIER=%s\n' "$RUNNER_TEMP/gate4-verify-release-manifest.py" >> "$GITHUB_ENV"
+          printf 'GATE4_CUSTODY_VALIDATOR=%s\n' "$RUNNER_TEMP/gate4-validate-external-custody.py" >> "$GITHUB_ENV"
+          printf 'GATE4_CUSTODY_SCHEMA=%s\n' "$RUNNER_TEMP/gate4-external-custody.schema.json" >> "$GITHUB_ENV"
+
+      - name: Verify signed release manifest authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(python3 "$GATE4_VERIFIER" \
+            "$MANIFEST_REFERENCE" \
+            --digest "$MANIFEST_SHA256" \
+            --signature "$MANIFEST_SIGNATURE_REFERENCE" \
+            --trust-policy "$MANIFEST_TRUST_POLICY_REFERENCE" \
+            --repository "$GITHUB_REPOSITORY")"
+          RELEASE_SHA="$(printf '%s' "$result" | jq -er '.commit_sha')"
+          RELEASE_TREE="$(printf '%s' "$result" | jq -er '.tree_sha')"
+          printf 'RELEASE_SHA=%s\n' "$RELEASE_SHA" >> "$GITHUB_ENV"
+          printf 'RELEASE_TREE=%s\n' "$RELEASE_TREE" >> "$GITHUB_ENV"
+          git fetch --no-tags origin "$RELEASE_SHA"
+          git checkout --detach "$RELEASE_SHA"
+
+      - name: Verify exact authorized release commit and tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "authorized commit is malformed" >&2; exit 1; }
+          [[ "$RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]] || { echo "authorized tree is malformed" >&2; exit 1; }
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           test "$(git rev-parse 'HEAD^{tree}')" = "$RELEASE_TREE"
+          test -f "$ACTIVATION_MANIFEST_PATH"
+          test "$ACTIVATION_MANIFEST_PATH" = "deployment/staging/scripts/trusted_browser_activation_manifest.mjs"
+          test ! -e "deployment/staging/trusted_browser_activation_manifest.mjs"
+          actual_activation="sha256:$(sha256sum "$ACTIVATION_MANIFEST_PATH" | cut -d' ' -f1)"
+          python3 - "$MANIFEST_REFERENCE" "$MANIFEST_SHA256" "$actual_activation" "$GATE4_VERIFIER" <<'PY'
+import sys
+from pathlib import Path
+import importlib.util
+spec = importlib.util.spec_from_file_location("gate4_verify", sys.argv[4])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+load_canonical_manifest = module.load_canonical_manifest
+manifest, _, _ = load_canonical_manifest(Path(sys.argv[1]), sys.argv[2])
+if manifest["activation_manifest"]["sha256"] != sys.argv[3]:
+    raise SystemExit("activation manifest digest mismatch")
+PY
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Verify required custody build contexts
@@ -219,7 +267,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 deployment/staging/scripts/validate_gate4_external_custody.py \
+          package_digest="sha256:$(sha256sum "$CUSTODY_PACKAGE_PATH" | cut -d' ' -f1)"
+          python3 - "$MANIFEST_REFERENCE" "$MANIFEST_SHA256" "$package_digest" "$GATE4_VERIFIER" <<'PY'
+import sys
+from pathlib import Path
+import importlib.util
+spec = importlib.util.spec_from_file_location("gate4_verify", sys.argv[4])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+load_canonical_manifest = module.load_canonical_manifest
+manifest, _, _ = load_canonical_manifest(Path(sys.argv[1]), sys.argv[2])
+if manifest["custody_package"]["digest"] != sys.argv[3]:
+    raise SystemExit("custody package digest mismatch")
+PY
+          python3 "$GATE4_CUSTODY_VALIDATOR" \
             "$CUSTODY_PACKAGE_PATH" \
             --expected-commit "$RELEASE_SHA" \
             --expected-tree "$RELEASE_TREE" \
@@ -227,9 +288,9 @@ jobs:
             --expected-trusted-browser-image "$REGISTRY/$NAMESPACE/trusted-browser@${TRUSTED_BROWSER_IMAGE_DIGEST}" \
             --expected-egress-image "$EGRESS_GATEWAY_IMAGE" \
             --expected-edge-image "$EDGE_IMAGE" \
+            --schema "$GATE4_CUSTODY_SCHEMA" \
             --activation-manifest-bytes "$ACTIVATION_MANIFEST_PATH"
-          test "$RELEASE_SHA" = "59520f21dbbe20f0bef047f64d40bf67f2e2675b"
-          test "$RELEASE_TREE" = "36ca2d9cb7a2a3711f9f14c9a3820539019f83cd"
+          test -n "$MANIFEST_SHA256"
 
       - name: Generate SBOM before terminal publication
         shell: bash
@@ -307,7 +368,7 @@ jobs:
       - name: Retain non-secret custody evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: gate4-custody-evidence-${{ inputs.release_sha }}
+          name: gate4-custody-evidence-${{ inputs.manifest_sha256 }}
           if-no-files-found: error
           retention-days: 90
           path: |

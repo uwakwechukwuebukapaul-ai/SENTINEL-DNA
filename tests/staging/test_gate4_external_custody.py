@@ -5,8 +5,12 @@ from pathlib import Path
 
 from deployment.staging.scripts.validate_gate4_external_custody import validate
 
-RELEASE_COMMIT = "8cf91fe0736f5da4521687272ffb10d1dfa0779b"
-RELEASE_TREE = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf"
+# Historical synthetic package fixture. Current release authorization is
+# manifest-driven and covered by test_gate4_release_manifest.py.
+HISTORICAL_RELEASE_COMMIT = "8cf91fe0736f5da4521687272ffb10d1dfa0779b"
+HISTORICAL_RELEASE_TREE = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf"
+RELEASE_COMMIT = HISTORICAL_RELEASE_COMMIT
+RELEASE_TREE = HISTORICAL_RELEASE_TREE
 ROOT = Path(__file__).parents[2]
 
 
@@ -100,8 +104,8 @@ def test_historical_and_conflicting_statuses_never_promote(tmp_path):
     package, manifest = complete_package(tmp_path); package["artifacts"]["trusted_browser_image"]["signature"]["status"] = "HISTORICAL"; package["artifacts"]["browserauth_bridge"]["verification_record"]["status"] = "CONFLICTING"; assert check(package, manifest)["status"] == "BLOCKED"
 
 
-def test_authoritative_release_constants_are_used():
-    assert RELEASE_COMMIT == "8cf91fe0736f5da4521687272ffb10d1dfa0779b"; assert RELEASE_TREE == "6cf6b210d8a052da92e4b76feafe14247ce1d8bf"
+def test_historical_fixture_identity_is_explicit():
+    assert RELEASE_COMMIT == HISTORICAL_RELEASE_COMMIT; assert RELEASE_TREE == HISTORICAL_RELEASE_TREE
 
 
 def test_external_artifacts_are_not_sentinel_bound(tmp_path):
