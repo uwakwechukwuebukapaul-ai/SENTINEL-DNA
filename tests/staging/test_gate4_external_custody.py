@@ -5,8 +5,8 @@ from pathlib import Path
 
 from deployment.staging.scripts.validate_gate4_external_custody import validate
 
-RELEASE_COMMIT = "b20721b935692d825db0d4217dab7359ede4f8b5"
-RELEASE_TREE = "e9b032c9634d9c9bb96047e4afb182c787275596"
+RELEASE_COMMIT = "3002cf0eee896e1385bdc8208d870522794bc673"
+RELEASE_TREE = "21583edf58ca94058fa7f743e37d5db85fdc7e5c"
 ROOT = Path(__file__).parents[2]
 
 
@@ -101,7 +101,7 @@ def test_historical_and_conflicting_statuses_never_promote(tmp_path):
 
 
 def test_authoritative_release_constants_are_used():
-    assert RELEASE_COMMIT == "b20721b935692d825db0d4217dab7359ede4f8b5"; assert RELEASE_TREE == "e9b032c9634d9c9bb96047e4afb182c787275596"
+    assert RELEASE_COMMIT == "3002cf0eee896e1385bdc8208d870522794bc673"; assert RELEASE_TREE == "21583edf58ca94058fa7f743e37d5db85fdc7e5c"
 
 
 def test_external_artifacts_are_not_sentinel_bound(tmp_path):
