@@ -98,6 +98,28 @@ creates files, and rejects placeholders, mutable trusted-browser/gateway image
 references, missing SHA-256 values, repository-relative protected paths, and
 developer-machine paths.
 
+The external custody package interface is defined by
+`GATE4_EXTERNAL_CUSTODY.schema.json` and validated by
+`scripts/validate_gate4_external_custody.py`. The authoritative artifact
+classes are `SENTINEL_BUILT`, `EXTERNAL_SECURITY_BOUNDARY`, and
+`THIRD_PARTY`. The application and trusted-browser wrapper are
+`SENTINEL_BUILT`; the egress gateway and edge are
+`EXTERNAL_SECURITY_BOUNDARY`. External does not mean trusted by default:
+every image requires an immutable digest, independently verified signature,
+digest-bound SBOM, meaningful supplier/build provenance, independent
+approval, and activation-manifest binding. The supplier identity must match
+the independently approved trust policy; a vendor label alone is insufficient.
+Mutable tags, opaque images,
+self-asserted verification, and historical/conflicting evidence are blocked.
+
+The repository-side workflow design is `.github/workflows/gate4-custody.yml`.
+It is manual-only, requires explicit external-custody confirmation, requires
+registry and signer configuration from the workflow environment, and fails
+closed when any build context, digest, signing, SBOM, provenance, or identity
+input is unavailable. It builds only Sentinel-owned images and verifies the
+externally supplied egress and edge image references without building or
+signing them. Adding the workflow does not execute it or establish custody.
+
 ## Artifact tooling already present
 
 Safe source-side tooling already exists for:
@@ -177,3 +199,41 @@ all seven custody domains have authoritative evidence, Compose renders from
 protected external configuration, root-level firewall evidence is captured,
 the legacy edge issue is separately resolved, and the approved browser/human
 acceptance evidence is available.
+## Phase A verification boundary
+
+The external custody validator requires typed evidence records. Boolean fields
+such as `verified: true` are not accepted. A custody package is blocked unless
+the evidence record is independently approved and includes an evidence
+reference, evidence digest, verifier identity, verification method, timestamp,
+and approval reference. The validator also loads the actual activation-manifest
+bytes and cross-checks every release and artifact digest before accepting it.
+
+The permitted status vocabulary is `MISSING`, `PRESENT`, `CLAIMED`,
+`LOCALLY_VERIFIED`, `EXTERNALLY_VERIFIED`, `INDEPENDENTLY_APPROVED`,
+`HISTORICAL`, `CONFLICTING`, and `BLOCKED`. `CLAIMED`, `HISTORICAL`,
+`CONFLICTING`, and `MISSING` can never be promoted by local JSON claims.
+
+The repository does not contain authoritative build contexts for
+`deployment/staging/egress_gateway/Dockerfile` or
+`deployment/staging/edge/Dockerfile`. The custody workflow therefore fails
+closed unless externally supplied immutable custody for both security-boundary
+images is present; this package does not invent either Dockerfile.
+
+The only security-relevant gateway configuration injected by staging Compose
+is the approved egress policy, whose reference and digest remain mandatory.
+The edge Nginx configuration is a repository-controlled security-boundary
+configuration and is bound by digest to the release. TLS private keys are
+never read, recorded, hashed, or printed. TLS intake retains only a non-secret
+private-key custody reference, the public certificate digest, and an
+independently approved certificate/private-key match evidence record. Missing,
+self-asserted, mismatched, historical, or conflicting key-match evidence
+blocks custody; metadata alone never substitutes for custody of the key.
+The key-match record must bind the certificate digest and the non-secret key
+custody reference, and must include its own evidence digest, verifier identity,
+verification method, timestamp, and approval reference.
+
+The workflow's third-party trust policy is separate from the custom-image
+signer policy. The protected `gate4-custody` environment and external approval
+are prerequisites for any future publish/signing run. Action references still
+require immutable SHA pinning from an approved dependency source; no SHA is
+fabricated in this repository.

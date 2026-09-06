@@ -35,6 +35,32 @@ const OPTIONAL_RUNTIME_FIELDS = new Set([
   "approved_runtime_dependency_lockfile_digest",
   "approved_browser_auth_bridge_identity",
   "approved_browser_auth_bridge_digest",
+  "release_commit",
+  "release_tree",
+  "application_image_digest",
+  "trusted_browser_image_digest",
+  "egress_gateway_image_digest",
+  "edge_image_digest",
+  "postgres_image_digest",
+  "redis_image_digest",
+  "approved_browser_executable_digest",
+  "approved_browser_revision",
+  "approved_browser_version",
+  "approved_browser_base_image_digest",
+  "approved_egress_policy_reference",
+  "approved_egress_policy_digest",
+  "release_approval_reference",
+  "registry_identity",
+  "signature_evidence_status",
+  "attestation_evidence_status",
+  "sbom_evidence_status",
+  "egress_gateway_artifact_class",
+  "edge_artifact_class",
+  "approved_edge_configuration_digest",
+  "approved_edge_tls_custody_reference",
+  "approved_edge_tls_certificate_digest",
+  "approved_edge_tls_private_key_custody_reference",
+  "approved_edge_tls_certificate_key_match_evidence_digest",
 ]);
 
 function manifestError(code) {
@@ -174,4 +200,71 @@ export async function loadActivationManifest() {
     throw manifestError("TB_PROVIDER_MANIFEST_MISSING");
   }
   return validateActivationManifest(manifest);
+}
+
+const RELEASE_IDENTITY = /^[0-9a-f]{40}$/;
+
+/**
+ * Strict external-custody validation layered on the runtime manifest format.
+ * The expected release identity is supplied by the caller; no release or
+ * environment value is embedded in this module.
+ */
+export function validateReleaseBoundActivationManifest(
+  manifest,
+  { releaseCommit, releaseTree, certifiedOrigin: explicitCertifiedOrigin } = {},
+) {
+  if (!RELEASE_IDENTITY.test(releaseCommit || "") || !RELEASE_IDENTITY.test(releaseTree || "")) {
+    throw manifestError("TB_RELEASE_IDENTITY_INVALID");
+  }
+  validateActivationManifest(manifest, { certifiedOrigin: explicitCertifiedOrigin });
+  const requiredDigests = [
+    "application_image_digest",
+    "trusted_browser_image_digest",
+    "egress_gateway_image_digest",
+    "edge_image_digest",
+    "postgres_image_digest",
+    "redis_image_digest",
+    "approved_browser_executable_digest",
+    "approved_browser_base_image_digest",
+    "approved_egress_policy_digest",
+  ];
+  if (manifest.release_commit !== releaseCommit || manifest.release_tree !== releaseTree) {
+    throw manifestError("TB_RELEASE_IDENTITY_INVALID");
+  }
+  for (const field of requiredDigests) {
+    if (!IMAGE_DIGEST.test(manifest[field] || "")) throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!IMAGE_DIGEST.test(manifest.approved_browser_auth_bridge_digest || "")) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!IMAGE_DIGEST.test(manifest.approved_egress_policy_digest || "")) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (manifest.egress_gateway_artifact_class !== "EXTERNAL_SECURITY_BOUNDARY" || manifest.edge_artifact_class !== "EXTERNAL_SECURITY_BOUNDARY") {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!IMAGE_DIGEST.test(manifest.approved_edge_configuration_digest || "")) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!isSafeIdentifier(manifest.approved_edge_tls_custody_reference) || !IMAGE_DIGEST.test(manifest.approved_edge_tls_certificate_digest || "") || !isSafeIdentifier(manifest.approved_edge_tls_private_key_custody_reference) || !IMAGE_DIGEST.test(manifest.approved_edge_tls_certificate_key_match_evidence_digest || "")) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!isSafeIdentifier(manifest.approved_egress_policy_reference)) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!isSafeIdentifier(manifest.release_approval_reference)) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (typeof manifest.approved_browser_revision !== "string" || !manifest.approved_browser_revision.trim()) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (typeof manifest.approved_browser_version !== "string" || !manifest.approved_browser_version.trim()) {
+    throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  if (!manifest.signature) throw manifestError("TB_PROVIDER_MANIFEST_SIGNATURE_MISSING");
+  if (!isSafeIdentifier(manifest.registry_identity)) throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  for (const key of ["signature_evidence_status", "attestation_evidence_status", "sbom_evidence_status"]) {
+    if (manifest[key] !== "INDEPENDENTLY_APPROVED") throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
+  }
+  return Object.freeze({ ...manifest });
 }

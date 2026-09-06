@@ -1,0 +1,316 @@
+name: gate4-custody
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact reviewed release commit SHA
+        required: true
+        type: string
+      release_tree:
+        description: Exact reviewed release tree SHA
+        required: true
+        type: string
+      registry:
+        description: Approved OCI registry host; supplied by the release environment
+        required: true
+        type: string
+      namespace:
+        description: Approved registry namespace; supplied by the release environment
+        required: true
+        type: string
+      confirm_external_custody:
+        description: Explicitly authorize external build/publish/signing in the approved environment
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: gate4-custody-${{ inputs.release_sha }}
+  cancel-in-progress: false
+
+jobs:
+  custody:
+    name: Build, attest, sign, and verify Gate4 custody package
+    if: ${{ github.ref == 'refs/heads/gate4-controlled-analyst-pilot' && inputs.confirm_external_custody == true && vars.GATE4_ACTION_PINS_VERIFIED == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: Gate4-Release
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      RELEASE_TREE: ${{ inputs.release_tree }}
+      REGISTRY: ${{ inputs.registry }}
+      NAMESPACE: ${{ inputs.namespace }}
+      SIGNER_IDENTITY: ${{ vars.GATE4_SIGNER_IDENTITY }}
+      SIGNER_OIDC_ISSUER: ${{ vars.GATE4_SIGNER_OIDC_ISSUER }}
+      BUILDER_IDENTITY: ${{ vars.GATE4_BUILDER_IDENTITY }}
+      REGISTRY_USERNAME: ${{ vars.GATE4_REGISTRY_USERNAME }}
+      REGISTRY_TOKEN: ${{ secrets.GATE4_REGISTRY_TOKEN }}
+      PLAYWRIGHT_BASE_IMAGE: ${{ vars.GATE4_PLAYWRIGHT_BASE_IMAGE }}
+      POSTGRES_IMAGE: ${{ vars.GATE4_POSTGRES_IMAGE }}
+      REDIS_IMAGE: ${{ vars.GATE4_REDIS_IMAGE }}
+      EGRESS_GATEWAY_IMAGE: ${{ vars.GATE4_EGRESS_GATEWAY_IMAGE }}
+      EDGE_IMAGE: ${{ vars.GATE4_EDGE_IMAGE }}
+      THIRD_PARTY_SIGNER_IDENTITY: ${{ vars.GATE4_THIRD_PARTY_SIGNER_IDENTITY }}
+      THIRD_PARTY_SIGNER_OIDC_ISSUER: ${{ vars.GATE4_THIRD_PARTY_SIGNER_OIDC_ISSUER }}
+      THIRD_PARTY_REGISTRY_IDENTITY: ${{ vars.GATE4_THIRD_PARTY_REGISTRY_IDENTITY }}
+      EXTERNAL_BOUNDARY_SIGNER_IDENTITY: ${{ vars.GATE4_EXTERNAL_BOUNDARY_SIGNER_IDENTITY }}
+      EXTERNAL_BOUNDARY_SIGNER_OIDC_ISSUER: ${{ vars.GATE4_EXTERNAL_BOUNDARY_SIGNER_OIDC_ISSUER }}
+      BUILD_TIMESTAMP: ${{ github.run_started_at }}
+      CUSTODY_PACKAGE_PATH: ${{ vars.GATE4_EXTERNAL_CUSTODY_PACKAGE_PATH }}
+      ACTIVATION_MANIFEST_PATH: ${{ vars.GATE4_ACTIVATION_MANIFEST_PATH }}
+
+    steps:
+      - name: Validate external custody configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=Gate4 custody configuration::$1" >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "release SHA is malformed"
+          [[ "$RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]] || fail "release tree is malformed"
+          [[ "$REGISTRY" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || fail "registry identity is malformed"
+          [[ "$NAMESPACE" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "registry namespace is malformed"
+          [[ -n "$SIGNER_IDENTITY" ]] || fail "approved signer identity is missing"
+          [[ -n "$SIGNER_OIDC_ISSUER" ]] || fail "approved signer OIDC issuer is missing"
+          [[ -n "$BUILDER_IDENTITY" ]] || fail "builder identity is missing"
+          [[ -n "$THIRD_PARTY_SIGNER_IDENTITY" ]] || fail "third-party signer identity is missing"
+          [[ -n "$THIRD_PARTY_SIGNER_OIDC_ISSUER" ]] || fail "third-party signer OIDC issuer is missing"
+          [[ -n "$EXTERNAL_BOUNDARY_SIGNER_IDENTITY" ]] || fail "external-boundary signer identity is missing"
+          [[ -n "$EXTERNAL_BOUNDARY_SIGNER_OIDC_ISSUER" ]] || fail "external-boundary signer OIDC issuer is missing"
+          [[ "$THIRD_PARTY_SIGNER_IDENTITY" != "$SIGNER_IDENTITY" ]] || fail "third-party signer must be distinct from custom signer"
+          [[ "$THIRD_PARTY_REGISTRY_IDENTITY" = "$REGISTRY" ]] || fail "third-party registry identity mismatch"
+          [[ "$BUILD_TIMESTAMP" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || fail "GitHub build timestamp is unavailable or malformed"
+          [[ -n "$REGISTRY_USERNAME" ]] || fail "registry username is missing"
+          [[ -n "$REGISTRY_TOKEN" ]] || fail "registry credential is missing"
+          [[ "$PLAYWRIGHT_BASE_IMAGE" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || fail "Playwright base image must be immutable"
+          [[ "$POSTGRES_IMAGE" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || fail "PostgreSQL image must be immutable"
+          [[ "$REDIS_IMAGE" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || fail "Redis image must be immutable"
+          [[ "$EGRESS_GATEWAY_IMAGE" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || fail "egress gateway image must be immutable"
+          [[ "$EDGE_IMAGE" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || fail "edge image must be immutable"
+          [[ -n "$CUSTODY_PACKAGE_PATH" ]] || fail "externally supplied custody package path is missing"
+          [[ -n "$ACTIVATION_MANIFEST_PATH" ]] || fail "externally supplied activation manifest path is missing"
+
+      - name: Checkout exact release commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Verify exact release commit and tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RELEASE_SHA" = "b20721b935692d825db0d4217dab7359ede4f8b5"
+          test "$RELEASE_TREE" = "e9b032c9634d9c9bb96047e4afb182c787275596"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$RELEASE_TREE"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Verify required custody build contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f Dockerfile
+          test -f deployment/staging/trusted_browser_runtime/Dockerfile
+          test -f deployment/staging/GATE4_EXTERNAL_CUSTODY.schema.json
+          test -f deployment/staging/scripts/validate_gate4_external_custody.py
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 # v0.20.0
+
+      - name: Authenticate to the externally configured registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login "$REGISTRY" \
+            --username "$REGISTRY_USERNAME" \
+            --password-stdin
+
+      - name: Verify externally supplied security-boundary images
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "$EGRESS_GATEWAY_IMAGE" "$EDGE_IMAGE"; do
+            cosign verify "$image" \
+              --certificate-identity "$EXTERNAL_BOUNDARY_SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$EXTERNAL_BOUNDARY_SIGNER_OIDC_ISSUER"
+            cosign verify-attestation "$image" \
+              --type spdxjson \
+              --certificate-identity "$EXTERNAL_BOUNDARY_SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$EXTERNAL_BOUNDARY_SIGNER_OIDC_ISSUER"
+            cosign verify-attestation "$image" \
+              --type https://slsa.dev/provenance/v1 \
+              --certificate-identity "$EXTERNAL_BOUNDARY_SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$EXTERNAL_BOUNDARY_SIGNER_OIDC_ISSUER"
+          done
+
+      - name: Verify third-party immutable references
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "$POSTGRES_IMAGE" "$REDIS_IMAGE"; do
+            cosign verify "$image" \
+              --certificate-identity "$THIRD_PARTY_SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$THIRD_PARTY_SIGNER_OIDC_ISSUER"
+          done
+
+      - name: Build custom images without publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          created="$BUILD_TIMESTAMP"
+          build_image() {
+            local name="$1" dockerfile="$2" tag="$REGISTRY/$NAMESPACE/$1:$RELEASE_SHA"
+            local metadata="$RUNNER_TEMP/$name-build-metadata.json"
+            local args=(
+              --platform linux/amd64
+              --file "$dockerfile"
+              --tag "$tag"
+              --provenance=mode=max
+              --sbom=true
+              --metadata-file "$metadata"
+              --build-arg "VCS_REF=$RELEASE_SHA"
+              --build-arg "VCS_REF_FULL=$RELEASE_SHA"
+              --build-arg "IMAGE_SOURCE=$image_source"
+              --build-arg "IMAGE_CREATED=$created"
+            )
+            if [[ "$name" = "trusted-browser" ]]; then
+              args+=(--build-arg "PLAYWRIGHT_BASE_IMAGE=$PLAYWRIGHT_BASE_IMAGE")
+            fi
+            docker buildx build --load "${args[@]}" .
+            test -s "$metadata"
+          }
+          build_image sentinel-dna Dockerfile
+          build_image trusted-browser deployment/staging/trusted_browser_runtime/Dockerfile
+
+      - name: Discover immutable image digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=Gate4 digest discovery::$1" >&2; exit 1; }
+          : > "$RUNNER_TEMP/gate4-image-digests.env"
+          for name in sentinel-dna trusted-browser; do
+            image="$REGISTRY/$NAMESPACE/$name:$RELEASE_SHA"
+            digest="$(jq -r '.[\"containerimage.digest\"] // empty' "$RUNNER_TEMP/$name-build-metadata.json")"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "immutable digest unavailable for $name"
+            printf '%s_IMAGE_DIGEST=%s\n' "$(echo "$name" | tr '[:lower:]-' '[:upper:]_')" "$digest" >> "$RUNNER_TEMP/gate4-image-digests.env"
+          done
+          cat "$RUNNER_TEMP/gate4-image-digests.env" >> "$GITHUB_ENV"
+
+      - name: Install verification tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cosign >/dev/null || { echo "cosign unavailable" >&2; exit 1; }
+          command -v syft >/dev/null || { echo "syft unavailable" >&2; exit 1; }
+
+      - name: Final pre-publication custody gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 deployment/staging/scripts/validate_gate4_external_custody.py \
+            "$CUSTODY_PACKAGE_PATH" \
+            --expected-commit "$RELEASE_SHA" \
+            --expected-tree "$RELEASE_TREE" \
+            --expected-application-image "$REGISTRY/$NAMESPACE/sentinel-dna@${SENTINEL_DNA_IMAGE_DIGEST}" \
+            --expected-trusted-browser-image "$REGISTRY/$NAMESPACE/trusted-browser@${TRUSTED_BROWSER_IMAGE_DIGEST}" \
+            --expected-egress-image "$EGRESS_GATEWAY_IMAGE" \
+            --expected-edge-image "$EDGE_IMAGE" \
+            --activation-manifest-bytes "$ACTIVATION_MANIFEST_PATH"
+          test "$RELEASE_SHA" = "b20721b935692d825db0d4217dab7359ede4f8b5"
+          test "$RELEASE_TREE" = "e9b032c9634d9c9bb96047e4afb182c787275596"
+
+      - name: Generate SBOM before terminal publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A digests=(
+            [sentinel-dna]="$SENTINEL_DNA_IMAGE_DIGEST"
+            [trusted-browser]="$TRUSTED_BROWSER_IMAGE_DIGEST"
+          )
+          for name in "${!digests[@]}"; do
+            image="$REGISTRY/$NAMESPACE/$name@${digests[$name]}"
+            sbom="$RUNNER_TEMP/$name.sbom.spdx.json"
+            syft "$image" -o spdx-json > "$sbom"
+          done
+
+      - name: Publish custom images (terminal)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in sentinel-dna trusted-browser; do
+            docker push "$REGISTRY/$NAMESPACE/$name:$RELEASE_SHA"
+            published="$(docker buildx imagetools inspect "$REGISTRY/$NAMESPACE/$name:$RELEASE_SHA" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            expected_var="${name^^}_IMAGE_DIGEST"
+            expected="${!expected_var}"
+            test "$published" = "$expected"
+          done
+
+      - name: Publish SBOM attestations (terminal)
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A digests=(
+            [sentinel-dna]="$SENTINEL_DNA_IMAGE_DIGEST"
+            [trusted-browser]="$TRUSTED_BROWSER_IMAGE_DIGEST"
+          )
+          for name in "${!digests[@]}"; do
+            cosign attest --yes --type spdxjson --predicate "$RUNNER_TEMP/$name.sbom.spdx.json" "$REGISTRY/$NAMESPACE/$name@${digests[$name]}"
+          done
+
+      - name: Sign immutable image digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A digests=(
+            [sentinel-dna]="$SENTINEL_DNA_IMAGE_DIGEST"
+            [trusted-browser]="$TRUSTED_BROWSER_IMAGE_DIGEST"
+          )
+          for name in "${!digests[@]}"; do
+            cosign sign --yes "$REGISTRY/$NAMESPACE/$name@${digests[$name]}"
+          done
+
+      - name: Verify signature, SBOM, and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A digests=(
+            [sentinel-dna]="$SENTINEL_DNA_IMAGE_DIGEST"
+            [trusted-browser]="$TRUSTED_BROWSER_IMAGE_DIGEST"
+          )
+          for name in "${!digests[@]}"; do
+            image="$REGISTRY/$NAMESPACE/$name@${digests[$name]}"
+            cosign verify "$image" \
+              --certificate-identity "$SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$SIGNER_OIDC_ISSUER"
+            cosign verify-attestation "$image" \
+              --type spdxjson \
+              --certificate-identity "$SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$SIGNER_OIDC_ISSUER"
+            cosign verify-attestation "$image" \
+              --type https://slsa.dev/provenance/v1 \
+              --certificate-identity "$SIGNER_IDENTITY" \
+              --certificate-oidc-issuer "$SIGNER_OIDC_ISSUER"
+          done
+
+      - name: Retain non-secret custody evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gate4-custody-evidence-${{ inputs.release_sha }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            ${{ runner.temp }}/gate4-image-digests.env
+            ${{ runner.temp }}/*-build-metadata.json
+            ${{ runner.temp }}/*.sbom.spdx.json
