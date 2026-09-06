@@ -6,7 +6,9 @@
  * origin.
  */
 
-export const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+// This origin is intentionally simulation-only and must never be used by a
+// deployment path. Real staging requires SENTINEL_DNA_CERTIFIED_ORIGIN.
+export const CERTIFIED_ORIGIN = process.env?.SENTINEL_DNA_SIMULATION_CERTIFIED_ORIGIN || "https://simulation.invalid";
 export const SIMULATION_MODE = "NON-PRODUCTION_SIMULATION";
 
 export function isSyntheticCertifiedOriginReachable(origin) {

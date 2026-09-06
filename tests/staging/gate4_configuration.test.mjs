@@ -20,6 +20,17 @@ const ACTIVATION_MANIFEST = new URL(
   import.meta.url,
 );
 
+async function withCertifiedOrigin(manifest, work) {
+  const previous = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN;
+  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = manifest.staging_origin;
+  try {
+    return await work();
+  } finally {
+    if (previous === undefined) delete process.env.SENTINEL_DNA_CERTIFIED_ORIGIN;
+    else process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = previous;
+  }
+}
+
 test("Gate 4 configuration helper pins the facade and approved provider boundary", async () => {
   const source = await readFile(CONFIG_HELPER, "utf8");
   assert.match(source, /trusted_browser_service\\browser-client\.mjs/);
@@ -40,9 +51,23 @@ test("Gate 4 validator requires the exact reviewed facade and provider boundary"
 
 test("Gate 4 activation manifest is integrity-bound to the certified origin", async () => {
   const manifest = JSON.parse(await readFile(ACTIVATION_MANIFEST, "utf8"));
-  const validated = validateActivationManifest(manifest);
-  assert.equal(validated.staging_origin, "https://uwakwe-desktop.taile388cc.ts.net");
-  assert.equal(validated.integrity.algorithm, "sha256");
+  await withCertifiedOrigin(manifest, () => {
+    const validated = validateActivationManifest(manifest);
+    assert.equal(validated.staging_origin, manifest.staging_origin);
+    assert.equal(validated.integrity.algorithm, "sha256");
+  });
+});
+
+test("Gate 4 activation manifest fails closed without external certified origin", async () => {
+  const manifest = JSON.parse(await readFile(ACTIVATION_MANIFEST, "utf8"));
+  const previous = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN;
+  delete process.env.SENTINEL_DNA_CERTIFIED_ORIGIN;
+  try {
+    assert.throws(() => validateActivationManifest(manifest), /TB_ORIGIN_REJECTED/);
+  } finally {
+    if (previous === undefined) delete process.env.SENTINEL_DNA_CERTIFIED_ORIGIN;
+    else process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = previous;
+  }
 });
 
 test("Gate 4 activation manifest binds the external browserAuth bridge digest", async () => {
@@ -57,15 +82,17 @@ test("Gate 4 activation manifest binds the external browserAuth bridge digest", 
     manifest_hash: computeManifestHash(bound),
   };
 
-  const validated = validateActivationManifest(bound);
-  assert.equal(validated.approved_browser_auth_bridge_identity, "sentinel-dna-browser-auth-bridge:1.0.0");
-  assert.equal(validated.approved_browser_auth_bridge_digest, `sha256:${"a".repeat(64)}`);
-  assert.throws(
-    () => validateActivationManifest({
-      ...bound,
-      approved_browser_auth_bridge_digest: undefined,
-      integrity: { ...bound.integrity },
-    }),
-    /TB_PROVIDER_MANIFEST_INVALID/,
-  );
+  await withCertifiedOrigin(bound, () => {
+    const validated = validateActivationManifest(bound);
+    assert.equal(validated.approved_browser_auth_bridge_identity, "sentinel-dna-browser-auth-bridge:1.0.0");
+    assert.equal(validated.approved_browser_auth_bridge_digest, `sha256:${"a".repeat(64)}`);
+    assert.throws(
+      () => validateActivationManifest({
+        ...bound,
+        approved_browser_auth_bridge_digest: undefined,
+        integrity: { ...bound.integrity },
+      }),
+      /TB_PROVIDER_MANIFEST_INVALID/,
+    );
+  });
 });

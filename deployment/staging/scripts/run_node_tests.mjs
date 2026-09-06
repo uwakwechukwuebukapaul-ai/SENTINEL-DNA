@@ -16,10 +16,17 @@ function stagingTests(directory) {
 // already deterministic for this suite, so accept that compatibility flag but
 // do not forward it as an unsupported Node option.
 const forwardedArgs = process.argv.slice(2).filter((argument) => argument !== "--runInBand");
+if (typeof process.env.SENTINEL_DNA_CERTIFIED_ORIGIN !== "string" || !process.env.SENTINEL_DNA_CERTIFIED_ORIGIN.trim()) {
+  console.error("SENTINEL_DNA_CERTIFIED_ORIGIN is required for staging tests");
+  process.exitCode = 1;
+} else {
 const result = spawnSync(
   process.execPath,
   ["--test", ...stagingTests("tests/staging"), ...forwardedArgs],
-  { stdio: "inherit" },
+  {
+    stdio: "inherit",
+    env: { ...process.env },
+  },
 );
 
 if (result.error) {
@@ -27,4 +34,5 @@ if (result.error) {
   process.exitCode = 1;
 } else {
   process.exitCode = result.status ?? 1;
+}
 }

@@ -11,6 +11,7 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -41,7 +42,7 @@ def _load_config() -> dict[str, object]:
     if not isinstance(config, dict):
         raise CertificateConfigurationError("staging certificate configuration must be an object")
     required = {
-        "ca_common_name", "server_common_name", "dns_sans", "fixed_ip_sans",
+        "ca_common_name", "server_common_name", "dns_sans", "fixed_ip_sans", "certified_hostname_environment_variable",
         "lan_ip_environment_variable", "ca_certificate_filename", "ca_private_key_filename",
         "certificate_filename", "fullchain_certificate_filename", "private_key_filename", "key_algorithm", "key_size",
         "signature_hash", "ca_validity_days", "validity_days",
@@ -52,7 +53,7 @@ def _load_config() -> dict[str, object]:
         raise CertificateConfigurationError("staging certificate key configuration is invalid")
     if config["signature_hash"] != "SHA-256":
         raise CertificateConfigurationError("staging certificate signature configuration is invalid")
-    for field in ("ca_common_name", "server_common_name", "lan_ip_environment_variable"):
+    for field in ("ca_common_name", "server_common_name", "lan_ip_environment_variable", "certified_hostname_environment_variable"):
         if not isinstance(config[field], str) or not config[field].strip():
             raise CertificateConfigurationError("staging certificate identity configuration is invalid")
     for field in ("ca_validity_days", "validity_days"):
@@ -95,6 +96,31 @@ def _staging_ip(config: dict[str, object]) -> ipaddress.IPv4Address | ipaddress.
     return address
 
 
+def _certified_hostname(config: dict[str, object]) -> str:
+    variable = config["certified_hostname_environment_variable"]
+    if not isinstance(variable, str):
+        raise CertificateConfigurationError("certified hostname environment variable configuration is invalid")
+    hostname = _required_environment(variable).rstrip(".").lower()
+    if len(hostname) > 253 or "." not in hostname:
+        raise CertificateConfigurationError(f"{variable} must contain a certified DNS hostname")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        raise CertificateConfigurationError(f"{variable} must contain a certified DNS hostname")
+    if not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", hostname):
+        raise CertificateConfigurationError(f"{variable} must contain a certified DNS hostname")
+    return hostname
+
+
+def _dns_sans(config: dict[str, object]) -> list[str]:
+    static_sans = config["dns_sans"]
+    if not isinstance(static_sans, list) or not all(isinstance(item, str) for item in static_sans):
+        raise CertificateConfigurationError("staging certificate SAN configuration is invalid")
+    return [*static_sans, _certified_hostname(config)]
+
+
 def _paths(config: dict[str, object]) -> tuple[Path, Path, Path, Path, Path]:
     directory = _tls_directory()
     names = (config["ca_certificate_filename"], config["ca_private_key_filename"],
@@ -109,7 +135,7 @@ def _paths(config: dict[str, object]) -> tuple[Path, Path, Path, Path, Path]:
 
 
 def _expected_sans(config: dict[str, object], staging_ip: object) -> set[tuple[str, str]]:
-    dns_sans = config["dns_sans"]
+    dns_sans = _dns_sans(config)
     fixed_ip_sans = config["fixed_ip_sans"]
     server_common_name = config["server_common_name"]
     if not isinstance(dns_sans, list) or not isinstance(fixed_ip_sans, list) or not isinstance(server_common_name, str):
@@ -360,7 +386,7 @@ def _generate(config: dict[str, object], staging_ip: object, paths: tuple[Path, 
     _prepare_tls_directory(ca_cert_path.parent, (ca_key_path, leaf_key_path))
     ca_common_name = config["ca_common_name"]
     server_common_name = config["server_common_name"]
-    dns_sans = config["dns_sans"]
+    dns_sans = _dns_sans(config)
     fixed_ip_sans = config["fixed_ip_sans"]
     ca_validity_days = config["ca_validity_days"]
     leaf_validity_days = config["validity_days"]

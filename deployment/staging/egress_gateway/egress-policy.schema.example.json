@@ -1,0 +1,8 @@
+{
+  "schema": "sentinel-dna-egress-policy-v1",
+  "schemes": ["https"],
+  "ports": [443],
+  "destinations": [
+    {"hostname": "approved.example", "ports": [443]}
+  ]
+}

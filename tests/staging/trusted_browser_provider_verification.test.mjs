@@ -21,6 +21,7 @@ import {
 } from "../../deployment/staging/scripts/trusted_browser_service/providers/playwright-runtime-provider.mjs";
 import { verifyTrustedBrowserProvider } from "../../deployment/staging/scripts/verify_trusted_browser_provider.mjs";
 
+
 const SERVICE_MODULE = fileURLToPath(new URL(
   "../../deployment/staging/scripts/trusted_browser_service/browser-client.mjs",
   import.meta.url,
@@ -43,7 +44,7 @@ const VALID_RUNTIME = `
       capabilities: { get: async (name) => name === "browserAuth" ? { request: async () => ({ status: "not-called" }) } : undefined },
     };
     return { browsers: { getForUrl: async (origin) => {
-      if (origin !== "https://uwakwe-desktop.taile388cc.ts.net") throw new Error("origin rejected");
+      if (origin !== ${JSON.stringify(CERTIFIED_ORIGIN)}) throw new Error("origin rejected");
       return { tabs: { new: async () => tab } };
     } } };
   }

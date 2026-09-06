@@ -19,15 +19,13 @@ import {
   TRUSTED_BROWSER_ENVIRONMENT,
 } from "../scripts/trusted_browser_service/runtime-provider.mjs";
 import {
-  CERTIFIED_STAGING_ORIGIN,
-} from "../scripts/trusted_browser_activation_manifest.mjs";
-import {
   generateSimulationActivationManifest,
   SIMULATION_IMAGE_DIGEST,
   SIMULATION_MODE,
   SIMULATION_OUTPUT_DIRECTORY,
 } from "./generate_simulation_activation_manifest.mjs";
 import {
+  CERTIFIED_ORIGIN,
   isSyntheticCertifiedOriginReachable,
   syntheticEndpointEvidence,
 } from "./fixtures/synthetic-certified-staging-endpoint.mjs";
@@ -43,6 +41,7 @@ const INITIAL_BLOCKED_CODES = Object.freeze([
   "TB_SECURITY_CONTROL_MISSING",
 ]);
 const REQUIRED_ENVIRONMENT_KEYS = [
+  "SENTINEL_DNA_CERTIFIED_ORIGIN",
   "SENTINEL_DNA_TRUSTED_BROWSER_CLIENT",
   "SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT",
   "SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME",
@@ -105,7 +104,7 @@ function createSimulationExternalProvider() {
       return {
         browsers: {
           getForUrl: async (origin) => {
-            if (origin !== CERTIFIED_STAGING_ORIGIN) {
+            if (origin !== CERTIFIED_ORIGIN) {
               throw simulationError("TB_ORIGIN_REJECTED");
             }
             return browser;
@@ -133,7 +132,7 @@ async function verifySimulationProvider() {
     }
     checks.provider = "PASS";
     checks.runtime = "PASS";
-    const browser = await runtime.browsers.getForUrl(CERTIFIED_STAGING_ORIGIN);
+    const browser = await runtime.browsers.getForUrl(CERTIFIED_ORIGIN);
     checks.origin = "PASS";
     if (!browser || typeof browser.tabs?.new !== "function") {
       throw simulationError("TB_BROWSER_CONTRACT_FAILED");
@@ -310,6 +309,7 @@ async function withSimulationEnvironment(manifestPath, callback) {
     SENTINEL_DNA_TRUSTED_BROWSER_UPSTREAM_CLIENT: "NON-PRODUCTION_SIMULATION_ONLY",
     SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME: "NON-PRODUCTION_SIMULATION_ONLY",
     SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST: manifestPath,
+    SENTINEL_DNA_CERTIFIED_ORIGIN: CERTIFIED_ORIGIN,
     SENTINEL_DNA_IMAGE_DIGEST: SIMULATION_IMAGE_DIGEST,
     SENTINEL_DNA_ENV: "staging",
     SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1",

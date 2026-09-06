@@ -44,6 +44,7 @@ class CanonicalMembership:
     actor_id: str
     role: str
     status: str
+    lifecycle_state: str = "active"
 
 
 def _tenant(row: Any) -> CanonicalTenant | None:
@@ -55,7 +56,7 @@ def _identity(row: Any) -> CanonicalIdentity | None:
 
 
 def _membership(row: Any) -> CanonicalMembership | None:
-    return CanonicalMembership(row["tenant_id"], row["actor_id"], row["role"], row["status"]) if row else None
+    return CanonicalMembership(row["tenant_id"], row["actor_id"], row["role"], row["status"], row["lifecycle_state"] if "lifecycle_state" in row.keys() else "active") if row else None
 
 
 class CanonicalTenantService:

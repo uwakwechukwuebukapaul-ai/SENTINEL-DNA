@@ -14,7 +14,8 @@ export const state = {
   authRequests: [],
 };
 
-const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+// Explicitly synthetic test-only origin; never a deployment default.
+const CERTIFIED_ORIGIN = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN || "https://synthetic-gate4.example.test";
 
 function assertCertifiedUrl(url) {
   const parsed = new URL(url);

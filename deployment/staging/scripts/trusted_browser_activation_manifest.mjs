@@ -11,11 +11,11 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { configuredCertifiedOrigin, parseTrustedOrigin } from "./trusted_browser_service/policy/origin-policy.mjs";
 
 export const ACTIVATION_MANIFEST_ENV =
   "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST";
 export const ACTIVATION_MANIFEST_SCHEMA_VERSION = "1.0";
-export const CERTIFIED_STAGING_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{2,127}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
@@ -68,7 +68,7 @@ function isSafeIdentifier(value) {
   return typeof value === "string" && SAFE_IDENTIFIER.test(value);
 }
 
-export function validateActivationManifest(manifest) {
+export function validateActivationManifest(manifest, { certifiedOrigin: explicitCertifiedOrigin } = {}) {
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
     throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
   }
@@ -105,7 +105,16 @@ export function validateActivationManifest(manifest) {
   if (bridgeDigest !== undefined && !IMAGE_DIGEST.test(bridgeDigest)) {
     throw manifestError("TB_PROVIDER_MANIFEST_INVALID");
   }
-  if (manifest.staging_origin !== CERTIFIED_STAGING_ORIGIN) {
+  let certifiedOrigin;
+  try {
+    const configured = explicitCertifiedOrigin ?? configuredCertifiedOrigin();
+    certifiedOrigin = explicitCertifiedOrigin === undefined
+      ? configured
+      : parseTrustedOrigin(configured, { certifiedOrigin: configured }).origin;
+  } catch {
+    throw manifestError("TB_ORIGIN_REJECTED");
+  }
+  if (manifest.staging_origin !== certifiedOrigin) {
     throw manifestError("TB_ORIGIN_REJECTED");
   }
   if (

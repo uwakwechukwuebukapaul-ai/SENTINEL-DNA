@@ -30,6 +30,7 @@ import { validateConfiguredBrowserAuthBridge } from "./validate_trusted_browser_
 import {
   APPROVED_PLAYWRIGHT_RUNTIME_ENV,
 } from "./trusted_browser_service/providers/playwright-runtime-provider.mjs";
+import { configuredCertifiedOrigin } from "./trusted_browser_service/policy/origin-policy.mjs";
 
 export const EXTERNAL_ARTIFACT_EVIDENCE_SCHEMA_VERSION = "1.0";
 const GATE4_EVIDENCE_DIRECTORY = resolve(
@@ -44,7 +45,6 @@ const IMAGE_DIGEST_ENV = "SENTINEL_DNA_IMAGE_DIGEST";
 const REPOSITORY_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const READY_STATUS = "READY_FOR_ANALYST_PILOT";
 const BLOCKED_STATUS = "BLOCKED_WITH_REASON";
-const CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
 const SAFE_CODES = new Set([
   "TB_PROVIDER_NOT_CONFIGURED",
   "TB_PROVIDER_MODULE_MISSING",
@@ -211,6 +211,8 @@ function remediationFor(code) {
 }
 
 export async function verifyGate4ExternalArtifacts() {
+  let certifiedOrigin = null;
+  try { certifiedOrigin = configuredCertifiedOrigin(); } catch { /* fail closed below */ }
   const runtimeUrl = configuredPath(APPROVED_PLAYWRIGHT_RUNTIME_ENV);
   const runtimeUsable = runtimeUrl !== null && !isRepositoryArtifact(runtimeUrl);
   const checks = {
@@ -273,7 +275,7 @@ export async function verifyGate4ExternalArtifacts() {
   } else if (manifest) {
     checks.image_digest_binding = blockedCheck("image_digest_binding", "TB_PROVIDER_MANIFEST_INVALID");
   }
-  checks.certified_origin_binding = manifest?.staging_origin === CERTIFIED_ORIGIN
+  checks.certified_origin_binding = certifiedOrigin && manifest?.staging_origin === certifiedOrigin
     ? passCheck("certified_origin_binding")
     : blockedCheck(
       "certified_origin_binding",
@@ -382,7 +384,7 @@ export async function verifyGate4ExternalArtifacts() {
         ? manifest.approved_browser_auth_bridge_digest.toLowerCase()
         : null,
       image_digest: isImageDigest(configuredImage) ? configuredImage.toLowerCase() : null,
-      certified_origin: CERTIFIED_ORIGIN,
+      certified_origin: certifiedOrigin,
     },
     controls: {
       credentials_included: false,

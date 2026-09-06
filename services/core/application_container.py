@@ -150,6 +150,7 @@ from services.favp_operations import FAVPOperationsRepository, FAVPOperationsSer
 from services.compliance.governance import GovernanceService
 from services.identity_security.service import IdentitySecurityService
 from services.identity.canonical_authority import CanonicalAuthorityService
+from services.identity.organization_membership import OrganizationMembershipService
 from services.identity.request_context import CanonicalRequestContextService
 from services.tenant.authorization import CanonicalTenantAuthorizationService
 from database.connection import database
@@ -265,6 +266,7 @@ def build_container() -> ServiceRegistry:
 
     dashboard_service = DashboardService()
     audit_service = AuditService()
+    organization_membership_service = OrganizationMembershipService(database, authority=canonical_authority, auth=auth_service, audit=audit_service)
     investigation_intake = InvestigationIntake(
         coordinator.execution_repository,
         audit_service=audit_service,
@@ -476,6 +478,7 @@ def build_container() -> ServiceRegistry:
     registry.register("security_copilot", security_copilot)
     registry.register("platform_experience", platform_experience)
     registry.register("canonical_authority", canonical_authority)
+    registry.register("organization_membership_service", organization_membership_service)
     registry.register("canonical_request_context", canonical_request_context)
     registry.register("canonical_authorization", canonical_authorization)
 

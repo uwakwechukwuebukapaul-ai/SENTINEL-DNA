@@ -84,7 +84,7 @@ test("simulation manifest has valid SHA-256 binding and an ephemeral public sign
   }
   const manifest = JSON.parse(await readFile(join(directory, result.manifest_file), "utf8"));
   const signatureBundle = JSON.parse(await readFile(join(directory, result.signature_file), "utf8"));
-  assert.equal(validateActivationManifest(manifest).approved_image_runtime_digest, SIMULATION_IMAGE_DIGEST);
+  assert.equal(validateActivationManifest(manifest, { certifiedOrigin: CERTIFIED_ORIGIN }).approved_image_runtime_digest, SIMULATION_IMAGE_DIGEST);
   assert.equal(signatureBundle.mode, SIMULATION_MODE);
   assert.equal(signatureBundle.private_key_written, false);
   assert.equal(signatureBundle.signed_manifest_hash, manifest.integrity.manifest_hash);

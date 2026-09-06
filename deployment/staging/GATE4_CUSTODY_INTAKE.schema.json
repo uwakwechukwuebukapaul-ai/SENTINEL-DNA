@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sentinel-dna.gate4.custody-intake.v1",
+  "title": "Sentinel DNA Gate4 custody intake package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "custody_domains", "configuration_inputs", "acceptance_conditions"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "custody_domains": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "evidence_class", "required_artifact", "identity_fields", "digest_fields", "authority", "validation", "fail_closed"],
+        "properties": {
+          "name": {"enum": ["REPOSITORY_PROVENANCE", "RUNTIME_IMAGE_PROVENANCE", "BROWSER_PROVENANCE", "BROWSERAUTH_BRIDGE_PROVENANCE", "EGRESS_POLICY_PROVENANCE", "ACTIVATION_MANIFEST_PROVENANCE", "LIVE_DEPLOYMENT_PROVENANCE"]},
+          "evidence_class": {"enum": ["OPERATOR_SUPPLIED", "EXTERNALLY_CUSTODIED", "DOCKER_GENERATED", "ROOT_LEVEL_READ_ONLY", "LIVE_RUNTIME", "HUMAN_BROWSER_ACCEPTANCE"]},
+          "required_artifact": {"type": "string", "minLength": 1},
+          "identity_fields": {"type": "array", "items": {"type": "string"}},
+          "digest_fields": {"type": "array", "items": {"type": "string"}},
+          "authority": {"type": "string", "minLength": 1},
+          "validation": {"type": "array", "items": {"type": "string"}},
+          "fail_closed": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "configuration_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["secrets", "environment", "artifact_references", "provenance", "runtime_provider"],
+      "properties": {
+        "secrets": {"type": "array", "items": {"type": "string"}},
+        "environment": {"type": "array", "items": {"type": "string"}},
+        "artifact_references": {"type": "array", "items": {"type": "string"}},
+        "provenance": {"type": "array", "items": {"type": "string"}},
+        "runtime_provider": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "acceptance_conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ipv6_forwarding", "staging_edge", "firewall", "live_runtime"],
+      "properties": {
+        "ipv6_forwarding": {"const": "disabled_until_separately_approved"},
+        "staging_edge": {"const": "legacy_failure_requires_separate_resolution"},
+        "firewall": {"const": "read_only_root_evidence_required"},
+        "live_runtime": {"const": "no_validation_until_custody_and_compose_pass"}
+      }
+    }
+  }
+}

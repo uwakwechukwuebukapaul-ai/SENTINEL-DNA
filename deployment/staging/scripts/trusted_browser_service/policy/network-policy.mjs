@@ -37,7 +37,10 @@ function isForbiddenIp(address) {
       ["172.16.0.0", [255, 240, 0, 0]],
       ["192.0.0.0", [255, 255, 255, 0]],
       ["192.168.0.0", [255, 255, 0, 0]],
+      ["192.0.2.0", [255, 255, 255, 0]],
       ["198.18.0.0", [255, 254, 0, 0]],
+      ["198.51.100.0", [255, 255, 255, 0]],
+      ["203.0.113.0", [255, 255, 255, 0]],
       ["224.0.0.0", [240, 0, 0, 0]],
     ];
     return masks.some((entry) => inIpv4(address, entry));
@@ -48,7 +51,7 @@ function isForbiddenIp(address) {
       normalized.startsWith("fc") || normalized.startsWith("fd") ||
       normalized.startsWith("fe8") || normalized.startsWith("fe9") ||
       normalized.startsWith("fea") || normalized.startsWith("feb") ||
-      normalized.startsWith("ff");
+      normalized.startsWith("ff") || /^2001:(?:0{0,3})db8:/i.test(normalized);
   }
   return false;
 }
@@ -60,7 +63,11 @@ export async function resolveAndValidateNetworkTarget(url, { lookup = dns.lookup
   } catch {
     throw new Error("TB_NETWORK_TARGET_REJECTED");
   }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port && parsed.port !== "443") {
+    throw new Error("TB_NETWORK_TARGET_REJECTED");
+  }
   const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (net.isIP(hostname) !== 0) throw new Error("TB_NETWORK_TARGET_REJECTED");
   if (METADATA_HOSTS.has(hostname) || isForbiddenIp(hostname)) {
     throw new Error("TB_NETWORK_TARGET_REJECTED");
   }
@@ -75,6 +82,21 @@ export async function resolveAndValidateNetworkTarget(url, { lookup = dns.lookup
     throw new Error("TB_NETWORK_TARGET_REJECTED");
   }
   return Object.freeze({ origin: parsed.origin, hostname, addresses: results.map((item) => item.address) });
+}
+
+export async function revalidateBeforeConnect({ hostname, addresses, lookup = dns.lookup } = {}) {
+  if (typeof hostname !== "string" || !hostname || !Array.isArray(addresses) || !addresses.length) {
+    throw new Error("TB_NETWORK_TOCTOU_REJECTED");
+  }
+  let current;
+  try { current = await lookup(hostname, { all: true, verbatim: true }); } catch { throw new Error("TB_NETWORK_TOCTOU_REJECTED"); }
+  if (!Array.isArray(current) || !current.length) throw new Error("TB_NETWORK_TOCTOU_REJECTED");
+  const original = new Set(addresses.map((address) => normalizeAddress(address)));
+  const currentAddresses = current.map((item) => item?.address);
+  if (currentAddresses.some((address) => !address || isForbiddenIp(address) || !original.has(normalizeAddress(address)))) {
+    throw new Error("TB_NETWORK_TOCTOU_REJECTED");
+  }
+  return Object.freeze(currentAddresses);
 }
 
 export function assertResolvedAddress(address) {

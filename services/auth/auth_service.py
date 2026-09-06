@@ -7,6 +7,7 @@ from typing import Any
 
 from database.connection import DatabaseConnection, database
 from database.portability import identity_primary_key, table_columns
+from database.migrations.foundation.users_authority import validate_users_schema
 from .models import User
 from .security import hash_password, validate_password, verify_password
 from .age import validate_minimum_age
@@ -24,6 +25,12 @@ class AuthService:
         self.db = db or database
         with self.db.session() as connection:
             identity = identity_primary_key(self.db.backend_name)
+            existing_users = connection.execute(
+                "SELECT 1 FROM "
+                + ("sqlite_master WHERE type='table' AND name='users'" if self.db.backend_name == "sqlite" else "information_schema.tables WHERE table_schema=current_schema() AND table_name='users'")
+            ).fetchone()
+            if existing_users:
+                validate_users_schema(connection, self.db.backend_name)
             connection.execute(f"""CREATE TABLE IF NOT EXISTS users (
                 id {identity}, username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
@@ -80,11 +87,19 @@ class AuthService:
             connection.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (
                 bucket_hash TEXT PRIMARY KEY, window_started TEXT NOT NULL,
                 count INTEGER NOT NULL DEFAULT 0)""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS auth_mfa (
+                user_id INTEGER PRIMARY KEY, secret_encrypted TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id))""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS auth_mfa_recovery_codes (
+                id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, code_hash TEXT NOT NULL,
+                used_at TEXT, created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id))""")
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
     def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, onboarding_state=None, connection=None) -> User:
-        if len(username.strip()) < 3 or "@" not in str(email):
+        if len(username.strip()) < 3 or username.strip().casefold() in {"admin", "root", "system"} or "@" not in str(email):
             raise ValueError("invalid_user_registration")
         try:
             validate_password(password)
@@ -99,6 +114,8 @@ class AuthService:
         )
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
+            if connection.execute("SELECT 1 FROM users WHERE lower(username)=lower(?)", (username.strip(),)).fetchone():
+                raise ValueError("username_already_registered")
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             row = connection.execute(
                 """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,onboarding_state)
@@ -127,6 +144,13 @@ class AuthService:
             now = datetime.now(timezone.utc).isoformat()
             connection.execute("UPDATE users SET last_login=? WHERE id=?", (now, row["id"]))
         return self.get_by_id(row["id"])
+
+    def mfa_enabled(self, user_id: int | None) -> bool:
+        if user_id is None:
+            return False
+        with self.db.session() as connection:
+            row = connection.execute("SELECT enabled FROM auth_mfa WHERE user_id=?", (user_id,)).fetchone()
+        return bool(row and row["enabled"])
 
     def create_persistent_session(self, user, raw_token, tenant_id, session_id, expires, *, user_agent=None, ip_address=None, auth_method="password"):
         with self.db.session() as connection:
@@ -386,6 +410,9 @@ class AuthService:
     def complete_verified_onboarding(self, user_id: int) -> User | None:
         """Atomically complete the verified browser registration lifecycle."""
         sequence = (
+            OnboardingState.ORGANIZATION_MEMBERSHIP_APPROVED,
+            OnboardingState.AUTHENTICATED,
+        ) if self.get_by_id(user_id) and self.get_by_id(user_id).onboarding_state == OnboardingState.ORGANIZATION_MEMBERSHIP_APPROVED else (
             OnboardingState.EMAIL_VERIFICATION_REQUIRED,
             OnboardingState.EMAIL_VERIFIED,
             OnboardingState.PHONE_VERIFICATION_REQUIRED,
@@ -428,7 +455,11 @@ class AuthService:
             return None
         with self.db.session() as connection:
             row = connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-        return self._user(row) if row else None
+        if not row:
+            return None
+        user = self._user(row)
+        user.mfa_enabled = self.mfa_enabled(user.id)
+        return user
 
     def session_user(self, user_id: int | None, session_version: int | None = None) -> User | None:
         """Return an active user only when the signed session epoch is current."""

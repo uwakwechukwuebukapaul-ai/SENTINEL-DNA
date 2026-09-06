@@ -11,6 +11,8 @@ import {
   runControlledAnalystPilot,
 } from "../../deployment/staging/scripts/controlled_analyst_pilot_runner.mjs";
 
+const SYNTHETIC_CERTIFIED_ORIGIN = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN || "https://synthetic-gate4.example.test";
+
 test("trusted browser diagnostics bound a pending operation and emit no exception text", async () => {
   const diagnostics = createTrustedBrowserDiagnostics();
   const started = Date.now();
@@ -84,7 +86,7 @@ test("pilot completes navigation and manager handoff only with a supplied auth c
   const browser = {
     tabs: {
       new: async () => ({
-        goto: async (url) => assert.equal(url, "https://uwakwe-desktop.taile388cc.ts.net/login"),
+        goto: async (url) => assert.equal(url, `${SYNTHETIC_CERTIFIED_ORIGIN}/login`),
         close: async () => { closed += 1; },
         dom_cua: { get_visible_dom: async () => ({ login: true }) },
         playwright: {

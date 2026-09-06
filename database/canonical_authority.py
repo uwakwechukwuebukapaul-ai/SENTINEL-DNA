@@ -37,8 +37,8 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
             name TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'inactive', 'deleted')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_canonical_tenants_status
             ON canonical_tenants(status);
@@ -49,8 +49,8 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
             display_name TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'inactive', 'deleted')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_canonical_identities_email
             ON canonical_identities(email);
@@ -61,8 +61,8 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
             role TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'inactive')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (tenant_id, actor_id),
             FOREIGN KEY (tenant_id) REFERENCES canonical_tenants(tenant_id),
             FOREIGN KEY (actor_id) REFERENCES canonical_identities(actor_id)
@@ -205,7 +205,7 @@ class CanonicalMembershipRepository:
     def add(self, tenant_id: str, actor_id: str, role: str = "viewer"):
         now = _now()
         self.connection.execute(
-            "INSERT INTO canonical_memberships VALUES (?, ?, ?, 'active', ?, ?)",
+            "INSERT INTO canonical_memberships(tenant_id,actor_id,role,status,created_at,updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
             (tenant_id, actor_id, role, now, now),
         )
         return self.get(tenant_id, actor_id)

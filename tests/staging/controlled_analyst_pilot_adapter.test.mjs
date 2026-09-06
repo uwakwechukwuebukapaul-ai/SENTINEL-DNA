@@ -11,6 +11,8 @@ import {
   TRUSTED_BROWSER_RUNTIME_ENVIRONMENT,
 } from "../../deployment/staging/scripts/trusted_browser_execution_adapter.mjs";
 
+const SYNTHETIC_CERTIFIED_ORIGIN = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN || "https://synthetic-gate4.example.test";
+
 async function withFakeClient(source, callback) {
   const directory = await mkdtemp(join(tmpdir(), "sentinel-dna-browser-adapter-"));
   const modulePath = join(directory, "fake-browser-client.mjs");
@@ -46,7 +48,7 @@ test("creates an approved browser only through the trusted runtime and checks br
 
     assert.strictEqual(browser, expected.browser);
     assert.deepEqual(browser.setupEnvironments, [TRUSTED_BROWSER_RUNTIME_ENVIRONMENT]);
-    assert.deepEqual(browser.selectedOrigins, ["https://uwakwe-desktop.taile388cc.ts.net"]);
+    assert.deepEqual(browser.selectedOrigins, [SYNTHETIC_CERTIFIED_ORIGIN]);
     assert.equal(browser.closedProbeTabs, 1);
   });
 });
@@ -162,7 +164,7 @@ test("production caller is RPC-only when the legacy routing flag is absent", asy
   const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   process.env.SENTINEL_DNA_ENV = "production";
   delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION;
-  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = SYNTHETIC_CERTIFIED_ORIGIN;
   delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY;
   delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST;
   delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT;
@@ -184,7 +186,7 @@ test("production caller is RPC-only when the legacy routing flag is absent", asy
 test("configured production caller selects RPC and never imports the local client", async () => {
   const names = ["SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION", "SENTINEL_DNA_CERTIFIED_ORIGIN", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST", "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT"];
   const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
-  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = "https://uwakwe-desktop.taile388cc.ts.net";
+  process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = SYNTHETIC_CERTIFIED_ORIGIN;
   delete process.env.SENTINEL_DNA_TRUSTED_BROWSER_PRODUCTION;
   process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY = "c".repeat(32);
   process.env.SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST = "trusted-browser";

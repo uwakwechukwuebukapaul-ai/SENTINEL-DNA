@@ -58,9 +58,9 @@ test("network policy rejects forbidden literal and resolved addresses", async ()
     /TB_NETWORK_TARGET_REJECTED/,
   );
   const result = await resolveAndValidateNetworkTarget("https://public.example/", {
-    lookup: async () => [{ address: "203.0.113.10", family: 4 }],
+    lookup: async () => [{ address: "8.8.8.8", family: 4 }],
   });
-  assert.deepEqual(result.addresses, ["203.0.113.10"]);
+  assert.deepEqual(result.addresses, ["8.8.8.8"]);
 });
 
 test("tenant context is mandatory and cannot cross tenants", () => {
@@ -99,7 +99,7 @@ test("runtime policy requires tenant context in production and binds navigation 
     certifiedOrigin: CERTIFIED_ORIGIN,
     tenantContext: { tenantId: "tenant-a", subjectId: "analyst-a" },
     production: true,
-    lookup: async () => [{ address: "203.0.113.10", family: 4 }],
+    lookup: async () => [{ address: "8.8.8.8", family: 4 }],
   });
   assert.equal(await policy.validateNavigation("/login"), `${CERTIFIED_ORIGIN}/login`);
   assert.throws(() => policy.bindTenant({ tenantId: "tenant-b", subjectId: "analyst-a" }), /TB_TENANT_CONTEXT_MISMATCH/);
@@ -122,7 +122,7 @@ test("production policy never permits a generic evaluation capability", () => {
     certifiedOrigin: CERTIFIED_ORIGIN,
     tenantContext: { tenantId: "tenant-a", subjectId: "analyst-a", sessionId: "session-a", authorizationContext: "manager" },
     production: true,
-    lookup: async () => [{ address: "203.0.113.10", family: 4 }],
+    lookup: async () => [{ address: "8.8.8.8", family: 4 }],
   });
   assert.equal(typeof policy.evaluate, "undefined");
   assert.deepEqual(policy.audit("tab.getTitle", { tenant: "tenant-a" }).tenantId, "tenant-a");

@@ -13,10 +13,10 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  CERTIFIED_STAGING_ORIGIN,
   computeManifestHash,
   validateActivationManifest,
 } from "../scripts/trusted_browser_activation_manifest.mjs";
+import { CERTIFIED_ORIGIN } from "./fixtures/synthetic-certified-staging-endpoint.mjs";
 
 export const SIMULATION_MODE = "NON-PRODUCTION_SIMULATION";
 export const SIMULATION_IMAGE_DIGEST = `sha256:${createHash("sha256")
@@ -66,7 +66,7 @@ function simulationManifest() {
     runtime_module_identity: "simulation-runtime:ephemeral-contract",
     approved_runtime_module_digest: SIMULATION_RUNTIME_DIGEST,
     approved_image_runtime_digest: SIMULATION_IMAGE_DIGEST,
-    staging_origin: CERTIFIED_STAGING_ORIGIN,
+    staging_origin: CERTIFIED_ORIGIN,
     activation_timestamp: new Date().toISOString().replace(/\.(\d{3})Z$/, ".$1Z"),
     operator_approval_reference: "SIMULATION-APPROVAL-NONPRODUCTION",
     signature: {
@@ -79,7 +79,7 @@ function simulationManifest() {
     algorithm: "sha256",
     manifest_hash: computeManifestHash(manifest),
   };
-  return validateActivationManifest(manifest);
+  return validateActivationManifest(manifest, { certifiedOrigin: CERTIFIED_ORIGIN });
 }
 
 export async function generateSimulationActivationManifest({

@@ -181,7 +181,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "ports" not in rendered["services"]["postgres"]
     assert "ports" not in rendered["services"]["redis"]
     assert set(rendered["services"]["edge"]["networks"]) == {"staging_edge"}
-    assert set(rendered["services"]["app"]["networks"]) == {"staging_edge", "staging_internal"}
+    assert set(rendered["services"]["app"]["networks"]) == {"staging_edge", "staging_internal", "trusted_browser_control"}
     assert set(rendered["services"]["postgres"]["networks"]) == {"staging_internal"}
     assert set(rendered["services"]["redis"]["networks"]) == {"staging_internal"}
     assert rendered["networks"]["staging_internal"]["internal"] is True
@@ -218,13 +218,18 @@ def test_staging_compose_and_deploy_contract_are_explicit():
 def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp_path):
     secret = random_secret()
     postgres_password = random_secret()
+    synthetic_digest = "sha256:" + "a" * 64
+    synthetic_runtime_digest = "sha256:" + "b" * 64
     env_file = tmp_path / "staging.env"
     env_file.write_text(
         "\n".join(
             (
                 "SENTINEL_DNA_SECRET_KEY=" + secret,
                 "SENTINEL_DNA_POSTGRES_PASSWORD=" + postgres_password,
-                "SENTINEL_DNA_STAGING_EDGE_IMAGE=nginx:1.27-alpine",
+                "SENTINEL_DNA_STAGING_APP_IMAGE=registry.example.test/sentinel/staging-app@sha256:" + "c" * 64,
+                "SENTINEL_DNA_STAGING_EDGE_IMAGE=registry.example.test/nginx@sha256:" + "d" * 64,
+                "SENTINEL_DNA_POSTGRES_IMAGE=registry.example.test/postgres@sha256:" + "e" * 64,
+                "SENTINEL_DNA_REDIS_IMAGE=registry.example.test/redis@sha256:" + "f" * 64,
                 "SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE=/tmp/staging-nginx.conf",
                 "SENTINEL_DNA_STAGING_TLS_DIR=/tmp/staging-tls",
                 "SENTINEL_DNA_STAGING_APP_SECRET_FILE=" + str(tmp_path / "app.secret"),
@@ -232,6 +237,26 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
                 "SENTINEL_DNA_IMAGE_TAG=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
                 "SENTINEL_DNA_IMAGE_REVISION_FULL=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
                 "SENTINEL_DNA_IMAGE_CREATED=2026-08-29T00:00:00Z",
+                # Synthetic-only Gate4 inputs required to render the current
+                # fail-closed Compose contract. These are not production
+                # artifact or provenance values.
+                "SENTINEL_DNA_CERTIFIED_ORIGIN=https://synthetic.example.test",
+                "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST=trusted-browser",
+                "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT=8080",
+                "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY=synthetic-test-only-key",
+                "SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY=true",
+                "SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_PROXY=http://egress-gateway:8081",
+                "SENTINEL_DNA_EGRESS_GATEWAY_BIND=0.0.0.0",
+                "SENTINEL_DNA_EGRESS_GATEWAY_PORT=8081",
+                "SENTINEL_DNA_TRUSTED_BROWSER_GATEWAY_UPLINK_NETWORK=synthetic-uplink",
+                "SENTINEL_DNA_EGRESS_POLICY_FILE=/tmp/egress-policy.json",
+                "SENTINEL_DNA_EGRESS_POLICY_REFERENCE=synthetic-policy-v1",
+                "SENTINEL_DNA_EGRESS_POLICY_DIGEST=" + synthetic_digest,
+                "SENTINEL_DNA_TRUSTED_BROWSER_IMAGE=registry.example.test/sentinel/trusted-browser@" + synthetic_digest,
+                "SENTINEL_DNA_EGRESS_GATEWAY_IMAGE=registry.example.test/sentinel/egress-gateway@" + synthetic_runtime_digest,
+                "SENTINEL_DNA_IMAGE_DIGEST=" + synthetic_digest,
+                "SENTINEL_DNA_APPROVED_RUNTIME_DIGEST=" + synthetic_runtime_digest,
+                "SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST=/tmp/activation-manifest.json",
             )
         )
         + "\n",
@@ -289,8 +314,13 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():
     env_example = (ROOT / "deployment" / "staging" / ".env.example").read_text()
-    assert "SENTINEL_DNA_BASE_URL=https://uwakwe-desktop.taile388cc.ts.net" in env_example
-    assert "SENTINEL_DNA_STAGING_TLS_IP=192.168.1.115" in env_example
+    assert "SENTINEL_DNA_BASE_URL=__EXTERNAL_CERTIFIED_ORIGIN__" in env_example
+    assert "SENTINEL_DNA_CERTIFIED_HOSTNAME=__EXTERNAL_CERTIFIED_HOSTNAME__" in env_example
+    assert "SENTINEL_DNA_STAGING_APP_IMAGE=__EXTERNAL_IMMUTABLE_APP_IMAGE__" in env_example
+    assert "SENTINEL_DNA_STAGING_EDGE_IMAGE=__EXTERNAL_IMMUTABLE_EDGE_IMAGE__" in env_example
+    assert "SENTINEL_DNA_POSTGRES_IMAGE=__EXTERNAL_IMMUTABLE_POSTGRES_IMAGE__" in env_example
+    assert "SENTINEL_DNA_REDIS_IMAGE=__EXTERNAL_IMMUTABLE_REDIS_IMAGE__" in env_example
+    assert "SENTINEL_DNA_STAGING_TLS_IP=__EXTERNAL_STAGING_TLS_IP__" in env_example
     assert "SENTINEL_DNA_SECRET_KEY=__INJECT_NON_PRODUCTION_SECRET__" in env_example
     assert "SENTINEL_DNA_POSTGRES_PASSWORD=__INJECT_DISPOSABLE_STAGING_PASSWORD__" in env_example
 
@@ -304,7 +334,7 @@ def test_staging_nginx_contract_terminates_tls_and_keeps_gunicorn_private():
     assert "proxy_pass http://app:5000;" in nginx
     assert "proxy_set_header X-Forwarded-Proto https;" in nginx
     assert "5000:5000" not in nginx
-    assert "sentinel-dna-staging" in nginx
+    assert "server_name _;" in nginx
 
 
 def test_staging_tls_validator_requires_the_private_root_ca_as_trust_anchor():
@@ -321,6 +351,7 @@ def _run_staging_certificate_generator(tmp_path: Path, ip: str = "192.168.1.115"
     environment = os.environ.copy()
     environment["SENTINEL_DNA_STAGING_TLS_DIR"] = str(tmp_path)
     environment["SENTINEL_DNA_STAGING_TLS_IP"] = ip
+    environment["SENTINEL_DNA_CERTIFIED_HOSTNAME"] = "synthetic-gate4.example.test"
     return subprocess.run(
         [
             sys.executable,
@@ -357,7 +388,7 @@ def test_staging_certificate_generator_emits_required_sans_and_valid_key_pair(tm
     assert certificate.extensions.get_extension_for_class(x509.BasicConstraints).value.ca is False
     assert certificate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
     sans = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-    assert sans.get_values_for_type(x509.DNSName) == ["sentinel-dna-staging", "localhost", "uwakwe-desktop.taile388cc.ts.net"]
+    assert sans.get_values_for_type(x509.DNSName) == ["sentinel-dna-staging", "localhost", "synthetic-gate4.example.test"]
     assert {str(value) for value in sans.get_values_for_type(x509.IPAddress)} == {
         "192.168.1.115",
         "127.0.0.1",
@@ -409,6 +440,7 @@ def test_staging_certificate_generator_fails_closed_for_missing_or_invalid_confi
     environment = os.environ.copy()
     environment.pop("SENTINEL_DNA_STAGING_TLS_DIR", None)
     environment["SENTINEL_DNA_STAGING_TLS_IP"] = "192.168.1.115"
+    environment["SENTINEL_DNA_CERTIFIED_HOSTNAME"] = "synthetic-gate4.example.test"
     result = subprocess.run(
         [sys.executable, str(ROOT / "deployment" / "staging" / "scripts" / "generate_staging_cert.py")],
         env=environment,
@@ -443,7 +475,8 @@ def test_staging_secret_hygiene_contract_has_no_tracked_runtime_tls_or_secret_fi
 
 def test_staging_certificate_configuration_is_explicit_and_non_secret():
     config = json.loads((ROOT / "deployment" / "staging" / "staging-cert-config.json").read_text())
-    assert config["dns_sans"] == ["sentinel-dna-staging", "localhost", "uwakwe-desktop.taile388cc.ts.net"]
+    assert config["dns_sans"] == ["sentinel-dna-staging", "localhost"]
+    assert config["certified_hostname_environment_variable"] == "SENTINEL_DNA_CERTIFIED_HOSTNAME"
     assert config["fixed_ip_sans"] == ["127.0.0.1"]
     assert config["lan_ip_environment_variable"] == "SENTINEL_DNA_STAGING_TLS_IP"
     assert config["ca_certificate_filename"] == "staging-ca.crt"

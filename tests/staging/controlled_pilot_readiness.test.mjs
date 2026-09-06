@@ -26,6 +26,8 @@ import {
 import { generateTrustedBrowserReadinessReport } from "../../deployment/staging/scripts/generate_trusted_browser_readiness_report.mjs";
 import { generateTrustedBrowserActivationTroubleshootingReport } from "../../deployment/staging/scripts/generate_trusted_browser_activation_troubleshooting_report.mjs";
 
+const SYNTHETIC_CERTIFIED_ORIGIN = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN || "https://synthetic-gate4.example.test";
+
 const SERVICE_MODULE = fileURLToPath(new URL(
   "../../deployment/staging/scripts/trusted_browser_service/browser-client.mjs",
   import.meta.url,
@@ -59,7 +61,7 @@ const VALID_RUNTIME = `
       capabilities: { get: async (name) => name === "browserAuth" ? { request: async () => ({ status: "not-called" }) } : undefined },
     };
     return { browsers: { getForUrl: async (origin) => {
-      if (origin !== "https://uwakwe-desktop.taile388cc.ts.net") throw new Error("origin rejected");
+      if (origin !== ${JSON.stringify(SYNTHETIC_CERTIFIED_ORIGIN)}) throw new Error("origin rejected");
       return { tabs: { new: async () => tab } };
     } } };
   }
@@ -77,7 +79,7 @@ async function withReadinessConfiguration({ runtimeSource = VALID_RUNTIME, provi
     runtime_module_identity: "reviewed-runtime:test",
     approved_runtime_module_digest: `sha256:${runtimeDigest}`,
     approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
-    staging_origin: "https://uwakwe-desktop.taile388cc.ts.net",
+    staging_origin: SYNTHETIC_CERTIFIED_ORIGIN,
     activation_timestamp: "2026-09-01T12:00:00Z",
     operator_approval_reference: "APPROVAL-TEST-001",
   };
@@ -200,7 +202,7 @@ test("readiness blocks a tampered activation manifest", { concurrency: false }, 
       runtime_module_identity: "reviewed-runtime:test",
       approved_runtime_module_digest: `sha256:${"a".repeat(64)}`,
       approved_image_runtime_digest: `sha256:${"a".repeat(64)}`,
-      staging_origin: "https://uwakwe-desktop.taile388cc.ts.net",
+      staging_origin: SYNTHETIC_CERTIFIED_ORIGIN,
       activation_timestamp: "2026-09-01T12:00:00Z",
       operator_approval_reference: "APPROVAL-TEST-001",
       integrity: { algorithm: "sha256", manifest_hash: "b".repeat(64) },
@@ -219,7 +221,7 @@ test("readiness succeeds with an isolated reviewed-runtime test fixture", { conc
   await withReadinessConfiguration({}, async ({ directory }) => {
     const readiness = await checkControlledPilotReadiness({
       evidenceDir: directory,
-      originReachability: async (origin) => origin === "https://uwakwe-desktop.taile388cc.ts.net",
+      originReachability: async (origin) => origin === SYNTHETIC_CERTIFIED_ORIGIN,
     });
     assert.equal(readiness.status, "READY_FOR_ANALYST_PILOT", JSON.stringify(readiness));
     assert.ok(readiness.checks.every((item) => item.status === "PASS"));

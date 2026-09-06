@@ -59,7 +59,7 @@ route or change the loopback-only edge publication.
 The supported browser endpoint is:
 
 ```text
-https://uwakwe-desktop.taile388cc.ts.net/
+https://__EXTERNAL_CERTIFIED_ORIGIN__/
 ```
 
 TLS terminates at the Nginx edge on container port `443`; Docker publishes
@@ -145,11 +145,11 @@ openssl x509 \
 python3 deployment/staging/scripts/validate_staging_tls.py \
   --ca-file "$SENTINEL_DNA_STAGING_TLS_DIR/staging-ca.crt" \
   --connect-host 127.0.0.1 \
-  --server-name uwakwe-desktop.taile388cc.ts.net \
+  --server-name "$env:SENTINEL_DNA_CERTIFIED_HOSTNAME" \
   --port 18443
 ```
 
-The output must show `DNS:uwakwe-desktop.taile388cc.ts.net`, `DNS:sentinel-dna-staging`, `DNS:localhost`, the
+The output must show the externally configured certified DNS name, `DNS:sentinel-dna-staging`, `DNS:localhost`, the
 configured LAN IP, and `IP Address:127.0.0.1`. Because the leaf is signed by
 the private staging CA, import only the CA certificate into the Windows
 LocalMachine Trusted Root store; do not trust a leaf as a root, disable TLS
@@ -159,7 +159,7 @@ verification, or trust a private key. The handshake validator must report TLS
 ```powershell
 Import-Certificate -FilePath .\staging-ca.crt -CertStoreLocation Cert:\LocalMachine\Root
 Test-NetConnection 127.0.0.1 -Port 18443
-curl.exe --ssl-revoke-best-effort --cacert .\staging-ca.crt -I https://uwakwe-desktop.taile388cc.ts.net/
+curl.exe --ssl-revoke-best-effort --cacert .\staging-ca.crt -I https://<externally-configured-certified-origin>/
 ```
 
 The expected application result for the final request is HTTP `401` with the

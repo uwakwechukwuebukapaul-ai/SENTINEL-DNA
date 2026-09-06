@@ -106,7 +106,8 @@ of the following before reporting success:
 2. the server certificate is current, `CA=false`, signed by that CA, contains
    the requested SAN and Server Authentication EKU, and matches its private
    key; the supplied fullchain contains exactly the leaf followed by that CA;
-3. `uwakwe-desktop.taile388cc.ts.net` resolves to the intended Tailscale staging node;
+3. the externally supplied `SENTINEL_DNA_CERTIFIED_HOSTNAME` resolves to the
+   intended staging node;
 4. TLS hostname and chain verification succeed with the CA as the explicit
    trust anchor; and
 5. `GET /health` returns HTTP 200 JSON whose `status` is `ok`.
@@ -117,7 +118,7 @@ The equivalent curl acceptance check is:
 curl.exe --fail-with-body --silent --show-error `
   --ssl-revoke-best-effort `
   --cacert 'C:\approved\staging-ca.crt' `
-  https://uwakwe-desktop.taile388cc.ts.net/health
+  ${SENTINEL_DNA_CERTIFIED_ORIGIN}/health
 ```
 
 The response must be exactly the health contract `{"status":"ok"}`. On Windows,

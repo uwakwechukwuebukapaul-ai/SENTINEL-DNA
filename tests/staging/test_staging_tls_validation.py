@@ -29,6 +29,7 @@ def _generate_material(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     environment = os.environ.copy()
     environment["SENTINEL_DNA_STAGING_TLS_DIR"] = str(tmp_path)
     environment["SENTINEL_DNA_STAGING_TLS_IP"] = "192.168.1.115"
+    environment["SENTINEL_DNA_CERTIFIED_HOSTNAME"] = "synthetic-gate4.example.test"
     result = subprocess.run(
         [sys.executable, str(GENERATOR)],
         cwd=ROOT,

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from functools import wraps
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, session, url_for
 from services.core.security_context import authorize_investigation, request_context
 from services.intelligence.reporting.ai_investigator_report import AIInvestigatorReportService
 from services.intelligence.reporting.investigation_projection import InvestigationProjectionBuilder
@@ -19,6 +19,9 @@ def _principal():
     except (LookupError, PermissionError, ValueError):
         return None
     user = current_app.container.require("auth_service").get_by_id(context.user_id)
+    auth_service = current_app.container.require("auth_service")
+    if user and auth_service.mfa_enabled(user.id) and not session.get("mfa_verified"):
+        return None
     return {"analyst": {"actor_id": identity.actor_id, "name": identity.display_name or identity.email, "email": identity.email, "role": membership.role, "age": user.age() if user else None, "age_verified": bool(user and user.date_of_birth), "phone_verified": bool(user and user.phone_verified_at)}, "tenant": {"id": tenant.tenant_id, "name": tenant.name}, "tenant_id": tenant.tenant_id}
 
 
@@ -27,6 +30,8 @@ def _authenticated(view):
     def wrapped(*args, **kwargs):
         principal = _principal()
         if principal is None:
+            if getattr(g, "session_revoked", False):
+                return redirect("/login?reason=session_revoked")
             return jsonify({"error": "authentication_required"}), 401
         return view(principal, *args, **kwargs)
     return wrapped

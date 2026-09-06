@@ -22,7 +22,7 @@ def test_staging_compose_exposes_only_opt_in_favp_and_disposable_evidence_volume
 def test_staging_postgres_provisioning_contract_remains_private_and_health_checked():
     compose = yaml.safe_load((ROOT / "deployment" / "staging" / "docker-compose.yml").read_text(encoding="utf-8"))
     postgres = compose["services"]["postgres"]
-    assert postgres["image"] == "postgres:16-alpine"
+    assert postgres["image"] == "${SENTINEL_DNA_POSTGRES_IMAGE:?set immutable postgres image}"
     assert postgres["healthcheck"]
     assert "staging_internal" in postgres["networks"]
     assert compose["networks"]["staging_internal"]["internal"] is True

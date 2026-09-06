@@ -1,7 +1,7 @@
 services:
 
   favp-volume-init:
-    image: staging-app:974e3275bc678851e3979a5cbb95ff7d2e9dc4c9
+    image: ${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}
     user: "0:0"
     network_mode: "none"
     command:
@@ -16,7 +16,7 @@ services:
       - staging_favp_evidence:/var/lib/sentinel/favp-evidence
 
   edge:
-    image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set external staging edge image}
+    image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set immutable staging edge image}
     restart: unless-stopped
     ports:
       - "127.0.0.1:18443:443"
@@ -40,7 +40,7 @@ services:
       - staging_edge
 
   app:
-    image: staging-app:${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
+    image: ${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -132,19 +132,56 @@ services:
       SENTINEL_DNA_IMAGE_DIGEST: ${SENTINEL_DNA_IMAGE_DIGEST:?set immutable image digest}
       SENTINEL_DNA_EGRESS_POLICY_REFERENCE: ${SENTINEL_DNA_EGRESS_POLICY_REFERENCE:?set egress policy reference}
       SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY:?set egress readiness}
+      SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_PROXY: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_PROXY:?set gateway proxy endpoint}
+      SENTINEL_DNA_EGRESS_POLICY_DIGEST: ${SENTINEL_DNA_EGRESS_POLICY_DIGEST:?set egress policy digest}
     expose:
       - "3000"
     networks:
       - trusted_browser_control
       - trusted_browser_egress
+    depends_on:
+      egress-gateway:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "deployment/staging/trusted_browser_runtime/healthcheck.mjs"]
       interval: 30s
       timeout: 5s
       retries: 3
 
+  egress-gateway:
+    image: ${SENTINEL_DNA_EGRESS_GATEWAY_IMAGE:?set immutable egress gateway image}
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      SENTINEL_DNA_EGRESS_GATEWAY_BIND: ${SENTINEL_DNA_EGRESS_GATEWAY_BIND:?set gateway bind address}
+      SENTINEL_DNA_EGRESS_GATEWAY_PORT: ${SENTINEL_DNA_EGRESS_GATEWAY_PORT:?set gateway port}
+      SENTINEL_DNA_EGRESS_POLICY_FILE: /run/secrets/trusted_browser_egress_policy
+      SENTINEL_DNA_EGRESS_POLICY_DIGEST: ${SENTINEL_DNA_EGRESS_POLICY_DIGEST:?set egress policy digest}
+    volumes:
+      - type: bind
+        source: ${SENTINEL_DNA_EGRESS_POLICY_FILE:?set external egress policy file}
+        target: /run/secrets/trusted_browser_egress_policy
+        read_only: true
+    expose:
+      - "${SENTINEL_DNA_EGRESS_GATEWAY_PORT:?set gateway port}"
+    networks:
+      - trusted_browser_egress
+      - trusted_browser_gateway_uplink
+    healthcheck:
+      test: ["CMD", "node", "deployment/staging/egress_gateway/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   migration:
-    image: staging-app:${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
+    image: ${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -192,7 +229,7 @@ services:
       - staging_internal
 
   postgres:
-    image: postgres:16-alpine
+    image: ${SENTINEL_DNA_POSTGRES_IMAGE:?set immutable postgres image}
     restart: unless-stopped
     environment:
       POSTGRES_DB: sentinel_dna
@@ -212,7 +249,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: ${SENTINEL_DNA_REDIS_IMAGE:?set immutable redis image}
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -232,7 +269,9 @@ networks:
   trusted_browser_control:
     internal: true
   trusted_browser_egress:
-    name: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_NETWORK:?set controlled browser egress network}
+    internal: true
+  trusted_browser_gateway_uplink:
+    name: ${SENTINEL_DNA_TRUSTED_BROWSER_GATEWAY_UPLINK_NETWORK:?set gateway uplink network}
     external: true
 
 secrets:

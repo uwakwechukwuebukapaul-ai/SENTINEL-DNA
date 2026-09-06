@@ -1,6 +1,8 @@
 """Canonical Authentication V3 HTTP boundary."""
 from datetime import datetime, timedelta, timezone
 import secrets
+import hashlib
+from uuid import uuid4
 from flask import Blueprint, current_app, g, jsonify, redirect, request, session, url_for
 from database.errors import DatabaseError
 from database.portability import integrity_error
@@ -9,7 +11,9 @@ from .oauth import GoogleOIDC
 from .phone import country_options, normalize_phone
 from .providers import email_provider
 from .security import csrf_token
+from .security import verify_password
 from .onboarding import OnboardingState
+from .mfa import decrypt_totp_secret, encrypt_totp_secret, generate_totp_secret, provisioning_uri, verify_totp
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
@@ -44,6 +48,21 @@ def _ensure_csrf():
     if "csrf_token" not in session: session["csrf_token"] = csrf_token()
     return session["csrf_token"]
 
+def _strict_csrf():
+    expected = session.get("csrf_token")
+    supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    return bool(expected and supplied and secrets.compare_digest(str(expected), str(supplied)))
+
+def _mfa_user():
+    return _service().session_user(session.get("user_id"), session.get("session_version"))
+
+def _mfa_authenticated():
+    user = _mfa_user()
+    return user if user and (not _service().mfa_enabled(user.id) or session.get("mfa_verified")) else None
+
+def _organization_service():
+    return current_app.container.get("organization_membership_service")
+
 def _otp_binding():
     """Bind browser OTP challenges to the current signed auth flow."""
     binding = session.get("auth_otp_binding")
@@ -63,7 +82,7 @@ def _bind(user):
         connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, membership.tenant_id, user.id))
     return identity, membership
 def _login_session(user, remember=False, auth_method="password"):
-    identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
+    identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat(), mfa_verified=not _service().mfa_enabled(user.id))
     if remember:
         raw = secrets.token_urlsafe(48); sid = secrets.token_urlsafe(18); expires = datetime.now(timezone.utc) + timedelta(days=30)
         _service().create_persistent_session(user, raw, membership.tenant_id, sid, expires.isoformat(), user_agent=request.user_agent.string[:256], ip_address=request.remote_addr, auth_method=auth_method); session["persistent_session_id"] = sid; session.permanent = True
@@ -72,7 +91,9 @@ def _login_session(user, remember=False, auth_method="password"):
     else:
         g.clear_remember_cookie = True
     _audit("login_success", user_id=user.id, method=auth_method, outcome="success")
-    return user.public()
+    payload = user.public()
+    if _service().mfa_enabled(user.id): payload["mfa_required"] = True
+    return payload
 
 def restore_persistent_session():
     if session.get("user_id") or not request.cookies.get(REMEMBER_COOKIE): return
@@ -84,6 +105,7 @@ def restore_persistent_session():
     user = _service().resolve_persistent_session(sid, raw)
     if not user:
         g.clear_remember_cookie = True
+        g.session_revoked = True
         return
     _service().revoke_persistent_session(sid)
     _login_session(user, remember=True, auth_method="remember_me")
@@ -97,19 +119,87 @@ def enforce_current_session():
         g.clear_remember_cookie = True
         session.clear()
 
+def _mfa_secret_row(user_id):
+    with _service().db.session() as connection:
+        return connection.execute("SELECT secret_encrypted FROM auth_mfa WHERE user_id=?", (user_id,)).fetchone()
+
+@auth_api.post("/mfa/setup/start")
+def mfa_setup_start():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user()
+    if user is None or _service().mfa_enabled(user.id): return jsonify({"error": "forbidden"}), 403
+    secret = generate_totp_secret(); now = datetime.now(timezone.utc).isoformat()
+    with _service().db.session() as connection:
+        connection.execute("INSERT INTO auth_mfa(user_id,secret_encrypted,enabled,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET secret_encrypted=excluded.secret_encrypted,enabled=0,updated_at=excluded.updated_at", (user.id, encrypt_totp_secret(secret, current_app.config["SECRET_KEY"]), 0, now, now))
+    session["mfa_enrollment_pending"] = True
+    return jsonify({"provisioning_uri": provisioning_uri(secret, account_name=user.email)})
+
+@auth_api.post("/mfa/setup/verify")
+def mfa_setup_verify():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user(); code = str((request.get_json(silent=True) or {}).get("code", ""))
+    row = _mfa_secret_row(user.id) if user and session.get("mfa_enrollment_pending") else None
+    if not row or not verify_totp(decrypt_totp_secret(row["secret_encrypted"], current_app.config["SECRET_KEY"]), code): return jsonify({"error": "mfa_verification_failed"}), 401
+    now = datetime.now(timezone.utc).isoformat(); recovery_codes = [secrets.token_urlsafe(8) for _ in range(10)]
+    with _service().db.session() as connection:
+        connection.execute("UPDATE auth_mfa SET enabled=1,updated_at=? WHERE user_id=?", (now, user.id))
+        for recovery in recovery_codes: connection.execute("INSERT INTO auth_mfa_recovery_codes(id,user_id,code_hash,created_at) VALUES(?,?,?,?)", (str(uuid4()), user.id, hashlib.sha256(recovery.encode()).hexdigest(), now))
+        connection.execute("UPDATE users SET session_version=session_version+1 WHERE id=?", (user.id,))
+        connection.execute("UPDATE persistent_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", (now, user.id))
+    session["mfa_enrollment_pending"] = False; session["mfa_verified"] = False
+    return jsonify({"mfa_enrollment_verified": True, "recovery_codes": recovery_codes})
+
+@auth_api.post("/mfa/verify")
+def mfa_verify():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user(); row = _mfa_secret_row(user.id) if user else None
+    code = str((request.get_json(silent=True) or {}).get("code", ""))
+    if not row or not _service().mfa_enabled(user.id) or not verify_totp(decrypt_totp_secret(row["secret_encrypted"], current_app.config["SECRET_KEY"]), code): return jsonify({"error": "mfa_verification_failed"}), 401
+    session["mfa_verified"] = True
+    return jsonify({"mfa_verified": True})
+
+@auth_api.post("/mfa/recovery")
+def mfa_recovery():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user(); code = str((request.get_json(silent=True) or {}).get("code", ""))
+    if not user: return jsonify({"error": "authentication_required"}), 401
+    now = datetime.now(timezone.utc).isoformat(); digest = hashlib.sha256(code.encode()).hexdigest()
+    with _service().db.session() as connection:
+        row = connection.execute("SELECT id FROM auth_mfa_recovery_codes WHERE user_id=? AND code_hash=? AND used_at IS NULL", (user.id, digest)).fetchone()
+        if not row: return jsonify({"error": "mfa_recovery_invalid"}), 401
+        connection.execute("UPDATE auth_mfa_recovery_codes SET used_at=? WHERE id=?", (now, row["id"]))
+    session["mfa_verified"] = True
+    return jsonify({"mfa_verified": True})
+
+@auth_api.post("/mfa/disable")
+def mfa_disable():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user(); data = request.get_json(silent=True) or {}; row = _mfa_secret_row(user.id) if user else None
+    if not user or not row or not verify_password(user.password_hash, str(data.get("password", ""))) or not verify_totp(decrypt_totp_secret(row["secret_encrypted"], current_app.config["SECRET_KEY"]), str(data.get("code", ""))): return jsonify({"error": "mfa_disable_failed"}), 401
+    with _service().db.session() as connection:
+        connection.execute("UPDATE auth_mfa SET enabled=0,updated_at=? WHERE user_id=?", (datetime.now(timezone.utc).isoformat(), user.id))
+        connection.execute("DELETE FROM auth_mfa_recovery_codes WHERE user_id=?", (user.id,))
+    session["mfa_verified"] = True
+    return jsonify({"mfa_enabled": False})
+
 @auth_api.post("/register")
 def register():
     if current_app.config.get("PILOT_ACCESS_REQUIRED", False):
         return jsonify({"error": "registration_unavailable"}), 403
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     data = request.get_json(silent=True) or {}
+    organizations = _organization_service()
+    organization_decision = organizations.inspect_email(str(data.get("email", ""))) if organizations else None
+    organization_pending = bool(organization_decision and organization_decision.existing_verified_active and organization_decision.enrollment_policy != "VERIFIED_DOMAIN_AUTO_JOIN")
+    if organization_pending and not (data.get("date_of_birth") or data.get("phone")):
+        return jsonify({"error": "organization_approval_required"}), 400
     if not _allowed("signup", 12, 3600): return jsonify({"error": "registration_unavailable"}), 429
     _audit("signup_started", method="password", outcome="started")
     try:
         # Explicit migration boundary: legacy JSON callers remain compatible
         # until a versioned API contract replaces this path. Browser-style
         # registration always requires email and phone verification below.
-        legacy_api = current_app.config.get("AUTH_LEGACY_JSON_COMPAT", True) and request.is_json and not data.get("date_of_birth") and not data.get("phone")
+        legacy_api = (current_app.config.get("AUTH_LEGACY_JSON_COMPAT", True) and request.is_json and not data.get("date_of_birth") and not data.get("phone")) or organization_pending
         dob = validate_minimum_age(data.get("date_of_birth")) if data.get("date_of_birth") else None
         phone = normalize_phone(data.get("country", ""), data.get("phone", "")) if data.get("phone") else None
         email_verified_at = None
@@ -140,6 +230,15 @@ def register():
         _audit("signup_failed", method="password", outcome="failure", reason="invalid_registration")
         return jsonify({"error": "invalid_registration"}), 400
     try:
+        if organization_pending:
+            with _service().db.session() as connection:
+                connection.execute("UPDATE users SET onboarding_state=? WHERE id=?", (OnboardingState.ORGANIZATION_MEMBERSHIP_PENDING, user.id))
+            if organizations:
+                organizations.ensure_user_identity(user.id)
+                organizations.create_join_request(user.id, organization_decision.tenant_id)
+            for key in ("auth_otp_binding", "registration_email_challenge_id", "registration_email_verified", "registration_phone_verified"):
+                session.pop(key, None)
+            return jsonify({"status": "organization_approval_required"}), 202
         _bind(user)
         if not legacy_api:
             user = _service().complete_verified_onboarding(user.id)
@@ -181,12 +280,12 @@ def logout():
 @auth_api.get("/me")
 def me():
     user = _service().session_user(session.get("user_id"), session.get("session_version"))
-    return jsonify(user.public()) if user else (jsonify({"error": "authentication_required"}), 401)
+    return jsonify(user.public()) if user and _mfa_authenticated() else (jsonify({"error": "authentication_required"}), 401)
 
 @auth_api.get("/sessions")
 def sessions():
     user_id = session.get("user_id")
-    if not user_id: return jsonify({"error": "authentication_required"}), 401
+    if not user_id or _mfa_authenticated() is None: return jsonify({"error": "authentication_required"}), 401
     current = session.get("persistent_session_id")
     result = []
     for item in _service().list_sessions(user_id):
