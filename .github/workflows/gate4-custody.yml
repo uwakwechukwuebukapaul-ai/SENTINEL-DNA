@@ -104,8 +104,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$RELEASE_SHA" = "8cf91fe0736f5da4521687272ffb10d1dfa0779b"
-          test "$RELEASE_TREE" = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf"
+          test "$RELEASE_SHA" = "59520f21dbbe20f0bef047f64d40bf67f2e2675b"
+          test "$RELEASE_TREE" = "36ca2d9cb7a2a3711f9f14c9a3820539019f83cd"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           test "$(git rev-parse 'HEAD^{tree}')" = "$RELEASE_TREE"
           test -z "$(git status --porcelain --untracked-files=all)"
@@ -228,8 +228,8 @@ jobs:
             --expected-egress-image "$EGRESS_GATEWAY_IMAGE" \
             --expected-edge-image "$EDGE_IMAGE" \
             --activation-manifest-bytes "$ACTIVATION_MANIFEST_PATH"
-          test "$RELEASE_SHA" = "8cf91fe0736f5da4521687272ffb10d1dfa0779b"
-          test "$RELEASE_TREE" = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf"
+          test "$RELEASE_SHA" = "59520f21dbbe20f0bef047f64d40bf67f2e2675b"
+          test "$RELEASE_TREE" = "36ca2d9cb7a2a3711f9f14c9a3820539019f83cd"
 
       - name: Generate SBOM before terminal publication
         shell: bash
