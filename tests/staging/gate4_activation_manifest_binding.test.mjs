@@ -12,6 +12,7 @@ const HISTORICAL_RELEASE_TREE = "6cf6b210d8a052da92e4b76feafe14247ce1d8bf";
 const RELEASE_COMMIT = HISTORICAL_RELEASE_COMMIT;
 const RELEASE_TREE = HISTORICAL_RELEASE_TREE;
 const digest = (letter) => `sha256:${letter.repeat(64)}`;
+const SYNTHETIC_CERTIFIED_ORIGIN = process.env.SENTINEL_DNA_CERTIFIED_ORIGIN || "https://synthetic.example.test";
 
 function manifest() {
   const value = {
@@ -20,7 +21,7 @@ function manifest() {
     runtime_module_identity: "runtime:test-only",
     approved_runtime_module_digest: digest("a"),
     approved_image_runtime_digest: digest("b"),
-    staging_origin: "https://synthetic-gate4.example.test",
+    staging_origin: SYNTHETIC_CERTIFIED_ORIGIN,
     activation_timestamp: "2026-09-06T00:00:00Z",
     operator_approval_reference: "approval:test-only",
     approved_runtime_dependency_lockfile_digest: digest("c"),
@@ -66,7 +67,7 @@ test("strict activation manifest accepts exact release binding", () => {
   const value = validateReleaseBoundActivationManifest(manifest(), {
     releaseCommit: RELEASE_COMMIT,
     releaseTree: RELEASE_TREE,
-    certifiedOrigin: "https://synthetic-gate4.example.test",
+    certifiedOrigin: SYNTHETIC_CERTIFIED_ORIGIN,
   });
   assert.equal(value.release_commit, RELEASE_COMMIT);
   assert.equal(value.release_tree, RELEASE_TREE);
@@ -80,7 +81,7 @@ test("strict activation manifest rejects a wrong release commit", () => {
     () => validateReleaseBoundActivationManifest(value, {
       releaseCommit: RELEASE_COMMIT,
       releaseTree: RELEASE_TREE,
-      certifiedOrigin: "https://synthetic-gate4.example.test",
+      certifiedOrigin: SYNTHETIC_CERTIFIED_ORIGIN,
     }),
     (error) => error.code === "TB_RELEASE_IDENTITY_INVALID",
   );
@@ -94,7 +95,7 @@ test("strict activation manifest rejects missing required image digest", () => {
     () => validateReleaseBoundActivationManifest(value, {
       releaseCommit: RELEASE_COMMIT,
       releaseTree: RELEASE_TREE,
-      certifiedOrigin: "https://synthetic-gate4.example.test",
+      certifiedOrigin: SYNTHETIC_CERTIFIED_ORIGIN,
     }),
     (error) => error.code === "TB_PROVIDER_MANIFEST_INVALID",
   );
@@ -108,7 +109,7 @@ test("strict activation manifest rejects missing external signature", () => {
     () => validateReleaseBoundActivationManifest(value, {
       releaseCommit: RELEASE_COMMIT,
       releaseTree: RELEASE_TREE,
-      certifiedOrigin: "https://synthetic-gate4.example.test",
+      certifiedOrigin: SYNTHETIC_CERTIFIED_ORIGIN,
     }),
     (error) => error.code === "TB_PROVIDER_MANIFEST_SIGNATURE_MISSING",
   );
@@ -119,7 +120,7 @@ test("strict activation manifest rejects missing TLS key custody binding", () =>
   delete value.approved_edge_tls_private_key_custody_reference;
   value.integrity.manifest_hash = computeManifestHash(value);
   assert.throws(
-    () => validateReleaseBoundActivationManifest(value, { releaseCommit: RELEASE_COMMIT, releaseTree: RELEASE_TREE, certifiedOrigin: "https://synthetic-gate4.example.test" }),
+    () => validateReleaseBoundActivationManifest(value, { releaseCommit: RELEASE_COMMIT, releaseTree: RELEASE_TREE, certifiedOrigin: SYNTHETIC_CERTIFIED_ORIGIN }),
     (error) => error.code === "TB_PROVIDER_MANIFEST_INVALID",
   );
 });
