@@ -1,6 +1,25 @@
 import json
 from pathlib import Path
 
+from deployment.staging.scripts.verify_gate4_external_authority import (
+    validate_authority_package,
+)
+
+
+def test_gate4_missing_authority_blocks(tmp_path):
+    package = tmp_path / "authority.json"
+
+    package.write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    result = validate_authority_package(
+        str(package)
+    )
+
+    assert result["status"] == "BLOCKED"
+    assert result["errors"]
 
 AUTHORITY_SCHEMA = Path(
     "deployment/staging/gate4-authority/GATE4_EXTERNAL_AUTHORITY.schema.json"
