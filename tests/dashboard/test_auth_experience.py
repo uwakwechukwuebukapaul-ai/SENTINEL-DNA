@@ -77,6 +77,19 @@ def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
     assert b"name=\"tenant_id\"" not in response.data
 
 
+def test_auth_surfaces_are_clean_and_hide_unavailable_oauth(auth_client, monkeypatch):
+    monkeypatch.setitem(dashboard_app.app.config, "GOOGLE_OAUTH_CONFIGURED", False)
+    login = auth_client.get("/login")
+    signup = auth_client.get("/signup")
+
+    assert b"/api/auth/google/start" not in login.data
+    assert b"country-picker" not in signup.data
+    assert b"country-flag" not in signup.data
+    assert b"signup-country-search" not in signup.data
+    assert signup.data.count(b"data-signup-email-verify") == 1
+    assert b"data-registration-submit disabled" in signup.data
+
+
 def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):
     payload = {
         "username": "new-analyst",

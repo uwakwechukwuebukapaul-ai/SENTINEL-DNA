@@ -201,6 +201,14 @@ app.config["PILOT_ACCESS_REQUIRED"] = (
     os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"
 )
 
+# Presence-only capability flag for public auth templates. The provider route
+# remains the authority for the OAuth flow; this prevents an unconfigured
+# provider from being presented as an available sign-in method.
+app.config["GOOGLE_OAUTH_CONFIGURED"] = all(
+    os.getenv(name, "").strip()
+    for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI")
+)
+
 app.config["OBSERVABILITY"] = ObservabilityService()
 
 app.config["HUNT_DB_PATH"] = str(DB_PATH)

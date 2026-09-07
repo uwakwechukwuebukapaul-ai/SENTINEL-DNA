@@ -35,8 +35,10 @@
       <p class="auth-status is-success" data-registered hidden role="status">Account created. Sign in to continue.</p>
 
       <div class="auth-form">
-        <a class="auth-button auth-oauth" href="/api/auth/google/start">Continue with Google</a>
-        <div class="auth-divider"><span>or use a verified identity</span></div>
+        {% if config.get('GOOGLE_OAUTH_CONFIGURED') %}
+          <a class="auth-button auth-oauth" href="/api/auth/google/start">Continue with Google</a>
+          <div class="auth-divider"><span>or use a verified identity</span></div>
+        {% endif %}
         <div class="auth-row" role="tablist" aria-label="Sign-in method">
           <button class="auth-link-button is-selected" type="button" data-login-mode="password" role="tab" aria-selected="true">Password</button>
           <button class="auth-link-button" type="button" data-login-mode="email" role="tab" aria-selected="false">Email code</button>
