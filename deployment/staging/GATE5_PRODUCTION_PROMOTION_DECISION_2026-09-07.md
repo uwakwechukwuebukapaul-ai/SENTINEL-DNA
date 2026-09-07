@@ -26,7 +26,8 @@ readiness is NOT ESTABLISHED.
 
 ## Outstanding conditions
 
-Remaining blocker: external analyst validation and acceptance.
+Remaining blocker: required independent external validation and production
+authorization have not been established in the inspected records.
 Required approvals: human governance approval and separate production
 authorization.
 External dependencies: production environment ownership, secrets provisioning,

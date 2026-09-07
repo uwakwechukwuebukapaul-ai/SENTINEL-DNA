@@ -44,9 +44,11 @@ human authorization evidence before treating the pilot as complete.
 
 ## Final decision
 
-Decision: PENDING; no completion decision is recorded.
-Decision reason: required execution metrics, quality assessments, analyst
-acceptance, and human authorization are not provided.
+Decision: PENDING_EXTERNAL_VALIDATION
+Decision reason: The repository contains controlled-pilot preparation,
+execution/evidence records, and governance documentation, but the inspected
+decision record does not contain completed independent external analyst
+acceptance or human production authorization.
 
 ## Release recommendation
 
@@ -54,6 +56,7 @@ Recommendation: CONTINUE VALIDATION
 
 ## Human authorization
 
+Human authorization: PENDING
 Approved by: NOT PROVIDED
 Role: NOT PROVIDED
 Timestamp: NOT PROVIDED

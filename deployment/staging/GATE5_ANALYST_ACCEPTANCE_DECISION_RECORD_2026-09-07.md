@@ -34,6 +34,8 @@ State: PENDING_EXTERNAL_ANALYST_ACCEPTANCE
 No analyst identity, acceptance, signature, timestamp, or external validation is
 provided. The record name does not prove that analyst acceptance occurred.
 
+This record does not constitute analyst acceptance.
+
 ## Governance boundary
 
 This record authorizes no production deployment. Completion of documentation

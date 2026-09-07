@@ -19,7 +19,7 @@ occurred.
 
 ### 2. Retained local evidence
 
-Status: PRESENT / RETAINED LOCALLY.
+Status: PRESERVED.
 
 Review archives, verification bundles, and audit materials may be retained for
 review and custody. Their presence is not proof of analyst acceptance or
@@ -27,7 +27,7 @@ production authorization.
 
 ### 3. Development/temporary artifacts
 
-Status: DEVELOPMENT OR TEMPORARY MATERIAL.
+Status: RETAINED OUTSIDE THE RELEASE CANDIDATE.
 
 Scripts, tests, generated files, and temporary tooling are not release-candidate
 material unless separately reviewed and admitted.
@@ -49,7 +49,7 @@ separate production authorization remain required.
 ## Final repository assessment
 
 Tracked Gate 5 evidence: COMPLETE / RECORDED
-Working Tree Classification: PENDING GOVERNANCE CLASSIFICATION
+Working Tree Classification: PENDING
 Release Boundary: DEFINED
 
 Engineering validation: COMPLETE / RECORDED
@@ -62,8 +62,15 @@ Final Gate 5 status: BLOCKED_PENDING_EXTERNAL_VALIDATION
 Completion of documentation does not itself constitute analyst acceptance or
 production authorization.
 
+Untracked material remains awaiting classification. This includes retained
+evidence, provenance, review bundles, custody tooling, inventories,
+Cloudflare/Gate 5 preparation material, and other development artifacts.
+Untracked material is not automatically included in the release candidate and
+has not been deleted or cleaned.
+
 ## Human review
 
+Status: PENDING
 Reviewed by: NOT PROVIDED
 Decision: HUMAN DECISION REQUIRED; NO ACCEPTANCE OR AUTHORIZATION RECORDED
 Timestamp: NOT PROVIDED

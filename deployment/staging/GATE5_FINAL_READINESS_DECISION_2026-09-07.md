@@ -17,8 +17,8 @@ readiness review. It is a boundary record, not proof of final approval.
 | Evidence integrity | PASS / RECORDED |
 | Artifact provenance | PASS / RECORDED |
 | Runtime custody | PASS / RECORDED |
-| Analyst workflow validation | RECORDED; external acceptance pending |
-| Governance documentation | PREPARED |
+| Analyst workflow validation | PASS / RECORDED |
+| Governance documentation | PASS / RECORDED |
 | External analyst validation | PENDING / NOT COMPLETED |
 | Production deployment authorization | NOT GRANTED |
 

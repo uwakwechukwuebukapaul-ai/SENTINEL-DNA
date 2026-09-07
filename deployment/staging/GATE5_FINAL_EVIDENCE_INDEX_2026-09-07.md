@@ -16,6 +16,7 @@ does not prove that the underlying human decisions occurred.
 
 ## Final assessment
 
+Status: PREPARED
 ENGINEERING_VALIDATION: COMPLETE / RECORDED
 GOVERNANCE_EVIDENCE: PREPARED
 EXTERNAL_ANALYST_ACCEPTANCE: PENDING
@@ -23,16 +24,24 @@ PRODUCTION_AUTHORIZATION: NOT GRANTED
 PRODUCTION_DEPLOYMENT: NOT AUTHORIZED
 FINAL_GATE5_STATUS: BLOCKED_PENDING_EXTERNAL_VALIDATION
 
-Decision: No final human decision is recorded. A record named an acceptance or
+Decision: BLOCKED_PENDING_EXTERNAL_VALIDATION
+
+No final human decision is recorded. A record named an acceptance or
 completion decision is not proof of acceptance or completion without actual
 decision evidence.
 
-Outstanding conditions: external analyst participation and acceptance, human
-governance decision, operational ownership confirmation, recovery/rollback
-confirmation, and separate production authorization.
+Outstanding conditions:
+
+* independent external analyst validation;
+* analyst acceptance;
+* operational ownership confirmation;
+* recovery/rollback confirmation where applicable;
+* production authorization;
+* any remaining external dependency identified by the evidence.
 
 ## Human governance approval
 
+Human Governance Approval: PENDING
 Approved by: NOT PROVIDED
 Role: NOT PROVIDED
 Timestamp: NOT PROVIDED
