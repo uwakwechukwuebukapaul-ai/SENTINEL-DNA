@@ -1,0 +1,37 @@
+{
+  "gate": "GATE5",
+  "artifact_selection_type": "controlled_review_package",
+  "status": "PENDING_REVIEW",
+  "selected_categories": {
+    "governance_records": [
+      "deployment/staging/GATE5_*.md",
+      "deployment/staging/GATE5_*.json",
+      "docs/GATE5_*.md"
+    ],
+    "pilot_evidence": [
+      "pilot-evidence/"
+    ],
+    "provenance": [
+      "provenance/"
+    ],
+    "validation_tooling": [
+      "tests/tools/test_sdna_custody.py",
+      "tools/sdna-custody/"
+    ]
+  },
+  "excluded_categories": {
+    "generated_artifacts": [
+      "*.zip",
+      "*.patch",
+      "archive/"
+    ],
+    "local_or_sensitive": [
+      "cloudtrail-public-key-base64.txt",
+      ".gate4-*"
+    ]
+  },
+  "authorization": {
+    "pilot_authorized": false,
+    "external_authority_required": true
+  }
+}
