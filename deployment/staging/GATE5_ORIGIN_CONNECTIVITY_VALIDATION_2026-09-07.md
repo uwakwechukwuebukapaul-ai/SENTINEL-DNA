@@ -5,7 +5,7 @@
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
 Status: BLOCKED_PENDING_EXTERNAL_ORIGIN_PREFLIGHT
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Performed by: static repository review; no live endpoint request succeeded
 
 Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
@@ -50,3 +50,16 @@ The approved operator must, from the staging host and enrolled analyst device:
 
 No live origin, certificate, DNS, runtime, or deployment event is claimed by
 this record.
+
+## Status classification
+
+READY: The exact origin, private path, CA/SNI procedure, and denial checks are
+defined.
+
+BLOCKED: Live origin and external private-path configuration are unavailable.
+
+OWNER ACTION REQUIRED: Network/release owner must run the CA-verified origin
+and isolation preflight from approved hosts.
+
+NOT MEASURED: Live DNS, TLS, health/readiness, headers, routing, and private
+path isolation.

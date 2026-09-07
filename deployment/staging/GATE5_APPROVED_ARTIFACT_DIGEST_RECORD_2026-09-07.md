@@ -4,11 +4,11 @@
 
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Performed by: repository inspection and static configuration review; no human analyst action
 
-Observed repository HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1
-Observed repository tree: 4c78a1a8906290ef720e9102b87e83e1325b60f6
+Observed repository HEAD: b48c17daeb2ab329b9682537bf21c33e2c16967a
+Observed repository tree: 7f3f7c2591ec116ff315be477750bd0d870aa987
 Branch: gate5-controlled-analyst-pilot-preparation
 
 Authorized release-candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
@@ -47,3 +47,14 @@ build timestamp, and external custody reference.
 
 This record establishes a fail-closed workflow only. It does not authorize
 deployment or prove successful production operation.
+
+## Status classification
+
+READY: The capture and reconciliation workflow is defined.
+
+BLOCKED: The immutable image digest and external build record are unavailable.
+
+OWNER ACTION REQUIRED: Release/build operator must supply the candidate-bound
+image digest and custody references.
+
+NOT MEASURED: Runtime image resolution and registry reconciliation.

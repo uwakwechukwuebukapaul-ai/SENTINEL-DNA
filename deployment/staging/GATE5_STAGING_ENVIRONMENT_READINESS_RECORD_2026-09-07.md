@@ -4,12 +4,12 @@
 
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Performed by: static repository configuration review; no staging deployment was performed
 
 Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
 Candidate tree: 0c34089a3781c172c3711094b870f61964902d9
-Current repository HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1
+Current repository HEAD: b48c17daeb2ab329b9682537bf21c33e2c16967a
 
 ## Readiness assessment
 
@@ -48,3 +48,17 @@ Status: BLOCKED_PENDING_EXTERNAL_STAGING_PREFLIGHT
 The environment architecture is prepared for controlled execution, but no
 staging environment was started or validated. Production deployment is neither
 authorized nor performed.
+
+## Status classification
+
+READY: Static staging isolation and fail-closed Compose requirements are
+defined.
+
+BLOCKED: External images, secrets, TLS, runtime, trusted-browser provider, and
+certified-origin checks are unavailable locally.
+
+OWNER ACTION REQUIRED: Staging operator must inject approved external
+configuration and run the complete preflight.
+
+NOT MEASURED: Live service health, database/cache availability, TLS behavior,
+backup readiness, and runtime tenant isolation.

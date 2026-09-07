@@ -60,8 +60,77 @@ const SAFE_FAILURE_CODES = new Set([
   "TB_TAB_CLOSE_TIMEOUT",
 ]);
 
+const BLOCKED_CONTEXT = Object.freeze({
+  image_digest: {
+    owner: "release/build operator",
+    required_action: "provide the immutable candidate-bound image digest through external custody",
+    evidence_required: "image reference, sha256 digest, build provenance, commit/tree binding, and custody reference",
+  },
+  staging_environment: {
+    owner: "staging operator",
+    required_action: "configure the approved staging environment with external values",
+    evidence_required: "environment identity, service health, isolation, and deployment inspection",
+  },
+  activation_manifest: {
+    owner: "release/security owner",
+    required_action: "provide and verify the external activation manifest",
+    evidence_required: "candidate-bound manifest digest, scope, expiry, rollback, and approval references",
+  },
+  provider_configured: {
+    owner: "trusted-browser operator",
+    required_action: "configure the approved trusted-browser provider outside Git",
+    evidence_required: "provider identity, runtime identity, browserAuth capability, and custody references",
+  },
+  provider_verification: {
+    owner: "trusted-browser operator",
+    required_action: "verify the approved provider and runtime through the reviewed mechanism",
+    evidence_required: "provider verification result and safe failure category or immutable runtime references",
+  },
+  evidence_directory: {
+    owner: "staging operator",
+    required_action: "provide the approved externally controlled evidence directory",
+    evidence_required: "writable custody location and retention/reference metadata",
+  },
+  validation_scripts: {
+    owner: "release engineer",
+    required_action: "restore the repository-defined validation scripts or stop",
+    evidence_required: "script presence and integrity verification",
+  },
+  certified_origin: {
+    owner: "network/release operator",
+    required_action: "establish the approved private origin and run CA/SNI-verified reachability checks",
+    evidence_required: "DNS, TLS, /ready response, origin, and private-boundary references",
+  },
+  secure_cookies: {
+    owner: "staging operator",
+    required_action: "inject the approved staging security configuration with secure cookies enabled",
+    evidence_required: "effective runtime configuration and cookie security observation",
+  },
+  debug_disabled: {
+    owner: "staging operator",
+    required_action: "run staging with debug mode disabled",
+    evidence_required: "effective runtime configuration and startup inspection",
+  },
+  pilot_access_gate: {
+    owner: "staging operator",
+    required_action: "enable the controlled pilot access gate",
+    evidence_required: "effective runtime configuration and access-boundary observation",
+  },
+  tenant_isolation: {
+    owner: "staging/security operator",
+    required_action: "enable tenant isolation and verify it in the live staging runtime",
+    evidence_required: "direct foreign-tenant denial with no leakage",
+  },
+  audit_logging: {
+    owner: "staging/security operator",
+    required_action: "enable audit logging and verify the audit sink",
+    evidence_required: "actor/role/tenant/action/correlation/time audit references and integrity linkage",
+  },
+});
+
 function result(name, status, reason) {
-  return { name, status, reason };
+  const context = status === "BLOCKED" ? BLOCKED_CONTEXT[name] : undefined;
+  return context ? { name, status, reason, ...context } : { name, status, reason };
 }
 
 function hasValue(name) {

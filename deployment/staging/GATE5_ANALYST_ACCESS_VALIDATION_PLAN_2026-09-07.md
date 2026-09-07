@@ -5,7 +5,7 @@
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
 Status: PREPARED / PENDING EXTERNAL EXECUTION
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Prepared by: repository procedure review; no authentication was performed
 
 Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
@@ -60,3 +60,17 @@ alone do not establish analyst acceptance. Unperformed controls remain
 
 This plan does not weaken authentication, authorize analyst access, establish
 acceptance, or authorize production deployment.
+
+## Status classification
+
+READY: The approved browser-bound validation sequence and evidence boundary are
+defined.
+
+BLOCKED: Trusted-browser provider, certified origin, external identity, and
+human approval are unavailable.
+
+OWNER ACTION REQUIRED: Security/release owner must configure the approved
+provider and authorize the real analyst run.
+
+NOT MEASURED: Authentication, MFA, session, CSRF, RBAC, tenant, audit,
+provenance, and revocation observations.

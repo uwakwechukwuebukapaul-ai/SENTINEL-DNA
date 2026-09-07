@@ -5,12 +5,12 @@
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
 Manifest status: DRAFT / PENDING HUMAN AUTHORIZATION
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Prepared by: repository inspection; no activation was performed
 
 Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
 Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9
-Current repository HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1
+Current repository HEAD: b48c17daeb2ab329b9682537bf21c33e2c16967a
 
 ## Candidate artifact identity
 
@@ -77,3 +77,15 @@ and evidence-custody availability.
 
 This manifest authorizes no access, deployment, analyst acceptance, or
 production promotion.
+
+## Status classification
+
+READY: Scope, allowed actions, exclusions, rollback, and evidence requirements
+are defined.
+
+BLOCKED: Activation prerequisites and human authorization are absent.
+
+OWNER ACTION REQUIRED: Authorized governance owner must provide the approved
+scope, owner, analyst, tenant, expiry, rollback contact, and decision.
+
+NOT MEASURED: No activation, analyst access, or pilot execution occurred.

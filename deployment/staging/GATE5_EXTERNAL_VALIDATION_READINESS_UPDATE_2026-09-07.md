@@ -4,13 +4,13 @@
 
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Prepared by: repository inspection and static readiness review; no human analyst validation performed
 
 Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
 Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9
-Current HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1
-Current tree: 4c78a1a8906290ef720e9102b87e83e1325b60f6
+Current HEAD: b48c17daeb2ab329b9682537bf21c33e2c16967a
+Current tree: 7f3f7c2591ec116ff315be477750bd0d870aa987
 
 ## Readiness update
 
@@ -44,3 +44,16 @@ No analyst identity, signature, human decision, deployment event, or successful
 production operation is asserted.
 
 Final Gate 5 status: BLOCKED_PENDING_EXTERNAL_VALIDATION.
+
+## Status classification
+
+READY: Preparation records and the controlled execution procedure are available.
+
+BLOCKED: External validation prerequisites are not present in this repository
+environment.
+
+OWNER ACTION REQUIRED: Authorized operator, security/release owner, and real
+analyst must complete the external run and decision process.
+
+NOT MEASURED: All live analyst, runtime, custody, acceptance, and production
+observations.

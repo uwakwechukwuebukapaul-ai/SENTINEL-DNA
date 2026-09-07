@@ -5,7 +5,7 @@
 Project: Sentinel DNA
 Gate: Gate 5 Controlled Analyst Pilot
 Status: BLOCKED_PENDING_EXTERNAL_SECRET_INJECTION
-Record timestamp: 2026-09-07T20:06:55.1294813Z
+Record timestamp: 2026-09-07T20:13:52.4214721Z
 Performed by: static Compose and validator inspection; no secrets were accessed
 
 Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
@@ -51,3 +51,17 @@ read, generated, or stored by this review.
 Missing external security configuration stops the controlled pilot. It does not
 justify defaults, bypasses, debug mode, weakened TLS, alternate origins, or
 application-code changes.
+
+## Status classification
+
+READY: Required external-injection names and static fail-closed controls are
+documented.
+
+BLOCKED: Required external secret/configuration values and live provider
+verification are absent.
+
+OWNER ACTION REQUIRED: Security/operator owner must inject approved values
+outside Git and run startup and authentication checks.
+
+NOT MEASURED: Secret validity, live MFA/provider behavior, runtime encryption,
+and deployed security controls.
