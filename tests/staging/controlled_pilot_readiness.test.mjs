@@ -38,6 +38,7 @@ const PROVIDER_MODULE = fileURLToPath(new URL(
 ));
 const ENVIRONMENT_VARIABLES = [
   "SENTINEL_DNA_ENV",
+  "SENTINEL_DNA_CERTIFIED_ORIGIN",
   "SENTINEL_DNA_IMAGE_DIGEST",
   "SENTINEL_DNA_PILOT_ACCESS_REQUIRED",
   "SENTINEL_DNA_SECURE_COOKIES",
@@ -89,6 +90,7 @@ async function withReadinessConfiguration({ runtimeSource = VALID_RUNTIME, provi
   for (const name of ENVIRONMENT_VARIABLES) delete process.env[name];
   if (configure) {
     process.env.SENTINEL_DNA_ENV = "staging";
+    process.env.SENTINEL_DNA_CERTIFIED_ORIGIN = SYNTHETIC_CERTIFIED_ORIGIN;
     process.env.SENTINEL_DNA_IMAGE_DIGEST = `sha256:${"a".repeat(64)}`;
     process.env.SENTINEL_DNA_PILOT_ACCESS_REQUIRED = "1";
     process.env.SENTINEL_DNA_SECURE_COOKIES = "1";

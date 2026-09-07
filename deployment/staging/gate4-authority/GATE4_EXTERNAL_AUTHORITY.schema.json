@@ -8,7 +8,8 @@
     "trust_root_custodian",
     "independent_approver",
     "independent_reviewer",
-    "separation_of_duties"
+    "separation_of_duties",
+    "external_verification"
   ],
   "properties": {
     "governance_package_id": {
@@ -62,6 +63,26 @@
             }
           }
         }
+      }
+    },
+    "external_verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evidence_reference",
+        "evidence_digest",
+        "verifier_identity",
+        "signature_reference",
+        "expires_at"
+      ],
+      "properties": {
+        "status": { "const": "VERIFIED" },
+        "evidence_reference": { "type": "string", "minLength": 1 },
+        "evidence_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "verifier_identity": { "type": "string", "minLength": 1 },
+        "signature_reference": { "type": "string", "minLength": 1 },
+        "expires_at": { "type": "string", "format": "date-time" }
       }
     }
   },

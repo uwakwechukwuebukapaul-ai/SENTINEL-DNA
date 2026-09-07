@@ -9,6 +9,7 @@ import {
   validateTenantIsolation,
 } from "../../deployment/staging/scripts/controlled_analyst_pilot_evidence_validation.mjs";
 
+
 // This is an in-memory contract fixture only. It is not pilot evidence, does
 // not represent a real analyst or authentication event, and is never written
 // to pilot-evidence/.

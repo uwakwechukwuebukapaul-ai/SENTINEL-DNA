@@ -15,9 +15,9 @@ import {
   TRUSTED_BROWSER_RUNTIME_ENVIRONMENT,
 } from "./trusted_browser_execution_adapter.mjs";
 import {
-  CERTIFIED_ORIGIN,
   TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV,
 } from "./trusted_browser_service/browser-client.mjs";
+import { configuredCertifiedOrigin } from "./trusted_browser_service/policy/origin-policy.mjs";
 import {
   createTrustedBrowserDiagnostics,
   TRUSTED_BROWSER_TIMEOUTS,
@@ -168,11 +168,13 @@ async function closeResource(resource, operation, diagnostics, result) {
 export async function verifyTrustedBrowserProvider() {
   const result = resultTemplate();
   const diagnostics = createTrustedBrowserDiagnostics();
+  let certifiedOrigin;
   let trustedClient;
   let runtime;
   let tab;
 
   try {
+    certifiedOrigin = configuredCertifiedOrigin();
     await loadConfiguredModule(TRUSTED_BROWSER_UPSTREAM_CLIENT_ENV, diagnostics);
     trustedClient = await loadConfiguredModule(TRUSTED_BROWSER_CLIENT_ENV, diagnostics);
     markPass(result, "provider");
@@ -202,7 +204,7 @@ export async function verifyTrustedBrowserProvider() {
     browser = await diagnostics.run(
       "BROWSER_SELECTION",
       "certified_origin.select",
-      () => runtime.browsers.getForUrl(CERTIFIED_ORIGIN),
+      () => runtime.browsers.getForUrl(certifiedOrigin),
       { timeoutMs: TRUSTED_BROWSER_TIMEOUTS.BROWSER_SELECTION },
     );
     markPass(result, "origin");

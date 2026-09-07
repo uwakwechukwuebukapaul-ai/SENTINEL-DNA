@@ -4,7 +4,7 @@
   "title": "Gate4 signed release manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "release_id", "repository", "commit_sha", "tree_sha", "activation_manifest", "custody_package", "artifacts", "created_at", "expires_at", "status"],
+  "required": ["schema_version", "release_id", "repository", "commit_sha", "tree_sha", "activation_manifest", "custody_package", "artifacts", "created_at", "expires_at", "status", "revocation_status_reference"],
   "properties": {
     "schema_version": {"const": "gate4.release-manifest.v1"},
     "release_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._/-]+$"},
@@ -43,10 +43,12 @@
     },
     "activation": {
       "type": "object", "additionalProperties": false,
-      "required": ["path", "sha256"],
+      "required": ["validator_path", "validator_sha256", "instance_reference", "instance_sha256"],
       "properties": {
-        "path": {"const": "deployment/staging/scripts/trusted_browser_activation_manifest.mjs"},
-        "sha256": {"$ref": "#/$defs/digest"}
+        "validator_path": {"const": "deployment/staging/scripts/trusted_browser_activation_manifest.mjs"},
+        "validator_sha256": {"$ref": "#/$defs/digest"},
+        "instance_reference": {"$ref": "#/$defs/identity"},
+        "instance_sha256": {"$ref": "#/$defs/digest"}
       }
     },
     "image": {

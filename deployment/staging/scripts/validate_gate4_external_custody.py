@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import sys
+import os
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,15 @@ THIRD_PARTY = {"postgres_image", "redis_image"}
 IMAGES = SENTINEL_BUILT | EXTERNAL_SECURITY_BOUNDARY | THIRD_PARTY
 APPROVED = "INDEPENDENTLY_APPROVED"
 STATUSES = {"MISSING", "PRESENT", "CLAIMED", "LOCALLY_VERIFIED", "EXTERNALLY_VERIFIED", APPROVED, "HISTORICAL", "CONFLICTING", "BLOCKED"}
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate_json_key")
+        result[key] = value
+    return result
 
 
 def _schema_check(value: Any, schema: dict[str, Any], root: dict[str, Any], path: str, errors: list[str]) -> None:
@@ -59,7 +69,7 @@ def _approved_record(value: Any, label: str, errors: list[str]) -> None:
     if value.get("status") != APPROVED: errors.append(f"{label}.status:independent_approval_required")
     if not isinstance(value.get("evidence_reference"), str) or not value["evidence_reference"].strip(): errors.append(f"{label}.evidence_reference:missing")
     _digest(value.get("evidence_digest"), f"{label}.evidence_digest", errors)
-    for key in ("verifier_identity", "verification_method", "approval_reference"):
+    for key in ("verifier_identity", "verification_method", "verification_method_identity", "verification_method_version", "approval_reference"):
         if not isinstance(value.get(key), str) or not value[key].strip(): errors.append(f"{label}.{key}:missing")
     if not isinstance(value.get("verified_at"), str) or not UTC.fullmatch(value["verified_at"]): errors.append(f"{label}.verified_at:utc_required")
 
@@ -99,10 +109,43 @@ def _sbom(value: Any, label: str, digest: str, errors: list[str]) -> None:
 
 def _activation_bytes(path: Path | None, errors: list[str]) -> tuple[dict[str, Any] | None, bytes | None]:
     if path is None: errors.append("activation_manifest:bytes_required"); return None, None
-    try: raw = path.read_bytes(); manifest = json.loads(raw)
-    except (OSError, json.JSONDecodeError): errors.append("activation_manifest:bytes_unreadable"); return None, None
+    if path.suffix.casefold() == ".mjs" or not path.is_absolute():
+        errors.append("activation_manifest:external_json_path_required"); return None, None
+    try:
+        resolved = path.resolve(strict=True)
+        repository = Path(__file__).resolve().parents[3]
+        resolved.relative_to(repository)
+        errors.append("activation_manifest:repository_local")
+        return None, None
+    except ValueError:
+        pass
+    except OSError:
+        errors.append("activation_manifest:unavailable"); return None, None
+    forbidden = {"tests", "fixtures", "simulation", ".git", ".gate4", "pilot-evidence"}
+    if {part.casefold() for part in resolved.parts}.intersection(forbidden):
+        errors.append("activation_manifest:fixture_or_simulation"); return None, None
+    try:
+        raw = resolved.read_bytes()
+        if raw.startswith(b"\xef\xbb\xbf"):
+            raise ValueError("bom_forbidden")
+        manifest = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except (OSError, ValueError, json.JSONDecodeError): errors.append("activation_manifest:bytes_unreadable"); return None, None
     if not isinstance(manifest, dict): errors.append("activation_manifest:object_required"); return None, raw
     return manifest, raw
+
+
+def _external_verifier_config(path: Path) -> bool:
+    try:
+        resolved = path.resolve(strict=True)
+        repository = Path(__file__).resolve().parents[3]
+        resolved.relative_to(repository)
+        return False
+    except ValueError:
+        pass
+    except OSError:
+        return False
+    forbidden = {"tests", "fixtures", "simulation", ".git", ".gate4", "pilot-evidence", "generated-evidence"}
+    return resolved.is_file() and not ({part.casefold() for part in resolved.parts} & forbidden)
 
 
 def _configuration(value: Any, label: str, expected_commit: str, expected_tree: str, errors: list[str]) -> None:
@@ -129,14 +172,21 @@ def _tls(value: Any, label: str, errors: list[str]) -> None:
         if match.get("private_key_custody_reference") != value.get("private_key_custody_reference"): errors.append(f"{label}.certificate_key_match.private_key_custody_reference:mismatch")
         if not isinstance(match.get("evidence_reference"), str) or not match["evidence_reference"].strip(): errors.append(f"{label}.certificate_key_match.evidence_reference:missing")
         _digest(match.get("evidence_digest"), f"{label}.certificate_key_match.evidence_digest", errors)
-        for key in ("verifier_identity", "verification_method", "approval_reference"):
+        for key in ("verifier_identity", "verification_method", "verification_method_identity", "verification_method_version", "approval_reference"):
             if not isinstance(match.get(key), str) or not match[key].strip(): errors.append(f"{label}.certificate_key_match.{key}:missing")
         if not isinstance(match.get("verified_at"), str) or not UTC.fullmatch(match["verified_at"]): errors.append(f"{label}.certificate_key_match.verified_at:utc_required")
     _approved_record(value.get("verification_record"), f"{label}.verification_record", errors)
 
 
-def validate(package: dict, *, expected_commit: str, expected_tree: str, schema_path: Path | None = None, activation_manifest_path: Path | None = None, expected_application_image: str | None = None, expected_trusted_browser_image: str | None = None, expected_egress_image: str | None = None, expected_edge_image: str | None = None) -> dict[str, object]:
+def validate(package: dict, *, expected_commit: str, expected_tree: str, schema_path: Path | None = None, activation_manifest_path: Path | None = None, expected_application_image: str | None = None, expected_trusted_browser_image: str | None = None, expected_egress_image: str | None = None, expected_edge_image: str | None = None, require_external_verification: bool = True, test_only: bool = False) -> dict[str, object]:
     errors: list[str] = []
+    if test_only and os.environ.get("GATE4_CERTIFICATION_PATH", "").casefold() == "true":
+        errors.append("test_only:forbidden_on_certification_path")
+    if require_external_verification and not test_only:
+        # This repository deliberately contains no cryptographic authority.  A
+        # production invocation must supply an independently authenticated
+        # evidence verifier; structural custody records can never authorize.
+        errors.append("cryptographic_evidence_verifier:unavailable")
     if not COMMIT.fullmatch(expected_commit) or not COMMIT.fullmatch(expected_tree): return {"status": "BLOCKED", "errors": ["expected_release_identity:malformed"], "secret_values_logged": False}
     if not isinstance(package, dict): return {"status": "BLOCKED", "errors": ["package:object_required"], "secret_values_logged": False}
     schema_file = schema_path or Path(__file__).resolve().parents[1] / "GATE4_EXTERNAL_CUSTODY.schema.json"
@@ -219,11 +269,20 @@ def validate(package: dict, *, expected_commit: str, expected_tree: str, schema_
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("package", type=Path); parser.add_argument("--expected-commit", required=True); parser.add_argument("--expected-tree", required=True); parser.add_argument("--expected-application-image"); parser.add_argument("--expected-trusted-browser-image"); parser.add_argument("--expected-egress-image"); parser.add_argument("--expected-edge-image"); parser.add_argument("--schema", type=Path); parser.add_argument("--activation-manifest-bytes", type=Path); parser.add_argument("--json", action="store_true")
+    parser.add_argument("package", type=Path); parser.add_argument("--expected-commit", required=True); parser.add_argument("--expected-tree", required=True); parser.add_argument("--expected-application-image"); parser.add_argument("--expected-trusted-browser-image"); parser.add_argument("--expected-egress-image"); parser.add_argument("--expected-edge-image"); parser.add_argument("--schema", type=Path); parser.add_argument("--activation-manifest-bytes", type=Path); parser.add_argument("--evidence-verifier-config", type=Path, required=True); parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    if not _external_verifier_config(args.evidence_verifier_config):
+        result = {"status": "BLOCKED", "errors": ["cryptographic_evidence_verifier:unavailable_or_untrusted_configuration"], "secret_values_logged": False}
+        if args.json: print(json.dumps(result, sort_keys=True))
+        else: print("GATE4_EXTERNAL_CUSTODY=BLOCKED\nERROR=cryptographic_evidence_verifier:unavailable_or_untrusted_configuration")
+        return 1
     try: package = json.loads(args.package.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError): result = {"status": "BLOCKED", "errors": ["package:unreadable_or_invalid_json"], "secret_values_logged": False}
-    else: result = validate(package, expected_commit=args.expected_commit, expected_tree=args.expected_tree, schema_path=args.schema, activation_manifest_path=args.activation_manifest_bytes, expected_application_image=args.expected_application_image, expected_trusted_browser_image=args.expected_trusted_browser_image, expected_egress_image=args.expected_egress_image, expected_edge_image=args.expected_edge_image)
+    else:
+        # The config is an onboarding boundary only.  Until an independently
+        # authenticated external verifier is integrated, production remains
+        # blocked rather than accepting self-attested JSON evidence.
+        result = validate(package, expected_commit=args.expected_commit, expected_tree=args.expected_tree, schema_path=args.schema, activation_manifest_path=args.activation_manifest_bytes, expected_application_image=args.expected_application_image, expected_trusted_browser_image=args.expected_trusted_browser_image, expected_egress_image=args.expected_egress_image, expected_edge_image=args.expected_edge_image, require_external_verification=True)
     if args.json: print(json.dumps(result, sort_keys=True))
     else:
         print(f"GATE4_EXTERNAL_CUSTODY={result['status']}")

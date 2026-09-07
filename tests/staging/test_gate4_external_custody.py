@@ -18,7 +18,7 @@ def digest(letter): return "sha256:" + letter * 64
 
 
 def record(letter="e"):
-    return {"status": "INDEPENDENTLY_APPROVED", "evidence_reference": f"custody:evidence:{letter}", "evidence_digest": digest(letter), "verifier_identity": "external-verifier:test-only", "verification_method": "test-only-independent-record", "verified_at": "2026-09-06T00:00:00Z", "approval_reference": "approval:test-only"}
+    return {"status": "INDEPENDENTLY_APPROVED", "evidence_reference": f"custody:evidence:{letter}", "evidence_digest": digest(letter), "verifier_identity": "external-verifier:test-only", "verification_method": "test-only-independent-record", "verification_method_identity": "test-verifier:test-only", "verification_method_version": "test-v1", "verified_at": "2026-09-06T00:00:00Z", "approval_reference": "approval:test-only"}
 
 
 def signature(value, signer):
@@ -55,7 +55,7 @@ def complete_package(tmp_path):
     artifacts["browserauth_bridge"] = {"digest": digest("5"), "evidence_reference": "bridge:test-only", "export_contract": "requestBrowserAuth", "structural_validation": "PASS", "approval_reference": "approval:bridge:test-only", "signature": signature(digest("5"), "signer:custom"), "verification_record": record("5")}
     artifacts["egress_policy"] = {"reference": "policy:test-only", "digest": digest("6"), "owner": "owner:test-only", "reviewer": "reviewer:test-only", "approved_at": "2026-09-06T00:00:00Z", "review_by": "2026-10-06T00:00:00Z", "approval_reference": "approval:policy:test-only", "signature": signature(digest("6"), "signer:custom"), "verification_record": record("6")}
     artifacts["edge_configuration"] = {"artifact_class": "REPOSITORY_CONFIGURATION", "reference": "config:deployment/staging/nginx.conf", "digest": digest("8"), "source_commit": RELEASE_COMMIT, "source_tree": RELEASE_TREE, "verification_record": record("8")}
-    artifacts["edge_tls"] = {"artifact_class": "EXTERNAL_TLS_CUSTODY", "custody_reference": "tls-custody:test-only", "certificate_digest": digest("9"), "private_key_custody_reference": "tls-key-custody:test-only", "certificate_key_match": {"status": "INDEPENDENTLY_APPROVED", "certificate_digest": digest("9"), "private_key_custody_reference": "tls-key-custody:test-only", "evidence_reference": "tls-key-match:test-only", "evidence_digest": digest("a"), "verifier_identity": "verifier:tls:test-only", "verification_method": "independent-cert-key-match", "verified_at": "2026-09-06T00:00:00Z", "approval_reference": "approval:tls-key-match:test-only"}, "verification_record": record("9")}
+    artifacts["edge_tls"] = {"artifact_class": "EXTERNAL_TLS_CUSTODY", "custody_reference": "tls-custody:test-only", "certificate_digest": digest("9"), "private_key_custody_reference": "tls-key-custody:test-only", "certificate_key_match": {"status": "INDEPENDENTLY_APPROVED", "certificate_digest": digest("9"), "private_key_custody_reference": "tls-key-custody:test-only", "evidence_reference": "tls-key-match:test-only", "evidence_digest": digest("a"), "verifier_identity": "verifier:tls:test-only", "verification_method": "independent-cert-key-match", "verification_method_identity": "test-verifier:test-only", "verification_method_version": "test-v1", "verified_at": "2026-09-06T00:00:00Z", "approval_reference": "approval:tls-key-match:test-only"}, "verification_record": record("9")}
     fields = {"application_image_digest": artifacts["application_image"]["digest"], "trusted_browser_image_digest": artifacts["trusted_browser_image"]["digest"], "egress_gateway_image_digest": artifacts["egress_gateway_image"]["digest"], "edge_image_digest": artifacts["edge_image"]["digest"], "postgres_image_digest": artifacts["postgres_image"]["digest"], "redis_image_digest": artifacts["redis_image"]["digest"], "approved_runtime_module_digest": artifacts["playwright_runtime"]["digest"], "approved_runtime_dependency_lockfile_digest": artifacts["playwright_runtime"]["lockfile_digest"], "approved_browser_executable_digest": artifacts["browser_executable"]["digest"], "approved_browser_base_image_digest": artifacts["browser_executable"]["base_image_digest"], "approved_browser_auth_bridge_digest": artifacts["browserauth_bridge"]["digest"], "approved_egress_policy_digest": artifacts["egress_policy"]["digest"], "approved_edge_configuration_digest": artifacts["edge_configuration"]["digest"], "approved_edge_tls_certificate_digest": artifacts["edge_tls"]["certificate_digest"], "approved_edge_tls_certificate_key_match_evidence_digest": artifacts["edge_tls"]["certificate_key_match"]["evidence_digest"]}
     manifest = activation(fields); manifest_path = tmp_path / "activation.json"; raw = json.dumps(manifest, separators=(",", ":")).encode(); manifest_path.write_bytes(raw)
     activation_artifact = {"digest": "sha256:" + hashlib.sha256(raw).hexdigest(), "reference": "activation:test-only", "manifest_bytes_reference": "activation:test-only", "signature": signature("sha256:" + hashlib.sha256(raw).hexdigest(), "signer:custom"), "verification_record": record("7")}
@@ -64,11 +64,26 @@ def complete_package(tmp_path):
     return package, manifest_path
 
 
-def check(package, manifest_path): return validate(package, expected_commit=RELEASE_COMMIT, expected_tree=RELEASE_TREE, activation_manifest_path=manifest_path)
+def check(package, manifest_path): return validate(package, expected_commit=RELEASE_COMMIT, expected_tree=RELEASE_TREE, activation_manifest_path=manifest_path, test_only=True)
 
 
 def test_complete_package_requires_actual_manifest_and_passes(tmp_path):
     package, manifest = complete_package(tmp_path); result = check(package, manifest); assert result["status"] == "PASS"
+
+
+def test_validate_defaults_to_external_verification_and_blocks_structural_self_attestation(tmp_path):
+    package, manifest = complete_package(tmp_path)
+    result = validate(package, expected_commit=RELEASE_COMMIT, expected_tree=RELEASE_TREE, activation_manifest_path=manifest)
+    assert result["status"] == "BLOCKED"
+    assert "cryptographic_evidence_verifier:unavailable" in result["errors"]
+
+
+def test_test_only_mode_cannot_activate_on_certification_path(tmp_path, monkeypatch):
+    package, manifest = complete_package(tmp_path)
+    monkeypatch.setenv("GATE4_CERTIFICATION_PATH", "true")
+    result = validate(package, expected_commit=RELEASE_COMMIT, expected_tree=RELEASE_TREE, activation_manifest_path=manifest, test_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "test_only:forbidden_on_certification_path" in result["errors"]
 
 
 def test_self_asserted_booleans_are_not_accepted(tmp_path):
@@ -77,6 +92,17 @@ def test_self_asserted_booleans_are_not_accepted(tmp_path):
 
 def test_missing_actual_manifest_bytes_blocks(tmp_path):
     package, _ = complete_package(tmp_path); assert check(package, None)["status"] == "BLOCKED"
+
+
+def test_validator_module_is_not_an_activation_instance(tmp_path):
+    package, _ = complete_package(tmp_path)
+    assert check(package, ROOT / "deployment/staging/scripts/trusted_browser_activation_manifest.mjs")["status"] == "BLOCKED"
+
+
+def test_repository_local_activation_instance_blocks(tmp_path):
+    package, _ = complete_package(tmp_path)
+    local_instance = ROOT / "tests/staging/fixtures/local-activation.json"
+    assert check(package, local_instance)["status"] == "BLOCKED"
 
 
 def test_manifest_digest_and_cross_binding_fail_closed(tmp_path):
