@@ -2,20 +2,20 @@
 
 ## Manifest metadata
 
-Project: Sentinel DNA  
-Gate: Gate 5 Controlled Analyst Pilot  
-Manifest status: DRAFT / PENDING HUMAN AUTHORIZATION  
-Record timestamp: 2026-09-07T20:06:55.1294813Z  
+Project: Sentinel DNA
+Gate: Gate 5 Controlled Analyst Pilot
+Manifest status: DRAFT / PENDING HUMAN AUTHORIZATION
+Record timestamp: 2026-09-07T20:06:55.1294813Z
 Prepared by: repository inspection; no activation was performed
 
-Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229  
-Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9  
+Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
+Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9
 Current repository HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1
 
 ## Candidate artifact identity
 
-Image reference: NOT PROVIDED  
-Immutable digest: NOT PROVIDED  
+Image reference: NOT PROVIDED
+Immutable digest: NOT PROVIDED
 Build provenance: PENDING EXTERNAL ARTIFACT RECORD
 
 Activation cannot proceed until the artifact digest record is complete and
@@ -23,20 +23,20 @@ reconciled with the exact candidate identity.
 
 ## Environment target
 
-Target: disposable, non-production Sentinel DNA staging environment.  
+Target: disposable, non-production Sentinel DNA staging environment.
 Access path: selected Tailscale private path, subject to external configuration
-and preflight.  
-Certified origin: `https://uwakwe-desktop.taile388cc.ts.net`  
-Edge boundary: loopback-only `127.0.0.1:18443->443/tcp`  
+and preflight.
+Certified origin: `https://uwakwe-desktop.taile388cc.ts.net`
+Edge boundary: loopback-only `127.0.0.1:18443->443/tcp`
 Production access: prohibited.
 
 ## Ownership and scope
 
-Deployment owner: PENDING / NOT PROVIDED  
-Approved analyst identity: PENDING / NOT PROVIDED  
-Synthetic tenant: PENDING / NOT PROVIDED  
-Reviewer: PENDING / NOT PROVIDED  
-Rollback owner: PENDING / NOT PROVIDED  
+Deployment owner: PENDING / NOT PROVIDED
+Approved analyst identity: PENDING / NOT PROVIDED
+Synthetic tenant: PENDING / NOT PROVIDED
+Reviewer: PENDING / NOT PROVIDED
+Rollback owner: PENDING / NOT PROVIDED
 Execution window and expiry: PENDING / NOT PROVIDED
 
 No analyst identity or approval is created by this manifest.

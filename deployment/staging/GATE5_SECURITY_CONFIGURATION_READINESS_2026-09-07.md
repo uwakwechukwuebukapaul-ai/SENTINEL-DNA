@@ -2,13 +2,13 @@
 
 ## Record metadata
 
-Project: Sentinel DNA  
-Gate: Gate 5 Controlled Analyst Pilot  
-Status: BLOCKED_PENDING_EXTERNAL_SECRET_INJECTION  
-Record timestamp: 2026-09-07T20:06:55.1294813Z  
+Project: Sentinel DNA
+Gate: Gate 5 Controlled Analyst Pilot
+Status: BLOCKED_PENDING_EXTERNAL_SECRET_INJECTION
+Record timestamp: 2026-09-07T20:06:55.1294813Z
 Performed by: static Compose and validator inspection; no secrets were accessed
 
-Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229  
+Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
 Candidate tree: 0c34089a3781c172c3711094b870f61964902d9
 
 ## Required external configuration

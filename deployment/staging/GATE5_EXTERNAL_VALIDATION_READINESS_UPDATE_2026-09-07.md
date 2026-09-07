@@ -2,14 +2,14 @@
 
 ## Record metadata
 
-Project: Sentinel DNA  
-Gate: Gate 5 Controlled Analyst Pilot  
-Record timestamp: 2026-09-07T20:06:55.1294813Z  
+Project: Sentinel DNA
+Gate: Gate 5 Controlled Analyst Pilot
+Record timestamp: 2026-09-07T20:06:55.1294813Z
 Prepared by: repository inspection and static readiness review; no human analyst validation performed
 
-Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229  
-Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9  
-Current HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1  
+Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
+Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9
+Current HEAD: e4716c9c7543f9fc2919bbd92cc833b570310df1
 Current tree: 4c78a1a8906290ef720e9102b87e83e1325b60f6
 
 ## Readiness update

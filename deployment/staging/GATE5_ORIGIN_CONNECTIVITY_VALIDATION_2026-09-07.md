@@ -2,19 +2,19 @@
 
 ## Record metadata
 
-Project: Sentinel DNA  
-Gate: Gate 5 Controlled Analyst Pilot  
-Status: BLOCKED_PENDING_EXTERNAL_ORIGIN_PREFLIGHT  
-Record timestamp: 2026-09-07T20:06:55.1294813Z  
+Project: Sentinel DNA
+Gate: Gate 5 Controlled Analyst Pilot
+Status: BLOCKED_PENDING_EXTERNAL_ORIGIN_PREFLIGHT
+Record timestamp: 2026-09-07T20:06:55.1294813Z
 Performed by: static repository review; no live endpoint request succeeded
 
-Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229  
+Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
 Candidate tree: 0c34089a3781c172c3711094b870f61964902d9
 
 ## Required origin
 
-Certified analyst origin: `https://uwakwe-desktop.taile388cc.ts.net`  
-Selected private path: Tailscale raw TCP forwarding to the staging edge.  
+Certified analyst origin: `https://uwakwe-desktop.taile388cc.ts.net`
+Selected private path: Tailscale raw TCP forwarding to the staging edge.
 Expected edge publication: `127.0.0.1:18443->443/tcp` only.
 
 Cloudflare is paused for the first analyst login and is not an alternate path.
