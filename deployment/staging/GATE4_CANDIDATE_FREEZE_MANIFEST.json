@@ -1,0 +1,82 @@
+{
+  "document_type": "Sentinel DNA Gate 4 candidate custody manifest",
+  "candidate": {
+    "repository": "sentinel-dna-postmerge-ssh",
+    "branch": "gate4-controlled-analyst-pilot",
+    "commit": "c01508d29ea53e504f9cfa6acc330ff012c5fc77",
+    "tree": "acf1840a0d35bbfdaa7131fab3b4371f17dfd05e",
+    "parent": "103643a280a018a91fb0352b2b1252bd29ce6e15",
+    "path_count": 13
+  },
+  "included_candidate_paths": [
+    ".github/workflows/gate4-custody.yml",
+    "deployment/staging/GATE4_EXTERNAL_CUSTODY.schema.json",
+    "deployment/staging/GATE4_RELEASE_MANIFEST.schema.json",
+    "deployment/staging/gate4-authority/GATE4_EXTERNAL_AUTHORITY.schema.json",
+    "deployment/staging/scripts/check_governance_boundaries.py",
+    "deployment/staging/scripts/validate_gate4_external_custody.py",
+    "deployment/staging/scripts/validate_pilot_governance.py",
+    "deployment/staging/scripts/verify_trusted_browser_provider.mjs",
+    "tests/staging/controlled_analyst_pilot_evidence_validation.test.mjs",
+    "tests/staging/controlled_pilot_readiness.test.mjs",
+    "tests/staging/test_gate4_external_custody.py",
+    "tests/staging/test_gate4_second_remediation.py",
+    "tests/staging/test_pilot_governance.py"
+  ],
+  "evidence": {
+    "node_tests": "135 passed",
+    "pytest": "50 passed",
+    "git_diff_tree_check": "PASS",
+    "references": [
+      "archive/gate4-review-20260907/",
+      "pilot-evidence/",
+      "provenance/",
+      "runtime fixture F0983042CBD5BE55C1A0D16AFAC6A1DDD7219E702C654F8163A1FF5CF2FFAC54",
+      "backup fixture E53409A4EF8C28D4138D2E200DB420E5F22F90422C7FE50A06B9597F59815B87"
+    ]
+  },
+  "excluded_material": {
+    "documentation_artifacts": [
+      "deployment/staging/GATE4_CANDIDATE_FREEZE_MANIFEST.json",
+      "deployment/staging/GATE4_CANDIDATE_FREEZE_REVIEW_2026-09-07.md",
+      "deployment/staging/GATE4_CANDIDATE_FREEZE_REPORT_2026-09-07.md"
+    ],
+    "evidence_and_archive": [
+      "archive/",
+      "pilot-evidence/",
+      "provenance/"
+    ],
+    "build_and_tooling": [
+      ".gate4-artifact-build-2/",
+      ".gate4-release-source-c6d5713/",
+      "tools/sdna-custody/",
+      "tests/tools/test_sdna_custody.py"
+    ],
+    "out_of_scope_or_separate_review": [
+      "backend-pilot.py",
+      "dashboard/static/css/sentinel-dna-mission-control.css",
+      "deployment/scripts/cloudtrail_digest_monitor.ps1",
+      "deployment/staging/cloudflare/",
+      "deployment/staging/GATE4_APPROVED_STAGING_SET.md",
+      "deployment/staging/CONTROLLED_ANALYST_PILOT_ACCEPTANCE_CHECKLIST.md",
+      "deployment/staging/CONTROLLED_ANALYST_PILOT_MEASUREMENTS.schema.json",
+      "deployment/staging/GATE4_EXTERNAL_DEPENDENCY_CLOSURE_REPORT_2026-09-07.md",
+      "deployment/staging/GATE5_CLOUDFLARE_ANALYST_ACCESS_RUNBOOK.md",
+      "deployment/staging/GATE5_CONTROLLED_ANALYST_TEST_PACK.md",
+      "docs/GATE4_GATE5_CONTROLLED_PILOT_READINESS_AUDIT_2026-09-07.md",
+      "docs/GATE5_FINAL_ACCEPTANCE_REPORT.md",
+      "docs/GATE5_PRODUCTION_GOVERNANCE_RECORD.md",
+      "cloudtrail-public-key-base64.txt",
+      "root-level inventory, review, and working-tree snapshot files"
+    ]
+  },
+  "external_authority": {
+    "required_decision": "Independently verify the exact candidate identity, the 13 included paths, the separation of excluded material, the evidence references, and the absence of valid authority approval or signatures; then decide whether to grant Gate 4 authority.",
+    "status": "PENDING"
+  },
+  "certification_state": "BLOCKED_PENDING_EXTERNAL_AUTHORITY",
+  "certification_status": "BLOCKED_PENDING_EXTERNAL_AUTHORITY",
+  "submission_statement": "This package is submitted for external authority review. It is not a Gate 4 certification.",
+  "deployment_performed": false,
+  "files_staged": false
+}
