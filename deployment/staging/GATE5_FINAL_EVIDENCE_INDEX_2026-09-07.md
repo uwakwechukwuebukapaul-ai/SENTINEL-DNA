@@ -1,138 +1,41 @@
-\# Gate 5 Final Evidence Index
+# Gate 5 Final Evidence Index
 
+## Document metadata
 
+Gate: Gate 5 Controlled Analyst Pilot
+Date: 2026-09-07
+Branch: gate5-controlled-analyst-pilot-preparation
+Final Commit SHA: ca1d61467f4520f52a986e5fa1a8c13d499d2229
+Final Tree SHA: 0c34089a3781c172c3711094b870f61964902d9f
 
-\## Document Metadata
+## Evidence chain
 
+The existing governance, custody, provenance, runtime, analyst-pilot, decision,
+and learning records are indexed here as governance records. Their existence
+does not prove that the underlying human decisions occurred.
 
+## Final assessment
 
-\- Gate: Gate 5 Controlled Analyst Pilot
+ENGINEERING_VALIDATION: COMPLETE / RECORDED
+GOVERNANCE_EVIDENCE: PREPARED
+EXTERNAL_ANALYST_ACCEPTANCE: PENDING
+PRODUCTION_AUTHORIZATION: NOT GRANTED
+PRODUCTION_DEPLOYMENT: NOT AUTHORIZED
+FINAL_GATE5_STATUS: BLOCKED_PENDING_EXTERNAL_VALIDATION
 
-\- Date: 2026-09-07
+Decision: No final human decision is recorded. A record named an acceptance or
+completion decision is not proof of acceptance or completion without actual
+decision evidence.
 
-\- Branch:
+Outstanding conditions: external analyst participation and acceptance, human
+governance decision, operational ownership confirmation, recovery/rollback
+confirmation, and separate production authorization.
 
-\- Final Commit SHA:
+## Human governance approval
 
-\- Final Tree SHA:
+Approved by: NOT PROVIDED
+Role: NOT PROVIDED
+Timestamp: NOT PROVIDED
 
-
-
-\---
-
-
-
-\# Evidence Chain
-
-
-
-\## Governance
-
-
-
-\- GATE5\_CONTROLLED\_PILOT\_GOVERNANCE\_CHECKLIST\_2026-09-07.md
-
-\- GATE5\_PRODUCTION\_GOVERNANCE\_RECORD.md
-
-\- GATE5\_FINAL\_ACCEPTANCE\_REPORT.md
-
-
-
-\## Custody and Provenance
-
-
-
-\- GATE5\_EVIDENCE\_CUSTODY\_CLASSIFICATION\_2026-09-07.md
-
-\- GATE5\_RELEASE\_CUSTODY\_INTAKE\_2026-09-07.md
-
-\- GATE5\_ARTIFACT\_ADMISSION\_RECORD\_2026-09-07.md
-
-\- GATE5\_ADMITTED\_ARTIFACT\_INVENTORY\_2026-09-07.md
-
-\- GATE5\_ARTIFACT\_INTEGRITY\_BINDING\_2026-09-07.md
-
-\- GATE5\_PROVENANCE\_RECONCILIATION\_2026-09-07.md
-
-
-
-\## Runtime Validation
-
-
-
-\- GATE5\_RUNTIME\_CUSTODY\_BINDING\_2026-09-07.md
-
-\- GATE5\_RUNTIME\_EVIDENCE\_RECONCILIATION\_2026-09-07.md
-
-
-
-\## Analyst Pilot Execution
-
-
-
-\- GATE5\_FIRST\_ANALYST\_RUN\_REPORT\_2026-09-07.md
-
-\- GATE5\_ANALYST\_EXECUTION\_VALIDATION\_REPORT\_2026-09-07.md
-
-\- GATE5\_ANALYST\_FEEDBACK\_CAPTURE\_2026-09-07.md
-
-
-
-\## Decision Records
-
-
-
-\- GATE5\_FINAL\_READINESS\_DECISION\_2026-09-07.md
-
-\- GATE5\_PILOT\_ACTIVATION\_DECISION\_2026-09-07.md
-
-\- GATE5\_CONTROLLED\_ANALYST\_PILOT\_COMPLETION\_DECISION\_2026-09-07.md
-
-
-
-\## Learning
-
-
-
-\- GATE5\_POST\_PILOT\_LESSONS\_AND\_IMPROVEMENT\_RECORD\_2026-09-07.md
-
-
-
-\---
-
-
-
-\# Final Assessment
-
-
-
-Status:
-
-
-
-Decision:
-
-
-
-Outstanding Conditions:
-
-
-
-\---
-
-
-
-\# Human Governance Approval
-
-
-
-Approved By:
-
-
-
-Role:
-
-
-
-Timestamp:
-
+Completion of documentation does not itself constitute analyst acceptance or
+production authorization.

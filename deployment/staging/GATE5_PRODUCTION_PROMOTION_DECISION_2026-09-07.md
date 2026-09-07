@@ -1,120 +1,49 @@
-\# Gate 5 Production Promotion Decision Record
+# Gate 5 Production Promotion Decision Record
 
+## Document control
 
+Gate: Gate 5 Controlled Analyst Pilot
+Date: 2026-09-07
+Branch: gate5-controlled-analyst-pilot-preparation
+Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
+Candidate tree: 0c34089a3781c172c3711094b870f61964902d9
 
-\## 1. Document Control
+## Decision scope
 
-\- Gate:
+Record the production boundary. This record does not establish that Sentinel
+DNA may progress from controlled analyst pilot preparation to production.
 
-\- Date:
+## Validation summary
 
-\- Branch:
+Functional: analyst workflow, investigation execution, and evidence collection
+are NOT ESTABLISHED.
 
-\- Candidate commit:
+Security: authentication, authorization, tenant isolation, and audit logging
+are NOT ESTABLISHED.
 
-\- Candidate tree:
+Governance: artifact custody and provenance are PREPARED / RECORDED; recovery
+readiness is NOT ESTABLISHED.
 
+## Outstanding conditions
 
+Remaining blocker: external analyst validation and acceptance.
+Required approvals: human governance approval and separate production
+authorization.
+External dependencies: production environment ownership, secrets provisioning,
+infrastructure approval, recovery/rollback validation, and operator acceptance.
 
-\## 2. Decision Scope
+## Decision
 
-Purpose:
+Status: NOT APPROVED
 
-Evaluate whether Sentinel DNA may progress from controlled analyst pilot preparation toward controlled production deployment.
+No production authorization, analyst acceptance, signature, timestamp, or
+successful production operation is recorded.
 
+## Authority boundary
 
+Final production deployment requires environment ownership, secrets
+provisioning, infrastructure approval, rollback readiness, and operator
+acceptance. Completion of documentation does not itself constitute production
+authorization.
 
-\## 3. Evidence Reviewed
-
-\- Gate 5 evidence reconciliation
-
-\- Analyst execution validation
-
-\- Pilot measurement report
-
-\- Runtime custody evidence
-
-\- Provenance reconciliation
-
-
-
-\## 4. Validation Summary
-
-
-
-\### Functional
-
-\- Analyst workflow:
-
-\- Investigation execution:
-
-\- Evidence collection:
-
-
-
-\### Security
-
-\- Authentication:
-
-\- Authorization:
-
-\- Tenant isolation:
-
-\- Audit logging:
-
-
-
-\### Governance
-
-\- Artifact custody:
-
-\- Provenance:
-
-\- Recovery readiness:
-
-
-
-\## 5. Outstanding Conditions
-
-\- Remaining blockers
-
-\- Required approvals
-
-\- External dependencies
-
-
-
-\## 6. Decision
-
-
-
-Status:
-
-
-
-Options:
-
-\- APPROVED FOR CONTROLLED PRODUCTION
-
-\- CONDITIONAL APPROVAL
-
-\- NOT APPROVED
-
-
-
-\## 7. Authority Boundary
-
-
-
-Final production deployment requires:
-
-\- environment ownership
-
-\- secrets provisioning
-
-\- infrastructure approval
-
-\- rollback readiness
-
-\- operator acceptance
-
+Final Gate 5 status: BLOCKED_PENDING_EXTERNAL_VALIDATION.

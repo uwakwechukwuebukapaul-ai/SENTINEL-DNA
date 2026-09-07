@@ -1,130 +1,48 @@
-\# Gate 5 Final Readiness Decision
+# Gate 5 Final Readiness Decision
 
+Date: 2026-09-07
+Candidate branch: gate5-controlled-analyst-pilot-preparation
+Candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
+Candidate tree: 0c34089a3781c172c3711094b870f61964902d9
 
+## Decision scope
 
-Date:
+This governance record captures Gate 5 evidence preparation and controlled pilot
+readiness review. It is a boundary record, not proof of final approval.
 
-2026-09-07
-
-
-
-\## Decision Scope
-
-
-
-This record captures the governance decision following completion of Gate 5 evidence preparation and controlled pilot readiness review.
-
-
-
-\## Reviewed Evidence
-
-
-
-\- Gate 5 evidence package manifest
-
-\- Evidence custody classification
-
-\- Release custody intake
-
-\- Artifact admission record
-
-\- Admitted artifact inventory
-
-\- Artifact integrity binding
-
-\- Provenance reconciliation
-
-\- Runtime custody binding
-
-\- Runtime evidence reconciliation
-
-\- Controlled analyst execution evidence
-
-\- Analyst execution validation report
-
-\- Analyst pilot outcome record
-
-\- Analyst acceptance decision record
-
-\- Controlled pilot final review
-
-
-
-\## Readiness Assessment
-
-
+## Readiness assessment
 
 | Domain | Result |
-
 |---|---|
-
-| Evidence integrity | PASS |
-
-| Artifact provenance | PASS |
-
-| Runtime custody | PASS |
-
-| Analyst workflow validation | PASS |
-
-| Governance documentation | PASS |
-
+| Evidence integrity | PASS / RECORDED |
+| Artifact provenance | PASS / RECORDED |
+| Runtime custody | PASS / RECORDED |
+| Analyst workflow validation | RECORDED; external acceptance pending |
+| Governance documentation | PREPARED |
 | External analyst validation | PENDING / NOT COMPLETED |
-
 | Production deployment authorization | NOT GRANTED |
 
+## Final decision
 
+State: BLOCKED PENDING EXTERNAL VALIDATION
 
-\## Final Decision
+## Conditions remaining
 
+Real analyst participation, production-like environment validation, operational
+ownership confirmation, recovery and rollback confirmation, and deployment
+authorization review.
 
+## Authorization boundary
 
-State:
+Completion of Gate 5 documentation does not authorize unrestricted production
+deployment and does not itself constitute analyst acceptance. Production release
+requires separate approval and operational acceptance.
 
+## Owner decision point
 
+Human approval is required before moving from controlled preparation into live
+analyst operation.
 
-CONDITIONALLY READY FOR CONTROLLED ANALYST PILOT
-
-
-
-or
-
-
-
-BLOCKED PENDING EXTERNAL VALIDATION
-
-
-
-\## Conditions Remaining
-
-
-
-\- Real analyst participation
-
-\- Production-like environment validation
-
-\- Operational ownership confirmation
-
-\- Recovery and rollback confirmation
-
-\- Deployment authorization review
-
-
-
-\## Authorization Boundary
-
-
-
-Completion of Gate 5 documentation does not authorize unrestricted production deployment.
-
-
-
-Production release requires separate approval and operational acceptance.
-
-
-
-\## Owner Decision Point
-
-
-
-Human approval required before moving from controlled preparation into live analyst operation.
-
+Required status: ENGINEERING_VALIDATION COMPLETE / RECORDED;
+GOVERNANCE_EVIDENCE PREPARED; EXTERNAL_ANALYST_ACCEPTANCE PENDING;
+PRODUCTION_AUTHORIZATION NOT GRANTED; PRODUCTION_DEPLOYMENT NOT AUTHORIZED.
