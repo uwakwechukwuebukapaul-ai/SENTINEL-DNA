@@ -21,6 +21,54 @@ def test_gate4_missing_authority_blocks(tmp_path):
     assert result["status"] == "BLOCKED"
     assert result["errors"]
 
+
+def test_gate4_repository_only_looking_authority_never_passes(tmp_path):
+    package = tmp_path / "authority.json"
+    identity = {
+        "organization": "Synthetic Test Authority",
+        "human_role": "reviewer",
+        "identity_issuer": "https://issuer.example.test",
+        "audience": "sentinel-dna-gate4",
+        "subject_identifier": "test-only-reviewer",
+        "authorization_scope": "gate4",
+        "validity": {
+            "issued_at": "2026-01-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+        },
+        "revocation_status": "ACTIVE",
+    }
+    package.write_text(json.dumps({
+        "governance_package_id": "test-only-package",
+        "trust_root_custodian": identity,
+        "independent_approver": identity,
+        "independent_reviewer": identity,
+        "separation_of_duties": {"verified": True, "relationships": []},
+        "external_verification": {
+            "status": "VERIFIED",
+            "evidence_reference": "test-only",
+            "evidence_digest": "a" * 64,
+            "verifier_identity": "test-only",
+            "signature_reference": "test-only",
+            "expires_at": "2099-01-01T00:00:00Z",
+        },
+    }), encoding="utf-8")
+    result = validate_authority_package(str(package))
+    assert result["status"] == "BLOCKED"
+    assert result["external_authority_established"] is False
+
+
+def test_gate4_expired_identity_blocks(tmp_path):
+    package = tmp_path / "authority.json"
+    package.write_text(json.dumps({
+        "governance_package_id": "pkg",
+        "trust_root_custodian": {"validity": {"issued_at": "2020-01-01T00:00:00Z", "expires_at": "2021-01-01T00:00:00Z"}},
+        "independent_approver": {},
+        "independent_reviewer": {},
+    }), encoding="utf-8")
+    result = validate_authority_package(str(package))
+    assert result["status"] == "BLOCKED"
+    assert any("expired" in error for error in result["errors"])
+
 AUTHORITY_SCHEMA = Path(
     "deployment/staging/gate4-authority/GATE4_EXTERNAL_AUTHORITY.schema.json"
 )
