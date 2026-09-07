@@ -10,7 +10,7 @@ Prepared by: repository inspection; no activation was performed
 
 Authorized candidate commit: ca1d61467f4520f52a986e5fa1a8c13d499d2229
 Authorized candidate tree: 0c34089a3781c172c3711094b870f61964902d9
-Current repository HEAD: b48c17daeb2ab329b9682537bf21c33e2c16967a
+Repository HEAD at preparation review: b48c17daeb2ab329b9682537bf21c33e2c16967a
 
 ## Candidate artifact identity
 
