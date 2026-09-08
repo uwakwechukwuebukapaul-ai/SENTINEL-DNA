@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
-const baseURL = process.env.SENTINEL_DNA_BASE_URL || "http://127.0.0.1:5000";
+const baseURL = process.env.SENTINEL_DNA_BASE_URL || "https://localhost";
 
 test.describe("Sentinel DNA enterprise identity surfaces", () => {
   test("login exposes password, federation, and passkey readiness", async (t) => {

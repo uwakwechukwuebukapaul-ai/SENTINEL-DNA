@@ -1,58 +1,19 @@
-"""
-Sentinel DNA Application Entry Point.
+"""Canonical application entry point used by development and WSGI servers."""
 
-Registers API and platform services.
-"""
-
-from flask import Flask
-
-from services.api.investigations import (
-    investigation_bp,
-)
+from dashboard.app import app as _dashboard_app
 
 
 def create_app():
-
-    app = Flask(
-        __name__
-    )
-
-
-    # ==================================
-    # API BLUEPRINTS
-    # ==================================
-
-    app.register_blueprint(
-        investigation_bp
-    )
-
-
-    # ==================================
-    # HEALTH CHECK
-    # ==================================
-
-    @app.route("/")
-    def home():
-
-        return {
-            "status": "running",
-            "service": "Sentinel DNA",
-            "version": "1.0"
-        }
-
-
-    return app
-
+    """Return the Flask application with the browser and API surfaces."""
+    return _dashboard_app
 
 
 app = create_app()
 
 
-
 if __name__ == "__main__":
-
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=True,
+        debug=app.config.get("DEBUG", False),
     )
