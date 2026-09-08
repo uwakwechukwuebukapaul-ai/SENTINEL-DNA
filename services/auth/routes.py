@@ -14,6 +14,7 @@ from .security import csrf_token
 from .security import verify_password
 from .onboarding import OnboardingState
 from .mfa import decrypt_totp_secret, encrypt_totp_secret, generate_totp_secret, provisioning_uri, verify_totp
+from .webauthn import WebAuthnError, WebAuthnService
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
@@ -52,6 +53,9 @@ def _strict_csrf():
     expected = session.get("csrf_token")
     supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
     return bool(expected and supplied and secrets.compare_digest(str(expected), str(supplied)))
+
+def _webauthn_service() -> WebAuthnService:
+    return WebAuthnService(_service().db)
 
 def _mfa_user():
     return _service().session_user(session.get("user_id"), session.get("session_version"))
@@ -281,6 +285,53 @@ def logout():
 def me():
     user = _service().session_user(session.get("user_id"), session.get("session_version"))
     return jsonify(user.public()) if user and _mfa_authenticated() else (jsonify({"error": "authentication_required"}), 401)
+
+@auth_api.post("/passkey/options")
+def passkey_options():
+    """Start a server-bound WebAuthn ceremony; no browser assertion is trusted."""
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user()
+    if not user: return jsonify({"error": "authentication_required"}), 401
+    purpose = str((request.get_json(silent=True) or {}).get("purpose", "registration"))
+    try: challenge = _webauthn_service().create_challenge(user.id, purpose)
+    except WebAuthnError: return jsonify({"error": "webauthn_unavailable"}), 503
+    _audit("passkey_ceremony_started", user_id=user.id, method="webauthn", outcome="started", reason=purpose)
+    return jsonify({"challenge": challenge, "credentials": _webauthn_service().credentials_for_user(user.id)})
+
+@auth_api.post("/passkey/register")
+def passkey_register():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user(); data = request.get_json(silent=True) or {}
+    if not user: return jsonify({"error": "authentication_required"}), 401
+    if not _webauthn_service().consume_challenge(user.id, "registration", str(data.get("challenge", ""))): return jsonify({"error": "webauthn_challenge_invalid"}), 400
+    verifier = current_app.config.get("WEBAUTHN_REGISTRATION_VERIFIER")
+    if not callable(verifier): return jsonify({"error": "webauthn_unavailable"}), 503
+    try:
+        credential = verifier(data, user)
+        _webauthn_service().register_credential(user.id, str(credential["credential_id"]), str(credential["public_key"]), int(credential.get("sign_count", 0)))
+    except Exception:
+        _audit("passkey_registration_failed", user_id=user.id, method="webauthn", outcome="failure", reason="assertion_invalid")
+        return jsonify({"error": "webauthn_registration_failed"}), 400
+    _audit("passkey_registered", user_id=user.id, method="webauthn", outcome="success")
+    return jsonify({"status": "registered"}), 201
+
+@auth_api.post("/passkey/authenticate")
+def passkey_authenticate():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    data = request.get_json(silent=True) or {}; username = str(data.get("username", "")).strip()
+    user = _service().get_by_username(username) or _service().get_by_email(username)
+    if not user or not user.is_active: return jsonify({"error": "authentication_failed"}), 401
+    if not _webauthn_service().consume_challenge(user.id, "authentication", str(data.get("challenge", ""))): return jsonify({"error": "webauthn_challenge_invalid"}), 400
+    verifier = current_app.config.get("WEBAUTHN_AUTHENTICATION_VERIFIER")
+    if not callable(verifier): return jsonify({"error": "webauthn_unavailable"}), 503
+    try:
+        credential_id = str(verifier(data, user))
+        if not any(item["credential_id"] == credential_id and not item["revoked_at"] for item in _webauthn_service().credentials_for_user(user.id)): raise ValueError("credential_denied")
+    except Exception:
+        _audit("passkey_authentication_failed", user_id=user.id, method="webauthn", outcome="failure", reason="assertion_invalid")
+        return jsonify({"error": "authentication_failed"}), 401
+    _audit("passkey_authentication_success", user_id=user.id, method="webauthn", outcome="success")
+    return jsonify(_login_session(user, auth_method="webauthn"))
 
 @auth_api.get("/sessions")
 def sessions():

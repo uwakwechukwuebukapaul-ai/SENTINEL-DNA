@@ -95,6 +95,15 @@ class AuthService:
                 id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, code_hash TEXT NOT NULL,
                 used_at TEXT, created_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id))""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS auth_webauthn_credentials (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, credential_id TEXT UNIQUE NOT NULL,
+                public_key TEXT NOT NULL, sign_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL, last_used_at TEXT, revoked_at TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id))""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS auth_webauthn_challenges (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, purpose TEXT NOT NULL,
+                challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                consumed_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id))""")
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 

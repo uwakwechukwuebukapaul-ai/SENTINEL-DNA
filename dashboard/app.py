@@ -37,6 +37,7 @@ from services.auth import auth_api
 from services.auth.security import csrf_token
 from services.auth.permissions import current_role, permission_required
 from services.auth.routes import enforce_current_session, restore_persistent_session
+from services.identity.enterprise_routes import create_enterprise_identity_blueprint
 from services.core.security_context import request_context
 
 # Case management
@@ -233,6 +234,7 @@ app.register_blueprint(create_investigation_learning_blueprint())
 from dashboard.analyst_workspace import analyst_workspace
 app.register_blueprint(analyst_workspace)
 app.register_blueprint(auth_api)
+app.register_blueprint(create_enterprise_identity_blueprint())
 app.register_blueprint(cases_api)
 
 
