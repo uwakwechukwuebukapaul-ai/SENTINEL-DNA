@@ -6,7 +6,8 @@ DNA roles or tenants.  Those remain canonical-authority responsibilities.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Protocol
+from typing import Any, Mapping, Protocol
+import requests
 from urllib.parse import urlparse
 
 from .authentication import AuthenticatedProviderPrincipal
@@ -14,6 +15,37 @@ from .authentication import AuthenticatedProviderPrincipal
 
 class EnterpriseIdentityError(ValueError):
     """Raised when an enterprise identity cannot be trusted."""
+
+
+class JwksOidcVerifier:
+    """Fail-closed OIDC verifier with bounded discovery and PyJWT validation."""
+
+    def __init__(self, transport=requests.get, timeout: int = 5):
+        self.transport, self.timeout = transport, timeout
+
+    def verify(self, id_token: str, configuration: "EnterpriseProviderConfiguration", nonce: str) -> "VerifiedEnterpriseClaims":
+        try:
+            import jwt
+            response = self.transport(configuration.jwks_uri, timeout=self.timeout, allow_redirects=False, headers={"Accept": "application/json"})
+            if response.status_code != 200 or len(response.content) > 262144:
+                raise EnterpriseIdentityError("provider_jwks_unavailable")
+            document = response.json()
+            keys = document.get("keys") if isinstance(document, dict) else None
+            if not isinstance(keys, list) or not keys or len(keys) > 32:
+                raise EnterpriseIdentityError("provider_jwks_invalid")
+            signing = [key for key in keys if isinstance(key, dict) and key.get("use", "sig") == "sig" and key.get("alg", "RS256") in {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}]
+            if not signing: raise EnterpriseIdentityError("provider_signing_keys_invalid")
+            key = jwt.PyJWKClient(configuration.jwks_uri).get_signing_key_from_jwt(id_token).key
+            claims = jwt.decode(id_token, key, algorithms=[key.algorithm_name], audience=configuration.audience or configuration.client_id, issuer=configuration.issuer, options={"require": ["iss", "sub", "aud", "exp", "iat", "nonce"]})
+        except EnterpriseIdentityError:
+            raise
+        except Exception as exc:
+            raise EnterpriseIdentityError("provider_signature_invalid") from exc
+        subject, email = claims.get("sub"), claims.get("email") or claims.get("preferred_username")
+        if not isinstance(subject, str) or not subject.strip() or not isinstance(email, str) or "@" not in email:
+            raise EnterpriseIdentityError("provider_claims_invalid")
+        provider_tenant = str(claims.get(configuration.tenant_claim or "tid") or claims.get("hd") or "").strip()
+        return VerifiedEnterpriseClaims(configuration.issuer, configuration.audience or configuration.client_id, subject, email.lower(), provider_tenant, str(claims.get("nonce")))
 
 
 @dataclass(frozen=True)
@@ -41,6 +73,8 @@ class EnterpriseProviderConfiguration:
                 raise EnterpriseIdentityError("provider_endpoint_untrusted")
         if self.audience and self.audience != self.client_id:
             raise EnterpriseIdentityError("provider_audience_invalid")
+        if self.provider == "entra" and not self.tenant_claim:
+            raise EnterpriseIdentityError("entra_tenant_claim_required")
 
 
 @dataclass(frozen=True)
@@ -91,13 +125,50 @@ class EnterpriseProviderAdapter:
 class EntraProviderAdapter(EnterpriseProviderAdapter):
     """Microsoft Entra ID adapter; tenant claim is mandatory at verifier level."""
 
+    def verify(self, id_token: str, nonce: str) -> AuthenticatedProviderPrincipal:
+        principal = super().verify(id_token, nonce)
+        if not principal.tenant_id:
+            raise EnterpriseIdentityError("entra_tenant_invalid")
+        return principal
+
 
 class OktaProviderAdapter(EnterpriseProviderAdapter):
     """Okta OIDC adapter; issuer and audience are exact-match validated."""
 
+    def verify(self, id_token: str, nonce: str) -> AuthenticatedProviderPrincipal:
+        principal = super().verify(id_token, nonce)
+        if not principal.tenant_id or "." not in urlparse(self.configuration.issuer).hostname:
+            raise EnterpriseIdentityError("okta_organization_invalid")
+        return principal
+
 
 class GoogleWorkspaceProviderAdapter(EnterpriseProviderAdapter):
     """Google Workspace adapter; domain/Workspace allow-listing is external policy."""
+
+    def __init__(self, configuration, verifier, allowed_domains: frozenset[str] = frozenset()):
+        super().__init__(configuration, verifier)
+        self.allowed_domains = frozenset(domain.lower().strip() for domain in allowed_domains)
+
+    def verify(self, id_token: str, nonce: str) -> AuthenticatedProviderPrincipal:
+        principal = super().verify(id_token, nonce)
+        domain = principal.claims[0][1].rsplit("@", 1)[-1].lower()
+        if self.allowed_domains and domain not in self.allowed_domains:
+            raise EnterpriseIdentityError("google_workspace_domain_untrusted")
+        return principal
+
+
+class ProviderTenantTrustService:
+    """Resolve active provider trust without creating tenants or memberships."""
+
+    def __init__(self, db: Any): self.db = db
+
+    def require(self, provider: str, issuer: str, external_tenant_id: str, canonical_tenant_id: str) -> bool:
+        if not all(isinstance(value, str) and value.strip() for value in (provider, issuer, external_tenant_id, canonical_tenant_id)):
+            raise EnterpriseIdentityError("provider_trust_incomplete")
+        with self.db.session() as connection:
+            row = connection.execute("SELECT 1 FROM canonical_provider_tenant_trusts WHERE provider=? AND issuer=? AND external_tenant_id=? AND canonical_tenant_id=? AND status='active'", (provider, issuer, external_tenant_id, canonical_tenant_id)).fetchone()
+        if not row: raise EnterpriseIdentityError("provider_tenant_trust_denied")
+        return True
 
 
 def provider_configuration(provider: str, values: Mapping[str, str]) -> EnterpriseProviderConfiguration:

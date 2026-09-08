@@ -5,6 +5,7 @@ import secrets
 from flask import Blueprint, current_app, jsonify, redirect, request, session
 
 from services.auth.routes import _login_session, _audit
+from .enterprise_providers import ProviderTenantTrustService
 
 
 def create_enterprise_identity_blueprint() -> Blueprint:
@@ -40,6 +41,14 @@ def create_enterprise_identity_blueprint() -> Blueprint:
             user = auth.identity_user(principal.provider, principal.external_subject or principal.subject)
             if user is None or not user.is_active:
                 raise ValueError("local_identity_not_bound")
+            if not user.tenant_id:
+                raise ValueError("local_tenant_missing")
+            ProviderTenantTrustService(auth.db).require(
+                principal.provider,
+                flow.configuration.issuer,
+                principal.tenant_id,
+                user.tenant_id,
+            )
             _audit("enterprise_oidc_success", user_id=user.id, method=f"{provider.lower()}_oidc", outcome="success")
             return redirect("/") if _login_session(user, auth_method=f"{provider.lower()}_oidc") else (jsonify({"error": "authentication_failed"}), 401)
         except Exception:

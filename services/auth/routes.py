@@ -14,7 +14,7 @@ from .security import csrf_token
 from .security import verify_password
 from .onboarding import OnboardingState
 from .mfa import decrypt_totp_secret, encrypt_totp_secret, generate_totp_secret, provisioning_uri, verify_totp
-from .webauthn import WebAuthnError, WebAuthnService
+from .webauthn import WebAuthnConfiguration, WebAuthnError, WebAuthnService
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
@@ -55,7 +55,8 @@ def _strict_csrf():
     return bool(expected and supplied and secrets.compare_digest(str(expected), str(supplied)))
 
 def _webauthn_service() -> WebAuthnService:
-    return WebAuthnService(_service().db)
+    configuration = current_app.config.get("WEBAUTHN_CONFIGURATION") or WebAuthnConfiguration.from_environment()
+    return WebAuthnService(_service().db, configuration)
 
 def _mfa_user():
     return _service().session_user(session.get("user_id"), session.get("session_version"))
@@ -332,6 +333,17 @@ def passkey_authenticate():
         return jsonify({"error": "authentication_failed"}), 401
     _audit("passkey_authentication_success", user_id=user.id, method="webauthn", outcome="success")
     return jsonify(_login_session(user, auth_method="webauthn"))
+
+@auth_api.post("/passkey/revoke")
+def passkey_revoke():
+    if not _strict_csrf(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _mfa_user(); credential_id = str((request.get_json(silent=True) or {}).get("credential_id", ""))
+    if not user: return jsonify({"error": "authentication_required"}), 401
+    try: revoked = _webauthn_service().revoke_credential(user.id, credential_id)
+    except Exception: revoked = False
+    if not revoked: return jsonify({"error": "credential_not_found"}), 404
+    _audit("passkey_revoked", user_id=user.id, method="webauthn", outcome="success")
+    return jsonify({"status": "revoked"})
 
 @auth_api.get("/sessions")
 def sessions():

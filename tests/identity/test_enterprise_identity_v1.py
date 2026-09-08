@@ -5,6 +5,7 @@ from services.identity.enterprise_providers import (
     VerifiedEnterpriseClaims,
 )
 from services.identity.saml_foundation import SamlConfigurationError, SamlProviderConfiguration
+from services.auth.webauthn import WebAuthnConfiguration, WebAuthnError
 
 
 def config(provider="okta"):
@@ -39,3 +40,22 @@ def test_saml_foundation_rejects_untrusted_acs():
         assert str(exc) == "saml_endpoint_untrusted"
     else:
         raise AssertionError("untrusted ACS accepted")
+
+
+def test_webauthn_configuration_requires_matching_production_origin():
+    config = WebAuthnConfiguration("soc.example.com", "https://login.example.com", "Sentinel DNA", lambda *_: None)
+    try:
+        config.validate()
+    except WebAuthnError as exc:
+        assert str(exc) == "webauthn_rp_origin_mismatch"
+    else:
+        raise AssertionError("mismatched RP origin accepted")
+
+
+def test_webauthn_configuration_rejects_missing_verifier():
+    try:
+        WebAuthnConfiguration("example.com", "https://example.com", "Sentinel DNA").validate()
+    except WebAuthnError as exc:
+        assert str(exc) == "webauthn_verifier_required"
+    else:
+        raise AssertionError("missing verifier accepted")

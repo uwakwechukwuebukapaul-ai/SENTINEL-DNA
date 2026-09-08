@@ -7,13 +7,38 @@ protection, and lifecycle state.
 from __future__ import annotations
 
 import base64
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 
 class WebAuthnError(ValueError):
     pass
+
+
+class WebAuthnConfiguration:
+    """Explicit relying-party configuration; no localhost defaults in production."""
+
+    def __init__(self, rp_id: str, rp_origin: str, rp_name: str, verifier: Any = None):
+        self.rp_id, self.rp_origin, self.rp_name, self.verifier = rp_id.strip(), rp_origin.strip(), rp_name.strip(), verifier
+
+    @classmethod
+    def from_environment(cls, environ=None):
+        values = environ or os.environ
+        return cls(values.get("SENTINEL_DNA_WEBAUTHN_RP_ID", ""), values.get("SENTINEL_DNA_WEBAUTHN_RP_ORIGIN", ""), values.get("SENTINEL_DNA_WEBAUTHN_RP_NAME", "Sentinel DNA"))
+
+    def validate(self, production: bool = True) -> None:
+        parsed = urlparse(self.rp_origin)
+        if not self.rp_id or not self.rp_name or parsed.scheme not in {"https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise WebAuthnError("webauthn_configuration_invalid")
+        if production and parsed.hostname in {"localhost", "127.0.0.1"}:
+            raise WebAuthnError("webauthn_origin_untrusted")
+        if parsed.hostname != self.rp_id and not parsed.hostname.endswith("." + self.rp_id):
+            raise WebAuthnError("webauthn_rp_origin_mismatch")
+        if not callable(self.verifier):
+            raise WebAuthnError("webauthn_verifier_required")
 
 
 def _now() -> str:
@@ -21,10 +46,12 @@ def _now() -> str:
 
 
 class WebAuthnService:
-    def __init__(self, db: Any):
-        self.db = db
+    def __init__(self, db: Any, configuration: WebAuthnConfiguration | None = None):
+        self.db, self.configuration = db, configuration
 
     def create_challenge(self, user_id: int, purpose: str) -> str:
+        if self.configuration is not None:
+            self.configuration.validate(production=os.getenv("SENTINEL_DNA_ENV", "development").strip().lower() == "production")
         if purpose not in {"registration", "authentication"}:
             raise WebAuthnError("webauthn_purpose_invalid")
         challenge = secrets.token_bytes(32)
@@ -55,6 +82,14 @@ class WebAuthnService:
             raise WebAuthnError("webauthn_credential_invalid")
         with self.db.session() as connection:
             connection.execute("INSERT INTO auth_webauthn_credentials(user_id,credential_id,public_key,sign_count,created_at) VALUES(?,?,?,?,?)", (user_id, credential_id, public_key, sign_count, _now()))
+
+    def update_sign_count(self, user_id: int, credential_id: str, sign_count: int) -> bool:
+        if sign_count < 0: raise WebAuthnError("webauthn_sign_count_invalid")
+        with self.db.session() as connection:
+            row = connection.execute("SELECT sign_count FROM auth_webauthn_credentials WHERE user_id=? AND credential_id=? AND revoked_at IS NULL", (user_id, credential_id)).fetchone()
+            if not row or sign_count <= int(row["sign_count"]): raise WebAuthnError("webauthn_sign_count_replay")
+            connection.execute("UPDATE auth_webauthn_credentials SET sign_count=?,last_used_at=? WHERE user_id=? AND credential_id=?", (sign_count, _now(), user_id, credential_id))
+        return True
 
     def credentials_for_user(self, user_id: int) -> list[dict[str, Any]]:
         with self.db.session() as connection:
