@@ -88,7 +88,7 @@ from services.intelligence.copilot.copilot_engine import InvestigationCopilot
 from services.intelligence.reporting.narrative_engine import InvestigationNarrativeEngine
 from services.intelligence.threat_intelligence import ThreatCorrelationEngine
 from services.intelligence.fusion import ProviderNeutralFusionEngine
-from services.intelligence.investigation.evidence import EvidenceIntelligenceEngine
+from services.intelligence.investigation.evidence.engine import EvidenceIntelligenceEngine
 from services.intelligence.reporting.investigation_projection import InvestigationProjectionBuilder
 from services.intelligence.repository.execution_repository import ExecutionEnvelope, ExecutionRepository
 from services.intelligence.reporting.execution_projection import ExecutionProjectionBuilder

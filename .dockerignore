@@ -49,6 +49,11 @@ evidence/**
 **/evidence
 **/evidence/**
 
+# Keep the application Evidence Intelligence package.  The broad evidence
+# exclusions above apply to deployment artifacts, not Python source code.
+!services/intelligence/investigation/evidence/
+!services/intelligence/investigation/evidence/**
+
 custody
 custody/**
 **/custody
