@@ -7,6 +7,7 @@ const ROOT = process.env.SENTINEL_DNA_TRUSTED_BROWSER_SOURCE_ROOT || "/opt/senti
 export const EXPECTED_FILES = Object.freeze([
   "deployment/staging/scripts/controlled_analyst_pilot_runner.mjs",
   "deployment/staging/scripts/trusted_browser_diagnostics.mjs",
+  "deployment/staging/scripts/trusted_browser_activation_manifest.mjs",
   "deployment/staging/scripts/trusted_browser_execution_adapter.mjs",
   "deployment/staging/scripts/trusted_browser_service/browser-client.mjs",
   "deployment/staging/scripts/trusted_browser_service/policy/capability-policy.mjs",

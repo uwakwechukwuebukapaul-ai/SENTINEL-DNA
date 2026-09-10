@@ -26,7 +26,7 @@ ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     SENTINEL_DNA_TRUSTED_BROWSER_SOURCE_ROOT=/opt/sentinel/trusted-browser \
-    SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME=/opt/sentinel/trusted-browser/runtime/approved-playwright-runtime.mjs \
+    SENTINEL_DNA_APPROVED_PLAYWRIGHT_RUNTIME=/opt/sentinel/trusted-browser/deployment/staging/scripts/trusted_browser_service/providers/approved-playwright-runtime.mjs \
     SENTINEL_DNA_BROWSER_EXECUTABLE=/ms-playwright/chromium-1234/chrome-linux64/chrome \
     SENTINEL_DNA_SOURCE_COMMIT=${SENTINEL_DNA_SOURCE_COMMIT} \
     SENTINEL_DNA_SOURCE_TREE=${SENTINEL_DNA_SOURCE_TREE} \
@@ -47,6 +47,7 @@ RUN npm ci --ignore-scripts --omit=dev --no-audit --no-fund
 
 COPY deployment/staging/scripts/controlled_analyst_pilot_runner.mjs deployment/staging/scripts/controlled_analyst_pilot_runner.mjs
 COPY deployment/staging/scripts/trusted_browser_diagnostics.mjs deployment/staging/scripts/trusted_browser_diagnostics.mjs
+COPY deployment/staging/scripts/trusted_browser_activation_manifest.mjs deployment/staging/scripts/trusted_browser_activation_manifest.mjs
 COPY deployment/staging/scripts/trusted_browser_execution_adapter.mjs deployment/staging/scripts/trusted_browser_execution_adapter.mjs
 COPY deployment/staging/scripts/trusted_browser_service deployment/staging/scripts/trusted_browser_service
 COPY deployment/staging/trusted_browser_runtime/runtime-service.mjs deployment/staging/trusted_browser_runtime/runtime-service.mjs
@@ -56,7 +57,7 @@ COPY deployment/staging/trusted_browser_runtime/verify-image-inputs.mjs deployme
 
 # The custody runtime is intentionally absent from the repository source tree.
 # A future custody-controlled build context must provide this exact file.
-COPY runtime/approved-playwright-runtime.mjs runtime/approved-playwright-runtime.mjs
+COPY runtime/approved-playwright-runtime.mjs deployment/staging/scripts/trusted_browser_service/providers/approved-playwright-runtime.mjs
 
 RUN node deployment/staging/trusted_browser_runtime/verify-image-inputs.mjs
 

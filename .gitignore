@@ -43,3 +43,8 @@ sentinel-dna-readiness-*.json
 staging-readiness-*.json
 sentinel-dna-pilot-baseline-2026-09-01.txt
 sentinel-dna-pilot-baseline-2026-09-01.txt
+
+# Generated staging Compose artifacts
+deployment/staging/docker-compose.rendered.yml
+deployment/staging/docker-compose.rendered.final.yml
+deployment/staging/docker-compose.rendered.current.yml
