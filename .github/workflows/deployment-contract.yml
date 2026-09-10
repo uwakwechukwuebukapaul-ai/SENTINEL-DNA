@@ -21,7 +21,11 @@ permissions:
   packages: write
 
 concurrency:
+        remediation-register-deployment-contract-workflow-20260825
+  group: deployment-contract-${{ inputs.authorized_sha }}
+
   group: deployment-contract-${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
+        main
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +38,19 @@ jobs:
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       SENTINEL_DNA_TLS_DIR: ${{ vars.SENTINEL_DNA_TLS_DIR }}
+        remediation-register-deployment-contract-workflow-20260825
+      SENTINEL_DNA_AUTHORIZED_RELEASE_REF: feature/controlled-production-deployment-adapter
+      SENTINEL_DNA_AUTHORIZED_RELEASE_SHA: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
+      SENTINEL_DNA_AUTHORIZED_RELEASE_TREE: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_TREE }}
+    steps:
+      - name: Checkout authorized workflow commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.authorized_sha }}
+          fetch-depth: 0
+
+      - name: Verify authorized candidate identity
+
       SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF: ${{ vars.SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF }}
       SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA: ${{ vars.SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA }}
       SENTINEL_DNA_AUTHORIZED_RELEASE_REF: ${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_REF }}
@@ -117,6 +134,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify protected candidate identity
+        main
         shell: bash
         env:
           REQUESTED_RELEASE_REF: ${{ inputs.authorized_ref }}
@@ -127,6 +145,16 @@ jobs:
           test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"
           test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test -n "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          remediation-register-deployment-contract-workflow-20260825
+          [[ "$REQUESTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = "refs/heads/$REQUESTED_RELEASE_REF"
+          test "$REQUESTED_RELEASE_REF" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"
+          test "$REQUESTED_RELEASE_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+          test "$REQUESTED_RELEASE_TREE" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          test "$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
           test -n "$SENTINEL_DNA_AUTHORIZED_BASELINE_SHA"
           [[ "$REQUESTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUESTED_RELEASE_TREE" =~ ^[0-9a-f]{40}$ ]]
@@ -139,6 +167,7 @@ jobs:
           git merge-base --is-ancestor \
             "$SENTINEL_DNA_AUTHORIZED_BASELINE_SHA" \
             "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+      main
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Verify tracked deployment release boundary
@@ -224,8 +253,12 @@ jobs:
             tests/production/test_runtime_hardening.py \
             tests/intelligence/api/test_execution_visibility_api.py \
             tests/security/test_production_entrypoint_reconciliation.py \
+        remediation-register-deployment-contract-workflow-20260825
+            tests/intelligence/runtime/test_execution_durable_state.py
+
             tests/intelligence/runtime/test_execution_durable_state.py \
             tests/staging/test_staging_security_contract.py
+        main
 
       - name: Authenticate to private GHCR
         shell: bash
@@ -386,8 +419,12 @@ jobs:
             --image-digest "$PUBLISHED_IMAGE_DIGEST" \
             --image-id "$PUBLISHED_IMAGE_ID" \
             --image-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
+         remediation-register-deployment-contract-workflow-20260825
+            --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+
             --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
             --image-created "$SENTINEL_DNA_IMAGE_CREATED"
+       main
           echo "IMAGE_BOUND_MANIFEST_PATH=$manifest" >> "$GITHUB_ENV"
 
       - name: Verify image-bound release manifest
@@ -401,9 +438,15 @@ jobs:
             --expected-image-digest "$PUBLISHED_IMAGE_DIGEST"
 
       - name: Upload non-secret image release evidence
+        remediation-register-deployment-contract-workflow-20260825
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-dna-gate2-image-evidence-${{ inputs.authorized_sha }}
+
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sentinel-dna-gate2-image-evidence-${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}
+        main
           if-no-files-found: error
           retention-days: 30
           path: |
