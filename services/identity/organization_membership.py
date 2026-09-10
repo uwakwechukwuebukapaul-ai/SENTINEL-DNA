@@ -142,6 +142,11 @@ class OrganizationMembershipService:
                 connection.execute("ALTER TABLE canonical_memberships ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'")
 
     def inspect_email(self, email: str, *, connection=None) -> OrganizationDecision:
+        # A service instance can outlive a backend path change (for example,
+        # an isolated dashboard test database). Bootstrap the additive,
+        # idempotent canonical tables on the active backend before reading
+        # organization membership state. This never grants membership.
+        self._ensure_schema()
         normalized = normalize_email(email)
         domain = normalized.rsplit("@", 1)[1]
 

@@ -12,9 +12,12 @@ from .phone import country_options, normalize_phone
 from .providers import email_provider
 from .security import csrf_token
 from .security import verify_password
+from .security import validate_password
 from .onboarding import OnboardingState
 from .mfa import decrypt_totp_secret, encrypt_totp_secret, generate_totp_secret, provisioning_uri, verify_totp
 from .webauthn import WebAuthnConfiguration, WebAuthnError, WebAuthnService
+from .auth_service import AuthRegistrationConflict
+from services.identity.organization_membership import normalize_email
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
@@ -193,8 +196,27 @@ def register():
         return jsonify({"error": "registration_unavailable"}), 403
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid_registration"}), 400
+
+    # Validate the complete request before consulting organization state.  In
+    # addition to producing the correct client-facing status, this keeps
+    # malformed payloads from probing the organization membership boundary.
+    try:
+        username = str(data.get("username", "")).strip()
+        email = str(data.get("email", "")).strip()
+        password = str(data.get("password", ""))
+        if len(username) < 3 or username.casefold() in {"admin", "root", "system"}:
+            raise ValueError("invalid_user_registration")
+        normalize_email(email)
+        validate_password(password)
+        dob = validate_minimum_age(data.get("date_of_birth")) if data.get("date_of_birth") else None
+        phone = normalize_phone(data.get("country", ""), data.get("phone", "")) if data.get("phone") else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid_registration"}), 400
+
     organizations = _organization_service()
-    organization_decision = organizations.inspect_email(str(data.get("email", ""))) if organizations else None
+    organization_decision = organizations.inspect_email(email) if organizations else None
     organization_pending = bool(organization_decision and organization_decision.existing_verified_active and organization_decision.enrollment_policy != "VERIFIED_DOMAIN_AUTO_JOIN")
     if organization_pending and not (data.get("date_of_birth") or data.get("phone")):
         return jsonify({"error": "organization_approval_required"}), 400
@@ -205,8 +227,6 @@ def register():
         # until a versioned API contract replaces this path. Browser-style
         # registration always requires email and phone verification below.
         legacy_api = (current_app.config.get("AUTH_LEGACY_JSON_COMPAT", True) and request.is_json and not data.get("date_of_birth") and not data.get("phone")) or organization_pending
-        dob = validate_minimum_age(data.get("date_of_birth")) if data.get("date_of_birth") else None
-        phone = normalize_phone(data.get("country", ""), data.get("phone", "")) if data.get("phone") else None
         email_verified_at = None
         if not legacy_api:
             email_challenge_id = data.get("email_challenge_id")
@@ -229,9 +249,19 @@ def register():
             phone_verified_at=(datetime.now(timezone.utc).isoformat() if not legacy_api else None),
             onboarding_state=(OnboardingState.AUTHENTICATED if legacy_api else OnboardingState.NEW),
         )
-    except DatabaseError: return jsonify({"error": "registration_unavailable"}), 409
+    except AuthRegistrationConflict: return jsonify({"error": "registration_unavailable"}), 409
+    except DatabaseError: return jsonify({"error": "registration_unavailable"}), 503
     except Exception as exc:
-        if integrity_error(exc): return jsonify({"error": "registration_unavailable"}), 409
+        # A concurrent insert can race the explicit identity checks above.
+        # Only unique violations on the registration identity tables are
+        # resource conflicts; other integrity failures remain validation
+        # errors and must not be exposed as conflicts.
+        error_text = str(exc).lower()
+        identity_conflict = integrity_error(exc) and (
+            "unique constraint failed: users." in error_text
+            or "duplicate key" in error_text and ("users_" in error_text or "auth_identities" in error_text)
+        )
+        if identity_conflict: return jsonify({"error": "registration_unavailable"}), 409
         _audit("signup_failed", method="password", outcome="failure", reason="invalid_registration")
         return jsonify({"error": "invalid_registration"}), 400
     try:
