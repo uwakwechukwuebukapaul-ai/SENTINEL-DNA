@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sentinel-dna.gate5.custody-request.v1",
+  "title": "Sentinel DNA Gate 5 custody request",
+  "description": "A non-authorizing request for an independently controlled release/security authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "governance_package_id",
+    "candidate_commit",
+    "candidate_branch",
+    "repository",
+    "image_reference",
+    "image_digest",
+    "provenance_reference",
+    "approved_runtime_digest",
+    "staging_origin",
+    "activation_scope",
+    "issued_at",
+    "expires_at",
+    "rollback_reference",
+    "evidence_reference",
+    "verifier_identity",
+    "operator_approval_reference",
+    "signature_reference",
+    "integrity",
+    "request_status",
+    "external_authority_requirements"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "artifact_type": {"const": "GATE5_CUSTODY_REQUEST"},
+    "governance_package_id": {"type": "string", "minLength": 1},
+    "candidate_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "candidate_branch": {"const": "gate5-controlled-pilot-activation"},
+    "repository": {"type": "string", "minLength": 1},
+    "image_reference": {"type": "string", "minLength": 1},
+    "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "provenance_reference": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "approved_runtime_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "staging_origin": {"type": "string", "minLength": 1},
+    "activation_scope": {"type": "string", "minLength": 1},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "rollback_reference": {"type": "string", "minLength": 1},
+    "evidence_reference": {"type": "string", "minLength": 1},
+    "verifier_identity": {"type": ["string", "null"]},
+    "operator_approval_reference": {"type": ["string", "null"]},
+    "signature_reference": {"type": ["string", "null"]},
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "request_hash", "canonical_basis"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "request_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "canonical_basis": {
+          "type": "array",
+          "const": [
+            "schema_version", "governance_package_id", "candidate_commit",
+            "candidate_branch", "repository", "image_reference", "image_digest",
+            "provenance_reference", "approved_runtime_digest", "staging_origin",
+            "activation_scope", "issued_at", "expires_at", "rollback_reference",
+            "evidence_reference", "request_status"
+          ]
+        }
+      }
+    },
+    "request_status": {"const": "PENDING_EXTERNAL_AUTHORIZATION"},
+    "external_authority_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorization_artifact", "verifier_identity", "operator_approval_reference", "signature_reference", "integrity_reference", "trust_root"],
+      "properties": {
+        "authorization_artifact": {"type": "string", "minLength": 1},
+        "verifier_identity": {"const": "REQUIRED_FROM_EXTERNAL_AUTHORITY"},
+        "operator_approval_reference": {"const": "REQUIRED_FROM_EXTERNAL_AUTHORITY"},
+        "signature_reference": {"const": "REQUIRED_FROM_EXTERNAL_AUTHORITY"},
+        "integrity_reference": {"const": "REQUIRED_FROM_EXTERNAL_AUTHORITY"},
+        "trust_root": {"const": "REQUIRED_FROM_EXTERNAL_AUTHORITY"}
+      }
+    },
+    "staging_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "warnings", "evidence_reference"],
+      "properties": {
+        "passed": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0},
+        "evidence_reference": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
