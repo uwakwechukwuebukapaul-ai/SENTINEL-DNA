@@ -37,9 +37,9 @@ class AnalystDemoScenarioService:
             return existing
 
         evidence = [
-            {"evidence_id": f"{case_id}-E1", "case_id": case_id, "tenant_id": tenant_id, "type": "process", "source": "synthetic_endpoint_telemetry", "observed_at": "2026-01-15T12:00:00Z", "value": "powershell.exe -EncodedCommand <redacted-demo-payload>", "provenance": {"source": "synthetic_demo", "synthetic": True}},
-            {"evidence_id": f"{case_id}-E2", "case_id": case_id, "tenant_id": tenant_id, "type": "process_relationship", "source": "synthetic_endpoint_telemetry", "observed_at": "2026-01-15T12:00:03Z", "value": "winword.exe -> powershell.exe", "provenance": {"source": "synthetic_demo", "synthetic": True}},
-            {"evidence_id": f"{case_id}-E3", "case_id": case_id, "tenant_id": tenant_id, "type": "network_connection", "source": "synthetic_proxy_telemetry", "observed_at": "2026-01-15T12:01:10Z", "value": "https://updates.example.invalid/payload.bin", "provenance": {"source": "synthetic_demo", "synthetic": True}},
+            {"evidence_id": f"{case_id}-E1", "case_id": case_id, "tenant_id": tenant_id, "type": "process", "source": "synthetic_endpoint_telemetry", "observed_at": "2026-01-15T12:00:00Z", "host": "ENG-LAPTOP-042", "user": "daniel.ade@example.test", "process_name": "powershell.exe", "command_line": "powershell.exe -NoProfile -EncodedCommand ZQB2AGkAbAA=", "value": "powershell.exe -NoProfile -EncodedCommand ZQB2AGkAbAA=", "provenance": {"source": "synthetic_demo", "synthetic": True}},
+            {"evidence_id": f"{case_id}-E2", "case_id": case_id, "tenant_id": tenant_id, "type": "process_relationship", "source": "synthetic_endpoint_telemetry", "observed_at": "2026-01-15T12:00:03Z", "host": "ENG-LAPTOP-042", "user": "daniel.ade@example.test", "value": "winword.exe -> powershell.exe", "provenance": {"source": "synthetic_demo", "synthetic": True}},
+            {"evidence_id": f"{case_id}-E3", "case_id": case_id, "tenant_id": tenant_id, "type": "network_connection", "source": "synthetic_proxy_telemetry", "observed_at": "2026-01-15T12:01:10Z", "host": "ENG-LAPTOP-042", "user": "daniel.ade@example.test", "domain": "cdn-update.example.test", "value": "https://cdn-update.example.test/payload.bin", "provenance": {"source": "synthetic_demo", "synthetic": True}},
         ]
         iocs = [{"ioc_id": f"{case_id}-I1", "case_id": case_id, "tenant_id": tenant_id, "type": "domain", "value": "updates.example.invalid", "intelligence_status": "not_queried", "provider": None, "confidence": None, "freshness": None, "provenance": {"source": "synthetic_demo", "synthetic": True}}]
         timeline = [
@@ -49,8 +49,36 @@ class AnalystDemoScenarioService:
         ]
         metadata = {"tenant_id": tenant_id, "investigation_id": case_id, "synthetic": True, "scenario": "suspicious_powershell_execution", "evidence_limitations": ["Synthetic telemetry; no external provider lookup has been performed."]}
         report = {
-            "case_id": case_id, "title": "Synthetic alert: suspicious PowerShell execution", "summary": "Synthetic analyst demonstration awaiting canonical investigation execution.", "severity": "high", "risk_score": 0, "risk": {"score": 0, "severity": "unknown", "basis": "Investigation has not run."}, "mitre": [], "findings": [], "recommendations": [], "status": "ready", "evidence": evidence, "timeline": timeline, "relationships": [], "reasoning": None, "confidence": 0, "uncertainty": "Investigation has not run; no conclusion is available.", "tenant_context": {"tenant_id": tenant_id}, "metadata": metadata, "created_at": "2026-01-15T12:00:00Z",
+            "case_id": case_id, "title": "Synthetic alert: suspicious PowerShell execution", "summary": "Synthetic analyst demonstration awaiting canonical investigation execution.", "severity": "high", "risk_score": 0, "risk": {"score": 0, "severity": "unknown", "basis": "Investigation has not run."}, "mitre": [], "findings": [], "recommendations": [], "status": "ready", "evidence": evidence, "timeline": timeline, "relationships": [], "reasoning": None, "confidence": 0, "uncertainty": "Investigation has not run; no conclusion is available.", "tenant_context": {"tenant_id": tenant_id}, "metadata": metadata, "alert": self.alert_for_tenant(tenant_id), "created_at": "2026-01-15T12:00:00Z",
         }
         intelligence = InvestigationIntelligence(risk_score=0, risk_severity="unknown", confidence=0, iocs=iocs, evidence_summary={"count": len(evidence), "items": evidence}, timeline=timeline, metadata=metadata)
         self.intelligence_repository.save(case_id, intelligence)
         return self.report_repository.save(report)
+
+    def alert_for_tenant(self, tenant_id: str) -> dict[str, Any]:
+        """Return the canonical alert envelope used by the coordinator demo."""
+        return {
+            "case_id": self.case_id_for_tenant(tenant_id),
+            "source": "endpoint_detection",
+            "title": "Suspicious PowerShell execution",
+            "severity": "high",
+            "user": "daniel.ade@example.test",
+            "host": "ENG-LAPTOP-042",
+            "process": "powershell.exe",
+            "encoded_command": True,
+            "domain": "cdn-update.example.test",
+            "metadata": {"synthetic": True, "scenario": "suspicious_powershell_execution"},
+        }
+
+    def investigation_input_for_tenant(self, tenant_id: str) -> dict[str, Any]:
+        """Return alert, evidence, and IOC inputs without creating a second flow."""
+        case_id = self.case_id_for_tenant(tenant_id)
+        report = self.ensure_for_tenant(tenant_id)
+        evidence = list(report.get("evidence", []) or [])
+        return {
+            "case_id": case_id,
+            "alert": self.alert_for_tenant(tenant_id),
+            "artifacts": evidence,
+            "evidence": evidence,
+            "iocs": [{"type": "domain", "value": "cdn-update.example.test", "evidence_ids": [f"{case_id}-E3"]}],
+        }

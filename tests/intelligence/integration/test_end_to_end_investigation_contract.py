@@ -7,6 +7,7 @@ import pytest
 flask = pytest.importorskip("flask")
 
 from app import create_app  # noqa: E402
+from tests.credential_helpers import random_password
 
 
 CASE_ID = "E2E-FAILED-AUTH-001"
@@ -29,9 +30,14 @@ ARTIFACTS = [
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    import uuid
     from database.connection import database
     from services.auth.auth_service import AuthService
 
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
     original_path = database.database_path
     database.database_path = str(tmp_path / "contract.sqlite")
     app = create_app()
@@ -39,8 +45,14 @@ def client(tmp_path, monkeypatch):
     auth = app.container.get("auth_service")
     app.container.register("auth_service", AuthService(database))
     client = app.test_client()
-    assert client.post("/api/auth/register", json={"username": "contract-user", "email": "contract@example.test", "password": "CorrectHorseBattery1!"}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": "contract-user", "password": "CorrectHorseBattery1!"}).status_code == 200
+    # Keep the production limiter active while isolating this fixture's
+    # bucket from earlier test processes and shared local SQLite state.
+    client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
+    username = f"contract-{uuid.uuid4().hex[:12]}"
+    email = f"{username}@example.test"
+    password = random_password()
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
     try:
         yield client
     finally:

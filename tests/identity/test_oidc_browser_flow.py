@@ -1,7 +1,11 @@
 from services.identity.oidc_browser import OidcAuthorizationCodeFlow, OidcBrowserConfiguration, OidcBrowserError, _challenge
+from tests.credential_helpers import random_token
+
+
+ID_TOKEN = random_token()
 
 class TokenClient:
-    def exchange(self, code, redirect_uri, verifier): self.args=(code,redirect_uri,verifier); return {"token_type":"Bearer","id_token":"verified-token"}
+    def exchange(self, code, redirect_uri, verifier): self.args=(code,redirect_uri,verifier); return {"token_type":"Bearer","id_token":ID_TOKEN}
 class Adapter:
     def authenticate(self, token, state, nonce, verifier): self.args=(token,state,nonce,verifier); return type("P",(),{"provider":"entra","external_subject":"subject","tenant_id":"tenant","actor_id":"actor"})()
 

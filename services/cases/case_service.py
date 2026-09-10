@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from database.connection import DatabaseConnection, database
+from database.portability import identity_primary_key
 from services.audit import AuditService
 from .models import CaseAssignment
 
@@ -22,12 +23,13 @@ class CaseService:
         self.db = db or database
         self.audit = AuditService(self.db)
         with self.db.session() as connection:
-            connection.execute("""CREATE TABLE IF NOT EXISTS case_assignments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL UNIQUE,
+            identity = identity_primary_key(self.db.backend_name)
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS case_assignments (
+                id {identity}, case_id TEXT NOT NULL UNIQUE,
                 user_id INTEGER NOT NULL, assigned_by INTEGER, assigned_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'ACTIVE')""")
-            connection.execute("""CREATE TABLE IF NOT EXISTS analyst_notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL,
+            connection.execute(f"""CREATE TABLE IF NOT EXISTS analyst_notes (
+                id {identity}, case_id TEXT NOT NULL,
                 user_id INTEGER NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL)""")
 
@@ -70,8 +72,12 @@ class CaseService:
     def add_note(self, case_id: str, user_id: int, note: str) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         with self.db.session() as connection:
-            cursor = connection.execute("INSERT INTO analyst_notes(case_id,user_id,note,created_at,updated_at) VALUES(?,?,?,?,?)", (case_id, user_id, note, now, now))
-            row = connection.execute("SELECT * FROM analyst_notes WHERE id=?", (cursor.lastrowid,)).fetchone()
+            row = connection.execute(
+                "INSERT INTO analyst_notes(case_id,user_id,note,created_at,updated_at) "
+                "VALUES(?,?,?,?,?) "
+                "RETURNING *",
+                (case_id, user_id, note, now, now),
+            ).fetchone()
         self.audit.record("NOTE_CREATED", case_id, user_id)
         return dict(row)
 

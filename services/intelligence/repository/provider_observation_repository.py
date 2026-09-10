@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import base64
 import hashlib
 import hmac
@@ -15,6 +14,7 @@ from datetime import datetime
 from typing import Any, Iterable
 
 from database.connection import database
+from database.portability import database_error, table_columns
 from .errors import (
     ProviderObservationCursorExpiredError,
     ProviderObservationCursorOrderingMismatchError,
@@ -73,16 +73,16 @@ class ProviderObservationRepository:
         self.max_projection_observations = self._positive_bound(
             max_projection_observations
             if max_projection_observations is not None
-            else configured.provider_observation_projection_max,
+            else getattr(configured, "provider_observation_projection_max", 1000),
             "provider observation projection maximum",
         )
         self.max_projection_events = self._positive_bound(
             max_projection_events
             if max_projection_events is not None
-            else configured.provider_observation_lifecycle_event_projection_max,
+            else getattr(configured, "provider_observation_lifecycle_event_projection_max", 1000),
             "provider observation lifecycle-event projection maximum",
         )
-        self.replay_batch_size = replay_batch_size if replay_batch_size is not None else configured.provider_observation_replay_batch_size
+        self.replay_batch_size = replay_batch_size if replay_batch_size is not None else getattr(configured, "provider_observation_replay_batch_size", 100)
         if isinstance(self.replay_batch_size, bool) or not isinstance(self.replay_batch_size, int) or not 0 < self.replay_batch_size <= 1000:
             raise ValueError("provider observation replay batch size is invalid")
         self._ensure_schema()
@@ -343,7 +343,7 @@ class ProviderObservationRepository:
                 category = "audit_insertion_failure"
             else:
                 event = "provider_observation_lifecycle_failure"
-                category = "unexpected_database_failure" if isinstance(exc, sqlite3.Error) else "transition_failure"
+                category = "unexpected_database_failure" if database_error(exc) else "transition_failure"
             self._emit_lifecycle_telemetry(
                 event,
                 started=started,
@@ -407,12 +407,7 @@ class ProviderObservationRepository:
                 ("lifecycle_invalidated_by", "TEXT"),
                 ("lifecycle_invalidation_reason", "TEXT"),
             ):
-                columns = {
-                    str(row[1])
-                    for row in connection.execute(
-                        "PRAGMA table_info(provider_observations)"
-                    ).fetchall()
-                }
+                columns = table_columns(connection, self.db.backend_name, "provider_observations")
                 if column not in columns:
                     connection.execute(
                         f"ALTER TABLE provider_observations ADD COLUMN {column} {definition}"
@@ -542,7 +537,7 @@ class ProviderObservationRepository:
         current: BaseException | None = exc
         while current is not None and id(current) not in seen:
             seen.add(id(current))
-            if isinstance(current, sqlite3.OperationalError):
+            if current.__class__.__name__ in {"OperationalError", "DeadlockDetected", "SerializationFailure"}:
                 message = str(current).lower()
                 return any(
                     marker in message

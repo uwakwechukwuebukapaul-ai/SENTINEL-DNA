@@ -1,9 +1,11 @@
 from services.integration_hub import *
 from services.integration_hub.service import IntegrationHubService
+from tests.credential_helpers import random_token
 def test_registration_validation_and_health():
-    service = IntegrationHubService(); c = service.register("t1", "SIEM", ConnectorType.SIEM, "synthetic", credentials={"token": "secret"})
+    token = random_token()
+    service = IntegrationHubService(); c = service.register("t1", "SIEM", ConnectorType.SIEM, "synthetic", credentials={"token": token})
     assert service.validate(c.connector_id, "t1") and service.check_health(c.connector_id, "t1").status == "healthy"
-    assert "secret" not in str(c.to_dict())
+    assert token not in str(c.to_dict())
 def test_tenant_isolation():
     service = IntegrationHubService(); c = service.register("t1", "EDR", ConnectorType.EDR, "synthetic")
     assert service.get(c.connector_id, "t2") is None and service.list("t2") == []

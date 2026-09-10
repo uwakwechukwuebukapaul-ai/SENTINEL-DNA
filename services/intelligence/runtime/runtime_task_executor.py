@@ -24,14 +24,50 @@ InvestigationCoordinator
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Callable
 
 from .task import Task
 from services.observability import ObservabilityService
 import time
+from uuid import uuid4
 
 
 TaskHandler = Callable[[dict[str, Any]], Any]
+
+
+class RuntimeExecutionStatus(str, Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    UNAVAILABLE = "unavailable"
+    BLOCKED = "blocked"
+
+
+@dataclass(frozen=True)
+class RuntimeTaskFailure:
+    """Safe, serializable failure returned for non-success execution."""
+
+    task_id: str
+    capability: str
+    status: RuntimeExecutionStatus
+    error_code: str
+    error: str
+    retryable: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "capability": self.capability,
+            "status": self.status.value,
+            "error_code": self.error_code,
+            "error": self.error,
+            "retryable": self.retryable,
+            "metadata": dict(self.metadata),
+        }
+
+    def __getitem__(self, key: str) -> Any:
+        return self.to_dict()[key]
 
 
 @dataclass
@@ -53,6 +89,11 @@ class RuntimeTaskExecutor:
     executed: int = 0
 
     failed: int = 0
+
+    @staticmethod
+    def new_execution_id() -> str:
+        """Create an execution envelope ID; safe for future worker handoff."""
+        return str(uuid4())
 
     # ------------------------------------------------------------------
     # Capability registration
@@ -149,19 +190,42 @@ class RuntimeTaskExecutor:
         correlation_id = task.payload.get("correlation_id") or getattr(context, "correlation_id", None)
         event_context = {"correlation_id": correlation_id} if correlation_id else {}
         observer.event("AGENT_STARTED", case_id=task.payload.get("case_id"), agent=task.capability, **event_context)
+
+        if not task.status.can_execute() or (task.status.value == "pending" and not task.can_retry):
+            task.mark_blocked("Task is not executable in its current state")
+            self.failed += 1
+            failure = RuntimeTaskFailure(
+                task.task_id,
+                task.capability,
+                RuntimeExecutionStatus.BLOCKED,
+                "task_not_executable",
+                "Task is not executable in its current state",
+                retryable=False,
+                metadata={"lifecycle_status": task.status.value, "execution_id": task.execution_id, "attempt": task.attempt},
+            )
+            observer.event("AGENT_BLOCKED", case_id=task.payload.get("case_id"), agent=task.capability, status="blocked", duration_ms=round((time.perf_counter()-started)*1000, 2), **event_context)
+            return failure
+
         handler = self.handlers.get(
             task.capability
         )
 
         if handler is None:
-            task.fail(
-                f"No handler registered for {task.capability}"
-            )
+            task.mark_unavailable("Capability is not registered")
 
             self.failed += 1
-            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[f"No handler registered for {task.capability}"], **event_context)
+            failure = RuntimeTaskFailure(
+                task.task_id,
+                task.capability,
+                RuntimeExecutionStatus.UNAVAILABLE,
+                "capability_unavailable",
+                "Capability is not registered",
+                retryable=False,
+                metadata={"execution_id": task.execution_id, "attempt": task.attempt},
+            )
+            observer.event("AGENT_UNAVAILABLE", case_id=task.payload.get("case_id"), agent=task.capability, status="unavailable", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[failure.error_code], **event_context)
 
-            return None
+            return failure
 
         task.start()
 
@@ -180,14 +244,22 @@ class RuntimeTaskExecutor:
             return result
 
         except Exception as exc:
-            task.fail(
-                str(exc)
-            )
+            safe_type = type(exc).__name__
+            task.fail(safe_type)
 
             self.failed += 1
-            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[type(exc).__name__], **event_context)
+            failure = RuntimeTaskFailure(
+                task.task_id,
+                task.capability,
+                RuntimeExecutionStatus.FAILED,
+                "handler_exception",
+                "Capability handler failed",
+                retryable=True,
+                metadata={"exception_type": safe_type, "execution_id": task.execution_id, "attempt": task.attempt},
+            )
+            observer.event("AGENT_FAILED", case_id=task.payload.get("case_id"), agent=task.capability, status="failed", duration_ms=round((time.perf_counter()-started)*1000, 2), errors=[safe_type], **event_context)
 
-            return None
+            return failure
 
     # ------------------------------------------------------------------
     # Runtime management
@@ -220,5 +292,11 @@ class RuntimeTaskExecutor:
             ),
             "executed": self.executed,
             "failed": self.failed,
+            "success": self.executed,
             "available": capabilities,
+            "contract": {
+                "task_states": ["PENDING", "RUNNING", "SUCCESS", "FAILED", "UNAVAILABLE", "BLOCKED"],
+                "durability": "in_process_boundary",
+                "worker_ready": True,
+            },
         }

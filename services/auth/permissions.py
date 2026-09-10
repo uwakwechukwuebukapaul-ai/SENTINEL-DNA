@@ -1,6 +1,8 @@
 from __future__ import annotations
 from functools import wraps
 from flask import current_app, jsonify, session
+from services.core.pilot_boundary import pilot_permission_allowed
+from services.core.security_context import request_context
 
 ROLE_ALIASES = {"ADMIN": "admin", "SOC_MANAGER": "soc_manager", "ANALYST": "analyst", "VIEWER": "viewer"}
 PERMISSIONS = {
@@ -43,6 +45,7 @@ PERMISSIONS = {
     "incidents:manage": {"admin", "soc_manager", "analyst"},
     "api:read": {"admin", "soc_manager"},
     "api:manage": {"admin", "soc_manager"},
+    "audit:read": {"admin", "soc_manager"},
     "billing:read": {"admin", "soc_manager"},
     "mssp:read": {"admin", "soc_manager"},
     "compliance:read": {"admin", "soc_manager", "analyst", "viewer"},
@@ -104,13 +107,22 @@ PERMISSIONS = {
 }
 
 def current_role() -> str | None:
-    user = current_app.container.get("auth_service").get_by_id(session.get("user_id"))
-    return ROLE_ALIASES.get(str(user.role).upper()) if user else None
+    auth = current_app.container.get("auth_service")
+    user = auth.session_user(session.get("user_id"), session.get("session_version"))
+    if user is None:
+        return None
+    context = request_context()
+    if context.error or not context.roles:
+        return None
+    return ROLE_ALIASES.get(str(context.roles[0]).upper())
 
 def permission_required(permission: str):
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
+            pilot_allowed, pilot_response = pilot_permission_allowed(permission)
+            if not pilot_allowed:
+                return pilot_response
             role = current_role()
             if not role:
                 return jsonify({"error": "authentication_required"}), 401

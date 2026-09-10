@@ -1,5 +1,12 @@
 import os
+import pytest
 from services.identity.oidc_routes import OidcRouteConfiguration, create_oidc_blueprint
+
+
+@pytest.fixture(autouse=True)
+def testing_environment(monkeypatch):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
 
 def test_oidc_routes_are_disabled_without_complete_configuration(monkeypatch):
     for key in ("OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_JWKS_URI", "OIDC_CLIENT_ID", "OIDC_AUDIENCE", "OIDC_REDIRECT_URI", "OIDC_CLIENT_SECRET_REFERENCE", "OIDC_PROVIDER_TENANT_CLAIM", "OIDC_SIGNING_ALGORITHMS"): monkeypatch.delenv(key, raising=False)

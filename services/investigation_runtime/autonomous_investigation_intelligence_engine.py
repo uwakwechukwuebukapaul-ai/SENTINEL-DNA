@@ -428,7 +428,14 @@ class AutonomousInvestigationIntelligenceEngine:
         evidence = list(artifacts or [])
         extracted_iocs: list[dict[str, Any]] = []
         for item in evidence:
-            extracted_iocs.extend(self.ioc_extractor.extract(item))
+            # Integrity digests, tenant metadata, and provenance are audit
+            # fields, not observables. Only inspect the evidence content so
+            # SHA-256 integrity values cannot inflate IOC/risk scoring.
+            if isinstance(item, dict):
+                content = item.get("data") or item.get("value") or item.get("raw") or item.get("description") or ""
+            else:
+                content = item
+            extracted_iocs.extend(self.ioc_extractor.extract(content))
 
         for item in iocs or []:
             if isinstance(item, dict):
@@ -444,9 +451,10 @@ class AutonomousInvestigationIntelligenceEngine:
         unique_iocs = []
         seen = set()
         for indicator in extracted_iocs:
-            value = indicator["value"]
-            if value not in seen:
+            value = str(indicator["value"]).strip().lower().rstrip(".,);]}")
+            if value and value not in seen:
                 seen.add(value)
+                indicator = {**indicator, "value": value}
                 unique_iocs.append(indicator)
 
         text = " ".join(str(item).lower() for item in evidence)

@@ -11,9 +11,15 @@ runtime integrations do not break.
 
 from __future__ import annotations
 
-from .runtime_task_executor import RuntimeTaskExecutor
+from .runtime_task_executor import (
+    RuntimeExecutionStatus,
+    RuntimeTaskExecutor,
+    RuntimeTaskFailure,
+)
 
 
 __all__ = [
     "RuntimeTaskExecutor",
+    "RuntimeExecutionStatus",
+    "RuntimeTaskFailure",
 ]

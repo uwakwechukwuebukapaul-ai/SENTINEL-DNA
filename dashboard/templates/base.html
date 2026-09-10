@@ -1,3 +1,97 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{% block title %}Sentinel DNA SOC{% endblock %}</title><style>
-.auth-nav{display:flex;align-items:center;gap:12px}.auth-nav form{margin:0}.auth-nav button{border:1px solid var(--line);border-radius:6px;background:transparent;color:#b8d9ff;padding:7px 10px;font:inherit;cursor:pointer}.auth-nav button:hover,.auth-nav button:focus-visible{background:#123b58}.identity{color:var(--muted)}
-</style></head><body><main class="shell"><nav class="nav"><a class="brand" href="/">SENTINEL DNA / SOC COMMAND CENTER</a>{% if analyst %}<div class="auth-nav" aria-label="Authenticated navigation"><span class="identity">{{ analyst.name }} · {{ analyst.role|replace('_', ' ')|title }}</span><a href="/profile">Profile</a><a href="/workspace/">Workspace</a><form method="post" action="/api/auth/logout"><input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}"><button type="submit">Sign out</button></form></div>{% else %}<span class="muted">Live SQLite evidence view</span>{% endif %}</nav>{% block content %}{% endblock %}</main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>{% block title %}Sentinel DNA SOC{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-shell.css') }}">
+  <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-components.css') }}">
+</head>
+<body class="app-body" data-current-path="{{ request.path }}">
+  <div class="app-shell">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Primary navigation">
+      <a class="sidebar-brand" href="/" aria-label="Sentinel DNA Command Center">
+        <span class="brand-mark" aria-hidden="true">SD</span>
+        <span>Sentinel DNA</span>
+      </a>
+
+      <div class="sidebar-section">Operate</div>
+      <nav class="sidebar-nav" aria-label="Operations">
+        <a class="nav-item{% if request.path == '/' %} is-active{% endif %}" href="/"{% if request.path == '/' %} aria-current="page"{% endif %}>
+          <span class="nav-icon" aria-hidden="true">01</span><span>Command Center</span>
+        </a>
+        <a class="nav-item{% if request.path == '/workspace/' or request.path.startswith('/workspace/investigation') %} is-active{% endif %}" href="/workspace/"{% if request.path == '/workspace/' or request.path.startswith('/workspace/investigation') %} aria-current="page"{% endif %}>
+          <span class="nav-icon" aria-hidden="true">02</span><span>Investigations</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-section">Account</div>
+      <nav class="sidebar-nav" aria-label="Account">
+        <a class="nav-item{% if request.path == '/profile' %} is-active{% endif %}" href="/profile"{% if request.path == '/profile' %} aria-current="page"{% endif %}>
+          <span class="nav-icon" aria-hidden="true">03</span><span>Analyst Profile</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <strong>Evidence-first AI investigation</strong>
+        <span>Observed facts stay distinct from inference and analyst judgment.</span>
+      </div>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-topbar">
+        <div class="topbar-actions">
+          <button class="mobile-nav-toggle" type="button" data-mobile-nav-toggle aria-controls="app-sidebar" aria-expanded="false">
+            <span aria-hidden="true">☰</span><span>Menu</span>
+          </button>
+          <div class="topbar-context">
+            <p class="eyebrow">{% block shell_context %}SECURITY OPERATIONS{% endblock %}</p>
+            {% if tenant %}<span class="tenant-chip" title="Authenticated tenant context">{{ tenant.name }}</span>{% endif %}
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <button class="command-trigger" type="button" data-command-open aria-haspopup="dialog" aria-expanded="false" aria-controls="command-palette">
+            <span aria-hidden="true">⌕</span><span>Command</span><kbd>Ctrl K</kbd>
+          </button>
+          {% if analyst %}
+            <span class="identity-chip" title="Authenticated analyst">{{ analyst.name }} · {{ analyst.role|replace('_', ' ')|title }}</span>
+            <a href="/profile">Profile</a>
+            <form method="post" action="/api/auth/logout">
+              <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}">
+              <button class="button subtle" type="submit">Sign out</button>
+            </form>
+          {% else %}
+            <span class="context">Evidence-first SOC investigation platform</span>
+          {% endif %}
+        </div>
+      </header>
+
+      <main class="shell" id="main-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div class="overlay" data-nav-overlay hidden></div>
+
+  <div class="palette-backdrop" id="command-palette-backdrop" hidden>
+    <section class="command-palette" id="command-palette" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+      <div class="palette-header"><h2 id="command-palette-title">Command Center</h2><button class="palette-close" type="button" data-command-close aria-label="Close command palette">×</button></div>
+      <label class="sr-only" for="command-palette-input">Filter commands</label>
+      <input class="palette-search" id="command-palette-input" type="search" autocomplete="off" placeholder="Go to a workspace or profile…">
+      <ul class="palette-list" id="command-palette-list" role="listbox" aria-label="Available commands">
+        <li><a class="palette-command" href="/" role="option" data-keywords="home overview soc command center"><span>Open Command Center</span><small>Overview</small></a></li>
+        <li><a class="palette-command" href="/workspace/" role="option" data-keywords="cases queue investigations workspace"><span>Open Investigation Workspace</span><small>Queue</small></a></li>
+        <li><a class="palette-command" href="/profile" role="option" data-keywords="account analyst identity profile"><span>Open Analyst Profile</span><small>Account</small></a></li>
+        {% block command_palette_commands %}{% endblock %}
+      </ul>
+    </section>
+  </div>
+
+  <script src="{{ url_for('dashboard_static', filename='js/sentinel-dna-shell.js') }}" defer></script>
+  <script src="{{ url_for('dashboard_static', filename='js/sentinel-dna-command-palette.js') }}" defer></script>
+</body>
+</html>

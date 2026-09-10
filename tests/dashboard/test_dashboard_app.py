@@ -4,6 +4,7 @@ import sqlite3
 
 import dashboard.app as dashboard_app
 import services.auth.permissions as permissions
+from database.backend import PostgreSQLBackend
 from services.cases.case_service import AuthorizedCaseAccess
 from services.intelligence.ioc.persistence_service import IOCAccessContext
 from services.intelligence.ioc.persistence_service import IOCAccessDenied
@@ -12,6 +13,15 @@ from services.intelligence.ioc.persistence_service import IOCAccessDenied
 def make_client():
     dashboard_app.app.config["TESTING"] = True
     return dashboard_app.app.test_client()
+
+
+def test_dashboard_uses_authoritative_postgresql_backend_when_configured(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:password@db.example/sentinel")
+    monkeypatch.setattr(dashboard_app, "DB_PATH", "legacy-test.sqlite")
+
+    backend = dashboard_app._configured_dashboard_database()
+
+    assert isinstance(backend, PostgreSQLBackend)
 
 
 def authorize_dashboard_case(monkeypatch, case_id):
@@ -44,6 +54,16 @@ def test_global_dashboard_ioc_routes_require_existing_rbac(monkeypatch):
     assert client.get("/api/dashboard").status_code == 401
     assert client.get("/workspace").status_code == 401
     assert client.get("/workspace/iocs").status_code == 401
+
+
+def test_alternate_dashboard_rejects_stale_signed_session(monkeypatch):
+    auth = dashboard_app.app.container.require("auth_service")
+    monkeypatch.setattr(auth, "session_user", lambda *_args, **_kwargs: None)
+    client = make_client()
+    with client.session_transaction() as state:
+        state["user_id"] = 1
+        state["session_version"] = 0
+    assert client.get("/workspace/dashboard/data").status_code == 401
 
 
 def test_global_dashboard_ioc_route_uses_existing_read_permission(monkeypatch):

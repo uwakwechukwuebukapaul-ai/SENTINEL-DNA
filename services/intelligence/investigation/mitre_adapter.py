@@ -18,6 +18,10 @@ class MITREAdapter:
     ) -> dict:
 
         techniques = []
+        text = str(alert or {}).lower()
+
+        if "powershell" in text or "pwsh" in text:
+            techniques.append("T1059.001")
 
         if alert.get("source") == "email":
             techniques.append(

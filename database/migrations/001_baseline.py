@@ -1,6 +1,10 @@
-"""Baseline migration marker; existing schemas require no SQL changes."""
+"""Create the normalized core schema for a new or existing database."""
 VERSION = 1
-DESCRIPTION = "Baseline existing Sentinel DNA schema"
+DESCRIPTION = "normalized_core_schema"
 
 def upgrade(connection):
-    connection.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
+    from database.schema import core_schema_statements
+
+    backend = getattr(connection, "backend_name", "sqlite")
+    for statement in core_schema_statements(backend)[1:]:
+        connection.execute(statement)

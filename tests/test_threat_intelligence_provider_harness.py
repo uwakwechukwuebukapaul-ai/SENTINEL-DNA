@@ -7,6 +7,7 @@ from app.intelligence.provider_harness import (
     ProviderRegistration, TransportContract,
 )
 from services.billing.config import EnvironmentSecretProvider
+from tests.credential_helpers import random_secret
 
 
 ALLOWED = frozenset({"approved-later"})
@@ -23,7 +24,9 @@ def registration(**changes):
     return ProviderRegistration(**values)
 
 
-def harness(registration_value, secrets={"TEST_REFERENCE": "not-a-real-secret"}, authorize=lambda *_: True):
+def harness(registration_value, secrets=None, authorize=lambda *_: True):
+    if secrets is None:
+        secrets = {"TEST_REFERENCE": random_secret()}
     return ProviderAdapterHarness(registration_value, EnvironmentSecretProvider(secrets), ALLOWED, authorize)
 
 
@@ -87,7 +90,7 @@ def test_secret_unavailable_and_unsupported_ioc_never_contact_provider_or_expose
     assert unavailable.error.message == "secret_unavailable" and provider.calls == 0
     unsupported = harness(registration()).execute(provider, request(IOCType.URL))
     assert unsupported.error.message == "unsupported_ioc_type" and provider.calls == 0
-    assert "not-a-real-secret" not in repr(unavailable)
+    assert "TEST_REFERENCE" not in repr(unavailable)
 
 
 def test_unauthorized_actor_and_cross_tenant_are_authoritative_before_provider_call():

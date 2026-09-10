@@ -19,6 +19,7 @@ from typing import Any
 from ..models.investigation_intelligence import (
     InvestigationIntelligence,
 )
+from database.portability import identity_primary_key
 from .errors import RepositoryError
 
 
@@ -39,10 +40,11 @@ class IntelligenceRepository:
     def _ensure_schema(self) -> None:
         """Ensure the repository table exists for legacy/default construction."""
         with self.db.session() as connection:
+            identity = identity_primary_key(self.db.backend_name)
             connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS investigation_intelligence (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {identity},
                     case_id TEXT NOT NULL,
                     risk_score REAL DEFAULT 0,
                     risk_severity TEXT DEFAULT 'unknown',
@@ -51,9 +53,9 @@ class IntelligenceRepository:
                     recommendations_json TEXT DEFAULT '[]',
                     mitre_json TEXT DEFAULT '[]',
                     iocs_json TEXT DEFAULT '[]',
-                    attack_story TEXT DEFAULT '{}',
+                    attack_story TEXT DEFAULT '{{}}',
                     timeline_json TEXT DEFAULT '[]',
-                    metadata_json TEXT DEFAULT '{}',
+                    metadata_json TEXT DEFAULT '{{}}',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )

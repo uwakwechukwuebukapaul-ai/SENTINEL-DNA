@@ -86,7 +86,7 @@ class IOCRepository:
         conn.execute("DELETE FROM ioc_duplicate_keys")
         conn.execute(
             """
-            INSERT OR REPLACE INTO ioc_duplicate_keys
+            INSERT INTO ioc_duplicate_keys
                 (case_id, ioc_type, value, ioc_id)
             SELECT i.case_id, i.ioc_type, i.value, i.ioc_id
             FROM iocs AS i
@@ -97,6 +97,8 @@ class IOCRepository:
                   AND latest.ioc_type = i.ioc_type
                   AND latest.value = i.value
             )
+            ON CONFLICT (case_id, ioc_type, value) DO UPDATE
+                SET ioc_id=excluded.ioc_id
             """
         )
 
@@ -117,7 +119,7 @@ class IOCRepository:
                        reputation, source, created
                 FROM iocs WHERE ioc_id=?
                 """,
-                (registry_row[0],),
+                (registry_row["ioc_id"],),
             ).fetchone()
         return conn.execute(
             """
@@ -162,37 +164,35 @@ class IOCRepository:
             if existing and duplicate_policy == "return_existing":
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO ioc_duplicate_keys
+                    INSERT INTO ioc_duplicate_keys
                         (case_id, ioc_type, value, ioc_id)
                     VALUES (?, ?, ?, ?)
+                    ON CONFLICT (case_id, ioc_type, value) DO UPDATE
+                        SET ioc_id=excluded.ioc_id
                     """,
-                    (*fields[:3], existing[1]),
+                    (*fields[:3], existing["ioc_id"]),
                 )
                 return dict(existing)
             if existing and duplicate_policy == "reject":
                 raise IOCDuplicateError("ioc_already_exists")
 
-            cursor = conn.execute(
+            row = conn.execute(
                 """
                 INSERT INTO iocs
                 (ioc_id, case_id, ioc_type, value, confidence, reputation, source, created)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id, ioc_id, case_id, ioc_type, value, confidence,
+                          reputation, source, created
                 """,
                 (ioc_id, *fields, created),
-            )
-            row = conn.execute(
-                """
-                SELECT id, ioc_id, case_id, ioc_type, value, confidence,
-                       reputation, source, created
-                FROM iocs WHERE id=?
-                """,
-                (cursor.lastrowid,),
             ).fetchone()
             conn.execute(
                 """
-                INSERT OR REPLACE INTO ioc_duplicate_keys
+                INSERT INTO ioc_duplicate_keys
                     (case_id, ioc_type, value, ioc_id)
                 VALUES (?, ?, ?, ?)
+                ON CONFLICT (case_id, ioc_type, value) DO UPDATE
+                    SET ioc_id=excluded.ioc_id
                 """,
                 (*fields[:3], ioc_id),
             )
@@ -266,7 +266,7 @@ class IOCRepository:
 
     def count(self) -> int:
         with self.connection.session() as conn:
-            return int(conn.execute("SELECT COUNT(*) FROM iocs").fetchone()[0])
+            return int(conn.execute("SELECT COUNT(*) AS total FROM iocs").fetchone()["total"])
 
     def count_by_type(self) -> list[dict]:
         with self.connection.session() as conn:

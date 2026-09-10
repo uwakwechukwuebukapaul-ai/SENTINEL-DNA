@@ -12,7 +12,26 @@
     <dt>Email</dt><dd>{{ analyst.email }}</dd>
     <dt>Role</dt><dd>{{ analyst.role|replace('_', ' ')|title }}</dd>
     <dt>Tenant / organization</dt><dd>{{ analyst.tenant_id }}</dd>
+    <dt>Phone verification</dt><dd>{{ 'Verified' if analyst.phone_verified else 'Not verified' }}</dd>
+    <dt>Age verification</dt><dd>{{ 'Verified · ' ~ analyst.age if analyst.age_verified else 'Not available' }}</dd>
   </dl>
+  <h2>Authentication methods</h2>
+  <div class="profile-actions">
+    <form method="post" action="/api/auth/google/link">
+      <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+      <button class="button" type="submit">Connect Google</button>
+    </form>
+    <form method="post" action="/api/auth/google/unlink">
+      <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+      <button class="button" type="submit">Disconnect Google</button>
+    </form>
+  </div>
+  <h2>Active sessions</h2>
+  <p class="muted">Remembered sessions are server-revocable. Raw session credentials are never displayed.</p>
+  <button class="button" id="revoke-others" type="button">Revoke other sessions</button>
+  <p id="session-status" class="muted" role="status"></p>
+  <p class="muted">Password · Email OTP · Phone OTP · Google OIDC when configured</p>
   <p><a class="button" href="/">Back to Command Center</a></p>
 </article>
+<script>document.getElementById('revoke-others').onclick=async()=>{const token={{ session.get('csrf_token')|tojson }};const r=await fetch('/api/auth/sessions/revoke-others',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':token},body:'{}'});document.getElementById('session-status').textContent=r.ok?'Other remembered sessions revoked.':'Unable to revoke sessions.'};</script>
 {% endblock %}

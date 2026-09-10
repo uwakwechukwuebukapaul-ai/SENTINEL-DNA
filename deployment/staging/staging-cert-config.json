@@ -1,0 +1,16 @@
+{
+  "common_name": "sentinel-dna-staging",
+  "dns_sans": [
+    "sentinel-dna-staging"
+  ],
+  "fixed_ip_sans": [
+    "127.0.0.1"
+  ],
+  "lan_ip_environment_variable": "SENTINEL_DNA_STAGING_TLS_IP",
+  "certificate_filename": "staging.crt",
+  "private_key_filename": "staging.key",
+  "key_algorithm": "RSA",
+  "key_size": 3072,
+  "signature_hash": "SHA-256",
+  "validity_days": 397
+}

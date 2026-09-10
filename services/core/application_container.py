@@ -47,6 +47,7 @@ from services.intelligence.agents.runtime_adapter import (
 from services.intelligence.runtime.runtime_task_executor import (
     RuntimeTaskExecutor,
 )
+from services.intelligence.runtime.investigation_intake import InvestigationIntake
 
 from services.intelligence.dashboard.dashboard_service import (
     DashboardService,
@@ -54,6 +55,7 @@ from services.intelligence.dashboard.dashboard_service import (
 from services.auth.auth_service import AuthService
 from services.cases.case_service import CaseService
 from services.audit.service import AuditService
+from services.audit.read_service import ApplicationAuditReadService
 from services.intelligence.investigation_optimizer import FeedbackRecommendationService, InvestigationOptimizationService
 from services.tenancy.service import TenancyService
 from services.connectors.registry import ConnectorRegistry
@@ -72,6 +74,8 @@ from services.product_analytics.service import ProductAnalyticsService
 from services.pilot_analytics.service import PilotAnalyticsService
 from services.pilot_reports.service import PilotReportService
 from services.pilot_management.service import PilotManagementService
+from services.pilot_management.authorization import PilotAuthorizationService
+from services.pilot_management.provisioning import PilotAccountProvisioningService
 from services.support.service import SupportService
 from services.exercises.service import ExerciseService
 from services.case_studies.service import CaseStudyService
@@ -209,7 +213,8 @@ def build_container() -> ServiceRegistry:
     # for provider lookups.  No providers are enabled by default, preserving
     # the offline, zero-network runtime until an explicit provider adapter is
     # approved and injected here.
-    canonical_authority = CanonicalAuthorityService()
+    auth_service = AuthService()
+    canonical_authority = CanonicalAuthorityService(auth=auth_service)
     canonical_request_context = CanonicalRequestContextService(canonical_authority)
     canonical_authorization = CanonicalTenantAuthorizationService(canonical_authority)
 
@@ -257,7 +262,11 @@ def build_container() -> ServiceRegistry:
 
     dashboard_service = DashboardService()
     audit_service = AuditService()
-    auth_service = AuthService()
+    investigation_intake = InvestigationIntake(
+        coordinator.execution_repository,
+        audit_service=audit_service,
+    )
+    audit_read_service = ApplicationAuditReadService(audit_service)
     case_service = CaseService()
     tenancy_service = TenancyService()
     connector_registry = ConnectorRegistry()
@@ -289,7 +298,19 @@ def build_container() -> ServiceRegistry:
     customer_success_service = CustomerSuccessService()
     product_analytics_service = ProductAnalyticsService()
     pilot_analytics_service = PilotAnalyticsService(); pilot_report_service = PilotReportService()
-    pilot_management_service = PilotManagementService(); support_service = SupportService()
+    pilot_management_service = PilotManagementService()
+    pilot_authorization_service = PilotAuthorizationService(
+        auth_service=auth_service,
+        canonical_authority=canonical_authority,
+        audit_service=audit_service,
+    )
+    pilot_account_provisioning_service = PilotAccountProvisioningService(
+        auth_service=auth_service,
+        canonical_authority=canonical_authority,
+        pilot_authorization_service=pilot_authorization_service,
+        audit_service=audit_service,
+    )
+    support_service = SupportService()
     exercise_service = ExerciseService(); case_study_service = CaseStudyService()
     readiness_service = ReadinessService(service_lookup=lambda name: registry.get(name) if registry.has(name) else None)
     workflow_service = WorkflowService(); collaboration_service = CollaborationService(); sla_calculator = SLACalculator()
@@ -344,6 +365,8 @@ def build_container() -> ServiceRegistry:
         "investigation_coordinator",
         coordinator,
     )
+    registry.register("execution_repository", coordinator.execution_repository)
+    registry.register("investigation_intake", investigation_intake)
     registry.register("analyst_demo_scenario", analyst_demo_scenario)
 
     registry.register("threat_intelligence_gateway", threat_intelligence_gateway)
@@ -362,6 +385,7 @@ def build_container() -> ServiceRegistry:
         dashboard_service,
     )
     registry.register("audit_service", audit_service)
+    registry.register("audit_read_service", audit_read_service)
     registry.register("feedback_recommendation_service_factory", build_feedback_recommendation_service)
     registry.register("auth_service", auth_service)
     registry.register("case_service", case_service)
@@ -391,7 +415,10 @@ def build_container() -> ServiceRegistry:
     registry.register("customer_success_service", customer_success_service)
     registry.register("product_analytics_service", product_analytics_service)
     registry.register("pilot_analytics_service", pilot_analytics_service); registry.register("pilot_report_service", pilot_report_service)
-    registry.register("pilot_management_service", pilot_management_service); registry.register("support_service", support_service)
+    registry.register("pilot_management_service", pilot_management_service)
+    registry.register("pilot_authorization_service", pilot_authorization_service)
+    registry.register("pilot_account_provisioning_service", pilot_account_provisioning_service)
+    registry.register("support_service", support_service)
     registry.register("exercise_service", exercise_service); registry.register("case_study_service", case_study_service)
     registry.register("readiness_service", readiness_service)
     registry.register("workflow_service", workflow_service); registry.register("collaboration_service", collaboration_service); registry.register("sla_calculator", sla_calculator)

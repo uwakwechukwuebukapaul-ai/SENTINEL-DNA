@@ -1,6 +1,8 @@
 import os
+from pathlib import Path
 
 import pytest
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture
@@ -15,8 +17,9 @@ def application(tmp_path, monkeypatch):
 
 
 def register_and_login(client, username="reconciliation-user", email="reconciliation@example.test"):
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!", "role": "admin", "tenant_id": "attacker"}).status_code == 201
-    response = client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}, headers={"X-CSRF-Token": client.get("/api/auth/csrf").get_json()["csrf_token"]})
+    password = random_password()
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password, "role": "admin", "tenant_id": "attacker"}).status_code == 201
+    response = client.post("/api/auth/login", json={"username": username, "password": password}, headers={"X-CSRF-Token": client.get("/api/auth/csrf").get_json()["csrf_token"]})
     assert response.status_code == 200
 
 
@@ -28,6 +31,12 @@ def test_factory_exposes_canonical_browser_entrypoints(application):
     assert client.get("/workspace/").status_code == 401
     assert client.get("/workspace/investigation/CASE-1").status_code == 401
     assert client.get("/workspace/investigation/CASE-1/report").status_code == 401
+
+
+def test_production_deploys_only_the_canonical_wsgi_entrypoint():
+    assert "from app import create_app" in Path("wsgi.py").read_text(encoding="utf-8")
+    assert "application = create_app()" in Path("wsgi.py").read_text(encoding="utf-8")
+    assert '"wsgi:application"' in Path("Dockerfile").read_text(encoding="utf-8")
 
 
 def test_login_establishes_server_owned_canonical_context(application):

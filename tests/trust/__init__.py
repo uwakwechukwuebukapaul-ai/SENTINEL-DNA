@@ -1,0 +1,1 @@
+"""Enterprise trust closure tests."""

@@ -8,10 +8,13 @@ domain state model independent from SQLite.
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from database.backend import DatabaseBackend
+from database.connection import DatabaseConnection
+from database.portability import table_columns
 
 from ..state import (
     InvestigationState,
@@ -27,7 +30,7 @@ class SQLiteInvestigationRepository(
     InvestigationRepository
 ):
     """
-    SQLite-backed investigation repository.
+    Backend-neutral investigation repository with a retained legacy name.
 
     The repository owns its database connection lifecycle
     and initializes its schema automatically.
@@ -35,38 +38,19 @@ class SQLiteInvestigationRepository(
 
     def __init__(
         self,
-        database_path: str | Path,
+        database_path: str | Path | DatabaseBackend,
     ) -> None:
-        self.database_path = Path(
+        self.db = (
             database_path
+            if hasattr(database_path, "session")
+            else DatabaseConnection(database_path)
         )
-
-        if (
-            str(self.database_path)
-            != ":memory:"
-        ):
-            self.database_path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+        self.database_path = getattr(self.db, "database_path", database_path)
 
         self._initialize()
 
-    def _connect(
-        self,
-    ) -> sqlite3.Connection:
-        connection = sqlite3.connect(
-            str(self.database_path)
-        )
-
-        connection.row_factory = (
-            sqlite3.Row
-        )
-
-        return connection
-
     def _initialize(self) -> None:
-        with self._connect() as connection:
+        with self.db.session() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS
@@ -74,11 +58,15 @@ class SQLiteInvestigationRepository(
                     investigation_id TEXT PRIMARY KEY,
                     investigation_json TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    current_stage TEXT,
+                    completed_stages_json TEXT NOT NULL DEFAULT '[]',
+                    results_json TEXT NOT NULL DEFAULT '{}',
                     intelligence_json TEXT NOT NULL,
                     correlation_json TEXT NOT NULL,
                     confidence_json TEXT NOT NULL,
                     finding_json TEXT NOT NULL,
                     errors_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
                     started_at TEXT,
                     completed_at TEXT,
@@ -86,6 +74,21 @@ class SQLiteInvestigationRepository(
                 )
                 """
             )
+
+            columns = table_columns(
+                connection,
+                self.db.backend_name,
+                "investigations",
+            )
+            additions = {
+                "current_stage": "ALTER TABLE investigations ADD COLUMN current_stage TEXT",
+                "completed_stages_json": "ALTER TABLE investigations ADD COLUMN completed_stages_json TEXT NOT NULL DEFAULT '[]'",
+                "results_json": "ALTER TABLE investigations ADD COLUMN results_json TEXT NOT NULL DEFAULT '{}'",
+                "metadata_json": "ALTER TABLE investigations ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'",
+            }
+            for column, statement in additions.items():
+                if column not in columns:
+                    connection.execute(statement)
 
             connection.commit()
 
@@ -112,24 +115,28 @@ class SQLiteInvestigationRepository(
 
         payload = state.to_dict()
 
-        with self._connect() as connection:
+        with self.db.session() as connection:
             connection.execute(
                 """
                 INSERT INTO investigations (
                     investigation_id,
                     investigation_json,
                     status,
+                    current_stage,
+                    completed_stages_json,
+                    results_json,
                     intelligence_json,
                     correlation_json,
                     confidence_json,
                     finding_json,
                     errors_json,
+                    metadata_json,
                     created_at,
                     started_at,
                     completed_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload["investigation_id"],
@@ -137,6 +144,9 @@ class SQLiteInvestigationRepository(
                         payload["investigation"]
                     ),
                     payload["status"],
+                    payload["current_stage"],
+                    self._encode(payload["completed_stages"]),
+                    self._encode(payload["results"]),
                     self._encode(
                         payload["intelligence"]
                     ),
@@ -152,6 +162,7 @@ class SQLiteInvestigationRepository(
                     self._encode(
                         payload["errors"]
                     ),
+                    self._encode(payload["metadata"]),
                     payload["created_at"],
                     payload["started_at"],
                     payload["completed_at"],
@@ -172,7 +183,7 @@ class SQLiteInvestigationRepository(
                 "Investigation ID is required."
             )
 
-        with self._connect() as connection:
+        with self.db.session() as connection:
             row = connection.execute(
                 """
                 SELECT *
@@ -198,7 +209,7 @@ class SQLiteInvestigationRepository(
         if not investigation_id:
             return False
 
-        with self._connect() as connection:
+        with self.db.session() as connection:
             row = connection.execute(
                 """
                 SELECT 1
@@ -234,18 +245,22 @@ class SQLiteInvestigationRepository(
 
         payload = state.to_dict()
 
-        with self._connect() as connection:
+        with self.db.session() as connection:
             connection.execute(
                 """
                 UPDATE investigations
                 SET
                     investigation_json = ?,
                     status = ?,
+                    current_stage = ?,
+                    completed_stages_json = ?,
+                    results_json = ?,
                     intelligence_json = ?,
                     correlation_json = ?,
                     confidence_json = ?,
                     finding_json = ?,
                     errors_json = ?,
+                    metadata_json = ?,
                     created_at = ?,
                     started_at = ?,
                     completed_at = ?,
@@ -257,6 +272,9 @@ class SQLiteInvestigationRepository(
                         payload["investigation"]
                     ),
                     payload["status"],
+                    payload["current_stage"],
+                    self._encode(payload["completed_stages"]),
+                    self._encode(payload["results"]),
                     self._encode(
                         payload["intelligence"]
                     ),
@@ -272,6 +290,7 @@ class SQLiteInvestigationRepository(
                     self._encode(
                         payload["errors"]
                     ),
+                    self._encode(payload["metadata"]),
                     payload["created_at"],
                     payload["started_at"],
                     payload["completed_at"],
@@ -292,7 +311,7 @@ class SQLiteInvestigationRepository(
             investigation_id
         )
 
-        with self._connect() as connection:
+        with self.db.session() as connection:
             connection.execute(
                 """
                 DELETE FROM investigations
@@ -308,7 +327,7 @@ class SQLiteInvestigationRepository(
     def list(
         self,
     ) -> list[InvestigationState]:
-        with self._connect() as connection:
+        with self.db.session() as connection:
             rows = connection.execute(
                 """
                 SELECT *
@@ -340,7 +359,7 @@ class SQLiteInvestigationRepository(
     @classmethod
     def _deserialize(
         cls,
-        row: sqlite3.Row,
+        row: Any,
     ) -> InvestigationState:
         state = InvestigationState(
             investigation_id=row[
@@ -352,6 +371,9 @@ class SQLiteInvestigationRepository(
             status=InvestigationStatus(
                 row["status"]
             ),
+            current_stage=row["current_stage"],
+            completed_stages=cls._decode(row["completed_stages_json"] or "[]"),
+            results=cls._decode(row["results_json"] or "{}"),
             intelligence=cls._decode(
                 row["intelligence_json"]
             ),
@@ -367,6 +389,7 @@ class SQLiteInvestigationRepository(
             errors=cls._decode(
                 row["errors_json"]
             ),
+            metadata=cls._decode(row["metadata_json"] or "{}"),
             created_at=datetime.fromisoformat(
                 row["created_at"]
             ),

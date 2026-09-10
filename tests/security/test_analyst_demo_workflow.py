@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture
@@ -15,8 +16,9 @@ def application(tmp_path, monkeypatch):
 
 
 def login(client, username="workflow-user", email="workflow@example.test"):
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!"}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}).status_code == 200
+    password = random_password()
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
 
 
 def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
@@ -26,7 +28,15 @@ def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
     response = client.get("/workspace/")
     assert response.status_code == 200
     assert b"DEMO-PS-" in response.data
-    assert b"Synthetic" not in response.data
+    assert b"Synthetic" in response.data
+    dashboard = client.get("/")
+    assert b"Threat level" in dashboard.data
+    assert b"Risk distribution" in dashboard.data
+    assert b"Confidence distribution" in dashboard.data
+    assert b"MITRE ATT&amp;CK coverage" in dashboard.data
+    assert b"Recent investigation activity" in dashboard.data
+    assert b"Tenant-scoped investigations" in response.data
+    assert b"MITRE ATT&CK coverage" in response.data
 
     with client.session_transaction() as state:
         tenant_id = state["organization_id"]
@@ -35,6 +45,13 @@ def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
     assert seeded["metadata"]["synthetic"] is True
     assert seeded["metadata"]["tenant_id"] == tenant_id
     assert scenario.ensure_for_tenant(tenant_id)["case_id"] == seeded["case_id"]
+    snapshot = application.container.require("investigation_coordinator").get_workspace_snapshot(tenant_id)
+    assert snapshot["overview"]["evidence_collected"] == 3
+    assert snapshot["overview"]["ioc_intelligence"] == 1
+    assert snapshot["visualizations"]["severity_distribution"] == [{"label": "High", "count": 1}]
+    assert snapshot["visualizations"]["ioc_reputation_distribution"] == [{"label": "Not Queried", "count": 1}]
+    assert snapshot["visualizations"]["confidence_distribution"]
+    assert snapshot["visualizations"]["activity"]
 
 
 def test_start_uses_canonical_coordinator_and_report(application):
@@ -68,6 +85,14 @@ def test_start_uses_canonical_coordinator_and_report(application):
     assert b"synthetic_demo" in report.data
 
 
+def test_disabled_demo_mode_preserves_honest_empty_states(application):
+    application.config["DEMO_DATA_ENABLED"] = False
+    client = application.test_client()
+    login(client, "empty-user", "empty@example.test")
+    assert b"No investigations are available" in client.get("/").data
+    assert b"No active investigations" in client.get("/workspace/").data
+
+
 def test_demo_case_is_not_readable_across_tenants(application):
     first = application.test_client()
     login(first, "first-user", "first@example.test")
@@ -79,3 +104,48 @@ def test_demo_case_is_not_readable_across_tenants(application):
     login(second, "second-user", "second@example.test")
     assert second.get(f"/workspace/investigation/{case_id}").status_code == 404
     assert second.get(f"/workspace/investigation/{case_id}/report").status_code == 404
+
+
+def test_analyst_feedback_is_authenticated_tenant_scoped_and_persistent(application):
+    client = application.test_client()
+    login(client, "feedback-user", "feedback@example.test")
+    client.get("/workspace/")
+    with client.session_transaction() as state:
+        tenant_id = state["organization_id"]
+    case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(tenant_id)
+    csrf_token = client.get("/api/auth/csrf").get_json()["csrf_token"]
+
+    response = client.post(
+        f"/workspace/investigation/{case_id}/feedback",
+        headers={"X-CSRF-Token": csrf_token},
+        data={
+            "action": "confirm",
+            "helpful_rating": "5",
+            "confidence_rating": "4",
+            "estimated_time_saved": "30",
+            "analyst_comments": "Investigation reduced from 45 minutes to 15 minutes.",
+        },
+    )
+    assert response.status_code == 302
+    feedback = application.container.require("investigation_coordinator").get_feedback(case_id, tenant_id)
+    assert feedback[0]["tenant_id"] == tenant_id
+    assert feedback[0]["analyst_id"]
+    assert feedback[0]["helpful_rating"] == 5
+    assert feedback[0]["confidence_rating"] == 4
+    assert feedback[0]["estimated_time_saved"] == 30
+    assert feedback[0]["created_at"]
+
+    other = application.test_client()
+    login(other, "other-feedback-user", "other-feedback@example.test")
+    other_csrf = other.get("/api/auth/csrf").get_json()["csrf_token"]
+    assert other.post(
+        f"/workspace/investigation/{case_id}/feedback",
+        headers={"X-CSRF-Token": other_csrf},
+        data={
+            "action": "confirm",
+            "helpful_rating": "5",
+            "confidence_rating": "5",
+            "estimated_time_saved": "1",
+            "analyst_comments": "cross tenant attempt",
+        },
+    ).status_code == 404

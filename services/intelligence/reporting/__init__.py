@@ -17,6 +17,10 @@ from .report_builder import (
 )
 from .models import InvestigationNarrative
 from .narrative_engine import InvestigationNarrativeEngine
+from .investigation_projection import (
+    InvestigationProjectionV1,
+    InvestigationProjectionBuilder,
+)
 
 
 __all__ = [
@@ -25,4 +29,6 @@ __all__ = [
     "ReportBuilder",
     "InvestigationNarrative",
     "InvestigationNarrativeEngine",
+    "InvestigationProjectionV1",
+    "InvestigationProjectionBuilder",
 ]

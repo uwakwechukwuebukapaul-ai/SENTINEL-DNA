@@ -1,10 +1,15 @@
 __pycache__/
 **/__pycache__/
 *.pyc
+*.pyo
+*.pyd
+*$py.class
 *.db
 *.sqlite
 *.sqlite3
 .env
+*.release.env
+.sentinel-dna-release.env
 *.bak
 *.log
 venv/
@@ -18,3 +23,10 @@ logs/
 work/pytest-packages/
 work/pytest-runner/
 work/
+.env
+staging.env
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx

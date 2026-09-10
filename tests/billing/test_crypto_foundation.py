@@ -3,6 +3,9 @@ import pytest
 from services.billing.config import CryptoConfiguration, EnvironmentSecretProvider
 from services.billing.crypto import CryptoPaymentProvider, CryptoPaymentRequest
 from services.billing.exceptions import BillingConfigurationError, PaymentProviderError
+from tests.credential_helpers import random_secret
+
+CRYPTO_SECRET = random_secret()
 
 class Response:
     status_code = 200; content = b'{"data":{}}'
@@ -11,7 +14,7 @@ class Response:
 class Transport:
     def post(self, *args, **kwargs): return Response({"provider_reference":"p-1","payment_address":"treasury","expires_at":"2030-01-01T00:00:00Z"})
 class Secret:
-    def get(self, ref): return "deployment-secret" if ref == "CRYPTO_KEY" else ""
+    def get(self, ref): return CRYPTO_SECRET if ref == "CRYPTO_KEY" else ""
 
 def provider(): return CryptoPaymentProvider(provider="processor", base_url="https://crypto.example.test", secret_provider=Secret(), secret_reference="CRYPTO_KEY", assets=("USDC",), networks=("Ethereum",), transport=Transport())
 def test_crypto_disabled_and_valid_configuration():

@@ -1,6 +1,7 @@
 from pathlib import Path
 from flask import Flask, g, session
 import pytest
+from tests.credential_helpers import random_secret
 
 from database.connection import DatabaseConnection
 from services.identity.authentication import AuthenticatedProviderPrincipal, CanonicalAuthenticationBoundary, TrustedProviderAdapter
@@ -19,7 +20,7 @@ def app(tmp_path, principal):
     authority.tenants.create("Acme", "tenant-a"); authority.identities.create("a@example.com", actor_id="actor-a"); authority.memberships.add("tenant-a", "actor-a", "admin")
     boundary = CanonicalAuthenticationBoundary(CanonicalRequestContextService(authority))
     adapter = TrustedProviderAdapter(Provider(principal), boundary)
-    flask_app = Flask(__name__); flask_app.secret_key = "test-only"
+    flask_app = Flask(__name__); flask_app.secret_key = random_secret()
 
     @flask_app.get("/canonical")
     @require_canonical_authentication(adapter)

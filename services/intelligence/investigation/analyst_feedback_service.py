@@ -17,7 +17,14 @@ class AnalystFeedbackService:
     """
 
     _ALLOWED_FIELDS = frozenset(
-        {"decision", "reason", "finding_id", "recommendation_id", "metadata"}
+        {
+            "decision", "reason", "finding_id", "recommendation_id", "metadata",
+            "helpful_rating", "confidence_rating", "estimated_time_saved",
+            "analyst_comments",
+        }
+    )
+    _PILOT_FIELDS = frozenset(
+        {"helpful_rating", "confidence_rating", "estimated_time_saved", "analyst_comments"}
     )
 
     def __init__(self, repository: Any, audit_service: Any | None = None) -> None:
@@ -40,9 +47,18 @@ class AnalystFeedbackService:
         if set(payload) - self._ALLOWED_FIELDS:
             raise ValueError("invalid_feedback_fields")
 
+        supplied_pilot_fields = self._PILOT_FIELDS.intersection(payload)
+        if supplied_pilot_fields and supplied_pilot_fields != self._PILOT_FIELDS:
+            raise ValueError("complete_pilot_feedback_required")
+
         metadata = payload.get("metadata", {})
         if not isinstance(metadata, Mapping):
             raise ValueError("invalid_feedback_metadata")
+
+        metadata = dict(metadata)
+        for field_name in self._PILOT_FIELDS:
+            if field_name in payload:
+                metadata[field_name] = payload[field_name]
 
         feedback = AnalystFeedback(
             investigation_id=investigation_id,
@@ -53,7 +69,11 @@ class AnalystFeedbackService:
             reason=payload.get("reason", ""),
             finding_id=payload.get("finding_id"),
             recommendation_id=payload.get("recommendation_id"),
-            metadata=dict(metadata),
+            helpful_rating=payload.get("helpful_rating"),
+            confidence_rating=payload.get("confidence_rating"),
+            estimated_time_saved=payload.get("estimated_time_saved"),
+            analyst_comments=payload.get("analyst_comments", payload.get("reason", "")),
+            metadata=metadata,
         )
         saved = self.repository.save(feedback)
         self._record_audit(saved)

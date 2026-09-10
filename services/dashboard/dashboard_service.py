@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from database.connection import DatabaseConnection, resolve_database_path
+from database.connection import DatabaseConnection, database_for_environment
+from database.portability import table_columns
 from database.ioc_repository import IOCRepository
 from services.intelligence.ioc.persistence_service import IOCDataAccessService
 
@@ -25,19 +25,17 @@ class DashboardService:
         self,
         db_path: str | Path | None = None,
     ) -> None:
-        self.db = DatabaseConnection(resolve_database_path(db_path))
-        self.db_path = str(self.db.database_path)
+        self.db = DatabaseConnection(db_path) if db_path is not None else database_for_environment()
+        self.db_path = str(getattr(self.db, "database_path", ""))
         self.iocs = IOCDataAccessService(IOCRepository(self.db))
 
 
     def _rows(
         self,
-        conn: sqlite3.Connection,
+        conn,
         sql: str,
         params: tuple = (),
     ) -> list[dict[str, Any]]:
-
-        conn.row_factory = sqlite3.Row
 
         return [
             dict(row)
@@ -71,38 +69,23 @@ class DashboardService:
 
     @staticmethod
     def _table_exists(
-        conn: sqlite3.Connection,
+        conn,
         name: str,
     ) -> bool:
 
-        return bool(
-            conn.execute(
-                """
-                SELECT 1
-                FROM sqlite_master
-                WHERE type='table'
-                AND name=?
-                """,
-                (name,)
-            ).fetchone()
-        )
+        return bool(table_columns(conn, getattr(conn, "backend_name", "sqlite"), name))
 
 
     @staticmethod
     def _columns(
-        conn: sqlite3.Connection,
+        conn,
         table: str,
     ) -> set[str]:
 
         if not DashboardService._table_exists(conn, table):
             return set()
 
-        return {
-            row[1]
-            for row in conn.execute(
-                f"PRAGMA table_info({table})"
-            ).fetchall()
-        }
+        return table_columns(conn, getattr(conn, "backend_name", "sqlite"), table)
 
 
     def snapshot(
@@ -231,7 +214,7 @@ class DashboardService:
                         case_id,
                         data
                     FROM intelligence
-                    ORDER BY rowid DESC
+                    ORDER BY id DESC
                     LIMIT ?
                     """,
                     (limit,)

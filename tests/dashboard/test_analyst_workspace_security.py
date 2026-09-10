@@ -3,6 +3,7 @@ from pathlib import Path
 
 from flask import Flask
 from jinja2 import ChoiceLoader, FileSystemLoader
+from tests.credential_helpers import random_secret
 
 from dashboard.analyst_workspace import analyst_workspace
 
@@ -37,7 +38,7 @@ def make_app():
         endpoint="dashboard_static",
         view_func=lambda filename: "",
     )
-    app.secret_key = "test-secret"
+    app.secret_key = random_secret()
     app.container = SimpleNamespace(require=lambda name: Coordinator())
     app.register_blueprint(analyst_workspace)
     return app

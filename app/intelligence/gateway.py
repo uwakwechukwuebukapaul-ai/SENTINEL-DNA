@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Iterable, Mapping, Protocol
+import time
 
 
 def _utc_now() -> datetime:
@@ -81,6 +82,40 @@ class ProviderErrorCode(str, Enum):
     CONFIGURATION = "configuration_error"
 
 
+class ProviderAvailability(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    DEGRADED = "DEGRADED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class ProviderHealth:
+    """Provider-neutral operational health; no vendor policy is embedded."""
+
+    provider: str
+    status: ProviderAvailability
+    checked_at: datetime
+    success_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    last_error_code: str | None = None
+    unavailable_reason: str | None = None
+    latency_ms: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "status": self.status.value,
+            "timestamp": self.checked_at.isoformat(),
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+            "timeout_count": self.timeout_count,
+            "last_error_code": self.last_error_code,
+            "unavailable_reason": self.unavailable_reason,
+            "latency_ms": self.latency_ms,
+        }
+
+
 @dataclass(frozen=True)
 class ProviderError:
     code: ProviderErrorCode
@@ -132,6 +167,7 @@ class LookupRequest:
     ioc: IOC
     timeout_seconds: float = 5.0
     correlation_id: str | None = None
+    case_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.tenant_id or not self.actor_id:
@@ -164,6 +200,7 @@ class GatewayResult:
     observations: tuple[IntelligenceObservation, ...]
     provider_results: tuple[ProviderResult, ...]
     audit: LookupAudit
+    provider_health: tuple[ProviderHealth, ...] = ()
 
     @property
     def successful(self) -> bool:
@@ -171,9 +208,27 @@ class GatewayResult:
 
 
 class ThreatIntelligenceGateway:
-    def __init__(self, providers: Iterable[ThreatIntelligenceProvider], authorize: Callable[[str, str], bool]):
+    def __init__(self, providers: Iterable[ThreatIntelligenceProvider], authorize: Callable[[str, str], bool], provider_policy: Callable[[str, str, str], bool] | None = None):
         self._providers = tuple(sorted(providers, key=lambda p: p.identity.name))
         self._authorize = authorize
+        self._provider_policy = provider_policy
+        self._health: dict[str, ProviderHealth] = {
+            p.identity.name: ProviderHealth(p.identity.name, ProviderAvailability.UNAVAILABLE, _utc_now(), unavailable_reason="not_checked")
+            for p in self._providers
+        }
+
+    def health(self) -> tuple[ProviderHealth, ...]:
+        return tuple(self._health[name] for name in sorted(self._health))
+
+    def _record_health(self, provider: ProviderIdentity, error: ProviderError | None, latency_ms: float | None = None) -> None:
+        previous = self._health.get(provider.name)
+        success_count = (previous.success_count if previous else 0) + (0 if error else 1)
+        failure_count = (previous.failure_count if previous else 0) + (1 if error else 0)
+        timeout_count = (previous.timeout_count if previous else 0) + (1 if error and error.code == ProviderErrorCode.TIMEOUT else 0)
+        status = ProviderAvailability.AVAILABLE if error is None else ProviderAvailability.UNAVAILABLE
+        if error is not None and previous and previous.status == ProviderAvailability.AVAILABLE:
+            status = ProviderAvailability.DEGRADED
+        self._health[provider.name] = ProviderHealth(provider.name, status, _utc_now(), success_count, failure_count, timeout_count, error.code.value if error else None, error.message if error else None, latency_ms)
 
     def lookup(self, request: LookupRequest) -> GatewayResult:
         if not self._authorize(request.tenant_id, request.actor_id):
@@ -183,15 +238,23 @@ class ThreatIntelligenceGateway:
         for provider in self._providers:
             if request.ioc.type not in provider.capabilities():
                 continue
+            provider_started = time.perf_counter()
+            if self._provider_policy is not None and not self._provider_policy(request.tenant_id, request.actor_id, provider.identity.name):
+                results.append(ProviderResult(provider.identity, error=ProviderError(ProviderErrorCode.CONFIGURATION, "Provider is not enabled by tenant policy", False)))
+                self._record_health(provider.identity, results[-1].error, (time.perf_counter() - provider_started) * 1000)
+                continue
             try:
                 result = provider.lookup(request)
                 if result.provider != provider.identity:
                     raise ValueError("provider identity mismatch")
                 results.append(result)
+                self._record_health(provider.identity, result.error, (time.perf_counter() - provider_started) * 1000)
             except TimeoutError:
                 results.append(ProviderResult(provider.identity, error=ProviderError(ProviderErrorCode.TIMEOUT, "provider timed out", True)))
+                self._record_health(provider.identity, results[-1].error, (time.perf_counter() - provider_started) * 1000)
             except Exception as exc:  # provider isolation boundary
-                results.append(ProviderResult(provider.identity, error=ProviderError(ProviderErrorCode.UNAVAILABLE, str(exc)[:200], True)))
+                results.append(ProviderResult(provider.identity, error=ProviderError(ProviderErrorCode.UNAVAILABLE, "provider failed", True)))
+                self._record_health(provider.identity, results[-1].error, (time.perf_counter() - provider_started) * 1000)
         completed = _utc_now()
         return GatewayResult(
             tuple(r.observation for r in results if r.observation),
@@ -205,6 +268,7 @@ class ThreatIntelligenceGateway:
                 completed,
                 request.correlation_id,
             ),
+            self.health(),
         )
 
     def add_to_case_evidence(self, case: dict[str, Any], request: LookupRequest, context: Any | None = None) -> GatewayResult:

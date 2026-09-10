@@ -18,24 +18,32 @@ if str(ROOT) not in sys.path:
 
 
 from app import create_app
+from tests.credential_helpers import random_password
 
 
-def create_client():
+def create_client(monkeypatch, db_path):
+
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db_path))
 
     app = create_app()
 
     app.testing = True
 
     client = app.test_client()
-    client.post("/api/auth/register", json={"username": "e2e-investigator", "email": "e2e-investigator@example.test", "password": "CorrectHorseBattery1!"})
-    client.post("/api/auth/login", json={"username": "e2e-investigator", "password": "CorrectHorseBattery1!"})
+    password = random_password()
+    client.post("/api/auth/register", json={"username": "e2e-investigator", "email": "e2e-investigator@example.test", "password": password})
+    client.post("/api/auth/login", json={"username": "e2e-investigator", "password": password})
     return client
 
 
 
-def test_end_to_end_investigation_execution():
+def test_end_to_end_investigation_execution(monkeypatch, tmp_path):
 
-    client = create_client()
+    client = create_client(monkeypatch, tmp_path / "end-to-end.sqlite")
 
 
     response = client.post(
@@ -75,9 +83,9 @@ def test_end_to_end_investigation_execution():
 
 
 
-def test_empty_investigation_request():
+def test_empty_investigation_request(monkeypatch, tmp_path):
 
-    client = create_client()
+    client = create_client(monkeypatch, tmp_path / "empty-investigation.sqlite")
 
 
     response = client.post(

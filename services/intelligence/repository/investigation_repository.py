@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .errors import RepositoryError
+from database.portability import table_columns
 
 
 _SENSITIVE_KEYS = {"authorization", "authorization_capability", "token", "password", "secret", "credential", "credentials", "database_path"}
@@ -63,7 +64,7 @@ class InvestigationRepository:
                 )
                 """
             )
-            columns = {row["name"] for row in connection.execute("PRAGMA table_info(investigations)").fetchall()}
+            columns = table_columns(connection, self.db.backend_name, "investigations")
             additions = {
                 "case_id": "TEXT",
                 "tenant_id": "TEXT",
@@ -120,7 +121,7 @@ class InvestigationRepository:
                 "confidence_json": self._json(result.get("confidence", {})),
                 "finding_json": self._json(result.get("findings", [])), "errors_json": self._json(result.get("errors", [])),
             }
-            columns = {row["name"] for row in connection.execute("PRAGMA table_info(investigations)").fetchall()}
+            columns = table_columns(connection, self.db.backend_name, "investigations")
             values = {key: value for key, value in values.items() if key in columns}
             names = list(values)
             if existing:

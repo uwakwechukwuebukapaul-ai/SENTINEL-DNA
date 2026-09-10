@@ -5,9 +5,12 @@ from services.billing.paystack import PaystackPaymentProvider
 from services.billing.service import BillingService
 from services.billing.webhooks import PaystackWebhookProcessor
 from services.billing.exceptions import BillingConfigurationError, WebhookVerificationError
+from tests.credential_helpers import random_secret
+
+PAYSTACK_SECRET = random_secret()
 
 class Secret:
-    def get(self, reference): return "test-secret" if reference == "PAYSTACK" else ""
+    def get(self, reference): return PAYSTACK_SECRET if reference == "PAYSTACK" else ""
 class Response:
     status_code=200
     def __init__(self,data): self.data=data
@@ -26,7 +29,7 @@ def test_initialization_is_server_priced_and_references_canonical_tenant():
 def test_verification_is_server_side():
     assert provider().verify_payment("sdna_x").status == PaymentStatus.SUCCESS
 def test_webhook_signature_and_idempotency():
-    p=provider(); service=BillingService(p); processor=PaystackWebhookProcessor(p,service); body=json.dumps({"id":"evt-1","event":"charge.success"}).encode(); sig=hmac.new(b"test-secret",body,hashlib.sha512).hexdigest()
+    p=provider(); service=BillingService(p); processor=PaystackWebhookProcessor(p,service); body=json.dumps({"id":"evt-1","event":"charge.success"}).encode(); sig=hmac.new(PAYSTACK_SECRET.encode(),body,hashlib.sha512).hexdigest()
     assert processor.process(sig,body) is True and processor.process(sig,body) is False
     with pytest.raises(WebhookVerificationError): processor.process("bad",body)
 def test_entitlements_are_separate_from_authorization():

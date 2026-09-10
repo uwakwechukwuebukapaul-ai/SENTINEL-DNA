@@ -23,10 +23,17 @@ if str(ROOT) not in sys.path:
 
 
 from app import create_app  # noqa: E402  # type: ignore[import-not-found]
+from tests.credential_helpers import random_password
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
+
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "investigation-api.sqlite"))
 
     app = create_app()
 
@@ -40,8 +47,10 @@ def authenticated_client(client):
     import uuid
     username = f"investigator-test-{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.test"
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": "CorrectHorseBattery1!"}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": username, "password": "CorrectHorseBattery1!"}).status_code == 200
+    password = random_password()
+    client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
+    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
+    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
     return client
 
 
