@@ -38,7 +38,7 @@ the repository Compose identity contract was verified.
 | Current staging runtime | NOT CANDIDATE | Recorded running revision is `c34a0707d2ef7a51e2cf9d90ccc933adaec300dd`; Docker is unavailable for independent inspection |
 | Historical local image evidence | RETAINED / NOT CANDIDATE | Existing image evidence identifies revision `626eed8ecc83b67b90d8baf04112d1e05a685196`; it is not relabeled as candidate evidence |
 
-The corrected canonical GitHub repository `uwakwechukwuebukapaul-ai/SENTINEL-DNA`
+The corrected canonical GitHub repository `uwakwechukwuebukpaul-ai/SENTINEL-DNA`
 resolves, but its commit API returns `422 No commit found` for the candidate SHA;
 the exact candidate Actions query returns no runs. The remote
 `gate4-controlled-analyst-pilot` branch remains at `c34a0707d2ef7a51e2cf9d90ccc933adaec300dd`.

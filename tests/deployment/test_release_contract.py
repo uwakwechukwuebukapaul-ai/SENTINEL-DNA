@@ -616,7 +616,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "--password-stdin" in _step_text(login)
     publish = _step(workflow, "Publish immutable candidate image to private GHCR")
     publish_text = _step_text(publish)
-    assert "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna" in publish_text
+    assert "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna" in publish_text
     assert 'sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}' in publish_text
     assert "docker push" in publish_text
     assert "REPO_DIGESTS_JSON" in publish_text

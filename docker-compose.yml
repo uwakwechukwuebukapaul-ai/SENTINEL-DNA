@@ -50,7 +50,7 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?SENTINEL_DNA_IMAGE_REVISION_FULL must be set}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?SENTINEL_DNA_IMAGE_REVISION_FULL must be set}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?SENTINEL_DNA_IMAGE_REVISION_FULL must be set}
-        IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
+        IMAGE_SOURCE: https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?SENTINEL_DNA_IMAGE_CREATED must be set}
     restart: unless-stopped
 

@@ -14,7 +14,7 @@ pilot evidence below does not establish production readiness.
 - Worktree state at pilot execution: `clean`
 - Protected RC1 tag: `v1.0.0-rc1`
 - Protected RC1 commit: `30c9568012879319675a4c86eeb712519f61dfe3`
-- Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukapaul-ai` repository owner metadata)
+- Repository owner/maintainer: `Uwakwe chukwuebuka paul` (`uwakwechukwuebukpaul-ai` repository owner metadata)
 - Documentation author/maintainer: `Uwakwe chukwuebuka paul`
 - Custody attestation: `NOT ATTESTED`
 

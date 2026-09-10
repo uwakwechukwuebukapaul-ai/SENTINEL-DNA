@@ -48,7 +48,7 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
-        IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
+        IMAGE_SOURCE: https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
     command: ["gunicorn", "--config", "/app/gunicorn.conf.py", "wsgi:application", "--bind", "0.0.0.0:5000", "--workers", "1", "--access-logfile", "-", "--error-logfile", "-"]
     restart: unless-stopped
@@ -189,7 +189,7 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
-        IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
+        IMAGE_SOURCE: https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
     command: ["python", "-m", "database.run_migrations"]
     working_dir: /app

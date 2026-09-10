@@ -11,7 +11,7 @@ controls.
 ## Ownership and governance boundary
 
 - Founder / Product Owner: `Uwakwe chukwuebuka paul`
-- Repository namespace: `uwakwechukwuebukapaul-ai`
+- Repository namespace: `uwakwechukwuebukpaul-ai`
 - Repository/documentation maintainer: `Uwakwe chukwuebuka paul`
 - Production operational ownership: `UNKNOWN — not attested`
 - Independent approval: `NOT ATTESTED`

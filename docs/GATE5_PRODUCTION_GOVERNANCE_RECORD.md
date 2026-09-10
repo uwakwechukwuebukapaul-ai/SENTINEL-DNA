@@ -7,8 +7,8 @@ deployment, promote an image, or establish analyst acceptance.
 
 ## 1. Current single-operator model
 
-The authoritative repository is `uwakwechukwuebukapaul-ai/SENTINEL-DNA`. Its
-authenticated owner account, `uwakwechukwuebukapaul-ai`, is the only direct
+The authoritative repository is `uwakwechukwuebukpaul-ai/SENTINEL-DNA`. Its
+authenticated owner account, `uwakwechukwuebukpaul-ai`, is the only direct
 collaborator and has administrator permission. No organization, repository team,
 or second legitimate release reviewer is presently available.
 
