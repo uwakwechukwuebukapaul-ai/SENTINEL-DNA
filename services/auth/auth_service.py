@@ -18,6 +18,10 @@ from services.rate_limiting import RateLimitPolicy, RateLimitRequest, RateLimitS
 from .onboarding import OnboardingState, initial_state
 
 
+class AuthRegistrationConflict(ValueError):
+    """Raised when registration collides with an existing identity."""
+
+
 class AuthService:
     ROLES = {"admin", "soc_manager", "analyst", "viewer"}
 
@@ -124,8 +128,10 @@ class AuthService:
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
             if connection.execute("SELECT 1 FROM users WHERE lower(username)=lower(?)", (username.strip(),)).fetchone():
-                raise ValueError("username_already_registered")
-            if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
+                raise AuthRegistrationConflict("username_already_registered")
+            if connection.execute("SELECT 1 FROM users WHERE lower(email)=lower(?)", (email.strip(),)).fetchone():
+                raise AuthRegistrationConflict("email_already_registered")
+            if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise AuthRegistrationConflict("phone_already_registered")
             row = connection.execute(
                 """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,onboarding_state)
                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",

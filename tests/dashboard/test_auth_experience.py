@@ -108,6 +108,16 @@ def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):
     assert elevated.get_json()["role"] == "analyst"
 
 
+def test_signup_malformed_payload_remains_validation_error(auth_client):
+    response = auth_client.post("/api/auth/register", json={
+        "username": "ab",
+        "email": "not-an-email",
+        "password": "short",
+    })
+
+    assert response.status_code == 400
+
+
 def test_login_works_after_signup_and_dashboard_stays_protected(auth_client):
     payload = {
         "username": "signup-login-analyst",
