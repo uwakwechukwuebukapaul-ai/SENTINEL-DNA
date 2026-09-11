@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, g, jsonify, redirect, request, session
 
-from services.auth.routes import REMEMBER_COOKIE, _csrf_ok
+from services.auth.routes import REMEMBER_COOKIE, _csrf_ok, _login_session
 from services.auth.security import csrf_token
 
 from .entra_oidc import (
@@ -17,6 +17,7 @@ from .entra_oidc import (
     EntraOidcConfig,
     EntraOidcError,
     EntraTokenClient,
+    ExternalSecretReferenceResolver,
     begin_transaction,
     consume_transaction,
 )
@@ -31,14 +32,13 @@ def create_entra_blueprint() -> Blueprint | None:
         config.validate()
     except EntraOidcError:
         return None
-    bp = Blueprint("entra_auth", __name__, url_prefix="/auth")
+    # Keep the concrete Entra flow under the enterprise identity namespace.
+    # The generic enterprise blueprint remains responsible for provider
+    # discovery and other provider adapters; it must not own these literal
+    # Entra callback URLs.
+    bp = Blueprint("entra_auth", __name__, url_prefix="/auth/enterprise/entra")
 
-    def secret_provider(reference: str) -> str:
-        # The reference names an external secret-provider contract.  This
-        # fallback reads only an operator-injected process value and never
-        # prints or persists it; production deployments should replace this
-        # callable with their approved secret provider.
-        return os.getenv(reference, "")
+    secret_provider = ExternalSecretReferenceResolver()
 
     @bp.get("/login")
     def login():
@@ -72,27 +72,16 @@ def create_entra_blueprint() -> Blueprint | None:
             tenant, identity, membership = authority.resolve(tenant_id, user.actor_id)
             if identity.status != "active" or membership.status != "active":
                 raise EntraOidcError("entra_local_membership_denied")
-            session.clear()
-            session.update(
-                user_id=user.id,
-                session_version=user.session_version,
-                actor_id=identity.actor_id,
-                organization_id=tenant.tenant_id,
-                canonical_principal={
-                    "actor_id": identity.actor_id,
-                    "tenant_id": tenant.tenant_id,
-                    "authentication_method": "entra_oidc",
-                    "identity": {
-                        "issuer": verified.identity.issuer,
-                        "tenant_id": verified.identity.tenant_id,
-                        "object_id": verified.identity.object_id,
-                        "subject_id": verified.identity.subject_id,
-                    },
-                    "roles": sorted(verified.roles),
+            _login_session(user, auth_method="entra_oidc")
+            session["canonical_principal"].update({
+                "identity": {
+                    "issuer": verified.identity.issuer,
+                    "tenant_id": verified.identity.tenant_id,
+                    "object_id": verified.identity.object_id,
+                    "subject_id": verified.identity.subject_id,
                 },
-                csrf_token=csrf_token(),
-                auth_time=datetime.now(timezone.utc).isoformat(),
-            )
+                "roles": sorted(verified.roles),
+            })
             return redirect("/")
         except Exception:
             return jsonify({"error": "authentication_failed"}), 401

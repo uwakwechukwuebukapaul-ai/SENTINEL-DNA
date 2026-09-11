@@ -39,6 +39,7 @@ from services.auth.permissions import current_role, permission_required
 from services.auth.routes import enforce_current_session, restore_persistent_session
 from services.auth.providers import email_provider, validate_email_provider_configuration
 from services.identity.enterprise_routes import create_enterprise_identity_blueprint
+from services.identity.enterprise_registry import load_enterprise_oidc_registry
 from services.core.security_context import request_context
 
 # Case management
@@ -198,6 +199,7 @@ app.config.update(
 
 
 app.config["JSON_SORT_KEYS"] = False
+app.config["ENTERPRISE_OIDC_FLOWS"] = load_enterprise_oidc_registry()
 
 app.config["PILOT_ACCESS_REQUIRED"] = (
     os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"

@@ -17,12 +17,14 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 import requests
 import jwt
 
 from database.connection import database
+from .authentication import AuthenticatedProviderPrincipal
 
 
 ENTRA_ROLES = frozenset({"sdna.requester", "sdna.reviewer"})
@@ -268,3 +270,108 @@ def consume_transaction(session: dict, returned_state: str) -> dict:
     transaction["status"] = "consumed"
     transaction["consumed_at"] = int(time.time())
     return transaction
+
+
+class ExternalSecretReferenceResolver:
+    """Resolve a named secret reference supplied by the deployment runtime."""
+
+    def __init__(self, environ: Mapping[str, str] | None = None):
+        self.environ = os.environ if environ is None else environ
+
+    def __call__(self, reference: str) -> str:
+        reference = str(reference or "").strip()
+        if not reference:
+            return ""
+        # References identify secret-file settings; secret contents are never
+        # accepted as application configuration values.
+        file_keys = [reference + "_FILE"]
+        # Sentinel DNA's deployment convention allows a short, lowercase
+        # reference (for example ``entra_client_secret``) to identify the
+        # canonical ``SENTINEL_DNA_ENTRA_CLIENT_SECRET_FILE`` setting.
+        canonical_key = "SENTINEL_DNA_" + reference.upper() + "_FILE"
+        if canonical_key not in file_keys:
+            file_keys.append(canonical_key)
+        path = next((self.environ.get(key, "") for key in file_keys if self.environ.get(key, "")), "")
+        if not path and reference.endswith("_FILE"):
+            path = self.environ.get(reference, "")
+        if not path:
+            return ""
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError):
+            return ""
+
+
+class EntraEnterpriseFlow:
+    """Provider-neutral registry flow backed by the hardened Entra primitives."""
+
+    provider = "entra"
+    display_name = "Microsoft Entra ID"
+
+    def __init__(self, config: EntraOidcConfig, secret_resolver=None, discovery=None,
+                 token_client=None, jwt_validator=None, binding_repository=None):
+        config.validate()
+        self.configuration = config
+        self.secret_resolver = secret_resolver or ExternalSecretReferenceResolver()
+        self.discovery = discovery or EntraDiscovery(config)
+        self.token_client = token_client or EntraTokenClient(config, self.secret_resolver)
+        self.jwt_validator = jwt_validator or EntraJwtValidator(config)
+        self.binding_repository = binding_repository or EntraBindingRepository()
+
+    def health_check(self) -> bool:
+        """Return readiness without exposing error details or secret material."""
+        try:
+            if not self.secret_resolver(self.configuration.client_secret_reference):
+                return False
+            self.discovery.validate()
+            return True
+        except Exception:
+            return False
+
+    def begin(self):
+        transaction = {}
+        location = begin_transaction(transaction, self.configuration)
+        record = transaction["entra_oidc_transaction"]
+        return location, record["state"], record["nonce"]
+
+    def complete(self, params, transaction):
+        if not isinstance(transaction, dict):
+            raise EntraOidcError("entra_transaction_invalid")
+        if transaction.get("status") != "pending" or int(time.time()) >= int(transaction.get("expires_at", 0)):
+            raise EntraOidcError("entra_transaction_expired")
+        if params.get("error"):
+            raise EntraOidcError("entra_provider_authentication_failed")
+        returned_state = str(params.get("state") or "")
+        expected_state = str(transaction.get("state") or "")
+        if not returned_state or not expected_state or not secrets.compare_digest(returned_state, expected_state):
+            raise EntraOidcError("entra_state_invalid")
+        code = str(params.get("code") or "").strip()
+        if not code:
+            raise EntraOidcError("entra_code_missing")
+        token = self.token_client.exchange(code, str(transaction.get("verifier") or ""))
+        verified = self.jwt_validator.validate(token["id_token"], str(transaction.get("nonce") or ""))
+        verified.identity.validate()
+        return AuthenticatedProviderPrincipal(
+            provider="entra",
+            subject=verified.identity.subject_id,
+            tenant_id=verified.identity.tenant_id,
+            actor_id="",
+            authentication_method="entra_oidc",
+            credential_id=verified.identity.object_id,
+            external_subject=verified.identity.object_id,
+            claims=(
+                ("issuer", verified.identity.issuer),
+                ("tenant_id", verified.identity.tenant_id),
+                ("object_id", verified.identity.object_id),
+                ("subject_id", verified.identity.subject_id),
+            ),
+        )
+
+    def resolve_bound_user(self, auth, principal):
+        claims = dict(principal.claims)
+        identity = EntraIdentityTuple(
+            claims.get("issuer", ""), claims.get("tenant_id", ""),
+            claims.get("object_id", ""), claims.get("subject_id", ""),
+        )
+        binding = self.binding_repository.resolve(identity)
+        return auth.get_by_id(binding["user_id"])

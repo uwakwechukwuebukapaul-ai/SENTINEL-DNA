@@ -86,14 +86,18 @@ def create_app():
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
     from services.identity.entra_routes import create_entra_blueprint
+    from services.identity.enterprise_routes import create_enterprise_identity_blueprint
+    from services.identity.enterprise_registry import load_enterprise_oidc_registry
     from services.audit import audit_api
     from services.auth.routes import enforce_current_session, restore_persistent_session
     from services.core.pilot_boundary import enforce_pilot_analyst_boundary
     from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
+    app.config["ENTERPRISE_OIDC_FLOWS"] = load_enterprise_oidc_registry()
     entra_blueprint = create_entra_blueprint()
     if entra_blueprint is not None:
         app.register_blueprint(entra_blueprint)
+    app.register_blueprint(create_enterprise_identity_blueprint())
     app.register_blueprint(audit_api)
     app.register_blueprint(browser)
     app.register_blueprint(automation_api)

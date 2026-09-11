@@ -83,6 +83,18 @@ services:
       SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/staging_smtp_password
       SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
       SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?set verified sender address}
+      SENTINEL_DNA_ENTRA_OIDC_ENABLED: "1"
+      SENTINEL_DNA_ENTRA_CLIENT_SECRET_REFERENCE: SENTINEL_DNA_ENTRA_CLIENT_SECRET
+      SENTINEL_DNA_ENTRA_CLIENT_SECRET_FILE: /run/secrets/entra_client_secret
+      SENTINEL_DNA_ENTRA_TENANT_ID: ${SENTINEL_DNA_ENTRA_TENANT_ID:?set SENTINEL_DNA_ENTRA_TENANT_ID}
+      SENTINEL_DNA_ENTRA_CLIENT_ID: ${SENTINEL_DNA_ENTRA_CLIENT_ID:?set SENTINEL_DNA_ENTRA_CLIENT_ID}
+      SENTINEL_DNA_ENTRA_REDIRECT_URI: https://localhost/auth/enterprise/entra/callback
+      SENTINEL_DNA_CERTIFIED_ORIGIN: ${SENTINEL_DNA_CERTIFIED_ORIGIN:-https://localhost}
+      SENTINEL_DNA_ENTRA_ISSUER: ${SENTINEL_DNA_ENTRA_ISSUER:-}
+      SENTINEL_DNA_ENTRA_AUTHORIZATION_ENDPOINT: ${SENTINEL_DNA_ENTRA_AUTHORIZATION_ENDPOINT:-}
+      SENTINEL_DNA_ENTRA_TOKEN_ENDPOINT: ${SENTINEL_DNA_ENTRA_TOKEN_ENDPOINT:-}
+      SENTINEL_DNA_ENTRA_JWKS_URI: ${SENTINEL_DNA_ENTRA_JWKS_URI:-}
+      SENTINEL_DNA_ENTRA_DISCOVERY_URI: https://login.microsoftonline.com/${SENTINEL_DNA_ENTRA_TENANT_ID}/v2.0/.well-known/openid-configuration
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
       SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
@@ -96,6 +108,8 @@ services:
         target: staging_smtp_username
       - source: staging_smtp_password
         target: staging_smtp_password
+      - source: staging_entra_client_secret
+        target: entra_client_secret
       - source: staging_trusted_browser_service_key
         target: staging_trusted_browser_service_key
     depends_on:
@@ -298,6 +312,8 @@ secrets:
     file: ${SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE:?set external SMTP username secret file}
   staging_smtp_password:
     file: ${SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE:?set external SMTP password secret file}
+  staging_entra_client_secret:
+    file: ${SENTINEL_DNA_STAGING_ENTRA_CLIENT_SECRET_FILE:?set external Entra client secret file}
   staging_trusted_browser_service_key:
     file: ${SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE:?set external trusted-browser service key file}
 

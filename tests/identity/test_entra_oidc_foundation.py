@@ -28,7 +28,7 @@ TEST_TOKEN = TEST_ISSUER + "/token"
 TEST_JWKS = TEST_ISSUER + "/keys"
 TEST_DISCOVERY = TEST_ISSUER + "/.well-known/openid-configuration"
 TEST_CERTIFIED_ORIGIN = "https://staging.example.test"
-TEST_REDIRECT = "https://staging.example.test/auth/callback"
+TEST_REDIRECT = "https://staging.example.test/auth/enterprise/entra/callback"
 
 
 def config(**changes):
@@ -176,8 +176,8 @@ def test_entra_logout_reuses_csrf_and_clears_remember_cookie(entra_app):
     client = entra_app.test_client()
     with client.session_transaction() as browser_session:
         browser_session.update(test_marker="present", csrf_token="csrf")
-    assert client.post("/auth/logout").status_code == 403
-    response = client.post("/auth/logout", headers={"X-CSRF-Token": "csrf"})
+    assert client.post("/auth/enterprise/entra/logout").status_code == 403
+    response = client.post("/auth/enterprise/entra/logout", headers={"X-CSRF-Token": "csrf"})
     assert response.status_code == 200
     assert any("sentinel_remember=" in value and "expires=" in value.lower() for value in response.headers.getlist("Set-Cookie"))
     with client.session_transaction() as browser_session:

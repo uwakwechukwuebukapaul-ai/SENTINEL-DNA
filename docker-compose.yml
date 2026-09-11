@@ -46,8 +46,6 @@ services:
     networks:
       - sentinel_backend
 
-
-
   sentinel-dna:
     image: sentinel-dna-staging-ui-fix:local
     # This local staging validation image is built from the reviewed repository
@@ -76,15 +74,28 @@ services:
       SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
       SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?SENTINEL_DNA_EMAIL_FROM must be set}
 
+      # Microsoft Entra OIDC - local staging
+      SENTINEL_DNA_ENTRA_OIDC_ENABLED: ${SENTINEL_DNA_ENTRA_OIDC_ENABLED:-0}
+      SENTINEL_DNA_ENTRA_TENANT_ID: ${SENTINEL_DNA_ENTRA_TENANT_ID:-}
+      SENTINEL_DNA_ENTRA_CLIENT_ID: ${SENTINEL_DNA_ENTRA_CLIENT_ID:-}
+      SENTINEL_DNA_ENTRA_CLIENT_SECRET_REFERENCE: SENTINEL_DNA_ENTRA_CLIENT_SECRET
+      SENTINEL_DNA_ENTRA_CLIENT_SECRET_FILE: /run/secrets/entra_client_secret
+      SENTINEL_DNA_ENTRA_REDIRECT_URI: ${SENTINEL_DNA_ENTRA_REDIRECT_URI:-https://localhost/auth/enterprise/entra/callback}
+      SENTINEL_DNA_CERTIFIED_ORIGIN: ${SENTINEL_DNA_CERTIFIED_ORIGIN:-https://localhost}
+      SENTINEL_DNA_ENTRA_ISSUER: ${SENTINEL_DNA_ENTRA_ISSUER:-}
+      SENTINEL_DNA_ENTRA_AUTHORIZATION_ENDPOINT: ${SENTINEL_DNA_ENTRA_AUTHORIZATION_ENDPOINT:-}
+      SENTINEL_DNA_ENTRA_TOKEN_ENDPOINT: ${SENTINEL_DNA_ENTRA_TOKEN_ENDPOINT:-}
+      SENTINEL_DNA_ENTRA_JWKS_URI: ${SENTINEL_DNA_ENTRA_JWKS_URI:-}
+      SENTINEL_DNA_ENTRA_DISCOVERY_URI: ${SENTINEL_DNA_ENTRA_DISCOVERY_URI:-}
+
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
-
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED: ${SENTINEL_DNA_PILOT_ACCESS_REQUIRED:?SENTINEL_DNA_PILOT_ACCESS_REQUIRED must be set}
       SENTINEL_DNA_TENANT_ISOLATION_ENABLED: ${SENTINEL_DNA_TENANT_ISOLATION_ENABLED:?SENTINEL_DNA_TENANT_ISOLATION_ENABLED must be set}
       SENTINEL_DNA_AUDIT_LOGGING_ENABLED: ${SENTINEL_DNA_AUDIT_LOGGING_ENABLED:?SENTINEL_DNA_AUDIT_LOGGING_ENABLED must be set}
-
       FLASK_DEBUG: "0"
+
 
       DATABASE_URL: ${DATABASE_URL:-postgresql://sentinel@postgres:5432/sentinel_dna}
       SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
@@ -112,6 +123,7 @@ services:
       - sentinel_dna_secret_key
       - sentinel_dna_smtp_username
       - sentinel_dna_smtp_password
+      - entra_client_secret
       - sentinel_dna_postgres_password
 
     networks:
@@ -238,3 +250,5 @@ secrets:
     file: ${SENTINEL_DNA_SMTP_USERNAME_FILE:?SENTINEL_DNA_SMTP_USERNAME_FILE must be set}
   sentinel_dna_smtp_password:
     file: ${SENTINEL_DNA_SMTP_PASSWORD_FILE:?SENTINEL_DNA_SMTP_PASSWORD_FILE must be set}
+  entra_client_secret:
+    file: ${SENTINEL_DNA_ENTRA_CLIENT_SECRET_FILE:?SENTINEL_DNA_ENTRA_CLIENT_SECRET_FILE must be set}
