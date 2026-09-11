@@ -14,12 +14,12 @@
     "worktree_state_before_manifest": "clean"
   },
   "docker_image": {
-    "reference": "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna@sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
+    "reference": "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna@sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
     "digest": "sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
     "image_id": "sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
-    "tag": "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196",
+    "tag": "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196",
     "oci_revision": "626eed8ecc83b67b90d8baf04112d1e05a685196",
-    "oci_source": "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA",
+    "oci_source": "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA",
     "digest_evidence": [
       {
         "path": "deployment-evidence/image-digest.txt",
