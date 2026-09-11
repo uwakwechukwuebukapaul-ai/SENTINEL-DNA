@@ -48,3 +48,8 @@ sentinel-dna-pilot-baseline-2026-09-01.txt
 deployment/staging/docker-compose.rendered.yml
 deployment/staging/docker-compose.rendered.final.yml
 deployment/staging/docker-compose.rendered.current.yml
+.env
+.env.*
+*.env
+*.secret
+secrets/
