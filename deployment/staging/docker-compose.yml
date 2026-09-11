@@ -76,6 +76,13 @@ services:
       SENTINEL_DNA_TRUSTED_BROWSER_REPLICA_COUNT: "1"
       SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
+      SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?set SENTINEL_DNA_EMAIL_PROVIDER=smtp}
+      SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?set SMTP relay host}
+      SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
+      SENTINEL_DNA_SMTP_USERNAME: ${SENTINEL_DNA_SMTP_USERNAME:?set SMTP username}
+      SENTINEL_DNA_SMTP_PASSWORD: ${SENTINEL_DNA_SMTP_PASSWORD:?set SMTP password}
+      SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
+      SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?set verified sender address}
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
       SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password

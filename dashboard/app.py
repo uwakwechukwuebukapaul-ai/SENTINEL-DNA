@@ -37,6 +37,7 @@ from services.auth import auth_api
 from services.auth.security import csrf_token
 from services.auth.permissions import current_role, permission_required
 from services.auth.routes import enforce_current_session, restore_persistent_session
+from services.auth.providers import email_provider, validate_email_provider_configuration
 from services.identity.enterprise_routes import create_enterprise_identity_blueprint
 from services.core.security_context import request_context
 
@@ -213,6 +214,14 @@ app.config["GOOGLE_OAUTH_CONFIGURED"] = all(
 app.config["OBSERVABILITY"] = ObservabilityService()
 
 app.config["HUNT_DB_PATH"] = str(DB_PATH)
+
+# Email verification is an identity gate.  Staging and production therefore
+# fail during startup when the SMTP relay is not explicitly configured.  Tests
+# inject a TestEmailProvider after app construction and are intentionally not
+# allowed to use this path.
+validate_email_provider_configuration()
+if os.getenv("SENTINEL_DNA_ENV", "development").strip().lower() in {"staging", "production"}:
+    app.config["EMAIL_PROVIDER"] = email_provider()
 
 
 

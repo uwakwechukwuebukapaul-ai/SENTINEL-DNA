@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import create_app
-from services.auth.providers import TestEmailProvider, TestSMSProvider, email_provider, sms_provider
+from services.auth.providers import SMTPEmailProvider, TestEmailProvider, TestSMSProvider, email_provider, sms_provider, validate_email_provider_configuration
 from services.auth.oauth import GoogleOIDC
 from services.auth.oauth import GoogleClaims
 from services.auth.rate_limit import RedisRateLimitBackend
@@ -106,6 +106,38 @@ def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
     monkeypatch.delenv("SENTINEL_DNA_EMAIL_PROVIDER", raising=False); monkeypatch.delenv("SENTINEL_DNA_SMS_PROVIDER", raising=False)
     with pytest.raises(RuntimeError): email_provider()
     with pytest.raises(RuntimeError): sms_provider()
+
+def test_v3_smtp_provider_selection_and_missing_configuration_is_safe(monkeypatch):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_PROVIDER", "smtp")
+    for name in ("SENTINEL_DNA_SMTP_HOST", "SENTINEL_DNA_SMTP_USERNAME", "SENTINEL_DNA_SMTP_PASSWORD", "SENTINEL_DNA_EMAIL_FROM"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(RuntimeError, match="smtp_configuration_incomplete") as error:
+        validate_email_provider_configuration()
+    assert "super-secret" not in str(error.value)
+
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_USERNAME", "relay-user")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_PASSWORD", "super-secret")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_FROM", "security@example.test")
+    assert isinstance(email_provider(), SMTPEmailProvider)
+
+def test_v3_smtp_delivery_does_not_log_or_expose_credentials(monkeypatch):
+    class FakeSMTP:
+        messages = []
+        def __init__(self, host, port, timeout): self.host, self.port, self.timeout = host, port, timeout
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def ehlo(self): pass
+        def starttls(self): pass
+        def login(self, username, password): assert password == "smtp-secret"
+        def send_message(self, message): self.messages.append(message)
+
+    monkeypatch.setattr("services.auth.providers.smtplib.SMTP", FakeSMTP)
+    provider = SMTPEmailProvider(host="smtp.example.test", port=587, username="user", password="smtp-secret", sender="security@example.test")
+    result = provider.send_code("analyst@example.test", "123456", "registration_email")
+    assert result.accepted and FakeSMTP.messages[-1]["To"] == "analyst@example.test"
+    assert "smtp-secret" not in str(FakeSMTP.messages[-1])
 
 def test_v3_password_recovery_is_single_use_and_revokes_sessions(app):
     client = app.test_client(); csrf = token(client)

@@ -22,6 +22,37 @@ temporary files use `/tmp`, which staging mounts as an ephemeral tmpfs. The
 application root filesystem remains read-only and the control socket is mode
 `0600`; no credentials or application data are written there.
 
+## Email verification delivery
+
+Email is the required registration identity gate; phone verification is not
+part of registration. Staging uses an explicitly configured SMTP relay and
+fails closed at startup when configuration is incomplete. Inject these values
+through the external staging secret/configuration store, never through Git:
+
+```text
+SENTINEL_DNA_EMAIL_PROVIDER=smtp
+SENTINEL_DNA_SMTP_HOST=<approved relay host>
+SENTINEL_DNA_SMTP_PORT=587
+SENTINEL_DNA_SMTP_USERNAME=<relay username>
+SENTINEL_DNA_SMTP_PASSWORD=<relay password>
+SENTINEL_DNA_SMTP_STARTTLS=1
+SENTINEL_DNA_EMAIL_FROM=<verified sender address>
+```
+
+Validate the effective configuration without printing secret values:
+
+```sh
+docker compose -f deployment/staging/docker-compose.yml exec app \
+  python -c 'from services.auth.providers import validate_email_provider_configuration; validate_email_provider_configuration(); print("smtp configuration valid")'
+docker compose -f deployment/staging/docker-compose.yml exec app \
+  env | grep -E '^(SENTINEL_DNA_EMAIL_PROVIDER|SENTINEL_DNA_SMTP_HOST|SENTINEL_DNA_SMTP_PORT|SENTINEL_DNA_SMTP_USERNAME|SENTINEL_DNA_SMTP_STARTTLS|SENTINEL_DNA_EMAIL_FROM)='
+```
+
+Do not include `SENTINEL_DNA_SMTP_PASSWORD` in diagnostics. Complete an
+end-to-end registration, confirm delivery, verify the code once, and confirm
+replay is rejected. A missing relay or failed delivery must block onboarding;
+do not substitute a console provider.
+
 `deployment/scripts/deploy.sh` is staging-only. It requires an absolute
 `STAGING_ENV_FILE` outside the repository and explicitly selects the staging
 Compose file. It must not be run as part of this repository gate. The root

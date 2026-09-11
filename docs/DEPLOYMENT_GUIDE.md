@@ -2,6 +2,16 @@
 
 Set `SENTINEL_DNA_ENV` to `production`. Production requires protected `SENTINEL_DNA_SECRET_KEY` and `POSTGRES_PASSWORD` values. The release helper derives immutable image metadata from Git; operators must not maintain those values manually.
 
+Email verification delivery is also a startup requirement. Set
+`SENTINEL_DNA_EMAIL_PROVIDER=smtp` and inject
+`SENTINEL_DNA_SMTP_HOST`, `SENTINEL_DNA_SMTP_PORT`,
+`SENTINEL_DNA_SMTP_USERNAME`, `SENTINEL_DNA_SMTP_PASSWORD`,
+`SENTINEL_DNA_SMTP_STARTTLS`, and `SENTINEL_DNA_EMAIL_FROM` through the
+protected configuration/secret store. The application validates these values
+without connecting at startup and fails closed when they are missing or
+invalid. Never print or commit the SMTP password. The test provider is
+available only when testing is enabled.
+
 Use the controlled deployment adapter in `deployment/scripts/controlled_deploy.py`. An authorized provider must materialize the protected production configuration outside the repository; never use the repository `.env` as production authority. Prepare the deployment-owned Gate 1 artifact with `deployment/scripts/prepare_trusted_release_metadata.py`, then run the adapter in `--dry-run` or `--validate-only` mode before any explicitly authorized `--execute` operation. The adapter uses only `deployment/docker-compose.yml`, pins the verified immutable digest, runs the one-shot migration service, and recreates only the application service. The container runs as a non-root `sentinel` user and persists data under `/var/lib/sentinel`.
 
 `GET /health` checks application and database availability. `GET /ready` additionally validates required registered services. Use the `deployment/docker-compose.yml` topology when an Nginx reverse proxy is required. Nginx is the public edge: port 80 redirects to HTTPS on port 443, while the application remains internal on port 5000. The proxy forwards `X-Forwarded-Proto=https`, `X-Forwarded-For`, and `X-Correlation-ID`; do not expose the application port directly to the public internet. The manual `deployment-contract` GitHub Actions workflow validates protected production configuration and provenance without assuming a remote hosting provider.
