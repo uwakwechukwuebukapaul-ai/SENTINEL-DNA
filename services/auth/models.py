@@ -24,14 +24,18 @@ class User:
     expires_at: str | None = None
     revocation_status: str = "active"
     audit_correlation_id: str | None = None
+    onboarding_state: str = "AUTHENTICATED"
+    mfa_enabled: bool = False
 
     def public(self) -> dict[str, Any]:
+        role_labels = {"admin": "Administrator", "soc_manager": "SOC Manager", "analyst": "SOC-L1 Analyst", "viewer": "Viewer"}
         return {
             "id": self.id, "username": self.username, "email": self.email,
-            "role": self.role, "created_at": self.created_at,
+            "role": self.role, "role_label": role_labels.get(self.role, self.role.replace("_", " ").title()), "created_at": self.created_at,
             "last_login": self.last_login, "is_active": self.is_active,
             "phone_verified": bool(self.phone_verified_at),
             "email_verified": bool(self.email_verified_at),
+            "onboarding_state": self.onboarding_state,
             "age": self.age(), "age_verified": self.age() is not None,
             "phone": self._masked_phone(),
         }

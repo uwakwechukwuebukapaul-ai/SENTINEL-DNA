@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "artifact_type": "GATE5_CUSTODY_REQUEST",
+  "governance_package_id": "gate5-custody-request-4e35f0c",
+  "candidate_commit": "4e35f0cb20cfab4779e1a567342e1855962ac58e",
+  "candidate_branch": "gate5-controlled-pilot-activation",
+  "repository": "uwakwechukwuebukpaul-ai/SENTINEL-DNA",
+  "image_reference": "sentinel-dna:pilot-staging-candidate-4e35f0c",
+  "image_digest": "sha256:45ce0498839eb12fe07f08c9bb153bab5c9c7f2531b2b7a991f2ad1eec2e3995",
+  "provenance_reference": [
+    "com.sentinel-dna.git.revision.full:4e35f0cb20cfab4779e1a567342e1855962ac58e",
+    "org.opencontainers.image.revision:4e35f0cb20cfab4779e1a567342e1855962ac58e",
+    "org.opencontainers.image.source:https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
+  ],
+  "approved_runtime_digest": null,
+  "staging_origin": "controlled-pilot-staging",
+  "activation_scope": "Gate 5 controlled pilot staging only; no production promotion",
+  "issued_at": "2026-09-10T00:00:00Z",
+  "expires_at": "2026-09-17T00:00:00Z",
+  "rollback_reference": "REQUIRED_FROM_EXTERNAL_AUTHORITY",
+  "evidence_reference": "staging-validation:118-passed-5-warnings",
+  "verifier_identity": null,
+  "operator_approval_reference": null,
+  "signature_reference": null,
+  "integrity": {
+    "algorithm": "sha256",
+    "request_hash": "c34158ec997758a01693ee5561335d77b064dd04da38e0b7a15a9f3bcae9b1fc",
+    "canonical_basis": [
+      "schema_version", "governance_package_id", "candidate_commit",
+      "candidate_branch", "repository", "image_reference", "image_digest",
+      "provenance_reference", "approved_runtime_digest", "staging_origin",
+      "activation_scope", "issued_at", "expires_at", "rollback_reference",
+      "evidence_reference", "request_status"
+    ]
+  },
+  "request_status": "PENDING_EXTERNAL_AUTHORIZATION",
+  "external_authority_requirements": {
+    "authorization_artifact": "Externally issued Gate 5 custody authorization bound to this request",
+    "verifier_identity": "REQUIRED_FROM_EXTERNAL_AUTHORITY",
+    "operator_approval_reference": "REQUIRED_FROM_EXTERNAL_AUTHORITY",
+    "signature_reference": "REQUIRED_FROM_EXTERNAL_AUTHORITY",
+    "integrity_reference": "REQUIRED_FROM_EXTERNAL_AUTHORITY",
+    "trust_root": "REQUIRED_FROM_EXTERNAL_AUTHORITY"
+  },
+  "staging_validation": {
+    "passed": 118,
+    "warnings": 5,
+    "evidence_reference": "staging-validation:118-passed-5-warnings"
+  }
+}

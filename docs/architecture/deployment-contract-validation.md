@@ -26,8 +26,9 @@ The validator evaluates five independent contracts:
    forward-only: rollback is not inferred from a missing `down()` function;
    operational rollback means restoring a validated pre-migration backup.
 4. **Deployment artifact integrity** checks Docker build-context policy and
-   the Compose boundary. If supplied, a release manifest is verified against
-   the current checkout and expected image digest.
+   the Compose boundary. A supplied production release manifest must be
+   image-bound and is verified against the current checkout, expected image
+   digest, and protected `SENTINEL_DNA_IMAGE_CREATED` value.
 5. **Backup/restore readiness** can rehearse backup creation from a supplied
    database copy, validates the backup artifact and manifest, restores into a
    disposable temporary target, compares logical content digests across

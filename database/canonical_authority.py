@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 from uuid import uuid4
 
-from .connection import DatabaseConnection, database
 from .portability import execute_script, identity_primary_key
+
+if TYPE_CHECKING:
+    from .backend import DatabaseBackend
 
 
 def _now() -> str:
@@ -35,8 +37,8 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
             name TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'inactive', 'deleted')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_canonical_tenants_status
             ON canonical_tenants(status);
@@ -47,8 +49,8 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
             display_name TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'inactive', 'deleted')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_canonical_identities_email
             ON canonical_identities(email);
@@ -59,8 +61,8 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
             role TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'inactive')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (tenant_id, actor_id),
             FOREIGN KEY (tenant_id) REFERENCES canonical_tenants(tenant_id),
             FOREIGN KEY (actor_id) REFERENCES canonical_identities(actor_id)
@@ -122,7 +124,15 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
 class CanonicalUnitOfWork:
     """One SQLite connection shared by canonical repositories and audit."""
 
-    def __init__(self, db: DatabaseConnection = database) -> None:
+    def __init__(self, db: "DatabaseBackend | None" = None) -> None:
+        if db is None:
+            # Keep the application convenience default lazy. Migration
+            # rehearsal loads schema modules against an explicit disposable
+            # connection and must not resolve the host production backend as
+            # an import side effect.
+            from .connection import database
+
+            db = database
         self.db = db
         self.connection: Any | None = None
 
@@ -195,7 +205,7 @@ class CanonicalMembershipRepository:
     def add(self, tenant_id: str, actor_id: str, role: str = "viewer"):
         now = _now()
         self.connection.execute(
-            "INSERT INTO canonical_memberships VALUES (?, ?, ?, 'active', ?, ?)",
+            "INSERT INTO canonical_memberships(tenant_id,actor_id,role,status,created_at,updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
             (tenant_id, actor_id, role, now, now),
         )
         return self.get(tenant_id, actor_id)

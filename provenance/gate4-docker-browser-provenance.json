@@ -1,0 +1,41 @@
+{
+  "schema": "sentinel-dna.gate4.docker-browser-provenance.v1",
+  "evidence_classification": "observed_release_evidence",
+  "runtime_configuration": false,
+  "docker": {
+    "context": "desktop-linux",
+    "base_image_reference": "mcr.microsoft.com/playwright:v1.62.1-noble",
+    "oci_image_index": {
+      "media_type": "application/vnd.oci.image.index.v1+json",
+      "digest": "sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e"
+    },
+    "linux_amd64_manifest": {
+      "reference": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac",
+      "media_type": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac",
+      "platform": "linux/amd64"
+    },
+    "linux_arm64_manifest_digest_not_for_release": "sha256:941cc91e5022880ac1d14ae90b476b624deb6399dbbc28d612d5d5bd7928fcbd",
+    "pulled_image_repo_digest": "mcr.microsoft.com/playwright@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e"
+  },
+  "container": {
+    "platform": "Linux x86_64",
+    "node": "v24.18.1",
+    "npm": "11.16.0"
+  },
+  "browser": {
+    "playwright_dependency": "1.62.1",
+    "revision": "1234",
+    "version": "151.0.7922.34",
+    "executable_path": "/ms-playwright/chromium-1234/chrome-linux64/chrome",
+    "executable_size": 290614600,
+    "executable_sha256": "0b20b130e7edd9dd51873be867761295fe0cfad490c2b9a64f95bd3cfc08fa71",
+    "direct_execution_result": "Google Chrome for Testing 151.0.7922.34"
+  },
+  "caveat": "npx playwright --version temporarily installed Playwright 1.63.0; this is not release provenance. Release dependency remains Playwright 1.62.1 from the locked project dependency and image tag v1.62.1.",
+  "gate4_status": {
+    "LINUX_BROWSER_PROVENANCE": "PASS",
+    "EXTERNAL_RUNTIME_PROVENANCE": "BLOCKED",
+    "EGRESS_CONNECTION_LAYER": "BLOCKED"
+  }
+}

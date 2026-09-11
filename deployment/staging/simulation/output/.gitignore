@@ -1,0 +1,3 @@
+# Simulation output is ephemeral and must not be committed as pilot evidence.
+*
+!.gitignore

@@ -15,6 +15,10 @@ PILOT_ALLOWED_PERMISSIONS = frozenset(
         "investigations:run",
         "reports:read",
         "pilot:read",
+        "pilot:feedback",
+        "pilot:feedback:read",
+        "pilot:review",
+        "pilot:review:read",
     }
 )
 
@@ -87,6 +91,22 @@ def pilot_path_allowed(path: str, method: str) -> bool:
     if path == "/api/pilot-provisioning/activate":
         return method in {"POST", "OPTIONS"}
     if path == "/workspace/":
+        return method in readonly
+    if path in {
+        "/api/controlled-analyst-pilot/current",
+        "/api/controlled-analyst-pilot/feedback",
+        "/api/controlled-analyst-pilot/reviews",
+    }:
+        return method in readonly or (
+            path.endswith("/feedback") and method == "POST"
+        ) or (path.endswith("/reviews") and method == "POST")
+    if path == "/api/controlled-analyst-pilot/onboard":
+        return method in {"POST", "OPTIONS"}
+    if re.fullmatch(r"/api/controlled-analyst-pilot/reviews/[^/]+/(?:transition|reopen|withdraw)", path):
+        return method in {"POST", "OPTIONS"}
+    if re.fullmatch(r"/api/controlled-analyst-pilot/tenants/[^/]+/(?:suspend|resume)", path):
+        return method in {"POST", "OPTIONS"}
+    if path == "/api/controlled-analyst-pilot/audit":
         return method in readonly
     if re.fullmatch(r"/workspace/(?:investigation|analyst)/[^/]+", path):
         return method in readonly

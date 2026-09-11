@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import create_app
-from services.auth.providers import TestEmailProvider, TestSMSProvider, email_provider, sms_provider
+from services.auth.providers import SMTPEmailProvider, TestEmailProvider, TestSMSProvider, email_provider, sms_provider, validate_email_provider_configuration
 from services.auth.oauth import GoogleOIDC
 from services.auth.oauth import GoogleClaims
 from services.auth.rate_limit import RedisRateLimitBackend
@@ -23,20 +23,16 @@ def app(tmp_path, monkeypatch):
 
 def token(client): return client.get("/api/auth/csrf").get_json()["csrf_token"]
 
-def test_v3_signup_phone_dob_and_analyst_binding(app):
+def test_v3_signup_email_dob_and_analyst_binding_without_phone_challenge(app):
     client = app.test_client(); csrf = token(client)
     assert client.post("/api/auth/email/send-registration-code", json={"email":"v3@example.test"}, headers={"X-CSRF-Token":csrf}).status_code == 202
     email_code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
     email_challenge = app.container.require("auth_service").db.connect().execute("SELECT id FROM otp_challenges WHERE purpose='registration_email' ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
     assert client.post("/api/auth/email/verify-registration-code", json={"challenge_id":email_challenge,"code":email_code}, headers={"X-CSRF-Token":csrf}).status_code == 200
-    send = client.post("/api/auth/phone/send-code", json={"country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert send.status_code == 202
-    challenge = send.get_json()["challenge_id"]
-    code = app.config["SMS_PROVIDER"].messages[-1]["code"]
-    assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
-    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
+    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
     assert created.status_code == 201 and created.get_json()["role"] == "analyst"
-    assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
+    assert created.get_json()["onboarding_state"] == "AUTHENTICATED"
+    assert created.get_json().get("phone_number") in (None, "")
 
 def test_v3_csrf_and_dob_rejection(app):
     client = app.test_client()
@@ -59,6 +55,48 @@ def test_v3_email_otp_authentication_and_replay_protection(app):
     assert client.post("/api/auth/email/verify-code", json={"challenge_id":challenge,"code":code}, headers={"X-CSRF-Token":csrf}).status_code == 200
     assert client.post("/api/auth/email/verify-code", json={"challenge_id":challenge,"code":code}, headers={"X-CSRF-Token":csrf}).status_code == 400
 
+def test_v3_registration_otp_cannot_cross_signed_auth_flows(app):
+    first = app.test_client(); first_csrf = token(first)
+    sent = first.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "bound@example.test"},
+        headers={"X-CSRF-Token": first_csrf},
+    )
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
+
+    second = app.test_client(); second_csrf = token(second)
+    denied = second.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": challenge, "code": code},
+        headers={"X-CSRF-Token": second_csrf},
+    )
+    assert denied.status_code == 400
+
+    accepted = first.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": challenge, "code": code},
+        headers={"X-CSRF-Token": first_csrf},
+    )
+    assert accepted.status_code == 200
+
+def test_onboarding_state_is_server_owned_and_invalid_transitions_fail_closed(app):
+    service = app.container.require("auth_service")
+    user = service.register(
+        "state-user", "state@example.test", PASSWORD,
+        onboarding_state="NEW",
+    )
+    assert service.authenticate("state@example.test", PASSWORD) is None
+    with pytest.raises(ValueError, match="invalid_onboarding_transition"):
+        service.transition_onboarding(user.id, "AUTHENTICATED")
+    assert service.complete_verified_onboarding(user.id) is None
+
+def test_password_strength_is_enforced_by_the_server(app):
+    service = app.container.require("auth_service")
+    with pytest.raises(ValueError, match="invalid_user_registration"):
+        service.register("weak-user", "weak@example.test", "longpassword")
+
 def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):
         GoogleOIDC("client", random_secret(), "http://127.0.0.1/callback").complete("code", "attacker-state", "expected-state", "nonce", "nonce")
@@ -68,6 +106,57 @@ def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
     monkeypatch.delenv("SENTINEL_DNA_EMAIL_PROVIDER", raising=False); monkeypatch.delenv("SENTINEL_DNA_SMS_PROVIDER", raising=False)
     with pytest.raises(RuntimeError): email_provider()
     with pytest.raises(RuntimeError): sms_provider()
+
+def test_v3_smtp_provider_selection_and_missing_configuration_is_safe(monkeypatch):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_PROVIDER", "smtp")
+    for name in ("SENTINEL_DNA_SMTP_HOST", "SENTINEL_DNA_SMTP_USERNAME", "SENTINEL_DNA_SMTP_PASSWORD", "SENTINEL_DNA_EMAIL_FROM"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(RuntimeError, match="smtp_configuration_incomplete") as error:
+        validate_email_provider_configuration()
+    assert "super-secret" not in str(error.value)
+
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_USERNAME", "relay-user")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_PASSWORD", "super-secret")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_FROM", "security@example.test")
+    assert isinstance(email_provider(), SMTPEmailProvider)
+
+def test_v3_smtp_provider_reads_credentials_from_secret_files(monkeypatch, tmp_path):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_PROVIDER", "smtp")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_FROM", "security@example.test")
+    username_file = tmp_path / "smtp-username"
+    password_file = tmp_path / "smtp-password"
+    username_file.write_text("relay-user\n", encoding="utf-8")
+    password_file.write_text("file-secret\n", encoding="utf-8")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_USERNAME_FILE", str(username_file))
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_PASSWORD_FILE", str(password_file))
+    monkeypatch.delenv("SENTINEL_DNA_SMTP_USERNAME", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SMTP_PASSWORD", raising=False)
+
+    provider = email_provider()
+    assert isinstance(provider, SMTPEmailProvider)
+    assert provider.username == "relay-user"
+    assert provider.password == "file-secret"
+
+def test_v3_smtp_delivery_does_not_log_or_expose_credentials(monkeypatch):
+    class FakeSMTP:
+        messages = []
+        def __init__(self, host, port, timeout): self.host, self.port, self.timeout = host, port, timeout
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def ehlo(self): pass
+        def starttls(self): pass
+        def login(self, username, password): assert password == "smtp-secret"
+        def send_message(self, message): self.messages.append(message)
+
+    monkeypatch.setattr("services.auth.providers.smtplib.SMTP", FakeSMTP)
+    provider = SMTPEmailProvider(host="smtp.example.test", port=587, username="user", password="smtp-secret", sender="security@example.test")
+    result = provider.send_code("analyst@example.test", "123456", "registration_email")
+    assert result.accepted and FakeSMTP.messages[-1]["To"] == "analyst@example.test"
+    assert "smtp-secret" not in str(FakeSMTP.messages[-1])
 
 def test_v3_password_recovery_is_single_use_and_revokes_sessions(app):
     client = app.test_client(); csrf = token(client)

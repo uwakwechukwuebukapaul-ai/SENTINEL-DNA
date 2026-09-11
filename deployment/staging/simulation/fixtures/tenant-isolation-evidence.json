@@ -1,0 +1,12 @@
+{
+  "mode": "NON-PRODUCTION_SIMULATION",
+  "status": "PASS",
+  "synthetic_data_only": true,
+  "synthetic_tenant_count": 1,
+  "synthetic_analyst_count": 1,
+  "server_derived_scope": "PASS",
+  "foreign_tenant_denied": "PASS",
+  "privileged_actions_denied": "PASS",
+  "production_data_used": false,
+  "evidence_reference": "SIM-TENANT-ISOLATION-001"
+}

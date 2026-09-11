@@ -37,7 +37,7 @@ $composeFile = 'rehearsal/postgresql/docker-compose.yml'
 $migrationProject = 'sentinel-dna-postgres-migration'
 $env:SENTINEL_DNA_REHEARSAL_PORT = '55432'
 
-$env:SENTINEL_DNA_REHEARSAL_PASSWORD = '<random-disposable-password>'
+$env:SENTINEL_DNA_REHEARSAL_PASSWORD_FILE = 'C:\approved\secrets\sentinel-dna-rehearsal-password'
 docker compose -p $migrationProject -f $composeFile up -d --wait
 $env:SENTINEL_DNA_REHEARSAL_POSTGRES_URL = 'postgresql://sentinel_rehearsal:<password>@127.0.0.1:55432/sentinel_dna_rehearsal'
 $env:SENTINEL_DNA_POSTGRES_REHEARSAL_APPROVED = 'I_UNDERSTAND_DISPOSABLE_POSTGRES_ONLY'

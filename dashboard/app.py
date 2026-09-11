@@ -37,6 +37,9 @@ from services.auth import auth_api
 from services.auth.security import csrf_token
 from services.auth.permissions import current_role, permission_required
 from services.auth.routes import enforce_current_session, restore_persistent_session
+from services.auth.providers import email_provider, validate_email_provider_configuration
+from services.identity.enterprise_routes import create_enterprise_identity_blueprint
+from services.identity.enterprise_registry import load_enterprise_oidc_registry
 from services.core.security_context import request_context
 
 # Case management
@@ -143,6 +146,9 @@ from services.security_copilot.routes import copilot_ai_api
 
 from services.platform_experience.routes import experience_api
 
+from services.favp_operations.routes import favp_operations_api
+from services.favp_operations.execution_routes import favp_execution_api
+
 
 
 # ---------------------------------------------------------
@@ -193,14 +199,31 @@ app.config.update(
 
 
 app.config["JSON_SORT_KEYS"] = False
+app.config["ENTERPRISE_OIDC_FLOWS"] = load_enterprise_oidc_registry()
 
 app.config["PILOT_ACCESS_REQUIRED"] = (
     os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"
 )
 
+# Presence-only capability flag for public auth templates. The provider route
+# remains the authority for the OAuth flow; this prevents an unconfigured
+# provider from being presented as an available sign-in method.
+app.config["GOOGLE_OAUTH_CONFIGURED"] = all(
+    os.getenv(name, "").strip()
+    for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI")
+)
+
 app.config["OBSERVABILITY"] = ObservabilityService()
 
 app.config["HUNT_DB_PATH"] = str(DB_PATH)
+
+# Email verification is an identity gate.  Staging and production therefore
+# fail during startup when the SMTP relay is not explicitly configured.  Tests
+# inject a TestEmailProvider after app construction and are intentionally not
+# allowed to use this path.
+validate_email_provider_configuration()
+if os.getenv("SENTINEL_DNA_ENV", "development").strip().lower() in {"staging", "production"}:
+    app.config["EMAIL_PROVIDER"] = email_provider()
 
 
 
@@ -222,6 +245,7 @@ app.register_blueprint(create_investigation_learning_blueprint())
 from dashboard.analyst_workspace import analyst_workspace
 app.register_blueprint(analyst_workspace)
 app.register_blueprint(auth_api)
+app.register_blueprint(create_enterprise_identity_blueprint())
 app.register_blueprint(cases_api)
 
 
@@ -377,6 +401,17 @@ app.register_blueprint(
 app.register_blueprint(
     pilot_api
 )
+
+# Internal FAVP operations are opt-in and never registered in production.
+# This preserves the production runtime path and existing pilot activation
+# gates while allowing a non-production operator environment to mount the
+# bounded management/workspace API.
+if (
+    os.getenv("SENTINEL_DNA_FAVP_OPERATIONS_ENABLED", "0") == "1"
+    and os.getenv("SENTINEL_DNA_ENV", "").strip().lower() != "production"
+):
+    app.register_blueprint(favp_operations_api)
+    app.register_blueprint(favp_execution_api)
 
 app.register_blueprint(
     identity_api

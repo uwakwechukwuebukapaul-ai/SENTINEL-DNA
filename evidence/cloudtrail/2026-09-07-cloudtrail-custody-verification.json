@@ -1,0 +1,74 @@
+{
+  "schema": "sentinel-dna.cloudtrail-custody-verification",
+  "schema_version": "1.1",
+  "evidence_type": "cloudtrail_custody_verification",
+  "scope": "CloudTrail custody evidence gate only",
+  "verification": {
+    "account": "634176594969",
+    "region": "eu-west-1",
+    "trail_name": "SentinelDNA-Trust-Trail",
+    "trail_arn": "arn:aws:cloudtrail:eu-west-1:634176594969:trail/SentinelDNA-Trust-Trail",
+    "bucket": "sentinel-dna-trust-cloudtrail-634176594969-eu-west-1",
+    "digest_coverage": {
+      "coverage_start": "2026-09-07T10:37:47Z",
+      "coverage_end": "2026-09-07T11:37:47Z",
+      "objects": [
+        {
+          "key": "AWSLogs/634176594969/CloudTrail-Digest/eu-west-1/2026/09/07/634176594969_CloudTrail-Digest_eu-west-1_SentinelDNA-Trust-Trail_eu-west-1_20260907T103747Z.json.gz",
+          "digest_timestamp": "2026-09-07T10:37:47Z",
+          "last_modified": "2026-09-07T10:54:27Z"
+        },
+        {
+          "key": "AWSLogs/634176594969/CloudTrail-Digest/eu-west-1/2026/09/07/634176594969_CloudTrail-Digest_eu-west-1_SentinelDNA-Trust-Trail_eu-west-1_20260907T113747Z.json.gz",
+          "digest_timestamp": "2026-09-07T11:37:47Z",
+          "last_modified": "2026-09-07T11:55:08Z"
+        }
+      ],
+      "basis": "recorded digest timestamps and S3 LastModified observations; not an AWS CLI validation interval"
+    },
+    "cloudtrail_configuration_checks": {
+      "logging": "active",
+      "multi_region": "enabled",
+      "log_file_validation": "enabled"
+    },
+    "s3_custody_checks": {
+      "versioning": "enabled",
+      "encryption": "SSE-S3 AES256",
+      "public_access_block": "fully_enabled",
+      "cloudtrail_bucket_policy": "verified"
+    },
+    "validation_invocation": {
+      "command": "aws cloudtrail validate-logs",
+      "initial": {
+        "start_time": "2026-09-07T09:37:47Z",
+        "end_time": "not_recorded"
+      },
+      "later": {
+        "invoked": true,
+        "timing": "after the second digest appeared",
+        "start_time": "not_recorded",
+        "end_time": "not_recorded"
+      },
+      "exact_stdout": "not_recorded"
+    },
+    "validate_logs": {
+      "result": "reported_valid",
+      "basis": "The user reported that the later direct validation showed all available validation results as valid; exact stdout is not recorded."
+    },
+    "log_file_integrity": {
+      "result": "reported_valid",
+      "basis": "The user reported that all available validation results were valid; exact stdout is not recorded, and individual log-file results are not enumerated."
+    },
+    "digest_chain": {
+      "result": "not_recorded",
+      "reason": "The exact AWS validate-logs output is not available in the repository; no digest-chain result is asserted."
+    },
+    "aws_cli_version": "2.36.40",
+    "verification_timestamp": "2026-09-07T12:06:25Z",
+    "verification_timestamp_basis": "repository evidence-record creation time"
+  },
+  "limitations": [
+    "The exact AWS validate-logs output is not present in the repository.",
+    "No overall Sentinel DNA release certification is asserted by this record."
+  ]
+}

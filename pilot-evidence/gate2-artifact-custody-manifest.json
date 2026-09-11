@@ -1,0 +1,130 @@
+{
+  "manifest_type": "gate2-artifact-custody",
+  "manifest_version": "1.0",
+  "generated_at_utc": "2026-09-01T16:22:58.897Z",
+  "scope": {
+    "custody_artifact_only": true,
+    "application_behavior_modified": false,
+    "migrations_modified": false
+  },
+  "repository": {
+    "branch": "gate2/artifact-custody-validation",
+    "commit_sha": "6e1dffa386e29a697858344dd46b6153ee63349f",
+    "tree_sha": "d772b7f300e8ba61cf58c85ee5179b17b2f6226e",
+    "worktree_state_before_manifest": "clean"
+  },
+  "docker_image": {
+    "reference": "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna@sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
+    "digest": "sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
+    "image_id": "sha256:0e1611251bf177f58a3d6ffc3f1a8003ca5c28152a0ad927a3625acd664d8027",
+    "tag": "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196",
+    "oci_revision": "626eed8ecc83b67b90d8baf04112d1e05a685196",
+    "oci_source": "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA",
+    "digest_evidence": [
+      {
+        "path": "deployment-evidence/image-digest.txt",
+        "sha256": "1c00ba2587843b77f5386f5ae104324228901a87bc60d24fe8bcef0cc5dc7425"
+      },
+      {
+        "path": "image-runtime-inspect.json",
+        "sha256": "70e6e65ebf1f67e9131de48735c13477092e7068611bbd349bb4b2be12424a4b"
+      }
+    ],
+    "current_commit_match": "BLOCKED"
+  },
+  "pilot_evidence_sha256": "07115ba59f0cfc7417844a98a5742f59f557db6d510360ec16eaea89803a6e36",
+  "pilot_evidence": {
+    "primary": {
+      "path": "pilot-evidence/MONITOR-PILOT-001.json",
+      "sha256": "07115ba59f0cfc7417844a98a5742f59f557db6d510360ec16eaea89803a6e36",
+      "validation_result": "PASS"
+    },
+    "gate2_readiness": {
+      "path": "pilot-evidence/controlled-pilot-readiness-report-20260901T000000Z.json",
+      "sha256": "d9f4fd730ca0378b5308a13a58d003ae22462caf84badbed2947efa946a89118",
+      "status": "BLOCKED_WITH_REASON"
+    },
+    "final_manual_attempt": {
+      "path": "pilot-evidence/controlled-analyst-pilot-final-manual-attempt-20260831T200208Z.json",
+      "sha256": "8c52f9729164ca412263df2f01ace47897318657352319e825d6dea921d74c64",
+      "status": "BLOCKED_WITH_REASON"
+    }
+  },
+  "validation_test_results": {
+    "git_diff_check": {
+      "command": "git diff --check",
+      "result": "PASS"
+    },
+    "custody_focused_pytest": {
+      "command": "python -m pytest -q tests/deployment/test_deployment_contract_validation.py tests/deployment/test_operational_readiness_evidence.py tests/deployment/test_trusted_release_metadata.py tests/deployment/test_release_hygiene_manifest.py tests/staging/test_staging_security_contract.py tests/staging/test_staging_persistence_contract.py tests/staging/test_favp_launch_contract.py tests/staging/test_favp_staging_initialization.py tests/favp_operations/test_launch_readiness.py tests/favp_operations/test_synthetic_onboarding.py",
+      "result": "PASS",
+      "passed": 94,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "duration": "124.58s"
+    },
+    "broader_gate2_pytest": {
+      "command": "python -m pytest -q tests/deployment tests/staging tests/favp_operations tests/monitoring/test_monitoring_pilot.py tests/unit/test_pilot_readiness.py tests/unit/test_runtime_production_contract.py tests/production/test_runtime_hardening.py tests/security/test_production_entrypoint_reconciliation.py",
+      "result": "BLOCKED",
+      "passed": 257,
+      "skipped": 2,
+      "failed": 4,
+      "errors": 6,
+      "duration": "741.80s",
+      "blocker": "Host execution cannot resolve Docker-network hostname postgres; production runtime contract expectations also fail in this host environment."
+    }
+  },
+  "runtime_health": {
+    "state": "HEALTHY_AND_READY",
+    "observation_source": "recorded deployment evidence",
+    "compose_status": "running; application, PostgreSQL, and Redis healthy; nginx edge running",
+    "health": {
+      "path": "deployment-evidence/health-response.json",
+      "sha256": "9ea647e3c18c0516a26b577e8b9721e7d7c2f151e92dd17625ffa36d55dbc348",
+      "http_status": 200,
+      "response": {
+        "database": "ok",
+        "service": "sentinel-dna",
+        "status": "ok"
+      }
+    },
+    "ready": {
+      "path": "deployment-evidence/ready-response.json",
+      "sha256": "0c9be6f56465bb82112a0970341de8536c68912e0f16ce23543bcfc3d1273fa1",
+      "http_status": 200,
+      "response": {
+        "database": "ok",
+        "services": "registered",
+        "status": "ready"
+      }
+    },
+    "compose_evidence": {
+      "path": "deployment-evidence/compose-status.txt",
+      "sha256": "1f8acabdcef868ae34114033e46aec17c76caa5b46c48891516d88cfe839ccb7"
+    }
+  },
+  "favp_recovery": {
+    "path": "pilot-evidence/favp-recovery-final-20260901.json",
+    "sha256": "fdade64576b9e11502f7cec924d930cafafd025db971412a93efbf0b10a70849",
+    "result": "FAVP_STAGING_RECOVERED",
+    "synthetic_only": true,
+    "production_access": "0",
+    "activation_performed": false,
+    "credentials_stored": false,
+    "audit_recorded": true,
+    "idempotent_replay": true,
+    "participant_state": "ACTIVE_VALIDATION",
+    "invitation_status": "ACCEPTED",
+    "human_program_owner_authorization_required": true
+  },
+  "remaining_blockers": [
+    "Recorded Docker image OCI revision 626eed8ecc83b67b90d8baf04112d1e05a685196 does not match current commit 6e1dffa386e29a697858344dd46b6153ee63349f; rebuild or independently verify an immutable image for the current commit.",
+    "Controlled analyst pilot readiness is BLOCKED_WITH_REASON because the approved trusted browser provider/module and activation manifest are unavailable.",
+    "No authorized manager session was available; no synthetic tenant or analyst was created; all 14 authenticated pilot gates remain NOT_MEASURED.",
+    "Certified staging origin reachability and audit prerequisites remain blocked: TB_PROVIDER_MODULE_MISSING, TB_PROVIDER_MANIFEST_MISSING, certified staging origin is not reachable, and SENTINEL_DNA_AUDIT_LOGGING_ENABLED must be 1.",
+    "Authenticated audit, provenance, AI advisory-only, denial, and session-revocation evidence is not present; human release approval is not measured.",
+    "The broader host-side pytest run remains blocked by six PostgreSQL Docker-network setup errors and four runtime-contract failures; the custody-focused validation set passed.",
+    "Docker CLI was unavailable in the host shell during package preparation; runtime health state is therefore recorded from the existing deployment evidence files."
+  ]
+}

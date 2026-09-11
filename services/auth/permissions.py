@@ -5,6 +5,12 @@ from services.core.pilot_boundary import pilot_permission_allowed
 from services.core.security_context import request_context
 
 ROLE_ALIASES = {"ADMIN": "admin", "SOC_MANAGER": "soc_manager", "ANALYST": "analyst", "VIEWER": "viewer"}
+# These are application capabilities, not Sentinel DNA local roles.  Entra
+# roles can narrow an already-authorized local session but never elevate it.
+ENTRA_ROLE_CAPABILITIES = {
+    "requester": "sdna.requester",
+    "reviewer": "sdna.reviewer",
+}
 PERMISSIONS = {
     "investigations:read": {"admin", "soc_manager", "analyst", "viewer"},
     "investigations:run": {"admin", "soc_manager", "analyst"},
@@ -55,6 +61,14 @@ PERMISSIONS = {
     "product_analytics:read": {"admin", "soc_manager"},
     "pilot:read": {"admin", "soc_manager", "analyst", "viewer"},
     "pilot:manage": {"admin", "soc_manager"},
+    # Controlled analyst pilot capabilities are explicit.  They do not grant
+    # general tenant administration or production response authority.
+    "pilot:feedback": {"admin", "soc_manager", "analyst"},
+    "pilot:feedback:read": {"admin", "soc_manager", "analyst"},
+    "pilot:review": {"admin", "soc_manager", "analyst"},
+    "pilot:review:read": {"admin", "soc_manager", "analyst"},
+    "pilot:review:manage": {"admin", "soc_manager"},
+    "pilot:audit:read": {"admin", "soc_manager"},
     "support:read": {"admin", "soc_manager", "analyst", "viewer"},
     "exercises:read": {"admin", "soc_manager", "analyst", "viewer"},
     "readiness:view": {"admin", "soc_manager", "analyst", "viewer"},
@@ -116,7 +130,28 @@ def current_role() -> str | None:
         return None
     return ROLE_ALIASES.get(str(context.roles[0]).upper())
 
-def permission_required(permission: str):
+
+def entra_capability_allowed(capability: str) -> bool:
+    principal = session.get("canonical_principal") or {}
+    if not isinstance(principal, dict) or principal.get("authentication_method") != "entra_oidc":
+        return True
+    roles = principal.get("roles")
+    required = ENTRA_ROLE_CAPABILITIES.get(capability)
+    return isinstance(roles, list) and isinstance(required, str) and required in roles
+
+
+def entra_capability_required(capability: str):
+    """Decorator for future requester/reviewer routes; local permission remains conjunctive."""
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not entra_capability_allowed(capability):
+                return jsonify({"error": "forbidden"}), 403
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
+
+def permission_required(permission: str, entra_capability: str | None = None):
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
@@ -127,6 +162,8 @@ def permission_required(permission: str):
             if not role:
                 return jsonify({"error": "authentication_required"}), 401
             if role not in PERMISSIONS.get(permission, set()):
+                return jsonify({"error": "forbidden"}), 403
+            if entra_capability is not None and not entra_capability_allowed(entra_capability):
                 return jsonify({"error": "forbidden"}), 403
             return view(*args, **kwargs)
         return wrapped

@@ -6,7 +6,12 @@ import pytest
 from app import create_app
 from config.production import ProductionConfig
 from config.runtime import RuntimeConfig
-from database.connection import DatabaseConnection
+from database.backend import DatabaseConfigurationError
+from database.connection import (
+    DatabaseConnection,
+    database,
+    database_for_environment,
+)
 from services.intelligence.repository.report_repository import InvestigationReportRepository
 from services.intelligence.runtime.execution_context import ExecutionContext
 from services.intelligence.runtime.runtime_task_executor import RuntimeTaskExecutor
@@ -27,6 +32,20 @@ def _production_env(monkeypatch, tmp_path, secret=None):
 
 def test_production_factory_starts_secure_and_health_ready(monkeypatch, tmp_path):
     _production_env(monkeypatch, tmp_path)
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://sentinel@postgres.test:5432/sentinel_dna",
+    )
+
+    # create_app() and its service container share this process-level lazy
+    # boundary. Inject an explicit SQLite test backend behind it so the factory
+    # can be exercised offline while the configured production URL remains
+    # PostgreSQL; fail-closed backend resolution is asserted below.
+    monkeypatch.setattr(
+        database,
+        "_backend",
+        DatabaseConnection(tmp_path / "data" / "factory.sqlite"),
+    )
     app = create_app()
 
     assert app.config["DEBUG"] is False
@@ -54,12 +73,16 @@ def test_production_rejects_debug_environment_leak(monkeypatch, tmp_path):
         RuntimeConfig.from_environment().validate()
 
 
-def test_production_config_uses_sqlite_contract_without_database_url(monkeypatch, tmp_path):
+def test_production_config_preserves_compatibility_metadata_but_backend_fails_closed(
+    monkeypatch, tmp_path
+):
     _production_env(monkeypatch, tmp_path)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     config = ProductionConfig.from_env()
     assert config.database_path == (tmp_path / "data" / "soc.db").resolve()
     assert config.database_url == ""
+    with pytest.raises(DatabaseConfigurationError, match="DATABASE_URL"):
+        database_for_environment()
 
 
 def test_sqlite_connection_uses_operational_pragmas(tmp_path):

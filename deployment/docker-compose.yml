@@ -8,19 +8,31 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
-        IMAGE_SOURCE: ${SENTINEL_DNA_IMAGE_SOURCE:-https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA}
+        IMAGE_SOURCE: ${SENTINEL_DNA_IMAGE_SOURCE:-https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA}
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
     command: ["python", "-m", "database.run_migrations"]
     restart: "no"
     environment:
       SENTINEL_DNA_ENV: production
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
+      SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?set SENTINEL_DNA_EMAIL_PROVIDER=smtp}
+      SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?set SMTP relay host}
+      SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
+      SENTINEL_DNA_SMTP_USERNAME_FILE: /run/secrets/sentinel_dna_smtp_username
+      SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/sentinel_dna_smtp_password
+      SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
+      SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?set verified sender address}
       SENTINEL_DNA_IMAGE_DIGEST: ${SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST}
       SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - sentinel_dna_secret_key
+      - sentinel_dna_smtp_username
+      - sentinel_dna_smtp_password
+      - sentinel_dna_postgres_password
     depends_on:
       postgres: {condition: service_healthy}
     volumes:
@@ -38,17 +50,24 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
-        IMAGE_SOURCE: ${SENTINEL_DNA_IMAGE_SOURCE:-https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA}
+        IMAGE_SOURCE: ${SENTINEL_DNA_IMAGE_SOURCE:-https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA}
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
     environment:
       SENTINEL_DNA_ENV: production
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
+      SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?set SENTINEL_DNA_EMAIL_PROVIDER=smtp}
+      SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?set SMTP relay host}
+      SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
+      SENTINEL_DNA_SMTP_USERNAME_FILE: /run/secrets/sentinel_dna_smtp_username
+      SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/sentinel_dna_smtp_password
+      SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
+      SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?set verified sender address}
       SENTINEL_DNA_IMAGE_DIGEST: ${SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST}
       SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres: {condition: service_healthy}
@@ -59,6 +78,11 @@ services:
         source: ${SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:?set SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE}
         target: /run/sentinel/release/metadata.json
         read_only: true
+    secrets:
+      - sentinel_dna_secret_key
+      - sentinel_dna_smtp_username
+      - sentinel_dna_smtp_password
+      - sentinel_dna_postgres_password
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
       interval: 30s
@@ -69,7 +93,9 @@ services:
     environment:
       POSTGRES_DB: sentinel_dna
       POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - sentinel_dna_postgres_password
     volumes: [sentinel-postgres:/var/lib/postgresql/data]
     healthcheck: {test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_dna"], interval: 10s, timeout: 5s, retries: 5}
   redis:
@@ -96,3 +122,12 @@ volumes:
   sentinel-data:
   sentinel-postgres:
   sentinel-redis:
+secrets:
+  sentinel_dna_secret_key:
+    file: ${SENTINEL_DNA_SECRET_KEY_FILE:?set external application secret file}
+  sentinel_dna_postgres_password:
+    file: ${SENTINEL_DNA_POSTGRES_PASSWORD_FILE:?set external database secret file}
+  sentinel_dna_smtp_username:
+    file: ${SENTINEL_DNA_SMTP_USERNAME_FILE:?set external SMTP username secret file}
+  sentinel_dna_smtp_password:
+    file: ${SENTINEL_DNA_SMTP_PASSWORD_FILE:?set external SMTP password secret file}

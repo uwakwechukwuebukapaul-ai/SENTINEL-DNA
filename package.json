@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "test": "node deployment/staging/scripts/run_node_tests.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

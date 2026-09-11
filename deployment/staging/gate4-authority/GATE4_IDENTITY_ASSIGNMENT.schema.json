@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gate 4 Identity Assignment",
+  "description": "Externally verified identity assignment for Gate 4 authority roles.",
+  "type": "object",
+  "required": [
+    "organization",
+    "human_identity",
+    "service_identity",
+    "identity_issuer",
+    "audience",
+    "subject_identifier",
+    "role",
+    "authorization_scope",
+    "validity",
+    "revocation_status",
+    "independence_declaration"
+  ],
+  "properties": {
+    "organization": {
+      "type": "string",
+      "minLength": 1
+    },
+    "human_identity": {
+      "type": "object",
+      "required": [
+        "name_reference",
+        "authentication_method"
+      ],
+      "properties": {
+        "name_reference": {
+          "type": "string"
+        },
+        "authentication_method": {
+          "type": "string"
+        }
+      }
+    },
+    "service_identity": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "identity_issuer": {
+      "type": "string"
+    },
+    "audience": {
+      "type": "string"
+    },
+    "subject_identifier": {
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "TRUST_ROOT_CUSTODIAN",
+        "INDEPENDENT_APPROVER",
+        "INDEPENDENT_REVIEWER",
+        "EVIDENCE_VERIFIER_OPERATOR"
+      ]
+    },
+    "authorization_scope": {
+      "type": "string"
+    },
+    "validity": {
+      "type": "object",
+      "required": [
+        "issued_at",
+        "expires_at"
+      ],
+      "properties": {
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "revocation_status": {
+      "enum": [
+        "ACTIVE",
+        "REVOKED",
+        "UNKNOWN"
+      ]
+    },
+    "independence_declaration": {
+      "type": "object",
+      "required": [
+        "conflict_checked",
+        "declared_independent"
+      ],
+      "properties": {
+        "conflict_checked": {
+          "type": "boolean"
+        },
+        "declared_independent": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

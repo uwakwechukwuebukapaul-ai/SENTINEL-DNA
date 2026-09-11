@@ -1,0 +1,9 @@
+[
+  {"name":"Afghanistan","code":"AF","flag":"🇦🇫","region":"Asia"},
+  {"name":"Germany","code":"DE","flag":"🇩🇪","region":"Europe"},
+  {"name":"Japan","code":"JP","flag":"🇯🇵","region":"Asia"},
+  {"name":"Nigeria","code":"NG","flag":"🇳🇬","region":"Africa"},
+  {"name":"United Arab Emirates","code":"AE","flag":"🇦🇪","region":"Asia"},
+  {"name":"United Kingdom","code":"GB","flag":"🇬🇧","region":"Europe"},
+  {"name":"United States","code":"US","flag":"🇺🇸","region":"Americas"}
+]

@@ -84,6 +84,8 @@ def test_staging_migration_and_application_share_the_authoritative_persistence_c
     migration = compose["services"]["migration"]
 
     assert migration["command"] == ["python", "-m", "database.run_migrations"]
+    assert migration["working_dir"] == "/app"
+    assert migration["environment"]["PYTHONPATH"] == "/app"
     assert migration["depends_on"]["postgres"]["condition"] == "service_healthy"
     assert app["depends_on"]["postgres"]["condition"] == "service_healthy"
     assert app["environment"]["DATABASE_URL"] == migration["environment"]["DATABASE_URL"]
@@ -93,10 +95,10 @@ def test_staging_migration_and_application_share_the_authoritative_persistence_c
 def test_staging_build_requires_candidate_derived_immutable_image_metadata():
     compose = _staging_compose()
     for service in (compose["services"]["app"], compose["services"]["migration"]):
-        assert service["image"] == "staging-app:${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}"
+        assert service["image"] == "${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}"
         args = service["build"]["args"]
         assert args["VCS_REF"] == "${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}"
         assert args["VCS_REF_FULL"] == "${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}"
         assert args["IMAGE_VERSION"] == "${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}"
         assert args["IMAGE_CREATED"] == "${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}"
-        assert args["IMAGE_SOURCE"] == "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+        assert args["IMAGE_SOURCE"] == "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"

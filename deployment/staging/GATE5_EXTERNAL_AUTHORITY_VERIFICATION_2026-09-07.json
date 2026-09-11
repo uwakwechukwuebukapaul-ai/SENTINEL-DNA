@@ -1,0 +1,20 @@
+{
+  "gate": "GATE5",
+  "verification_type": "external_authority",
+  "status": "PENDING_EXTERNAL_REVIEW",
+  "candidate_commit": "76937a33ea294e3b612b84b20a99a92a1ca22d47",
+  "candidate_tree": "8a6ed70f1fa8704dd9f92f019ecc9fcb043577c3",
+  "verification_scope": [
+    "candidate_identity",
+    "artifact_custody",
+    "runtime_validation",
+    "analyst_access_boundary"
+  ],
+  "external_authority_status": "PENDING_EXTERNAL_REVIEW",
+  "verified_by": null,
+  "verification_timestamp": null,
+  "notes": [
+    "No pilot authorization granted.",
+    "External verification remains required before activation decision."
+  ]
+}

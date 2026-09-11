@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-09-02T13:25:28.407Z",
+  "status": "BLOCKED_WITH_REASON",
+  "manifest_status": "BLOCKED",
+  "provider_status": "BLOCKED",
+  "image_digest_status": "PASS",
+  "origin_status": "BLOCKED",
+  "tenant_isolation_status": "PASS",
+  "audit_status": "PASS",
+  "final_readiness_decision": "BLOCKED_WITH_REASON",
+  "checks": [
+    {
+      "name": "provider_configured",
+      "status": "PASS",
+      "reason": "trusted browser provider configuration is present"
+    },
+    {
+      "name": "runtime_reachable",
+      "status": "BLOCKED",
+      "reason": "TB_RUNTIME_UNAVAILABLE"
+    },
+    {
+      "name": "browser_contract_valid",
+      "status": "BLOCKED",
+      "reason": "TB_RUNTIME_UNAVAILABLE"
+    },
+    {
+      "name": "origin_reachable",
+      "status": "BLOCKED",
+      "reason": "TB_ORIGIN_UNREACHABLE"
+    },
+    {
+      "name": "browser_auth_available",
+      "status": "BLOCKED",
+      "reason": "TB_RUNTIME_UNAVAILABLE"
+    },
+    {
+      "name": "evidence_directory_writable",
+      "status": "PASS",
+      "reason": "evidence directory is writable"
+    },
+    {
+      "name": "audit_prerequisites_available",
+      "status": "PASS",
+      "reason": "staging security and audit prerequisites are enabled"
+    },
+    {
+      "name": "activation_manifest_valid",
+      "status": "BLOCKED",
+      "reason": "TB_PROVIDER_MANIFEST_INVALID"
+    }
+  ]
+}

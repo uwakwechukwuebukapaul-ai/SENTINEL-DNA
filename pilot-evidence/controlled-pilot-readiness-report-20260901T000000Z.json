@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-09-01T07:52:31.882Z",
+  "status": "BLOCKED_WITH_REASON",
+  "manifest_status": "BLOCKED",
+  "provider_status": "BLOCKED",
+  "image_digest_status": "PASS",
+  "origin_status": "BLOCKED",
+  "tenant_isolation_status": "BLOCKED",
+  "audit_status": "BLOCKED",
+  "final_readiness_decision": "BLOCKED_WITH_REASON",
+  "checks": [
+    {
+      "name": "provider_configured",
+      "status": "BLOCKED",
+      "reason": "TB_PROVIDER_NOT_CONFIGURED"
+    },
+    {
+      "name": "runtime_reachable",
+      "status": "BLOCKED",
+      "reason": "TB_PROVIDER_MODULE_MISSING"
+    },
+    {
+      "name": "browser_contract_valid",
+      "status": "BLOCKED",
+      "reason": "TB_PROVIDER_MODULE_MISSING"
+    },
+    {
+      "name": "origin_reachable",
+      "status": "BLOCKED",
+      "reason": "certified staging origin is not reachable"
+    },
+    {
+      "name": "browser_auth_available",
+      "status": "BLOCKED",
+      "reason": "TB_PROVIDER_MODULE_MISSING"
+    },
+    {
+      "name": "evidence_directory_writable",
+      "status": "PASS",
+      "reason": "evidence directory is writable"
+    },
+    {
+      "name": "audit_prerequisites_available",
+      "status": "BLOCKED",
+      "reason": "SENTINEL_DNA_AUDIT_LOGGING_ENABLED must be 1"
+    },
+    {
+      "name": "activation_manifest_valid",
+      "status": "BLOCKED",
+      "reason": "TB_PROVIDER_MANIFEST_MISSING"
+    }
+  ]
+}

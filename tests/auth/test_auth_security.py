@@ -55,6 +55,19 @@ def test_auth_session_and_csrf(client):
     assert csrf.status_code == 200
 
 
+def test_unavailable_enterprise_providers_are_not_exposed_or_rendered(client):
+    response = client.get("/auth/enterprise/providers")
+
+    assert response.status_code == 200
+    assert response.get_json() == {"providers": []}
+
+    login = client.get("/login")
+    assert login.status_code == 200
+    assert b"Microsoft Entra ID" not in login.data
+    assert b"Google Workspace" not in login.data
+    assert b">Okta<" not in login.data
+
+
 def test_inactive_users_are_hidden_from_authentication_lookups_and_login(client):
     password = random_password()
     auth = client.application.container.require("auth_service")

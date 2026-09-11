@@ -32,7 +32,7 @@ trigger.
 ## 0. Founder/Product Ownership and Authority Boundaries
 
 - Founder / Product Owner: `Uwakwe chukwuebuka paul`
-- Repository namespace: `uwakwechukwuebukapaul-ai`
+- Repository namespace: `uwakwechukwuebukpaul-ai`
 - Repository Maintainer: `Uwakwe chukwuebuka paul`
 - Documentation author/maintainer: `Uwakwe chukwuebuka paul`
 - Role scope: `Founder / Product Owner / Repository Maintainer`

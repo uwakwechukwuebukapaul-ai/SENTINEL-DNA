@@ -8,6 +8,12 @@ __pycache__/
 *.sqlite
 *.sqlite3
 .env
+.env.*
+!.env.example
+!**/.env.example
+*.env
+*.secret
+secrets/
 *.release.env
 .sentinel-dna-release.env
 *.bak
@@ -30,3 +36,21 @@ staging.env
 *.pem
 *.p12
 *.pfx
+node_modules/
+node_modules/
+node_modules/
+*.runtime-state.txt
+*-readiness-2026-09-02.json
+gate4-final-readiness.json
+gate4-final-runtime-state.txt
+staging-runtime-state-2026-09-02.txt
+sentinel-dna-effective-compose-*.yml
+sentinel-dna-readiness-*.json
+staging-readiness-*.json
+sentinel-dna-pilot-baseline-2026-09-01.txt
+sentinel-dna-pilot-baseline-2026-09-01.txt
+
+# Generated staging Compose artifacts
+deployment/staging/docker-compose.rendered.yml
+deployment/staging/docker-compose.rendered.final.yml
+deployment/staging/docker-compose.rendered.current.yml

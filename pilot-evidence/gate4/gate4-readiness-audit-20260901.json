@@ -1,0 +1,84 @@
+{
+  "gate": "GATE4",
+  "status": "BLOCKED_WITH_REASON",
+  "git_revision": "bcfd3960bc013b079d5fa373eca6e8bafd109ebf",
+  "git_tree": "50676fb988840ce613de902cc781598116553d50",
+  "image_digest": "sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+  "architecture_assessment": {
+    "architecture": "PASS",
+    "security_controls": "PASS",
+    "fail_closed_behavior": "PASS",
+    "provenance": "PASS",
+    "evidence_model": "PASS",
+    "configuration_safety": "PASS"
+  },
+  "checks": {
+    "provider_boundary": {
+      "status": "PASS",
+      "assessment": "Checked-in facade and provider boundary are separated from the externally owned browser transport; only the certified runtime environment is forwarded."
+    },
+    "runtime_provider": {
+      "status": "BLOCKED",
+      "failure_category": "TB_RUNTIME_UNAVAILABLE",
+      "assessment": "The external approved Playwright/RPC runtime is not available in operator custody; the repository does not provide or simulate it."
+    },
+    "activation_manifest": {
+      "status": "BLOCKED",
+      "failure_category": "TB_PROVIDER_MANIFEST_MISSING",
+      "assessment": "No externally held activation manifest is configured for this audit environment; operator approval and digest reconciliation therefore cannot be verified."
+    },
+    "browser_contract": {
+      "status": "PASS",
+      "live_status": "NOT_RUN",
+      "assessment": "The facade and verifier enforce browser, tab, Playwright, visible-DOM, and capability surfaces; live validation is correctly withheld until the runtime is available."
+    },
+    "browser_auth": {
+      "status": "PASS",
+      "live_status": "NOT_RUN",
+      "assessment": "browserAuth is mandatory and credential values are not accepted or returned; provider verification discovers the capability without invoking it."
+    },
+    "certified_origin": {
+      "status": "PASS",
+      "live_status": "NOT_VERIFIED",
+      "assessment": "Origin checks are exact and HTTPS-scoped to https://sentinel-dna-staging:18443; reachability must be reverified on the approved staging host."
+    },
+    "evidence_generation": {
+      "status": "PASS",
+      "assessment": "Non-secret provider, activation, and readiness reports are generated with exclusive creation and safe status categories; no browser session or credential material is included."
+    }
+  },
+  "blockers": [
+    {
+      "category": "missing_external_dependency",
+      "failure_category": "TB_RUNTIME_UNAVAILABLE",
+      "detail": "Approved browser runtime module and trusted RPC transport are not present in external operator custody."
+    },
+    {
+      "category": "missing_operator_artifact",
+      "failure_category": "TB_PROVIDER_MANIFEST_MISSING",
+      "detail": "Externally held activation manifest with valid integrity, approval reference, certified origin, and image binding is not configured."
+    },
+    {
+      "category": "missing_runtime_custody",
+      "detail": "Runtime provenance, review reference, immutable runtime digest, teardown ownership, and operator approval record are not available for verification."
+    },
+    {
+      "category": "staging_preflight",
+      "failure_category": "TB_ORIGIN_UNREACHABLE",
+      "detail": "Certified staging-origin reachability was not established from this audit workspace and remains an operator-host prerequisite."
+    }
+  ],
+  "remediation": [
+    "Obtain the separately reviewed Playwright/RPC runtime module from approved custody; record its identity, provenance, immutable digest, reviewer, teardown owner, and scope without copying secrets.",
+    "Create or retrieve the externally held activation manifest for the certified origin, bind it to image digest sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653, and record human approval through the approved custody workflow.",
+    "Dot-source configure_gate4_provider_environment.ps1 with the external runtime module, external activation manifest, and the exact reviewed image digest.",
+    "Run provider verification and the activation dry-run on the approved staging host; proceed only when every required check returns PASS and the activation result is READY_FOR_ANALYST_PILOT."
+  ],
+  "evidence_safety": {
+    "secrets_included": false,
+    "credentials_included": false,
+    "browser_sessions_included": false,
+    "runtime_fabricated": false,
+    "security_controls_bypassed": false
+  }
+}

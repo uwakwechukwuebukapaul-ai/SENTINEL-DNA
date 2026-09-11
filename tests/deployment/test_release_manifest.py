@@ -189,6 +189,104 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
     assert secret not in str(failure.value)
 
 
+def _trusted_metadata(tmp_path: Path, release_sha: str, digest: str) -> Path:
+    metadata_path = tmp_path / "trusted" / "metadata.json"
+    metadata_path.parent.mkdir()
+    metadata_path.write_text(
+        json.dumps({"release_sha": release_sha, "image_digest": digest}) + "\n",
+        encoding="utf-8",
+    )
+    return metadata_path
+
+
+def test_image_bound_manifest_is_bound_to_trusted_metadata_and_oci_provenance(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    digest = "sha256:" + "a" * 64
+    created = "1970-01-01T00:00:00Z"
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_reference="deployment-app:current-release",
+        image_digest=digest,
+        image_id="sha256:image-id",
+        image_revision=release_sha,
+        image_created=created,
+        trusted_metadata_path=trusted_metadata,
+    )
+
+    assert manifest["repository"]["release_sha"] == release_sha
+    assert manifest["repository"]["tree_id"] == subprocess.check_output(
+        ["git", "rev-parse", "HEAD^{tree}"], cwd=clean_repository, text=True
+    ).strip()
+    assert manifest["image"]["digest"] == digest
+    assert manifest["image"]["oci_created"] == created
+    assert manifest["image"]["oci_revision"] == release_sha
+    assert manifest["image"]["git_revision_full"] == release_sha
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    verify_manifest(
+        manifest_path=manifest_path,
+        repository_root=clean_repository,
+        require_image=True,
+        require_trusted_metadata=True,
+        trusted_metadata_path=trusted_metadata,
+        expected_release_sha=release_sha,
+        expected_image_digest=digest,
+        expected_image_created=created,
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error"),
+    (
+        ("digest", "release manifest image digest does not match requested digest"),
+        ("timestamp", "release manifest image creation timestamp does not match requested timestamp"),
+    ),
+)
+def test_image_bound_manifest_rejects_wrong_digest_or_timestamp(
+    tmp_path: Path, clean_repository: Path, mutation: str, error: str
+) -> None:
+    digest = "sha256:" + "a" * 64
+    created = "1970-01-01T00:00:00Z"
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_digest=digest,
+        image_id="sha256:image-id",
+        image_created=created,
+        trusted_metadata_path=trusted_metadata,
+    )
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    with pytest.raises(ReleaseManifestError, match=error):
+        verify_manifest(
+            manifest_path=manifest_path,
+            repository_root=clean_repository,
+            require_image=True,
+            require_trusted_metadata=True,
+            trusted_metadata_path=trusted_metadata,
+            expected_release_sha=release_sha,
+            expected_image_digest=("sha256:" + "b" * 64) if mutation == "digest" else digest,
+            expected_image_created=("1970-01-01T00:00:01Z") if mutation == "timestamp" else created,
+        )
+
+
+def test_image_bound_manifest_rejects_missing_image_evidence(tmp_path: Path, clean_repository: Path) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    with pytest.raises(ReleaseManifestError, match="verified image digest is required"):
+        verify_manifest(
+            manifest_path=manifest_path,
+            repository_root=clean_repository,
+            require_image=True,
+            expected_release_sha=manifest["repository"]["release_sha"],
+        )
+
+
 def test_image_bound_manifest_requires_creation_timestamp(clean_repository: Path) -> None:
     with pytest.raises(ReleaseManifestError, match="creation timestamp is required"):
         build_manifest(

@@ -11,7 +11,7 @@ post-commit current HEAD is recorded in the custody handoff; neither later
 value is substituted into the pilot evidence.
 
 Repository/product owner reference: `Uwakwe chukwuebuka paul`
-(`uwakwechukwuebukapaul-ai` repository owner metadata). This identity records
+(`uwakwechukwuebukpaul-ai` repository owner metadata). This identity records
 repository/product documentation responsibility only; it is not a production
 database, monitoring, on-call, escalation, security, or independent approval
 attestation.

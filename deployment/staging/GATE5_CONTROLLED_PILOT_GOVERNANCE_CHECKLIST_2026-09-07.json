@@ -1,0 +1,34 @@
+{
+  "items": [
+    {
+      "control": "Candidate identity remains unchanged",
+      "status": "READY"
+    },
+    {
+      "control": "Restricted analyst access path configured",
+      "status": "READY"
+    },
+    {
+      "control": "Runtime validation completed",
+      "status": "READY"
+    },
+    {
+      "control": "Browser authentication validation completed",
+      "status": "READY"
+    },
+    {
+      "control": "Evidence capture workflow available",
+      "status": "READY"
+    },
+    {
+      "control": "Audit logging remains active",
+      "status": "READY"
+    },
+    {
+      "control": "External authority verification",
+      "status": "PENDING_EXTERNAL_REVIEW"
+    }
+  ],
+  "decision": "BLOCKED",
+  "external_authority_status": "PENDING_EXTERNAL_REVIEW"
+}

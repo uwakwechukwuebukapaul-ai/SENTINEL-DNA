@@ -281,7 +281,7 @@ Sentinel DNA focuses on reducing investigation time while keeping analysts in co
 
 Founder / Product Owner: `Uwakwe chukwuebuka paul`
 
-Repository namespace: `uwakwechukwuebukapaul-ai`
+Repository namespace: `uwakwechukwuebukpaul-ai`
 
 Repository and documentation maintainer: `Uwakwe chukwuebuka paul`
 

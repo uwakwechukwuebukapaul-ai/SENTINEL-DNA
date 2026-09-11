@@ -8,10 +8,15 @@ with database.session() as conn:
 
     cursor = conn.cursor()
 
-    cursor.execute("SELECT sqlite_version();")
+    cursor.execute("SELECT version();")
 
-    version = cursor.fetchone()[0]
+    row = cursor.fetchone()
 
-    print("SQLite Version :", version)
+    if isinstance(row, dict):
+        version = row["version"]
+    else:
+        version = row[0]
+
+    print("PostgreSQL Version :", version)
 
 print("\nDatabase connection successful!")

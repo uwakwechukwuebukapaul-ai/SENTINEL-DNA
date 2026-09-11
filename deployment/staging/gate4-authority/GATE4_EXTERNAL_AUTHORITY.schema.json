@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gate 4 External Authority Assignment",
+  "description": "Defines externally governed authority roles required before Gate 4 authorization.",
+  "type": "object",
+  "required": [
+    "governance_package_id",
+    "trust_root_custodian",
+    "independent_approver",
+    "independent_reviewer",
+    "separation_of_duties",
+    "external_verification"
+  ],
+  "properties": {
+    "governance_package_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust_root_custodian": {
+      "$ref": "#/$defs/authority_identity"
+    },
+    "independent_approver": {
+      "$ref": "#/$defs/authority_identity"
+    },
+    "independent_reviewer": {
+      "$ref": "#/$defs/authority_identity"
+    },
+    "separation_of_duties": {
+      "type": "object",
+      "required": [
+        "verified",
+        "relationships"
+      ],
+      "properties": {
+        "verified": {
+          "type": "boolean"
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "role_a",
+              "role_b",
+              "status"
+            ],
+            "properties": {
+              "role_a": {
+                "type": "string"
+              },
+              "role_b": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "SATISFIED",
+                  "REQUIRES_EXTERNAL_VERIFICATION",
+                  "CONFLICT",
+                  "MISSING",
+                  "REJECTED"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "external_verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evidence_reference",
+        "evidence_digest",
+        "verifier_identity",
+        "signature_reference",
+        "expires_at"
+      ],
+      "properties": {
+        "status": { "const": "VERIFIED" },
+        "evidence_reference": { "type": "string", "minLength": 1 },
+        "evidence_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "verifier_identity": { "type": "string", "minLength": 1 },
+        "signature_reference": { "type": "string", "minLength": 1 },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "authority_identity": {
+      "type": "object",
+      "required": [
+        "organization",
+        "human_role",
+        "identity_issuer",
+        "subject_identifier",
+        "authorization_scope",
+        "validity",
+        "revocation_status"
+      ],
+      "properties": {
+        "organization": {
+          "type": "string"
+        },
+        "human_role": {
+          "type": "string"
+        },
+        "identity_issuer": {
+          "type": "string"
+        },
+        "subject_identifier": {
+          "type": "string"
+        },
+        "authorization_scope": {
+          "type": "string"
+        },
+        "validity": {
+          "type": "object",
+          "required": [
+            "issued_at",
+            "expires_at"
+          ]
+        },
+        "revocation_status": {
+          "enum": [
+            "ACTIVE",
+            "REVOKED",
+            "UNKNOWN"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -23,7 +23,7 @@ independent-review use. It does not authorize deployment or Gate 1.
 - OCI provenance: **PASS**.
   - Full revision: `8eef9afd588a1dda80975bb997e4baae06a1d06d`
   - OCI revision: `8eef9afd5`
-  - OCI source: `https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA`
+  - OCI source: `https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA`
   - OCI version: exact full release SHA
   - Created: **NOT MEASURED FOR THIS COMMIT**
 - Image-bound release manifest: **EXTERNAL GATE**. Image ID, RepoDigest, and

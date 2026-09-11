@@ -1,26 +1,46 @@
 services:
+
+  favp-volume-init:
+    image: ${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}
+    user: "0:0"
+    network_mode: "none"
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/lib/sentinel/favp-evidence
+        chown -R 10001:10001 /var/lib/sentinel/favp-evidence
+        chmod 750 /var/lib/sentinel/favp-evidence
+        echo "FAVP evidence volume initialized"
+    volumes:
+      - staging_favp_evidence:/var/lib/sentinel/favp-evidence
+
   edge:
-    image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set external staging edge image}
+    image: ${SENTINEL_DNA_STAGING_EDGE_IMAGE:?set immutable staging edge image}
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:18443:443"
     depends_on:
       app:
         condition: service_healthy
-    ports:
-      - "0.0.0.0:8443:443"
     volumes:
       - type: bind
         source: ${SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE:?set external edge configuration}
         target: /etc/nginx/conf.d/default.conf
         read_only: true
       - type: bind
-        source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}
-        target: /etc/nginx/tls
+        source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}/staging-server-fullchain.crt
+        target: /etc/nginx/tls/staging-server.crt
+        read_only: true
+      - type: bind
+        source: ${SENTINEL_DNA_STAGING_TLS_DIR:?set external staging TLS directory}/staging-server.key
+        target: /etc/nginx/tls/staging-server.key
         read_only: true
     networks:
       - staging_edge
 
   app:
-    image: staging-app:${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
+    image: ${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -28,9 +48,9 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
-        IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
+        IMAGE_SOURCE: https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
-    command: ["gunicorn", "wsgi:application", "--bind", "0.0.0.0:5000", "--workers", "1", "--access-logfile", "-", "--error-logfile", "-"]
+    command: ["gunicorn", "--config", "/app/gunicorn.conf.py", "wsgi:application", "--bind", "0.0.0.0:5000", "--workers", "1", "--access-logfile", "-", "--error-logfile", "-"]
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -42,12 +62,39 @@ services:
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"
       SENTINEL_DNA_SECURE_COOKIES: "1"
       FLASK_DEBUG: "0"
+      SENTINEL_DNA_TENANT_ISOLATION_ENABLED: "1"
+      SENTINEL_DNA_AUDIT_LOGGING_ENABLED: "1"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
+      SENTINEL_DNA_FAVP_OPERATIONS_ENABLED: ${SENTINEL_DNA_FAVP_OPERATIONS_ENABLED:-0}
+      SENTINEL_DNA_FAVP_SYNTHETIC_ONLY: ${SENTINEL_DNA_FAVP_SYNTHETIC_ONLY:-1}
+      SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY_FILE: /run/secrets/staging_trusted_browser_service_key
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST:?set trusted-browser service host}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT:?set trusted-browser service port}
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE: single-instance
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLICA_COUNT: "1"
+      SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
-      # The named volume is mounted at /var/lib/sentinel. Keep the SQLite
-      # compatibility path at that mount root; staging's authoritative
-      # backend remains the private PostgreSQL DATABASE_URL below.
+      SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?set SENTINEL_DNA_EMAIL_PROVIDER=smtp}
+      SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?set SMTP relay host}
+      SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
+      SENTINEL_DNA_SMTP_USERNAME_FILE: /run/secrets/staging_smtp_username
+      SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/staging_smtp_password
+      SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
+      SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?set verified sender address}
+      SENTINEL_DNA_ENTRA_OIDC_ENABLED: "1"
+      SENTINEL_DNA_ENTRA_CLIENT_SECRET_REFERENCE: SENTINEL_DNA_ENTRA_CLIENT_SECRET
+      SENTINEL_DNA_ENTRA_CLIENT_SECRET_FILE: /run/secrets/entra_client_secret
+      SENTINEL_DNA_ENTRA_TENANT_ID: ${SENTINEL_DNA_ENTRA_TENANT_ID:?set SENTINEL_DNA_ENTRA_TENANT_ID}
+      SENTINEL_DNA_ENTRA_CLIENT_ID: ${SENTINEL_DNA_ENTRA_CLIENT_ID:?set SENTINEL_DNA_ENTRA_CLIENT_ID}
+      SENTINEL_DNA_ENTRA_REDIRECT_URI: https://localhost/auth/enterprise/entra/callback
+      SENTINEL_DNA_CERTIFIED_ORIGIN: ${SENTINEL_DNA_CERTIFIED_ORIGIN:-https://localhost}
+      SENTINEL_DNA_ENTRA_ISSUER: ${SENTINEL_DNA_ENTRA_ISSUER:-}
+      SENTINEL_DNA_ENTRA_AUTHORIZATION_ENDPOINT: ${SENTINEL_DNA_ENTRA_AUTHORIZATION_ENDPOINT:-}
+      SENTINEL_DNA_ENTRA_TOKEN_ENDPOINT: ${SENTINEL_DNA_ENTRA_TOKEN_ENDPOINT:-}
+      SENTINEL_DNA_ENTRA_JWKS_URI: ${SENTINEL_DNA_ENTRA_JWKS_URI:-}
+      SENTINEL_DNA_ENTRA_DISCOVERY_URI: https://login.microsoftonline.com/${SENTINEL_DNA_ENTRA_TENANT_ID}/v2.0/.well-known/openid-configuration
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
       SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
@@ -57,24 +104,111 @@ services:
         target: sentinel_dna_secret_key
       - source: staging_postgres_password
         target: sentinel_dna_postgres_password
+      - source: staging_smtp_username
+        target: staging_smtp_username
+      - source: staging_smtp_password
+        target: staging_smtp_password
+      - source: staging_entra_client_secret
+        target: entra_client_secret
+      - source: staging_trusted_browser_service_key
+        target: staging_trusted_browser_service_key
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     volumes:
       - staging_app_data:/var/lib/sentinel
+      - staging_favp_evidence:/var/lib/sentinel/favp-evidence
     networks:
       - staging_edge
       - staging_internal
+      - trusted_browser_control
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/ready')"]
       interval: 30s
       timeout: 5s
       retries: 3
 
+  trusted-browser:
+    image: ${SENTINEL_DNA_TRUSTED_BROWSER_IMAGE:?set immutable trusted-browser image}
+    restart: "no"
+    init: true
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    shm_size: "1gb"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./trusted_browser_runtime/seccomp-chromium.json
+    environment:
+      SENTINEL_DNA_ENV: staging
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY_FILE: /run/secrets/staging_trusted_browser_service_key
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST:?set trusted-browser service host}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT:?set trusted-browser service port}
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE: single-instance
+      SENTINEL_DNA_TRUSTED_BROWSER_REPLICA_COUNT: "1"
+      SENTINEL_DNA_CERTIFIED_ORIGIN: ${SENTINEL_DNA_CERTIFIED_ORIGIN:?set certified origin}
+      SENTINEL_DNA_APPROVED_RUNTIME_DIGEST: ${SENTINEL_DNA_APPROVED_RUNTIME_DIGEST:?set approved runtime digest}
+      SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST: ${SENTINEL_DNA_TRUSTED_BROWSER_ACTIVATION_MANIFEST:?set activation manifest}
+      SENTINEL_DNA_IMAGE_DIGEST: ${SENTINEL_DNA_IMAGE_DIGEST:?set immutable image digest}
+      SENTINEL_DNA_EGRESS_POLICY_REFERENCE: ${SENTINEL_DNA_EGRESS_POLICY_REFERENCE:?set egress policy reference}
+      SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY:?set egress readiness}
+      SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_PROXY: ${SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_PROXY:?set gateway proxy endpoint}
+      SENTINEL_DNA_EGRESS_POLICY_DIGEST: ${SENTINEL_DNA_EGRESS_POLICY_DIGEST:?set egress policy digest}
+    expose:
+      - "3000"
+    networks:
+      - trusted_browser_control
+      - trusted_browser_egress
+    depends_on:
+      egress-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "deployment/staging/trusted_browser_runtime/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  egress-gateway:
+    image: ${SENTINEL_DNA_EGRESS_GATEWAY_IMAGE:?set immutable egress gateway image}
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      SENTINEL_DNA_EGRESS_GATEWAY_BIND: ${SENTINEL_DNA_EGRESS_GATEWAY_BIND:?set gateway bind address}
+      SENTINEL_DNA_EGRESS_GATEWAY_PORT: ${SENTINEL_DNA_EGRESS_GATEWAY_PORT:?set gateway port}
+      SENTINEL_DNA_EGRESS_POLICY_FILE: /run/secrets/trusted_browser_egress_policy
+      SENTINEL_DNA_EGRESS_POLICY_DIGEST: ${SENTINEL_DNA_EGRESS_POLICY_DIGEST:?set egress policy digest}
+    volumes:
+      - type: bind
+        source: ${SENTINEL_DNA_EGRESS_POLICY_FILE:?set external egress policy file}
+        target: /run/secrets/trusted_browser_egress_policy
+        read_only: true
+    expose:
+      - "${SENTINEL_DNA_EGRESS_GATEWAY_PORT:?set gateway port}"
+    networks:
+      - trusted_browser_egress
+      - trusted_browser_gateway_uplink
+    healthcheck:
+      test: ["CMD", "node", "deployment/staging/egress_gateway/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   migration:
-    image: staging-app:${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
+    image: ${SENTINEL_DNA_STAGING_APP_IMAGE:?set immutable staging app image}
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -82,20 +216,28 @@ services:
         VCS_REF: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         VCS_REF_FULL: ${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}
         IMAGE_VERSION: ${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}
-        IMAGE_SOURCE: https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA
+        IMAGE_SOURCE: https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA
         IMAGE_CREATED: ${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}
     command: ["python", "-m", "database.run_migrations"]
+    working_dir: /app
     restart: "no"
     read_only: true
     tmpfs:
       - /tmp
     environment:
+      PYTHONPATH: /app
       SENTINEL_DNA_ENV: staging
       SENTINEL_DNA_PILOT_ACCESS_REQUIRED: "1"
       SENTINEL_DNA_SECURE_COOKIES: "1"
       FLASK_DEBUG: "0"
+      SENTINEL_DNA_TENANT_ISOLATION_ENABLED: "1"
+      SENTINEL_DNA_AUDIT_LOGGING_ENABLED: "1"
       SENTINEL_DNA_CONFIG_SOURCE_CLASSIFICATION: external_non_production
       SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION: disposable_staging
+      SENTINEL_DNA_FAVP_OPERATIONS_ENABLED: ${SENTINEL_DNA_FAVP_OPERATIONS_ENABLED:-0}
+      SENTINEL_DNA_FAVP_SYNTHETIC_ONLY: ${SENTINEL_DNA_FAVP_SYNTHETIC_ONLY:-1}
+      SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
+      SENTINEL_DNA_FAVP_EVIDENCE_DIR: /var/lib/sentinel/favp-evidence
       SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
@@ -105,6 +247,10 @@ services:
         target: sentinel_dna_secret_key
       - source: staging_postgres_password
         target: sentinel_dna_postgres_password
+      - source: staging_trusted_browser_service_key
+        target: staging_trusted_browser_service_key
+    volumes:
+      - staging_favp_evidence:/var/lib/sentinel/favp-evidence
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,7 +258,7 @@ services:
       - staging_internal
 
   postgres:
-    image: postgres:16-alpine
+    image: ${SENTINEL_DNA_POSTGRES_IMAGE:?set immutable postgres image}
     restart: unless-stopped
     environment:
       POSTGRES_DB: sentinel_dna
@@ -132,7 +278,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: ${SENTINEL_DNA_REDIS_IMAGE:?set immutable redis image}
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -149,14 +295,30 @@ networks:
   staging_edge:
   staging_internal:
     internal: true
+  trusted_browser_control:
+    internal: true
+  trusted_browser_egress:
+    internal: true
+  trusted_browser_gateway_uplink:
+    name: ${SENTINEL_DNA_TRUSTED_BROWSER_GATEWAY_UPLINK_NETWORK:?set gateway uplink network}
+    external: true
 
 secrets:
   staging_app_secret_key:
-    environment: SENTINEL_DNA_SECRET_KEY
+    file: ${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}
   staging_postgres_password:
-    environment: SENTINEL_DNA_POSTGRES_PASSWORD
+    file: ${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}
+  staging_smtp_username:
+    file: ${SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE:?set external SMTP username secret file}
+  staging_smtp_password:
+    file: ${SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE:?set external SMTP password secret file}
+  staging_entra_client_secret:
+    file: ${SENTINEL_DNA_STAGING_ENTRA_CLIENT_SECRET_FILE:?set external Entra client secret file}
+  staging_trusted_browser_service_key:
+    file: ${SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE:?set external trusted-browser service key file}
 
 volumes:
   staging_app_data:
+  staging_favp_evidence:
   staging_postgres_data:
   staging_redis_data:

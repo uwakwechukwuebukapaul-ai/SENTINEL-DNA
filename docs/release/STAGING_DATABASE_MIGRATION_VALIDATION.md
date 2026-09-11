@@ -77,6 +77,15 @@ database migrations applied: 1,2,3,4,5,6,7,8
 database migrations applied: none
 ```
 
+When the separately approved FAVP staging feature is enabled with
+`SENTINEL_DNA_FAVP_OPERATIONS_ENABLED=1`, the staging-only migration 9 and
+evidence-volume bootstrap are selected instead:
+
+```text
+database migrations applied: 1,2,3,4,5,6,7,8,9
+database migrations applied: none
+```
+
 ### Automated tests
 
 ```text
@@ -161,12 +170,14 @@ docker compose \
 docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
-  --file deployment/staging/docker-compose.yml run --rm migration
+  --file deployment/staging/docker-compose.yml run --rm --build migration
 ```
 
 Expected state:
 
-- `schema_migrations` contains versions 1 through 8.
+- baseline staging contains versions 1 through 8; an explicitly enabled FAVP
+  staging run contains versions 1 through 9, including the staging-only FAVP
+  migration.
 - All nine required tables are present.
 - The second migration run reports `database migrations applied: none`.
 - PostgreSQL and Redis are healthy.

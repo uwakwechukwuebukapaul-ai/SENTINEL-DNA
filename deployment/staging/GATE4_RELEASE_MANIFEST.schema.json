@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sentinel-dna.gate4.release-manifest.v1",
+  "title": "Gate4 signed release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "release_id", "repository", "commit_sha", "tree_sha", "activation_manifest", "custody_package", "artifacts", "created_at", "expires_at", "status", "revocation_status_reference"],
+  "properties": {
+    "schema_version": {"const": "gate4.release-manifest.v1"},
+    "release_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._/-]+$"},
+    "repository": {"$ref": "#/$defs/repository"},
+    "commit_sha": {"$ref": "#/$defs/commit"},
+    "tree_sha": {"$ref": "#/$defs/commit"},
+    "activation_manifest": {"$ref": "#/$defs/activation"},
+    "custody_package": {"$ref": "#/$defs/digested_identity"},
+    "artifacts": {"$ref": "#/$defs/artifacts"},
+    "target_platform": {"type": "string", "minLength": 1},
+    "created_at": {"$ref": "#/$defs/timestamp"},
+    "expires_at": {"$ref": "#/$defs/timestamp"},
+    "status": {"enum": ["ACTIVE", "SUPERSEDED", "REVOKED"]},
+    "revocation_status_reference": {"type": "string", "minLength": 1},
+    "supersedes_release_id": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+    "identity": {"type": "string", "minLength": 1, "pattern": "^[^\\s]+$"},
+    "repository": {
+      "type": "object", "additionalProperties": false,
+      "required": ["owner", "name", "full_name", "repository_id"],
+      "properties": {
+        "owner": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$"},
+        "name": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$"},
+        "full_name": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+        "repository_id": {"type": "string", "pattern": "^[0-9]+$"}
+      }
+    },
+    "digested_identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "digest"],
+      "properties": {"identity": {"$ref": "#/$defs/identity"}, "digest": {"$ref": "#/$defs/digest"}}
+    },
+    "activation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["validator_path", "validator_sha256", "instance_reference", "instance_sha256"],
+      "properties": {
+        "validator_path": {"const": "deployment/staging/scripts/trusted_browser_activation_manifest.mjs"},
+        "validator_sha256": {"$ref": "#/$defs/digest"},
+        "instance_reference": {"$ref": "#/$defs/identity"},
+        "instance_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "image": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "digest", "source_commit", "source_tree", "supplier", "signer", "provenance"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/identity"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "source_commit": {"$ref": "#/$defs/commit"},
+        "source_tree": {"$ref": "#/$defs/commit"},
+        "supplier": {"$ref": "#/$defs/identity"},
+        "signer": {"$ref": "#/$defs/identity"},
+        "provenance": {"$ref": "#/$defs/digested_identity"}
+      }
+    },
+    "external_image": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "digest", "supplier", "signer", "provenance"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/identity"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "supplier": {"$ref": "#/$defs/identity"},
+        "signer": {"$ref": "#/$defs/identity"},
+        "provenance": {"$ref": "#/$defs/digested_identity"}
+      }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "digest", "provenance"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/identity"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "provenance": {"$ref": "#/$defs/digested_identity"}
+      }
+    },
+    "browser": {
+      "type": "object", "additionalProperties": false,
+      "required": ["image", "playwright_version", "browser_revision", "browser_version", "executable"],
+      "properties": {
+        "image": {"$ref": "#/$defs/digested_identity"},
+        "playwright_version": {"type": "string", "minLength": 1},
+        "browser_revision": {"type": "string", "minLength": 1},
+        "browser_version": {"type": "string", "minLength": 1},
+        "executable": {"$ref": "#/$defs/digested_identity"}
+      }
+    },
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sentinel_built_images", "external_boundary_images", "third_party_images", "trusted_browser", "egress_policy", "tls_certified_origin", "browserauth", "sbom", "provenance", "deployment"],
+      "properties": {
+        "sentinel_built_images": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/image"}},
+        "external_boundary_images": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/external_image"}},
+        "third_party_images": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/external_image"}},
+        "trusted_browser": {"$ref": "#/$defs/browser"},
+        "egress_policy": {"$ref": "#/$defs/digested_identity"},
+        "tls_certified_origin": {"$ref": "#/$defs/digested_identity"},
+        "browserauth": {"$ref": "#/$defs/digested_identity"},
+        "sbom": {"$ref": "#/$defs/digested_identity"},
+        "provenance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/digested_identity"}},
+        "deployment": {"$ref": "#/$defs/digested_identity"}
+      }
+    }
+  }
+}

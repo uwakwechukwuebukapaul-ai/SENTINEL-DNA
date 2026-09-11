@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -397,6 +398,76 @@ def test_deployment_validation_requires_exact_trusted_release_artifact(tmp_path)
     assert validate_configuration(environ=environment, repository_root=ROOT) == []
 
 
+def test_deployment_validation_accepts_release_tag_and_seven_character_revision(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "b" * 64
+    trusted = tmp_path / "metadata.json"
+    trusted.write_text(
+        json.dumps(
+            {
+                "image_digest": digest,
+                "release_sha": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    trusted.chmod(0o444)
+    environment = {
+        "SENTINEL_DNA_IMAGE_TAG": "sentinel-dna-gate2-certified-2026-08-31",
+        "SENTINEL_DNA_IMAGE_REVISION": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"][:7],
+        "SENTINEL_DNA_IMAGE_REVISION_FULL": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+        "SENTINEL_DNA_IMAGE_CREATED": "2026-08-31T12:39:35Z",
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+    }
+
+    assert validate_configuration(environ=environment, repository_root=ROOT) == []
+
+    full_revision_as_short = dict(environment)
+    full_revision_as_short["SENTINEL_DNA_IMAGE_REVISION"] = metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"]
+    assert validate_configuration(environ=full_revision_as_short, repository_root=ROOT) == [
+        "SENTINEL_DNA_IMAGE_REVISION:invalid",
+    ]
+
+
+def test_deployment_validation_rejects_short_revision_not_bound_to_full_revision(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "c" * 64
+    trusted = tmp_path / "metadata.json"
+    trusted.write_text(
+        json.dumps(
+            {
+                "image_digest": digest,
+                "release_sha": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    trusted.chmod(0o444)
+    environment = {
+        "SENTINEL_DNA_IMAGE_TAG": "sentinel-dna-gate2-certified-2026-08-31",
+        "SENTINEL_DNA_IMAGE_REVISION": "deadbee",
+        "SENTINEL_DNA_IMAGE_REVISION_FULL": metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"],
+        "SENTINEL_DNA_IMAGE_CREATED": "2026-08-31T12:39:35Z",
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+    }
+
+    errors = validate_configuration(environ=environment, repository_root=ROOT)
+
+    assert errors == ["SENTINEL_DNA_IMAGE_REVISION:does-not-match-full-revision"]
+
+
 def test_controlled_production_validation_requires_postgresql_url():
     metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
     environment = {
@@ -439,8 +510,10 @@ def test_compose_preserves_internal_application_port_and_no_generated_env_mount(
     assert 'ports: ["80:80", "443:443"]' in compose
     assert "SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR" in compose
     assert "target: /etc/nginx/tls" in compose
-    assert "SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY" in compose
-    assert "POSTGRES_PASSWORD:?set POSTGRES_PASSWORD" in compose
+    assert "SENTINEL_DNA_SECRET_KEY_FILE:?set external application secret file" in compose
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE:?set external database secret file" in compose
+    assert "SENTINEL_DNA_SMTP_PASSWORD_FILE:?set external SMTP password secret file" in compose
+    assert "PGPASSWORD" not in compose
     assert "SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST" in compose
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:?set SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in compose
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json" in compose
@@ -545,7 +618,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "--password-stdin" in _step_text(login)
     publish = _step(workflow, "Publish immutable candidate image to private GHCR")
     publish_text = _step_text(publish)
-    assert "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna" in publish_text
+    assert "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna" in publish_text
     assert 'sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}' in publish_text
     assert "docker push" in publish_text
     assert "REPO_DIGESTS_JSON" in publish_text
@@ -585,8 +658,11 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "PUBLISHED_IMAGE_DIGEST" in _step_text(manifest)
     assert "PUBLISHED_IMAGE_ID" in _step_text(manifest)
     assert "SENTINEL_DNA_IMAGE_CREATED" in _step_text(manifest)
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in _step_text(manifest)
     verify_manifest = _step(workflow, "Verify image-bound release manifest")
     assert "--require-image" in _step_text(verify_manifest)
+    assert "--require-trusted-metadata" in _step_text(verify_manifest)
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in _step_text(verify_manifest)
     upload = _step(workflow, "Upload non-secret image release evidence")
     assert "sentinel-dna-image-provenance.json" in upload["with"]["path"]
     assert "sentinel-dna-release-manifest-image-bound.json" in upload["with"]["path"]

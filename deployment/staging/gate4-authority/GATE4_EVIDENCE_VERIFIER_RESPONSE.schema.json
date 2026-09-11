@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gate 4 EvidenceVerifier Response",
+  "description": "Authenticated external EvidenceVerifier response contract.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "nonce",
+    "request_hash",
+    "candidate_tuple_hash",
+    "evidence_digest",
+    "verification_result",
+    "verified_at",
+    "expires_at",
+    "verifier_identity",
+    "signature"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nonce": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_hash": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "candidate_tuple_hash": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "evidence_digest": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "verification_result": {
+      "enum": [
+        "PASS",
+        "BLOCKED"
+      ]
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "verifier_identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "signature": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "key_id",
+        "signature_value",
+        "trust_root"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "signature_value": {
+          "type": "string"
+        },
+        "trust_root": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "required": [
+        "issuer",
+        "subject",
+        "audience"
+      ],
+      "properties": {
+        "issuer": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

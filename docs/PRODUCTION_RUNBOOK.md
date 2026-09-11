@@ -27,18 +27,21 @@ the artifact outside the repository with the checked-in verifier:
 $image = "deployment-app:<reviewed-full-sha>"
 $revision = "<reviewed-full-sha>"
 $digest = "sha256:<reviewed-image-digest>"
+$created = "<reviewed-image-created-UTC>"
 $manifest = "C:\ProgramData\Sentinel-DNA\release\metadata.json"
 python deployment/scripts/prepare_trusted_release_metadata.py `
   --image $image `
   --expected-revision $revision `
   --expected-digest $digest `
+  --expected-image-created $created `
   --output $manifest `
   --docker-executable "C:\Users\<operator>\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 ```
 
 The verifier derives the current Git revision, inspects the local immutable
-image digest and OCI revision/source, rejects mismatches, and atomically writes
-only `release_sha` and `image_digest`. The output directory must be outside the
+image digest, OCI revision/source, and OCI creation timestamp, rejects
+mismatches, and atomically writes only `release_sha` and `image_digest`. The
+output directory must be outside the
 source tree and protected from untrusted users. On Linux the file and parent
 directory must not be group/other writable; on Windows use an ACL granting
 read access to the Docker engine and denying write access to the application

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "trusted_browser_provider_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_configuration": {
+    "trusted_browser_client": "repository:trusted_browser_service/browser-client.mjs",
+    "approved_provider": "repository:trusted_browser_service/providers/playwright-runtime-provider.mjs",
+    "runtime_environment": "codex-app",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "checks": {
+    "provider": "PASS",
+    "runtime": "FAIL",
+    "origin": "NOT_RUN",
+    "browser_contract": "NOT_RUN",
+    "browser_auth": "NOT_RUN"
+  },
+  "controls": {
+    "provider_module_existence_enforced": true,
+    "provider_export_validation_enforced": true,
+    "runtime_contract_enforced": true,
+    "certified_origin_restriction_enforced": true,
+    "browser_contract_enforced": true,
+    "browser_auth_capability_required": true,
+    "credentials_or_tokens_in_evidence": false,
+    "browserAuth_invoked": false,
+    "browser_launched_by_generator": false
+  },
+  "failure_category": "TB_RUNTIME_UNAVAILABLE",
+  "evidence_sha256": "7cf7e8e4024cd2945f00cd7b1b1224f6a9f2ee7374417cd190f99af99bc06571"
+}
