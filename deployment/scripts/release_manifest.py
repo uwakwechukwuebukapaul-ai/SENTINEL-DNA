@@ -22,7 +22,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = "sentinel-dna-release-manifest-v2"
-EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
+EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 CREATED_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")

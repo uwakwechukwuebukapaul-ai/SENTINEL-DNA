@@ -16,7 +16,7 @@ prerequisites is complete.
 | Image ID | **NOT MEASURED FOR THIS COMMIT** |
 | RepoDigest | **NOT MEASURED FOR THIS COMMIT** |
 | OCI revision | `8eef9afd5` |
-| OCI source | `https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA` |
+| OCI source | `https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA` |
 | OCI version | Exact full certified SHA |
 | Runtime user | `sentinel` |
 | Command | `gunicorn wsgi:application` |

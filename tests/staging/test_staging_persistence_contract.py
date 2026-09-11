@@ -101,4 +101,4 @@ def test_staging_build_requires_candidate_derived_immutable_image_metadata():
         assert args["VCS_REF_FULL"] == "${SENTINEL_DNA_IMAGE_REVISION_FULL:?set SENTINEL_DNA_IMAGE_REVISION_FULL}"
         assert args["IMAGE_VERSION"] == "${SENTINEL_DNA_IMAGE_TAG:?set SENTINEL_DNA_IMAGE_TAG}"
         assert args["IMAGE_CREATED"] == "${SENTINEL_DNA_IMAGE_CREATED:?set SENTINEL_DNA_IMAGE_CREATED}"
-        assert args["IMAGE_SOURCE"] == "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
+        assert args["IMAGE_SOURCE"] == "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"

@@ -28,7 +28,7 @@ if __name__ == "__main__" and str(REPOSITORY_ROOT) not in sys.path:
 
 from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest
 
-EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
+EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 EXPECTED_METADATA_FIELDS = frozenset(("release_sha", "image_digest"))
 EXPECTED_DOCKER_CONTEXT = "desktop-linux"
 EXPECTED_COMPOSE_PROJECT = "deployment"
