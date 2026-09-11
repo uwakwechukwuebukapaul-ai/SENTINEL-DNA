@@ -8,7 +8,7 @@ RUN set -eu; \
     test "$VCS_REF" = "$VCS_REF_FULL"; \
     printf '%s\n' "$VCS_REF_FULL" | grep -Eq '^[0-9a-f]{40}$'; \
     test "$IMAGE_VERSION" = "$VCS_REF_FULL"; \
-    test "$IMAGE_SOURCE" = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"; \
+    test "$IMAGE_SOURCE" = "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"; \
     test "$IMAGE_CREATED" != ""; \
     test "$IMAGE_CREATED" != "unknown"; \
     printf '%s\n' "$IMAGE_CREATED" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'

@@ -173,7 +173,7 @@ jobs:
             --output "$manifest" \
             --image-reference "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" \
             --image-revision "$SENTINEL_DNA_IMAGE_REVISION_FULL" \
-            --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+            --image-source "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
           python deployment/scripts/release_manifest.py verify \
             --manifest "$manifest" \
             --expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
@@ -191,7 +191,7 @@ jobs:
             --build-arg "VCS_REF=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
             --build-arg "VCS_REF_FULL=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
             --build-arg "IMAGE_VERSION=${SENTINEL_DNA_IMAGE_TAG}" \
-            --build-arg "IMAGE_SOURCE=https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
+            --build-arg "IMAGE_SOURCE=https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA" \
             --build-arg "IMAGE_CREATED=${SENTINEL_DNA_IMAGE_CREATED}" \
             .
 
@@ -204,7 +204,7 @@ jobs:
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "com.sentinel-dna.git.revision.full"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$SENTINEL_DNA_IMAGE_TAG"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
 
       - name: Verify OCI creation metadata
         shell: bash
@@ -309,7 +309,7 @@ jobs:
               raise SystemExit("published image ID is missing")
           if os.environ["OCI_REVISION"] != os.environ["CANDIDATE_SHA"]:
               raise SystemExit("published image revision does not match candidate SHA")
-          if os.environ["OCI_SOURCE"] != "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA":
+          if os.environ["OCI_SOURCE"] != "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA":
               raise SystemExit("published image source is invalid")
           if os.environ["RUNTIME_USER"] != "sentinel":
               raise SystemExit("published image runtime user is invalid")
@@ -387,7 +387,7 @@ jobs:
             --image-digest "$PUBLISHED_IMAGE_DIGEST" \
             --image-id "$PUBLISHED_IMAGE_ID" \
             --image-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
-            --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
+            --image-source "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA" \
             --image-created "$SENTINEL_DNA_IMAGE_CREATED" \
             --trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"
           echo "IMAGE_BOUND_MANIFEST_PATH=$manifest" >> "$GITHUB_ENV"

@@ -9,7 +9,7 @@ from deployment.scripts import prepare_trusted_release_metadata as trusted
 
 REVISION = "a1" * 20
 DIGEST = "sha256:" + "b" * 64
-SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+SOURCE = "https://github.com/uwakwechukwuebukpaul-ai/SENTINEL-DNA"
 CREATED = "1970-01-01T00:00:00Z"
 
 
