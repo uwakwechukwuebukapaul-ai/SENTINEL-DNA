@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-tokens.css') }}">
   <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-shell.css') }}">
   <link rel="stylesheet" href="{{ url_for('dashboard_static', filename='css/sentinel-dna-components.css') }}">
+  {% block page_styles %}{% endblock %}
 </head>
 <body class="app-body" data-current-path="{{ request.path }}">
   <div class="app-shell">
@@ -93,5 +94,6 @@
 
   <script src="{{ url_for('dashboard_static', filename='js/sentinel-dna-shell.js') }}" defer></script>
   <script src="{{ url_for('dashboard_static', filename='js/sentinel-dna-command-palette.js') }}" defer></script>
+  {% block page_scripts %}{% endblock %}
 </body>
 </html>

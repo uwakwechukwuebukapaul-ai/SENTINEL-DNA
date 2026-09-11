@@ -152,7 +152,6 @@
     const form = $("[data-auth-form='signup']");
     if (!form) return;
     const status = $("[data-auth-status]");
-    const country = $("#signup-country");
     const password = $("#signup-password");
     const confirm = $("#confirm");
     const strengthLabel = $("[data-strength-label]");
@@ -194,7 +193,7 @@
       return visible;
     }
     function chooseCountry(item) {
-      country.value = item.region;
+      countryPicker.value = item.region;
       label.textContent = `${flagFor(item.region)} ${displayName(item)} (${item.calling_code})`;
       menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); trigger.focus();
     }
@@ -215,10 +214,10 @@
       return response.json();
     }).then((data) => {
       countries = data.countries || [];
-      country.replaceChildren(new Option("Select country", ""));
-      countries.forEach((item) => country.add(new Option(`${displayName(item)} (${item.calling_code})`, item.region)));
+      countryPicker.replaceChildren(new Option("Select country", ""));
+      countries.forEach((item) => countryPicker.add(new Option(`${displayName(item)} (${item.calling_code})`, item.region)));
       label.textContent = "Select country";
-    }).catch(() => { country.replaceChildren(new Option("Country list unavailable", "")); setStatus("Country selection is temporarily unavailable."); });
+    }).catch(() => { countryPicker.replaceChildren(new Option("Country list unavailable", "")); setStatus("Country selection is temporarily unavailable."); });
 
     function updateStrength() {
       const value = password.value;
@@ -234,24 +233,13 @@
 
     const methodInputs = $$('input[name="verification_method"]');
     const selectedMethod = () => methodInputs.find((input) => input.checked)?.value || "";
-    const phoneInput = $("#signup-phone");
     const countryPicker = $("#signup-country");
-    const phonePanel = $("[data-verification-panel='phone']");
-    const phoneField = phoneInput.closest(".auth-field");
-    const countryField = countryPicker.closest(".auth-field");
     const verificationCode = $("#signup-verification-code");
     let cancelVerificationCooldown = null;
     function selectVerificationMethod(method) {
-      const phoneSelected = method === "phone";
       cancelVerificationCooldown?.();
       cancelVerificationCooldown = null;
-      phonePanel.hidden = !phoneSelected;
-      phonePanel.setAttribute("aria-hidden", String(!phoneSelected));
-      phoneField.hidden = !phoneSelected;
-      countryField.hidden = !phoneSelected;
       methodInputs.forEach((input) => input.setAttribute("aria-selected", String(input.value === method)));
-      phoneInput.required = phoneSelected;
-      countryPicker.required = phoneSelected;
       state.verificationChallenge = null;
       state.verificationMethod = null;
       verificationCode.value = "";
@@ -263,14 +251,14 @@
     sendVerification?.addEventListener("click", async () => {
       const method = selectedMethod();
       if (!method) { setStatus("Choose a verification method first."); return; }
-      const payload = method === "email" ? { method, email: $("#signup-email").value.trim() } : { method, country: country.value, phone: $("#signup-phone").value.trim() };
+      const payload = { method, email: $("#signup-email").value.trim() };
       let sent = false;
       busy(sendVerification, true);
       try {
         const { response, body } = await request("/api/auth/verification/send-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (response.ok) { state.verificationMethod = method; state.verificationChallenge = body.challenge_id; setStatus("Verification code sent.", "progress"); verificationCode.focus(); sent = true; }
-        else setStatus(method === "phone" ? "Unable to send a phone code." : "Unable to send an email code.");
-      } catch (_) { setStatus(method === "phone" ? "Unable to send a phone code." : "Unable to send an email code."); }
+        else setStatus("Unable to send an email code.");
+      } catch (_) { setStatus("Unable to send an email code."); }
       busy(sendVerification, false, "Send verification code");
       if (sent) cancelVerificationCooldown = cooldown(sendVerification, 60, "Send verification code");
     });
@@ -291,7 +279,6 @@
       const button = $("[type='submit']", form); busy(button, true);
       try {
         const payload = { username: $("#signup-username").value.trim(), email: $("#signup-email").value.trim(), password: password.value, date_of_birth: $("#signup-dob").value };
-        if (method === "phone") { payload.country = country.value; payload.phone = phoneInput.value.trim(); }
         const { response } = await request("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (response.ok) { setStatus("Account created. Continue to sign in.", "success"); window.location.assign("/login?registered=true"); }
         else setStatus("Unable to create the account. Check the information and verification status.");

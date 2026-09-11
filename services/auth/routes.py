@@ -318,7 +318,9 @@ def verification_send_code():
     if not _strict_csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
     data = request.get_json(silent=True) or {}
     method = str(data.get("method") or "").strip().lower()
-    if method not in {"email", "phone"}:
+    # Primary browser registration is email-first. SMS remains available only
+    # through the separately governed recovery/legacy boundary.
+    if method != "email":
         return jsonify({"error": "invalid_verification_method"}), 400
     if not _allowed(f"registration-verification|{method}", 5, 3600):
         return jsonify({"error": "verification_rate_limited"}), 429

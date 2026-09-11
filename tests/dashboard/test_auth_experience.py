@@ -100,7 +100,7 @@ def test_signup_page_exposes_one_accessible_unified_verification_flow(auth_clien
     assert page.count(b"data-signup-verification-verify") == 1
     assert b"name=\"verification_method\"" in page
     assert b"aria-controls=\"signup-email-verification\"" in page
-    assert b"aria-controls=\"signup-phone-verification\"" in page
+    assert b"SMS is reserved for optional recovery" in page
     assert b"data-signup-email-send" not in page
     assert b"data-signup-phone-send" not in page
     assert b"data-signup-email-verify" not in page
@@ -110,7 +110,7 @@ def test_signup_page_exposes_one_accessible_unified_verification_flow(auth_clien
     assert b"/api/auth/email/send-registration-code" not in script
     assert b"/api/auth/phone/send-code" not in script
     assert b"state.verificationChallenge = null" in script
-    assert b"if (method === \"phone\")" in script
+    assert b"const payload = { method, email: $(\"#signup-email\").value.trim() };" in script
 
 
 def test_signup_verification_controls_follow_active_method_contract(auth_client):
@@ -118,21 +118,17 @@ def test_signup_verification_controls_follow_active_method_contract(auth_client)
     script = auth_client.get("/static/js/sentinel-dna-auth.js").data.decode()
 
     choice = page.index('class="auth-field auth-field-wide verification-choice"')
-    country = page.index('for="signup-country-search"')
-    assert choice < country
-    assert '<div class="auth-field" hidden><label for="signup-country-search">Country</label>' in page
-    assert 'data-verification-panel="phone" hidden' in page
-    assert 'const phoneSelected = method === "phone"' in script
-    assert 'countryField.hidden = !phoneSelected' in script
-    assert 'phoneInput.required = phoneSelected' in script
-    assert 'countryPicker.required = phoneSelected' in script
+    assert choice < page.index('name="verification_method"')
+    assert 'country.value' not in script
+    assert 'countryPicker.value' in script
+    assert 'input:-webkit-autofill' in auth_client.get("/static/css/sentinel-dna-auth.css").data.decode()
 
 
 def test_signup_payload_only_adds_phone_contact_in_phone_mode(auth_client):
     script = auth_client.get("/static/js/sentinel-dna-auth.js").data.decode()
 
     assert 'const payload = { username:' in script
-    assert 'if (method === "phone") { payload.country = country.value; payload.phone = phoneInput.value.trim(); }' in script
+    assert 'const payload = { method, email: $("#signup-email").value.trim() };' in script
     assert 'payload.email_challenge_id' not in script
     assert 'payload.phone_challenge_id' not in script
     assert 'cancelVerificationCooldown?.();' in script

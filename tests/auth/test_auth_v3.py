@@ -167,20 +167,11 @@ def test_registration_email_only_uses_one_contact_verification_and_stops_for_mfa
     assert body["onboarding_state"] == "MFA_ENROLLMENT_REQUIRED"
     assert client.get("/api/auth/me").status_code == 401
 
-def test_registration_phone_only_normalizes_and_does_not_require_email_otp(app):
+def test_primary_registration_rejects_phone_verification_without_sms_dependency(app):
     client = app.test_client(); csrf = token(client)
     sent = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert sent.status_code == 202
-    challenge = sent.get_json()["challenge_id"]
-    code = app.config["SMS_PROVIDER"].messages[-1]["code"]
-    assert client.post("/api/auth/verification/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
-    created = client.post("/api/auth/register", json={"username": "phone-only", "email": "phone-only@example.test", "password": PASSWORD, "date_of_birth": "2000-01-02", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert created.status_code == 201
-    body = created.get_json()
-    assert body["phone_verified"] is True and body["email_verified"] is False
-    assert body["verification_method"] == "phone"
-    row = app.container.require("auth_service").db.connect().execute("SELECT phone_number FROM users WHERE email=?", ("phone-only@example.test",)).fetchone()
-    assert row["phone_number"] == "+2348031234567"
+    assert sent.status_code == 400
+    assert sent.get_json() == {"error": "invalid_verification_method"}
 
 def test_unified_registration_verification_rejects_missing_or_invalid_method(app):
     client = app.test_client(); csrf = token(client)
@@ -198,11 +189,20 @@ def test_country_contract_is_authoritative_and_phone_region_mismatch_fails_close
     assert by_region["GB"]["calling_code"] == "+44"
     client = app.test_client(); csrf = token(client)
     response = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "US", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert response.status_code == 400 and response.get_json()["error"] == "invalid_registration_destination"
+    assert response.status_code == 400 and response.get_json()["error"] == "invalid_verification_method"
 
 def test_unified_registration_verification_requires_csrf(app):
     response = app.test_client().post("/api/auth/verification/send-code", json={"method": "email", "email": "csrf@example.test"})
     assert response.status_code == 403 and response.get_json() == {"error": "csrf_validation_failed"}
+
+def test_primary_phone_delivery_failure_is_generic_and_does_not_bind_registration(app):
+    app.config["SMS_PROVIDER"] = None
+    client = app.test_client(); csrf = token(client)
+    response = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid_verification_method"}
+    with client.session_transaction() as state:
+        assert "registration_verification_challenge_id" not in state
 
 def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
     client = app.test_client(); csrf = token(client)
