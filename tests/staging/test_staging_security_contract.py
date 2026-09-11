@@ -148,6 +148,9 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "PGPASSWORD" not in compose
     assert "SENTINEL_DNA_SECRET_KEY: ${" not in compose
     assert "SENTINEL_DNA_POSTGRES_PASSWORD: ${" not in compose
+    assert "SENTINEL_DNA_SMTP_USERNAME: ${" not in compose
+    assert "SENTINEL_DNA_SMTP_PASSWORD: ${" not in compose
+    assert "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY: ${" not in compose
     assert "SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key" in compose
     assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
     assert "POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password" in compose
@@ -226,6 +229,11 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
             (
                 "SENTINEL_DNA_SECRET_KEY=" + secret,
                 "SENTINEL_DNA_POSTGRES_PASSWORD=" + postgres_password,
+                "SENTINEL_DNA_EMAIL_PROVIDER=smtp",
+                "SENTINEL_DNA_SMTP_HOST=__TEST_EXTERNAL_SMTP_HOST__",
+                "SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE=" + str(tmp_path / "smtp.username"),
+                "SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE=" + str(tmp_path / "smtp.password"),
+                "SENTINEL_DNA_EMAIL_FROM=__TEST_EXTERNAL_EMAIL_FROM__",
                 "SENTINEL_DNA_STAGING_APP_IMAGE=registry.example.test/sentinel/staging-app@sha256:" + "c" * 64,
                 "SENTINEL_DNA_STAGING_EDGE_IMAGE=registry.example.test/nginx@sha256:" + "d" * 64,
                 "SENTINEL_DNA_POSTGRES_IMAGE=registry.example.test/postgres@sha256:" + "e" * 64,
@@ -234,6 +242,7 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
                 "SENTINEL_DNA_STAGING_TLS_DIR=/tmp/staging-tls",
                 "SENTINEL_DNA_STAGING_APP_SECRET_FILE=" + str(tmp_path / "app.secret"),
                 "SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE=" + str(tmp_path / "postgres.secret"),
+                "SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE=" + str(tmp_path / "browser.key"),
                 "SENTINEL_DNA_IMAGE_TAG=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
                 "SENTINEL_DNA_IMAGE_REVISION_FULL=f44ec8747ad1bd8e6ee5c76be039e2826cb3c0fc",
                 "SENTINEL_DNA_IMAGE_CREATED=2026-08-29T00:00:00Z",
@@ -243,7 +252,6 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
                 "SENTINEL_DNA_CERTIFIED_ORIGIN=https://synthetic.example.test",
                 "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST=trusted-browser",
                 "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT=8080",
-                "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY=synthetic-test-only-key",
                 "SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_READY=true",
                 "SENTINEL_DNA_TRUSTED_BROWSER_EGRESS_PROXY=http://egress-gateway:8081",
                 "SENTINEL_DNA_EGRESS_GATEWAY_BIND=0.0.0.0",
@@ -286,6 +294,9 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
             if key not in {
                 "SENTINEL_DNA_STAGING_APP_SECRET_FILE",
                 "SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE",
+                "SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE",
+                "SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE",
+                "SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE",
             }
         },
         capture_output=True,
@@ -296,6 +307,9 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
     assert result.returncode == 0, result.stderr
     assert secret not in result.stdout
     assert postgres_password not in result.stdout
+    assert "__TEST_EXTERNAL_SMTP_PASSWORD__" not in result.stdout
+    assert "__TEST_EXTERNAL_SMTP_USERNAME__" not in result.stdout
+    assert "synthetic-test-only-key" not in result.stdout
     assert "PGPASSWORD" not in result.stdout
     rendered = json.loads(result.stdout)
     app_environment = rendered["services"]["app"]["environment"]
@@ -303,13 +317,22 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
     postgres_environment = rendered["services"]["postgres"]["environment"]
     assert "SENTINEL_DNA_SECRET_KEY" not in app_environment
     assert "SENTINEL_DNA_POSTGRES_PASSWORD" not in app_environment
+    assert "SENTINEL_DNA_SMTP_USERNAME" not in app_environment
+    assert "SENTINEL_DNA_SMTP_PASSWORD" not in app_environment
+    assert "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY" not in app_environment
     assert app_environment["SENTINEL_DNA_SECRET_KEY_FILE"] == "/run/secrets/sentinel_dna_secret_key"
     assert app_environment["SENTINEL_DNA_POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
+    assert app_environment["SENTINEL_DNA_SMTP_USERNAME_FILE"] == "/run/secrets/staging_smtp_username"
+    assert app_environment["SENTINEL_DNA_SMTP_PASSWORD_FILE"] == "/run/secrets/staging_smtp_password"
+    assert app_environment["SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY_FILE"] == "/run/secrets/staging_trusted_browser_service_key"
     assert migration_environment["SENTINEL_DNA_SECRET_KEY_FILE"] == "/run/secrets/sentinel_dna_secret_key"
     assert migration_environment["SENTINEL_DNA_POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
     assert postgres_environment["POSTGRES_PASSWORD_FILE"] == "/run/secrets/sentinel_dna_postgres_password"
     assert rendered["secrets"]["staging_app_secret_key"]["file"] == str(tmp_path / "app.secret")
     assert rendered["secrets"]["staging_postgres_password"]["file"] == str(tmp_path / "postgres.secret")
+    assert rendered["secrets"]["staging_smtp_username"]["file"] == str(tmp_path / "smtp.username")
+    assert rendered["secrets"]["staging_smtp_password"]["file"] == str(tmp_path / "smtp.password")
+    assert rendered["secrets"]["staging_trusted_browser_service_key"]["file"] == str(tmp_path / "browser.key")
 
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():
@@ -322,7 +345,8 @@ def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip(
     assert "SENTINEL_DNA_REDIS_IMAGE=__EXTERNAL_IMMUTABLE_REDIS_IMAGE__" in env_example
     assert "SENTINEL_DNA_STAGING_TLS_IP=__EXTERNAL_STAGING_TLS_IP__" in env_example
     assert "SENTINEL_DNA_SECRET_KEY=__INJECT_NON_PRODUCTION_SECRET__" in env_example
-    assert "SENTINEL_DNA_POSTGRES_PASSWORD=__INJECT_DISPOSABLE_STAGING_PASSWORD__" in env_example
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD=" not in env_example
+    assert "SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE=__EXTERNAL_SMTP_PASSWORD_SECRET_FILE_PATH__" in env_example
 
 
 def test_staging_nginx_contract_terminates_tls_and_keeps_gunicorn_private():

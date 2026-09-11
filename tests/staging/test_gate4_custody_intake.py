@@ -6,6 +6,9 @@ def complete_intake():
     for name in (
         "SENTINEL_DNA_STAGING_APP_SECRET_FILE",
         "SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE",
+        "SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE",
+        "SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE",
+        "SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE",
         "SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE",
         "SENTINEL_DNA_STAGING_TLS_DIR",
         "SENTINEL_DNA_EGRESS_POLICY_FILE",
@@ -16,7 +19,6 @@ def complete_intake():
     ):
         values[name] = "C:\\approved\\" + name.lower()
     values.update({
-        "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY": "operator-secret-not-printed",
         "SENTINEL_DNA_CERTIFIED_ORIGIN": "https://approved.test",
         "SENTINEL_DNA_CERTIFIED_HOSTNAME": "approved.test",
         "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST": "trusted-browser",

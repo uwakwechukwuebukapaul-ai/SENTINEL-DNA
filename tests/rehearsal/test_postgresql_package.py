@@ -62,7 +62,9 @@ def test_compose_is_disposable_postgresql_16_only():
     compose = (ROOT / "rehearsal" / "postgresql" / "docker-compose.yml").read_text(encoding="utf-8")
     requirements = (ROOT / "rehearsal" / "postgresql" / "requirements.txt").read_text(encoding="utf-8")
     assert "postgres:16-alpine" in compose
-    assert "POSTGRES_PASSWORD: ${SENTINEL_DNA_REHEARSAL_PASSWORD:?" in compose
+    assert "POSTGRES_PASSWORD: ${" not in compose
+    assert "POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_rehearsal_password" in compose
+    assert "SENTINEL_DNA_REHEARSAL_PASSWORD_FILE:?set external rehearsal password file" in compose
     assert '127.0.0.1:' in compose
     assert "tmpfs:" in compose
     assert "DATABASE_URL" not in compose

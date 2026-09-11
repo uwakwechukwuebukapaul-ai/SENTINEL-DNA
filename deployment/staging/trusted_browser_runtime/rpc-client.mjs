@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { configuredCertifiedOrigin, parseTrustedOrigin, parseTrustedNavigation } from "../scripts/trusted_browser_service/policy/origin-policy.mjs";
 import { createTenantContext } from "../scripts/trusted_browser_service/policy/tenant-context.mjs";
@@ -8,6 +9,16 @@ export const SERVICE_KEY_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY";
 export const SERVICE_HOST_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST";
 export const SERVICE_PORT_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT";
 export const REQUEST_TIMEOUT_MS = 30_000;
+
+function configuredServiceKey() {
+  const direct = process.env?.[SERVICE_KEY_ENV];
+  const file = process.env?.[`${SERVICE_KEY_ENV}_FILE`];
+  if (direct && file) throw rpcError("TB_RPC_CONFIGURATION_AMBIGUOUS");
+  if (file) {
+    try { return readFileSync(file, "utf8").trim(); } catch { throw rpcError("TB_RPC_CONFIGURATION_INVALID"); }
+  }
+  return direct;
+}
 
 export function canonicalize(value) {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
@@ -29,7 +40,7 @@ function configuration({ serviceKey = undefined, endpoint = undefined, testOnly 
     if (typeof serviceKey !== "string" || serviceKey.length < 32 || typeof endpoint !== "string" || !endpoint.startsWith("http://127.0.0.1:")) throw rpcError("TB_RPC_CONFIGURATION_INVALID");
     return Object.freeze({ key: serviceKey, endpoint });
   }
-  const key = process.env?.[SERVICE_KEY_ENV];
+  const key = configuredServiceKey();
   const host = process.env?.[SERVICE_HOST_ENV];
   const port = process.env?.[SERVICE_PORT_ENV];
   if (typeof key !== "string" || key.length < 32 || typeof host !== "string" || !host.trim() || !/^\d+$/.test(String(port))) throw rpcError("TB_RPC_CONFIGURATION_INVALID");

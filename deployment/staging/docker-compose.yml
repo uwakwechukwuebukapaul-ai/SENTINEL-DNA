@@ -69,7 +69,7 @@ services:
       SENTINEL_DNA_FAVP_OPERATIONS_ENABLED: ${SENTINEL_DNA_FAVP_OPERATIONS_ENABLED:-0}
       SENTINEL_DNA_FAVP_SYNTHETIC_ONLY: ${SENTINEL_DNA_FAVP_SYNTHETIC_ONLY:-1}
       SENTINEL_DNA_FAVP_PRODUCTION_ACCESS: "0"
-      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY:?set external trusted-browser service key}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY_FILE: /run/secrets/staging_trusted_browser_service_key
       SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST:?set trusted-browser service host}
       SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT:?set trusted-browser service port}
       SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE: single-instance
@@ -79,8 +79,8 @@ services:
       SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?set SENTINEL_DNA_EMAIL_PROVIDER=smtp}
       SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?set SMTP relay host}
       SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
-      SENTINEL_DNA_SMTP_USERNAME: ${SENTINEL_DNA_SMTP_USERNAME:?set SMTP username}
-      SENTINEL_DNA_SMTP_PASSWORD: ${SENTINEL_DNA_SMTP_PASSWORD:?set SMTP password}
+      SENTINEL_DNA_SMTP_USERNAME_FILE: /run/secrets/staging_smtp_username
+      SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/staging_smtp_password
       SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
       SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?set verified sender address}
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
@@ -92,6 +92,12 @@ services:
         target: sentinel_dna_secret_key
       - source: staging_postgres_password
         target: sentinel_dna_postgres_password
+      - source: staging_smtp_username
+        target: staging_smtp_username
+      - source: staging_smtp_password
+        target: staging_smtp_password
+      - source: staging_trusted_browser_service_key
+        target: staging_trusted_browser_service_key
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,7 +134,7 @@ services:
       - seccomp=./trusted_browser_runtime/seccomp-chromium.json
     environment:
       SENTINEL_DNA_ENV: staging
-      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY:?set external trusted-browser service key}
+      SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY_FILE: /run/secrets/staging_trusted_browser_service_key
       SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_HOST:?set trusted-browser service host}
       SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT: ${SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_PORT:?set trusted-browser service port}
       SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE: single-instance
@@ -227,6 +233,8 @@ services:
         target: sentinel_dna_secret_key
       - source: staging_postgres_password
         target: sentinel_dna_postgres_password
+      - source: staging_trusted_browser_service_key
+        target: staging_trusted_browser_service_key
     volumes:
       - staging_favp_evidence:/var/lib/sentinel/favp-evidence
     depends_on:
@@ -286,6 +294,12 @@ secrets:
     file: ${SENTINEL_DNA_STAGING_APP_SECRET_FILE:?set external application secret file}
   staging_postgres_password:
     file: ${SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE:?set external database secret file}
+  staging_smtp_username:
+    file: ${SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE:?set external SMTP username secret file}
+  staging_smtp_password:
+    file: ${SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE:?set external SMTP password secret file}
+  staging_trusted_browser_service_key:
+    file: ${SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE:?set external trusted-browser service key file}
 
 volumes:
   staging_app_data:

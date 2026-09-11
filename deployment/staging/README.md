@@ -33,8 +33,8 @@ through the external staging secret/configuration store, never through Git:
 SENTINEL_DNA_EMAIL_PROVIDER=smtp
 SENTINEL_DNA_SMTP_HOST=<approved relay host>
 SENTINEL_DNA_SMTP_PORT=587
-SENTINEL_DNA_SMTP_USERNAME=<relay username>
-SENTINEL_DNA_SMTP_PASSWORD=<relay password>
+SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE=/etc/sentinel-dna/secrets/smtp-username
+SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE=/etc/sentinel-dna/secrets/smtp-password
 SENTINEL_DNA_SMTP_STARTTLS=1
 SENTINEL_DNA_EMAIL_FROM=<verified sender address>
 ```
@@ -48,10 +48,42 @@ docker compose -f deployment/staging/docker-compose.yml exec app \
   env | grep -E '^(SENTINEL_DNA_EMAIL_PROVIDER|SENTINEL_DNA_SMTP_HOST|SENTINEL_DNA_SMTP_PORT|SENTINEL_DNA_SMTP_USERNAME|SENTINEL_DNA_SMTP_STARTTLS|SENTINEL_DNA_EMAIL_FROM)='
 ```
 
-Do not include `SENTINEL_DNA_SMTP_PASSWORD` in diagnostics. Complete an
+Do not include either SMTP secret file or its contents in diagnostics. Complete an
 end-to-end registration, confirm delivery, verify the code once, and confirm
 replay is rejected. A missing relay or failed delivery must block onboarding;
 do not substitute a console provider.
+
+### Approved secret-materialization workflow
+
+An infrastructure operator must retrieve the reviewed staging secret record
+from AWS Secrets Manager (or the approved equivalent), write each value to a
+separate protected host file, and set only the file paths in the external
+`STAGING_ENV_FILE`. For example, on a Linux staging host:
+
+```sh
+umask 077
+install -d -m 0700 /etc/sentinel-dna/secrets
+aws secretsmanager get-secret-value --secret-id sentinel-dna/staging --query SecretString --output text \
+  | jq -r .app_secret_key > /etc/sentinel-dna/secrets/app-secret-key
+aws secretsmanager get-secret-value --secret-id sentinel-dna/staging --query SecretString --output text \
+  | jq -r .postgres_password > /etc/sentinel-dna/secrets/postgres-password
+aws secretsmanager get-secret-value --secret-id sentinel-dna/staging --query SecretString --output text \
+  | jq -r .smtp_username > /etc/sentinel-dna/secrets/smtp-username
+aws secretsmanager get-secret-value --secret-id sentinel-dna/staging --query SecretString --output text \
+  | jq -r .smtp_password > /etc/sentinel-dna/secrets/smtp-password
+aws secretsmanager get-secret-value --secret-id sentinel-dna/staging --query SecretString --output text \
+  | jq -r .trusted_browser_service_key > /etc/sentinel-dna/secrets/trusted-browser-service-key
+chmod 600 /etc/sentinel-dna/secrets/*
+```
+
+The external environment contains paths such as
+`SENTINEL_DNA_STAGING_APP_SECRET_FILE=/etc/sentinel-dna/secrets/app-secret-key`,
+not secret values. Verify file ownership, permissions, and non-empty contents
+without printing them, run the custody intake validator, then run
+`deployment/scripts/deploy.sh`. Never run `docker compose config` with a
+secret-valued environment variable and never save its output as a release
+artifact; the rendered configuration should contain only Docker secret names
+and protected file paths.
 
 `deployment/scripts/deploy.sh` is staging-only. It requires an absolute
 `STAGING_ENV_FILE` outside the repository and explicitly selects the staging
@@ -64,6 +96,18 @@ can provide an approved private non-production runtime and remote boundary.
 The [staging environment template](.env.example) is a non-secret template
 only; inject values through the approved non-production secret/configuration
 store and never commit the populated file or use the repository `.env`.
+
+For production or any production-like pilot, use AWS Secrets Manager (or an
+approved equivalent) to materialize root-owned, mode-`0600` secret files before
+Compose starts. Configure only those file paths in the external environment;
+Compose mounts the files as Docker secrets at runtime. Local `.env` files are for
+developer use only, are ignored by Git, and must never be treated as a
+production secret store. Do not generate or retain rendered Compose output in
+the repository; if an operator must inspect it, provide values only in the
+controlled runtime environment and dispose of the rendered artifact securely.
+Rotate SMTP and application secrets after any suspected exposure and before
+promoting a staging configuration or image into a controlled pilot. Record the
+rotation in the operator change record without recording the secret value.
 
 For the selected Gate 5 Tailscale path, use the
 [Tailscale analyst access runbook](GATE5_TAILSCALE_ANALYST_ACCESS_RUNBOOK.md),

@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { loadActivationManifest } from "../scripts/trusted_browser_activation_manifest.mjs";
 import { verifyConfiguredRuntimeDigest } from "../scripts/verify_gate4_external_artifacts.mjs";
 import { setupBrowserRuntime as setupProviderRuntime } from "../scripts/trusted_browser_service/providers/playwright-runtime-provider.mjs";
@@ -17,6 +18,16 @@ export const MAX_BODY_BYTES = 64 * 1024;
 export const REQUEST_SKEW_MS = 30_000;
 export const REPLAY_MODE_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_REPLAY_MODE";
 export const REPLICA_COUNT_ENV = "SENTINEL_DNA_TRUSTED_BROWSER_REPLICA_COUNT";
+
+function configuredServiceKey() {
+  const direct = process.env?.[SERVICE_KEY_ENV];
+  const file = process.env?.[`${SERVICE_KEY_ENV}_FILE`];
+  if (direct && file) throw serviceError("TB_SERVICE_AUTH_AMBIGUOUS");
+  if (file) {
+    try { return readFileSync(file, "utf8").trim(); } catch { return undefined; }
+  }
+  return direct;
+}
 
 const SAFE_OPERATIONS = new Set([
   "health",
@@ -62,7 +73,7 @@ function signaturePayload({ timestamp, requestId, bodyDigest }) {
   return `${timestamp}.${requestId}.${bodyDigest}`;
 }
 
-export function authenticateRequest({ headers, bodyBytes, now = Date.now(), serviceKey = process.env?.[SERVICE_KEY_ENV] }) {
+export function authenticateRequest({ headers, bodyBytes, now = Date.now(), serviceKey = configuredServiceKey() }) {
   if (typeof serviceKey !== "string" || serviceKey.length < 32) {
     throw serviceError("TB_SERVICE_AUTH_UNAVAILABLE");
   }

@@ -11,12 +11,12 @@ services:
 
     environment:
       SENTINEL_DNA_ENV: ${SENTINEL_DNA_ENV:?SENTINEL_DNA_ENV must be set}
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?SENTINEL_DNA_SECRET_KEY must be set}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?SENTINEL_DNA_EMAIL_PROVIDER must be set}
       SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?SENTINEL_DNA_SMTP_HOST must be set}
       SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
-      SENTINEL_DNA_SMTP_USERNAME: ${SENTINEL_DNA_SMTP_USERNAME:?SENTINEL_DNA_SMTP_USERNAME must be set}
-      SENTINEL_DNA_SMTP_PASSWORD: ${SENTINEL_DNA_SMTP_PASSWORD:?SENTINEL_DNA_SMTP_PASSWORD must be set}
+      SENTINEL_DNA_SMTP_USERNAME_FILE: /run/secrets/sentinel_dna_smtp_username
+      SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/sentinel_dna_smtp_password
       SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
       SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?SENTINEL_DNA_EMAIL_FROM must be set}
 
@@ -31,9 +31,13 @@ services:
       FLASK_DEBUG: "0"
 
       DATABASE_URL: ${DATABASE_URL:-postgresql://sentinel@postgres:5432/sentinel_dna}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
       SENTINEL_DNA_DB_PATH: ${SENTINEL_DNA_DB_PATH:-/var/lib/sentinel/soc.db}
+    secrets:
+      - sentinel_dna_secret_key
+      - sentinel_dna_smtp_username
+      - sentinel_dna_smtp_password
+      - sentinel_dna_postgres_password
 
     depends_on:
       postgres:
@@ -63,12 +67,12 @@ services:
 
     environment:
       SENTINEL_DNA_ENV: ${SENTINEL_DNA_ENV:?SENTINEL_DNA_ENV must be set}
-      SENTINEL_DNA_SECRET_KEY: ${SENTINEL_DNA_SECRET_KEY:?SENTINEL_DNA_SECRET_KEY must be set}
+      SENTINEL_DNA_SECRET_KEY_FILE: /run/secrets/sentinel_dna_secret_key
       SENTINEL_DNA_EMAIL_PROVIDER: ${SENTINEL_DNA_EMAIL_PROVIDER:?SENTINEL_DNA_EMAIL_PROVIDER must be set}
       SENTINEL_DNA_SMTP_HOST: ${SENTINEL_DNA_SMTP_HOST:?SENTINEL_DNA_SMTP_HOST must be set}
       SENTINEL_DNA_SMTP_PORT: ${SENTINEL_DNA_SMTP_PORT:-587}
-      SENTINEL_DNA_SMTP_USERNAME: ${SENTINEL_DNA_SMTP_USERNAME:?SENTINEL_DNA_SMTP_USERNAME must be set}
-      SENTINEL_DNA_SMTP_PASSWORD: ${SENTINEL_DNA_SMTP_PASSWORD:?SENTINEL_DNA_SMTP_PASSWORD must be set}
+      SENTINEL_DNA_SMTP_USERNAME_FILE: /run/secrets/sentinel_dna_smtp_username
+      SENTINEL_DNA_SMTP_PASSWORD_FILE: /run/secrets/sentinel_dna_smtp_password
       SENTINEL_DNA_SMTP_STARTTLS: ${SENTINEL_DNA_SMTP_STARTTLS:-1}
       SENTINEL_DNA_EMAIL_FROM: ${SENTINEL_DNA_EMAIL_FROM:?SENTINEL_DNA_EMAIL_FROM must be set}
 
@@ -83,7 +87,7 @@ services:
       FLASK_DEBUG: "0"
 
       DATABASE_URL: ${DATABASE_URL:-postgresql://sentinel@postgres:5432/sentinel_dna}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
 
       REDIS_URL: redis://redis:6379/0
 
@@ -104,6 +108,11 @@ services:
 
     volumes:
       - sentinel_data:/var/lib/sentinel
+    secrets:
+      - sentinel_dna_secret_key
+      - sentinel_dna_smtp_username
+      - sentinel_dna_smtp_password
+      - sentinel_dna_postgres_password
 
     networks:
       sentinel_frontend:
@@ -132,7 +141,9 @@ services:
     environment:
       POSTGRES_DB: sentinel_dna
       POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - sentinel_dna_postgres_password
 
     volumes:
       - sentinel_postgres:/var/lib/postgresql/data
@@ -217,3 +228,13 @@ networks:
 
   sentinel_backend:
     internal: true
+
+secrets:
+  sentinel_dna_secret_key:
+    file: ${SENTINEL_DNA_SECRET_KEY_FILE:?SENTINEL_DNA_SECRET_KEY_FILE must be set}
+  sentinel_dna_postgres_password:
+    file: ${SENTINEL_DNA_POSTGRES_PASSWORD_FILE:?SENTINEL_DNA_POSTGRES_PASSWORD_FILE must be set}
+  sentinel_dna_smtp_username:
+    file: ${SENTINEL_DNA_SMTP_USERNAME_FILE:?SENTINEL_DNA_SMTP_USERNAME_FILE must be set}
+  sentinel_dna_smtp_password:
+    file: ${SENTINEL_DNA_SMTP_PASSWORD_FILE:?SENTINEL_DNA_SMTP_PASSWORD_FILE must be set}

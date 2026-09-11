@@ -6,6 +6,7 @@ Staging and production must use an explicitly configured SMTP relay.
 from dataclasses import dataclass
 from email.message import EmailMessage
 import os
+from pathlib import Path
 import secrets
 import smtplib
 
@@ -35,10 +36,24 @@ class SMTPEmailProvider(EmailProvider):
 
     @classmethod
     def from_environment(cls):
+        def configured(name: str, *, strip: bool = True) -> str:
+            direct = os.getenv(name)
+            secret_file = os.getenv(f"{name}_FILE", "").strip()
+            if direct is not None and secret_file:
+                raise RuntimeError(f"smtp_configuration_ambiguous:{name}")
+            if secret_file:
+                try:
+                    value = Path(secret_file).read_text(encoding="utf-8").strip()
+                except (OSError, UnicodeError) as exc:
+                    raise RuntimeError(f"smtp_configuration_secret_file_unreadable:{name}") from exc
+                return value
+            value = direct or ""
+            return value.strip() if strip else value
+
         required = {
             "SENTINEL_DNA_SMTP_HOST": os.getenv("SENTINEL_DNA_SMTP_HOST", "").strip(),
-            "SENTINEL_DNA_SMTP_USERNAME": os.getenv("SENTINEL_DNA_SMTP_USERNAME", "").strip(),
-            "SENTINEL_DNA_SMTP_PASSWORD": os.getenv("SENTINEL_DNA_SMTP_PASSWORD", ""),
+            "SENTINEL_DNA_SMTP_USERNAME": configured("SENTINEL_DNA_SMTP_USERNAME"),
+            "SENTINEL_DNA_SMTP_PASSWORD": configured("SENTINEL_DNA_SMTP_PASSWORD", strip=False),
             "SENTINEL_DNA_EMAIL_FROM": os.getenv("SENTINEL_DNA_EMAIL_FROM", "").strip(),
         }
         missing = [name for name, value in required.items() if not value]

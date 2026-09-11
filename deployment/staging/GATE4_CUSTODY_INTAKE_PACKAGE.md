@@ -42,7 +42,9 @@ classification, expiry/rotation status, and a redacted presence result.
 
 - [ ] `SENTINEL_DNA_STAGING_APP_SECRET_FILE` — protected readable file reference; contents never copied.
 - [ ] `SENTINEL_DNA_STAGING_POSTGRES_PASSWORD_FILE` — protected readable file reference; contents never copied.
-- [ ] `SENTINEL_DNA_TRUSTED_BROWSER_SERVICE_KEY` — supplied through protected secret handling; value never logged or recorded.
+- [ ] `SENTINEL_DNA_STAGING_SMTP_USERNAME_FILE` — protected readable secret-file path; contents never copied.
+- [ ] `SENTINEL_DNA_STAGING_SMTP_PASSWORD_FILE` — protected readable secret-file path; contents never copied.
+- [ ] `SENTINEL_DNA_STAGING_TRUSTED_BROWSER_SERVICE_KEY_FILE` — protected readable secret-file path; contents never copied.
 
 ### Environment configuration
 

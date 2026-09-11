@@ -122,6 +122,25 @@ def test_v3_smtp_provider_selection_and_missing_configuration_is_safe(monkeypatc
     monkeypatch.setenv("SENTINEL_DNA_EMAIL_FROM", "security@example.test")
     assert isinstance(email_provider(), SMTPEmailProvider)
 
+def test_v3_smtp_provider_reads_credentials_from_secret_files(monkeypatch, tmp_path):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_PROVIDER", "smtp")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_FROM", "security@example.test")
+    username_file = tmp_path / "smtp-username"
+    password_file = tmp_path / "smtp-password"
+    username_file.write_text("relay-user\n", encoding="utf-8")
+    password_file.write_text("file-secret\n", encoding="utf-8")
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_USERNAME_FILE", str(username_file))
+    monkeypatch.setenv("SENTINEL_DNA_SMTP_PASSWORD_FILE", str(password_file))
+    monkeypatch.delenv("SENTINEL_DNA_SMTP_USERNAME", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_SMTP_PASSWORD", raising=False)
+
+    provider = email_provider()
+    assert isinstance(provider, SMTPEmailProvider)
+    assert provider.username == "relay-user"
+    assert provider.password == "file-secret"
+
 def test_v3_smtp_delivery_does_not_log_or_expose_credentials(monkeypatch):
     class FakeSMTP:
         messages = []

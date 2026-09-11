@@ -4,7 +4,9 @@ services:
     environment:
       POSTGRES_DB: ${SENTINEL_DNA_REHEARSAL_DB:-sentinel_dna_rehearsal}
       POSTGRES_USER: ${SENTINEL_DNA_REHEARSAL_USER:-sentinel_rehearsal}
-      POSTGRES_PASSWORD: ${SENTINEL_DNA_REHEARSAL_PASSWORD:?set SENTINEL_DNA_REHEARSAL_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_rehearsal_password
+    secrets:
+      - sentinel_dna_rehearsal_password
     ports:
       - "127.0.0.1:${SENTINEL_DNA_REHEARSAL_PORT:-55432}:5432"
     tmpfs:
@@ -15,3 +17,6 @@ services:
       timeout: 3s
       retries: 15
 
+secrets:
+  sentinel_dna_rehearsal_password:
+    file: ${SENTINEL_DNA_REHEARSAL_PASSWORD_FILE:?set external rehearsal password file}
