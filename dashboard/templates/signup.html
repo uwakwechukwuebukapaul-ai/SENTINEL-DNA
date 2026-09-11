@@ -33,8 +33,7 @@
           <div class="auth-field"><label for="signup-username">Username</label><input id="signup-username" minlength="3" required autocomplete="username"></div>
           <div class="auth-field"><label for="signup-dob">Date of birth</label><input id="signup-dob" type="date" required autocomplete="bday"></div>
           <div class="auth-field"><label for="signup-country">Country or region</label><div class="sentinel-country-selector" data-country-selector data-input-id="signup-country"><input id="signup-country" type="hidden" required></div></div>
-          <div class="auth-field"><label for="signup-phone">Mobile phone</label><div class="auth-inline"><input id="signup-phone" type="tel" required autocomplete="tel"><button class="auth-link-button" type="button" data-signup-phone-send>Send code</button></div></div>
-          <div class="auth-field"><label for="signup-phone-code">Phone verification code</label><div class="auth-inline"><input id="signup-phone-code" class="auth-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"><button class="auth-link-button" type="button" data-signup-phone-verify disabled>Verify</button></div></div>
+          <div class="auth-field"><label for="signup-phone">Mobile phone <span class="muted">(optional recovery)</span></label><input id="signup-phone" type="tel" autocomplete="tel"></div>
           <div class="auth-field auth-field-wide"><label for="signup-email">Account email</label><div class="auth-inline"><input id="signup-email" type="email" required autocomplete="email"><button class="auth-link-button" type="button" data-signup-email-send>Send code</button></div></div>
           <div class="auth-field"><label for="signup-email-code">Email verification code</label><div class="auth-inline"><input id="signup-email-code" class="auth-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"><button class="auth-link-button" type="button" data-signup-email-verify>Verify</button></div></div>
           <div class="auth-field"><label for="signup-password">Password</label><div class="auth-password"><input id="signup-password" type="password" minlength="10" required autocomplete="new-password"><button type="button" data-password-toggle="signup-password" aria-label="Show password">Show</button></div></div>
@@ -44,7 +43,7 @@
         <p class="auth-status" data-auth-status role="alert" aria-live="polite"></p>
         <button class="auth-button" type="submit" data-registration-submit disabled>Create analyst account</button>
       </form>
-      <p class="auth-note">Only verified registration requests are accepted. Tenant identity and analyst permissions are never selected in this form.</p>
+      <p class="auth-note">Email verification is required to create the account. MFA enrollment is required before SOC workspace access; phone is optional recovery only. Tenant identity and analyst permissions are never selected in this form.</p>
       <p class="auth-footer">Already registered? <a href="/login">Sign in</a></p>
     </main>
   </div>

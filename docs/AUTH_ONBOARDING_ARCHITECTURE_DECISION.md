@@ -1,7 +1,7 @@
 # Sentinel DNA Authentication and Onboarding Architecture Decision
 
 Date: 2026-09-02
-Status: Implemented incrementally after forensic audit; security-critical role/provider/resume decisions remain open.
+Status: Locked and approved for implementation.
 
 ## Decision summary
 
@@ -32,6 +32,12 @@ should be introduced.
    and `InvestigationCoordinator` read models.
 
 ## Onboarding decision
+
+**Sentinel DNA uses email verification during registration and enforces MFA before SOC
+access. Phone verification is optional recovery/fallback and is not a registration
+gate.** Password creation or passkey setup may complete the identity registration flow;
+tenant membership and the analyst role are assigned only by Sentinel DNA backend
+controls. Registration never accepts a user-selected tenant, workspace, or privilege.
 
 The in-memory `services/onboarding/wizard.py` is not suitable for account onboarding.
 The implementation adds a small durable server-owned state and transition boundary in
@@ -146,10 +152,8 @@ an approved migration exists.
 ## Open decisions required before security completion
 
 1. Is `SOC-L1` a display label for canonical `analyst`, or a new canonical role?
-2. Is phone verification onboarding/account verification or a true MFA factor in the
-   existing security policy? Current code supports onboarding verification only.
-3. Which existing provisioning record/service is authoritative for self-service
+2. Which existing provisioning record/service is authoritative for self-service
    workspace readiness?
-4. Which production email and SMS adapters are approved and how are their credentials
+3. Which production email and SMS adapters are approved and how are their credentials
    supplied outside the repository?
-5. What browser-capable test environment will provide the real acceptance evidence?
+4. What browser-capable test environment will provide the real acceptance evidence?

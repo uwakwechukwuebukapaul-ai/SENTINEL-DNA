@@ -60,6 +60,9 @@ storage, one-time hashed recovery codes, MFA-pending session denial, strict MFA 
 MFA rate limits and audit events. `SOC-L1 Analyst` is a display/business label only;
 the canonical authorization role remains `analyst`.
 
+Sentinel DNA uses email verification during registration and enforces MFA before SOC
+access. Phone verification is optional recovery/fallback and is not a registration gate.
+
 Local automated security coverage is green, but Gate 5 cannot be accepted from this
 workstation. No approved S10 end-to-end run, live staging authentication, reconciled
 trusted-browser custody, mobile acceptance, production provider validation, human
@@ -82,7 +85,7 @@ evidence. No analyst account, credential, session, or pilot evidence was fabrica
 | Existing architecture preservation | PASS | Focused auth/identity/security/tenant tests; no replacement auth, RBAC, tenant, workspace, or Tailscale system added |
 | Canonical role | PASS | Internal role remains `analyst` in permissions, canonical memberships, pilot boundary, and API checks |
 | Product label | PASS | `SOC-L1 Analyst` is presentation-only in auth public data and dashboard templates |
-| Backend authentication | PASS | Existing password, email OTP, phone verification, OIDC boundaries retained; focused suites pass |
+| Backend authentication | PASS | Existing password, email verification, optional recovery phone, OIDC boundaries retained; focused suites pass |
 | Authenticator/TOTP implementation | PASS | RFC-compatible 30-second SHA-1 TOTP, one-step clock tolerance, secure random secret, AES-GCM envelope, server verification |
 | MFA session enforcement | PASS | MFA-enabled password/email login creates `mfa_pending`; canonical context and permission boundaries reject it until verification |
 | Recovery codes | PASS | 10 cryptographically random codes shown only at enrollment/regeneration, scrypt-hashed, one-time atomic consumption, regeneration invalidates prior set |
@@ -95,7 +98,7 @@ evidence. No analyst account, credential, session, or pilot evidence was fabrica
 | Nginx/private staging edge | BLOCKED | `docker` unavailable; existing Gate 4 record says live edge/TLS/ready checks blocked |
 | Browser desktop acceptance | BLOCKED | In-app browser runtime reported `No browser is available`; external trusted-browser custody currently fails certified-origin selection |
 | Browser mobile acceptance | NOT_MEASURED / REQUIRES HUMAN VALIDATION | No supported mobile browser/device session available |
-| Signup/email/phone | PASS (automated only) | Existing and new auth tests cover server-side verification; real provider/device acceptance is not measured |
+| Signup/email/phone | PASS (automated only) | Registration uses server-side email verification; phone remains optional recovery/fallback and real provider/device acceptance is not measured |
 | Login/logout/session expiration | PASS (automated only) | Existing session/revocation tests pass; live analyst run is not measured |
 | Profile/workspace/dashboard | PASS (contract only) | Server-side route tests pass; live remote analyst access is not measured |
 | Investigation/evidence/reports/actions/notes | PASS (contract only) | Existing focused route and authorization tests pass; approved synthetic analyst workflow is not measured |

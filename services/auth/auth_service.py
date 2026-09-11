@@ -430,8 +430,6 @@ class AuthService:
         ) if self.get_by_id(user_id) and self.get_by_id(user_id).onboarding_state == OnboardingState.ORGANIZATION_MEMBERSHIP_APPROVED else (
             OnboardingState.EMAIL_VERIFICATION_REQUIRED,
             OnboardingState.EMAIL_VERIFIED,
-            OnboardingState.PHONE_VERIFICATION_REQUIRED,
-            OnboardingState.PHONE_VERIFIED,
             OnboardingState.PROFILE_REQUIRED,
             OnboardingState.PROFILE_COMPLETED,
             OnboardingState.WORKSPACE_PROVISIONING,
@@ -440,12 +438,12 @@ class AuthService:
         )
         with self.db.session() as connection:
             row = connection.execute(
-                """SELECT onboarding_state, email_verified_at, phone_verified_at,
+                """SELECT onboarding_state, email_verified_at,
                           phone_number, date_of_birth
                      FROM users WHERE id=?""",
                 (user_id,),
             ).fetchone()
-            if not row or not row["email_verified_at"] or not row["phone_verified_at"] or not row["phone_number"] or not row["date_of_birth"]:
+            if not row or not row["email_verified_at"] or not row["date_of_birth"]:
                 return None
             current = str(row["onboarding_state"] or OnboardingState.NEW)
             if current == OnboardingState.AUTHENTICATED:

@@ -43,7 +43,7 @@ test.describe("Sentinel DNA enterprise identity surfaces", () => {
     }
   });
 
-  test("signup exposes an accessible country selector", async (t) => {
+  test("signup exposes a valid identity registration flow without phone verification", async (t) => {
     const browser = await chromium.launch({ headless: true }).catch(() => null);
     if (!browser) return t.skip("Chromium is not installed");
     const { context, page } = await openBrowserPage(browser, "/signup");
@@ -52,6 +52,9 @@ test.describe("Sentinel DNA enterprise identity surfaces", () => {
       assert.equal(await trigger.isVisible(), true);
       await trigger.click();
       assert.equal(await page.getByRole("searchbox", { name: "Search countries" }).isVisible(), true);
+      assert.equal(await page.getByLabel("Mobile phone").evaluate((input) => input.hasAttribute("required")), false);
+      assert.equal(await page.getByRole("button", { name: "Send code" }).count(), 1);
+      assert.equal(await page.getByLabel("Phone verification code").count(), 0);
     } finally {
       await context.close();
       await browser.close();

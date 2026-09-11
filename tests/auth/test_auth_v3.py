@@ -23,21 +23,16 @@ def app(tmp_path, monkeypatch):
 
 def token(client): return client.get("/api/auth/csrf").get_json()["csrf_token"]
 
-def test_v3_signup_phone_dob_and_analyst_binding(app):
+def test_v3_signup_email_dob_and_analyst_binding_without_phone_challenge(app):
     client = app.test_client(); csrf = token(client)
     assert client.post("/api/auth/email/send-registration-code", json={"email":"v3@example.test"}, headers={"X-CSRF-Token":csrf}).status_code == 202
     email_code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
     email_challenge = app.container.require("auth_service").db.connect().execute("SELECT id FROM otp_challenges WHERE purpose='registration_email' ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
     assert client.post("/api/auth/email/verify-registration-code", json={"challenge_id":email_challenge,"code":email_code}, headers={"X-CSRF-Token":csrf}).status_code == 200
-    send = client.post("/api/auth/phone/send-code", json={"country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert send.status_code == 202
-    challenge = send.get_json()["challenge_id"]
-    code = app.config["SMS_PROVIDER"].messages[-1]["code"]
-    assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
-    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
+    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
     assert created.status_code == 201 and created.get_json()["role"] == "analyst"
     assert created.get_json()["onboarding_state"] == "AUTHENTICATED"
-    assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
+    assert created.get_json().get("phone_number") in (None, "")
 
 def test_v3_csrf_and_dob_rejection(app):
     client = app.test_client()

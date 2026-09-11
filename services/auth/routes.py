@@ -225,7 +225,8 @@ def register():
     try:
         # Explicit migration boundary: legacy JSON callers remain compatible
         # until a versioned API contract replaces this path. Browser-style
-        # registration always requires email and phone verification below.
+        # registration requires email verification. MFA enrollment is enforced
+        # before workspace access; phone is optional recovery/fallback only.
         legacy_api = (current_app.config.get("AUTH_LEGACY_JSON_COMPAT", True) and request.is_json and not data.get("date_of_birth") and not data.get("phone")) or organization_pending
         email_verified_at = None
         if not legacy_api:
@@ -234,19 +235,16 @@ def register():
             expected_email = str(data.get("email", "")).strip().lower()
             if session.get("registration_email_verified") != expected_email:
                 raise ValueError("verification_required")
-            if session.get("registration_phone_verified") != phone:
-                raise ValueError("verification_required")
             with _service().db.session() as connection:
                 binding = _otp_binding()
-                verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (data.get("phone_challenge_id"), phone, binding)).fetchone()
                 email_verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_email' AND consumed_at IS NOT NULL AND destination=? AND session_binding=?", (email_challenge_id, expected_email, binding)).fetchone()
-            if not verified or not email_verified: raise ValueError("verification_required")
+            if not email_verified: raise ValueError("verification_required")
             email_verified_at = datetime.now(timezone.utc).isoformat()
         user = _service().register(
             data.get("username", ""), data.get("email", ""), data.get("password", ""),
             "analyst", phone_number=phone, date_of_birth=dob,
             email_verified_at=email_verified_at,
-            phone_verified_at=(datetime.now(timezone.utc).isoformat() if not legacy_api else None),
+            phone_verified_at=None,
             onboarding_state=(OnboardingState.AUTHENTICATED if legacy_api else OnboardingState.NEW),
         )
     except AuthRegistrationConflict: return jsonify({"error": "registration_unavailable"}), 409
