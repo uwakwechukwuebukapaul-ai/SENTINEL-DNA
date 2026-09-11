@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 import yaml
@@ -511,12 +512,48 @@ def test_compose_preserves_internal_application_port_and_no_generated_env_mount(
     assert "SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR" in compose
     assert "target: /etc/nginx/tls" in compose
     assert "SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY" in compose
-    assert "POSTGRES_PASSWORD:?set POSTGRES_PASSWORD" in compose
+    assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE:?set external PostgreSQL password file" in compose
     assert "SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST" in compose
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:?set SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in compose
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_PATH: /run/sentinel/release/metadata.json" in compose
     assert "target: /run/sentinel/release/metadata.json" in compose
     assert "read_only: true" in compose
+
+
+def test_root_and_deployment_compose_use_the_external_postgres_password_file_contract():
+    contracts = (
+        (ROOT / "docker-compose.yml", ("migration", "sentinel-dna")),
+        (ROOT / "deployment" / "docker-compose.yml", ("migration", "app")),
+    )
+
+    for path, application_services in contracts:
+        raw = path.read_text(encoding="utf-8")
+        compose = yaml.safe_load(raw)
+        services = compose["services"]
+
+        assert "PGPASSWORD" not in raw
+        assert "DATABASE_URL" in raw
+        assert "SENTINEL_DNA_POSTGRES_PASSWORD_FILE" in raw
+        assert "POSTGRES_PASSWORD_FILE" in raw
+
+        for service_name in application_services:
+            environment = services[service_name]["environment"]
+            assert "PGPASSWORD" not in environment
+            assert environment["SENTINEL_DNA_POSTGRES_PASSWORD_FILE"] == (
+                "/run/secrets/sentinel_dna_postgres_password"
+            )
+            assert urlparse(environment["DATABASE_URL"]).password is None
+            assert "sentinel_dna_postgres_password" in services[service_name]["secrets"]
+
+        postgres_environment = services["postgres"]["environment"]
+        assert "POSTGRES_PASSWORD" not in postgres_environment
+        assert postgres_environment["POSTGRES_PASSWORD_FILE"] == (
+            "/run/secrets/sentinel_dna_postgres_password"
+        )
+        assert "sentinel_dna_postgres_password" in services["postgres"]["secrets"]
+
+        secret_file = compose["secrets"]["sentinel_dna_postgres_password"]["file"]
+        assert "${SENTINEL_DNA_POSTGRES_PASSWORD_FILE:?" in secret_file
 
 
 def test_compose_build_contract_uses_full_candidate_revision():
