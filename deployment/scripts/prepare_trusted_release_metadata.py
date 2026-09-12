@@ -31,7 +31,7 @@ REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_CREATED_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
-IMAGE_REPOSITORY = "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna"
+IMAGE_REPOSITORY = "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna"
 METADATA_KEYS = frozenset(("release_sha", "image_digest"))
 
 
