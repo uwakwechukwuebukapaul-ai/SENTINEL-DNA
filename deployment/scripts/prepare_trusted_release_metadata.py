@@ -31,6 +31,7 @@ REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_CREATED_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+IMAGE_REPOSITORY = "ghcr.io/uwakwechukwuebukpaul-ai/sentinel-dna"
 METADATA_KEYS = frozenset(("release_sha", "image_digest"))
 
 
@@ -56,10 +57,18 @@ def _inspect_image(image: str, docker_executable: str = "docker") -> dict[str, A
 
 def _image_digest(info: dict[str, Any]) -> str:
     digests = info.get("RepoDigests") or []
-    matching = [value.rsplit("@", 1)[1] for value in digests if isinstance(value, str) and "@" in value]
-    if len(matching) != 1 or not IMAGE_DIGEST_PATTERN.fullmatch(matching[0]):
+    repository_prefix = IMAGE_REPOSITORY + "@"
+    matching = {
+        value[len(repository_prefix):]
+        for value in digests
+        if isinstance(value, str) and value.startswith(repository_prefix)
+    }
+    if len(matching) != 1:
         raise TrustedReleaseMetadataError("trusted_release_image_digest_unavailable")
-    return matching[0]
+    digest = next(iter(matching))
+    if not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+        raise TrustedReleaseMetadataError("trusted_release_image_digest_unavailable")
+    return digest
 
 
 def _validate_output_path(output: Path, repository_root: Path) -> tuple[Path, Path]:
