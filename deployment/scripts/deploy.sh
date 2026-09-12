@@ -3,6 +3,7 @@ set -eu
 
 : "${STAGING_ENV_FILE:?STAGING_ENV_FILE must point to external staging configuration}"
 : "${SENTINEL_DNA_BASE_URL:?SENTINEL_DNA_BASE_URL must point to the private staging edge}"
+: "${SENTINEL_DNA_STAGING_TLS_DIR:?SENTINEL_DNA_STAGING_TLS_DIR must point to external staging TLS material}"
 : "${SENTINEL_DNA_IMAGE_TAG:?SENTINEL_DNA_IMAGE_TAG must be derived from the reviewed checkout}"
 : "${SENTINEL_DNA_IMAGE_REVISION_FULL:?SENTINEL_DNA_IMAGE_REVISION_FULL must be the full reviewed commit}"
 : "${SENTINEL_DNA_IMAGE_CREATED:?SENTINEL_DNA_IMAGE_CREATED must be derived release metadata}"
@@ -10,6 +11,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPOSITORY_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 STAGING_COMPOSE="$REPOSITORY_ROOT/deployment/staging/docker-compose.yml"
+STAGING_OVERRIDE="$REPOSITORY_ROOT/deployment/staging/docker-compose.pilot.override.yml"
 
 case "$STAGING_ENV_FILE" in
   /*) ;;
@@ -24,6 +26,14 @@ if [ ! -f "$STAGING_ENV_FILE" ]; then
 fi
 if [ ! -f "$STAGING_COMPOSE" ]; then
   echo "Staging Compose contract was not found" >&2
+  exit 1
+fi
+if [ ! -f "$STAGING_OVERRIDE" ]; then
+  echo "Pilot staging Compose override was not found" >&2
+  exit 1
+fi
+if [ "$SENTINEL_DNA_BASE_URL" != "https://sentinel-dna-staging:18443" ]; then
+  echo "SENTINEL_DNA_BASE_URL must use HTTPS and be the certified staging origin" >&2
   exit 1
 fi
 
@@ -41,18 +51,24 @@ docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
+  --file "$STAGING_OVERRIDE" \
   up -d --build postgres redis
 
 docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
+  --file "$STAGING_OVERRIDE" \
   run --rm --build migration
 
 docker compose \
   --project-name sentinel-dna-staging \
   --env-file "$STAGING_ENV_FILE" \
   --file "$STAGING_COMPOSE" \
-  up -d --build app edge
+  --file "$STAGING_OVERRIDE" \
+  up -d --build --force-recreate app edge
 
+staging_ca_file="${SENTINEL_DNA_STAGING_TLS_CA_FILE:-$SENTINEL_DNA_STAGING_TLS_DIR/staging-ca.crt}"
+SENTINEL_DNA_TLS_CA_FILE="$staging_ca_file" \
+  SENTINEL_DNA_BASE_URL="$SENTINEL_DNA_BASE_URL" \
 "$SCRIPT_DIR/health_check.sh"

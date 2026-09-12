@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "external_artifact_onboarding_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_verification": {
+    "status": "BLOCKED_WITH_REASON",
+    "failure_category": "TB_AUTH_BRIDGE_MISSING"
+  },
+  "activation": {
+    "status": "BLOCKED_WITH_REASON",
+    "codes": [
+      "TB_AUTH_BRIDGE_MISSING"
+    ]
+  },
+  "checks": {
+    "runtime_module_exists": {
+      "name": "runtime_module_exists",
+      "status": "PASS"
+    },
+    "runtime_digest_matches_manifest": {
+      "name": "runtime_digest_matches_manifest",
+      "status": "PASS"
+    },
+    "runtime_dependency_bundle": {
+      "name": "runtime_dependency_bundle",
+      "status": "PASS"
+    },
+    "manifest_integrity": {
+      "name": "manifest_integrity",
+      "status": "PASS"
+    },
+    "image_digest_binding": {
+      "name": "image_digest_binding",
+      "status": "PASS"
+    },
+    "browser_auth_bridge_binding": {
+      "name": "browser_auth_bridge_binding",
+      "status": "BLOCKED",
+      "code": "TB_AUTH_BRIDGE_MISSING"
+    },
+    "certified_origin_binding": {
+      "name": "certified_origin_binding",
+      "status": "PASS"
+    },
+    "provider_verification": {
+      "name": "provider_verification",
+      "status": "BLOCKED",
+      "code": "TB_AUTH_BRIDGE_MISSING"
+    }
+  },
+  "artifact_identity": {
+    "runtime_module_digest": "sha256:42530c78b4d15f591d090d4da71ee2485dd20247104fdb2464705879a071831b",
+    "runtime_dependency_lockfile_digest": "sha256:bfe418c7e4c3ae90aed3b0637584b4a995f7a1f3ae3e2d3833d9fb936b4f3529",
+    "browser_auth_bridge_identity": "sentinel-dna-browser-auth-bridge:1.0.0",
+    "browser_auth_bridge_digest": null,
+    "image_digest": "sha256:0ce1ef605201f5f8e2d5b47c0bffae3eaa13da68952a14229faf2c97477bacec",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "browserAuth_invoked": false,
+    "security_controls_bypassed": false
+  },
+  "blockers": [
+    "TB_AUTH_BRIDGE_MISSING"
+  ],
+  "remediation": [
+    "Obtain the separately reviewed browserAuth bridge, reconcile its digest in the activation manifest, and rerun onboarding."
+  ],
+  "evidence_sha256": "7839f5a85fa60cbea2e519d7784437a5079acf8fb7c419658651729aa74c00ad"
+}

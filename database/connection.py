@@ -66,9 +66,33 @@ def database_for_environment(*, require_postgresql: bool | None = None) -> Datab
     return create_database_backend(require_postgresql=require_postgresql)
 
 
-# Kept for existing imports. The selected backend is still lazy with respect
-# to network/database access; only configuration is resolved at import time.
-database = database_for_environment()
+class _LazyDatabaseBackend:
+    """Resolve the process backend on first use, not at module import."""
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "_backend", None)
+
+    def _resolve(self) -> DatabaseBackend:
+        backend = self._backend
+        if backend is None:
+            backend = database_for_environment()
+            object.__setattr__(self, "_backend", backend)
+        return backend
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "_backend":
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._resolve(), name, value)
+
+
+# Kept for existing imports. Backend configuration remains fail-closed, but a
+# module import must not resolve production configuration before a caller uses
+# the backend (migration rehearsal imports schema modules in isolation).
+database = _LazyDatabaseBackend()
 
 
 __all__ = [

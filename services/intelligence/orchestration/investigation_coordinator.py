@@ -1223,7 +1223,18 @@ class InvestigationCoordinator:
                 "iocs": iocs,
                 "execution": execution,
             })
-        active = [item for item in investigations if str(item["status"]).lower() in {"active", "investigating", "in_progress", "open"}]
+        # The report repository is ordered by insertion/update history, not by
+        # analyst recency.  Sort the projection explicitly so the command
+        # center's first page prioritizes the newest persisted investigations.
+        investigations = sorted(
+            investigations,
+            key=lambda item: (
+                str(item.get("last_activity") or item.get("updated_at") or item.get("created_at") or ""),
+                str(item.get("case_id") or ""),
+            ),
+            reverse=True,
+        )
+        active = [item for item in investigations if str(item["status"]).lower() in {"active", "investigating", "in_progress", "open", "running", "pending", "requires_analyst_review"}]
         severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
         threat = max((str(item.get("severity") or "").lower() for item in investigations), key=lambda value: severity_order.get(value, 0), default="")
         risk_labels = ("critical", "high", "medium", "low")
@@ -1271,7 +1282,14 @@ class InvestigationCoordinator:
                 if isinstance(event, dict):
                     activity.append({"case_id": item["case_id"], "timestamp": event.get("timestamp") or event.get("created_at"), "label": event.get("event_type") or event.get("description") or "Investigation event"})
         activity = sorted(activity, key=lambda value: str(value.get("timestamp") or ""), reverse=True)[:12]
-        total_confidence = [float(item["confidence"]) for item in investigations if isinstance(item.get("confidence"), (int, float)) and float(item["confidence"]) > 0]
+        completed_statuses = {"completed", "partially_completed", "requires_analyst_review"}
+        total_confidence = [
+            float(item["confidence"])
+            for item in investigations
+            if str(item.get("status") or "").lower() in completed_statuses
+            and isinstance(item.get("confidence"), (int, float))
+            and float(item["confidence"]) > 0
+        ]
         return {
             "investigations": investigations,
             "active_investigations": active,

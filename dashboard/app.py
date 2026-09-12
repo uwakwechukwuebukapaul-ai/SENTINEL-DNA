@@ -143,6 +143,9 @@ from services.security_copilot.routes import copilot_ai_api
 
 from services.platform_experience.routes import experience_api
 
+from services.favp_operations.routes import favp_operations_api
+from services.favp_operations.execution_routes import favp_execution_api
+
 
 
 # ---------------------------------------------------------
@@ -377,6 +380,17 @@ app.register_blueprint(
 app.register_blueprint(
     pilot_api
 )
+
+# Internal FAVP operations are opt-in and never registered in production.
+# This preserves the production runtime path and existing pilot activation
+# gates while allowing a non-production operator environment to mount the
+# bounded management/workspace API.
+if (
+    os.getenv("SENTINEL_DNA_FAVP_OPERATIONS_ENABLED", "0") == "1"
+    and os.getenv("SENTINEL_DNA_ENV", "").strip().lower() != "production"
+):
+    app.register_blueprint(favp_operations_api)
+    app.register_blueprint(favp_execution_api)
 
 app.register_blueprint(
     identity_api

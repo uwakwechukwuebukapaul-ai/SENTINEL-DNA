@@ -67,6 +67,20 @@ def test_login_page_is_available(auth_client):
     assert b"/api/auth/login" in response.data
 
 
+def test_login_page_exposes_scoped_visual_priority_and_accessible_mode_tabs(auth_client):
+    response = auth_client.get("/login")
+
+    assert b"auth-login" in response.data
+    assert b"id=\"login-password-mode\"" in response.data
+    assert b"aria-controls=\"login-password-panel\"" in response.data
+    assert b"id=\"login-email-mode\"" in response.data
+    assert b"aria-controls=\"login-email-panel\"" in response.data
+    css = auth_client.get("/static/css/sentinel-dna-auth.css")
+    assert css.status_code == 200
+    assert b"#3373f2" in css.data
+    assert b"border-radius: 46px" in css.data
+
+
 def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
     response = auth_client.get("/signup")
 
@@ -75,6 +89,50 @@ def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):
     assert b"id=\"confirm\"" in response.data
     assert b"name=\"role\"" not in response.data
     assert b"name=\"tenant_id\"" not in response.data
+
+
+def test_signup_page_exposes_one_accessible_unified_verification_flow(auth_client):
+    response = auth_client.get("/signup")
+    page = response.data
+    script = auth_client.get("/static/js/sentinel-dna-auth.js").data
+
+    assert page.count(b"data-signup-verification-send") == 1
+    assert page.count(b"data-signup-verification-verify") == 1
+    assert b"name=\"verification_method\"" in page
+    assert b"aria-controls=\"signup-email-verification\"" in page
+    assert b"SMS is reserved for optional recovery" in page
+    assert b"data-signup-email-send" not in page
+    assert b"data-signup-phone-send" not in page
+    assert b"data-signup-email-verify" not in page
+    assert b"data-signup-phone-verify" not in page
+    assert script.count(b"/api/auth/verification/send-code") == 1
+    assert script.count(b"/api/auth/verification/verify-code") == 1
+    assert b"/api/auth/email/send-registration-code" not in script
+    assert b"/api/auth/phone/send-code" not in script
+    assert b"state.verificationChallenge = null" in script
+    assert b"const payload = { method, email: $(\"#signup-email\").value.trim() };" in script
+
+
+def test_signup_verification_controls_follow_active_method_contract(auth_client):
+    page = auth_client.get("/signup").data.decode()
+    script = auth_client.get("/static/js/sentinel-dna-auth.js").data.decode()
+
+    choice = page.index('class="auth-field auth-field-wide verification-choice"')
+    assert choice < page.index('name="verification_method"')
+    assert 'country.value' not in script
+    assert 'countryPicker.value' in script
+    assert 'input:-webkit-autofill' in auth_client.get("/static/css/sentinel-dna-auth.css").data.decode()
+
+
+def test_signup_payload_only_adds_phone_contact_in_phone_mode(auth_client):
+    script = auth_client.get("/static/js/sentinel-dna-auth.js").data.decode()
+
+    assert 'const payload = { username:' in script
+    assert 'const payload = { method, email: $("#signup-email").value.trim() };' in script
+    assert 'payload.email_challenge_id' not in script
+    assert 'payload.phone_challenge_id' not in script
+    assert 'cancelVerificationCooldown?.();' in script
+    assert 'verificationCode.value = "";' in script
 
 
 def test_signup_creates_analyst_user_and_duplicate_is_rejected(auth_client):

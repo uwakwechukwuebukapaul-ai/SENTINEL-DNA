@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "external_artifact_onboarding_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_verification": {
+    "status": "BLOCKED_WITH_REASON",
+    "failure_category": "TB_PROVIDER_MANIFEST_INVALID"
+  },
+  "activation": {
+    "status": "BLOCKED_WITH_REASON",
+    "codes": [
+      "TB_PROVIDER_MANIFEST_INVALID"
+    ]
+  },
+  "checks": {
+    "runtime_module_exists": {
+      "name": "runtime_module_exists",
+      "status": "PASS"
+    },
+    "runtime_digest_matches_manifest": {
+      "name": "runtime_digest_matches_manifest",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "manifest_integrity": {
+      "name": "manifest_integrity",
+      "status": "PASS"
+    },
+    "image_digest_binding": {
+      "name": "image_digest_binding",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    },
+    "certified_origin_binding": {
+      "name": "certified_origin_binding",
+      "status": "PASS"
+    },
+    "provider_verification": {
+      "name": "provider_verification",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_INVALID"
+    }
+  },
+  "artifact_identity": {
+    "runtime_module_digest": null,
+    "image_digest": "sha256:0ce1ef605201f5f8e2d5b47c0bffae3eaa13da68952a14229faf2c97477bacec",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "browserAuth_invoked": false,
+    "security_controls_bypassed": false
+  },
+  "blockers": [
+    "TB_PROVIDER_MANIFEST_INVALID"
+  ],
+  "remediation": [
+    "Return the activation manifest to custody for integrity, origin, approval, and digest reconciliation."
+  ],
+  "evidence_sha256": "6ff6389ff52371a6d4f909803ed7a49b71ba2cc7965709af69efc859d42268e2"
+}

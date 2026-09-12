@@ -27,7 +27,7 @@ def create_app():
     )
     runtime_config = RuntimeConfig.from_environment()
     runtime_config.validate()
-    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=timedelta(days=30), SESSION_REFRESH_EACH_REQUEST=False, AUTH_LEGACY_JSON_COMPAT=runtime_config.environment != "production", DEMO_DATA_ENABLED=os.getenv("SENTINEL_DNA_DEMO_DATA", "0" if runtime_config.environment == "production" else "1") == "1", PILOT_ACCESS_REQUIRED=runtime_config.pilot_access_required, CONFIG_SOURCE_CLASSIFICATION=runtime_config.config_source_classification, DATABASE_TARGET_CLASSIFICATION=runtime_config.database_target_classification)
+    app.config.update(ENVIRONMENT=runtime_config.environment, DEBUG=runtime_config.debug, SECRET_KEY=runtime_config.secret_key, SESSION_COOKIE_SECURE=runtime_config.secure_cookies, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=timedelta(days=30), SESSION_REFRESH_EACH_REQUEST=False, AUTH_LEGACY_JSON_COMPAT=runtime_config.environment in {"development", "testing", "test"}, DEMO_DATA_ENABLED=os.getenv("SENTINEL_DNA_DEMO_DATA", "0" if runtime_config.environment in {"production", "staging"} else "1") == "1", PILOT_ACCESS_REQUIRED=runtime_config.pilot_access_required, CONFIG_SOURCE_CLASSIFICATION=runtime_config.config_source_classification, DATABASE_TARGET_CLASSIFICATION=runtime_config.database_target_classification)
     if runtime_config.environment == "production":
         app.config.update(PROPAGATE_EXCEPTIONS=False, TRAP_HTTP_EXCEPTIONS=False)
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -81,6 +81,7 @@ def create_app():
         pilot_management_api,
         pilot_provisioning_api,
     )
+    from services.controlled_analyst_pilot.routes import controlled_analyst_pilot_api
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
@@ -114,6 +115,7 @@ def create_app():
     app.register_blueprint(pilot_management_api)
     app.register_blueprint(pilot_authorization_api)
     app.register_blueprint(pilot_provisioning_api)
+    app.register_blueprint(controlled_analyst_pilot_api)
     app.register_blueprint(support_api)
     app.register_blueprint(exercise_api)
 
@@ -193,9 +195,9 @@ def create_app():
         try:
             if not database.health_check():
                 raise RuntimeError("database health check failed")
-            return {"status": "ok", "service": "sentinel-dna", "database": "ok"}
+            return {"status": "ok"}
         except Exception:
-            return {"status": "degraded", "database": "unavailable"}, 503
+            return {"status": "degraded"}, 503
 
     @app.get("/ready")
     def ready():

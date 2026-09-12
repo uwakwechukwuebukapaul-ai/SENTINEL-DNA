@@ -55,6 +55,14 @@ PERMISSIONS = {
     "product_analytics:read": {"admin", "soc_manager"},
     "pilot:read": {"admin", "soc_manager", "analyst", "viewer"},
     "pilot:manage": {"admin", "soc_manager"},
+    # Controlled analyst pilot capabilities are explicit.  They do not grant
+    # general tenant administration or production response authority.
+    "pilot:feedback": {"admin", "soc_manager", "analyst"},
+    "pilot:feedback:read": {"admin", "soc_manager", "analyst"},
+    "pilot:review": {"admin", "soc_manager", "analyst"},
+    "pilot:review:read": {"admin", "soc_manager", "analyst"},
+    "pilot:review:manage": {"admin", "soc_manager"},
+    "pilot:audit:read": {"admin", "soc_manager"},
     "support:read": {"admin", "soc_manager", "analyst", "viewer"},
     "exercises:read": {"admin", "soc_manager", "analyst", "viewer"},
     "readiness:view": {"admin", "soc_manager", "analyst", "viewer"},

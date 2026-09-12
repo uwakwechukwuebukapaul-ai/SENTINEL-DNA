@@ -24,6 +24,9 @@ class User:
     expires_at: str | None = None
     revocation_status: str = "active"
     audit_correlation_id: str | None = None
+    onboarding_state: str = "AUTHENTICATED"
+    verification_method: str | None = None
+    mfa_enabled: bool = False
 
     def public(self) -> dict[str, Any]:
         return {
@@ -32,6 +35,9 @@ class User:
             "last_login": self.last_login, "is_active": self.is_active,
             "phone_verified": bool(self.phone_verified_at),
             "email_verified": bool(self.email_verified_at),
+            "onboarding_state": self.onboarding_state,
+            "verification_method": self.verification_method,
+            "mfa_enabled": self.mfa_enabled,
             "age": self.age(), "age_verified": self.age() is not None,
             "phone": self._masked_phone(),
         }

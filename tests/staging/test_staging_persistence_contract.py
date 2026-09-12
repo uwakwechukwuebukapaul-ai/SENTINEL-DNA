@@ -84,6 +84,8 @@ def test_staging_migration_and_application_share_the_authoritative_persistence_c
     migration = compose["services"]["migration"]
 
     assert migration["command"] == ["python", "-m", "database.run_migrations"]
+    assert migration["working_dir"] == "/app"
+    assert migration["environment"]["PYTHONPATH"] == "/app"
     assert migration["depends_on"]["postgres"]["condition"] == "service_healthy"
     assert app["depends_on"]["postgres"]["condition"] == "service_healthy"
     assert app["environment"]["DATABASE_URL"] == migration["environment"]["DATABASE_URL"]

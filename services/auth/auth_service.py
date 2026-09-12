@@ -4,16 +4,22 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import base64
+import hashlib
+import secrets
+from cryptography.fernet import Fernet, InvalidToken
 
 from database.connection import DatabaseConnection, database
 from database.portability import identity_primary_key, table_columns
 from .models import User
-from .security import hash_password, verify_password
+from .security import hash_password, validate_password, verify_password
 from .age import validate_minimum_age
 from .otp import code_hash, expires_at, generate_code, utcnow, OTP_COOLDOWN_SECONDS, OTP_MAX_ATTEMPTS
 from .phone import normalize_phone
 from .rate_limit import DatabaseRateLimitBackend
 from services.rate_limiting import RateLimitPolicy, RateLimitRequest, RateLimitService
+from .onboarding import OnboardingState, initial_state
+from .totp import verify_code as verify_totp
 
 
 class AuthService:
@@ -38,13 +44,23 @@ class AuthService:
                 "email_verified_at",
                 "expires_at",
                 "audit_correlation_id",
+                "verification_method",
             ):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
+            if "mfa_enabled" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0")
+            for name in ("mfa_secret_ciphertext", "mfa_enrolled_at"):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
             if "revocation_status" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+            if "onboarding_state" not in columns:
+                connection.execute(
+                    "ALTER TABLE users ADD COLUMN onboarding_state TEXT NOT NULL DEFAULT 'AUTHENTICATED'"
+                )
             connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_identities (
                 id {identity}, user_id INTEGER NOT NULL,
                 provider TEXT NOT NULL, provider_subject TEXT NOT NULL,
@@ -55,7 +71,21 @@ class AuthService:
                 id TEXT PRIMARY KEY, user_id INTEGER, destination TEXT NOT NULL,
                 purpose TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
                 attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL,
-                created_at TEXT NOT NULL, consumed_at TEXT, provider_request_id TEXT)""")
+                created_at TEXT NOT NULL, consumed_at TEXT, provider_request_id TEXT,
+                session_binding TEXT)""")
+            otp_columns = table_columns(connection, self.db.backend_name, "otp_challenges")
+            if "session_binding" not in otp_columns:
+                connection.execute("ALTER TABLE otp_challenges ADD COLUMN session_binding TEXT")
+            connection.execute("""CREATE TABLE IF NOT EXISTS mfa_enrollment_challenges (
+                id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, secret_ciphertext TEXT NOT NULL,
+                session_binding TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL,
+                consumed_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id)
+            )""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS mfa_recovery_codes (
+                id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, code_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL, used_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id)
+            )""")
             connection.execute("""CREATE TABLE IF NOT EXISTS persistent_sessions (
                 id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT UNIQUE NOT NULL,
                 tenant_id TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
@@ -74,20 +104,27 @@ class AuthService:
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
-    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, connection=None) -> User:
-        if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
+    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, verification_method=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, onboarding_state=None, connection=None) -> User:
+        if len(username.strip()) < 3 or "@" not in str(email):
             raise ValueError("invalid_user_registration")
+        try:
+            validate_password(password)
+        except ValueError as exc:
+            raise ValueError("invalid_user_registration") from exc
         normalized_role = str(role or "analyst").strip().lower()
         if normalized_role not in self.ROLES:
             raise ValueError("invalid_user_role")
         normalized_dob = validate_minimum_age(date_of_birth) if date_of_birth is not None else None
+        normalized_state = OnboardingState.validate(
+            onboarding_state or initial_state(legacy_compatibility=True)
+        )
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             row = connection.execute(
-                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0),
+                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,verification_method,session_version,expires_at,revocation_status,audit_correlation_id,is_active,onboarding_state)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, verification_method, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, normalized_state),
             ).fetchone()
             user_id = row["id"]
             connection.execute(
@@ -105,7 +142,7 @@ class AuthService:
 
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
-            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active'", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
+            row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active' AND COALESCE(onboarding_state, 'AUTHENTICATED') IN ('AUTHENTICATED','MFA_ENROLLMENT_REQUIRED')", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
             if not row or not verify_password(row["password_hash"], password):
                 return None
             now = datetime.now(timezone.utc).isoformat()
@@ -184,7 +221,7 @@ class AuthService:
         return cursor.rowcount
 
     def reset_password(self, user_id, password, *, connection=None):
-        if len(str(password or "")) < 10: raise ValueError("invalid_password")
+        validate_password(password)
         def reset(owned_connection):
             owned_connection.execute(
                 "UPDATE users SET password_hash=?, session_version=COALESCE(session_version, 0)+1 WHERE id=?",
@@ -308,23 +345,163 @@ class AuthService:
         )
         return decision.allowed
 
-    def issue_otp(self, destination, purpose, *, user_id=None, secret, provider_request_id=None):
+    def issue_otp(self, destination, purpose, *, user_id=None, secret, provider_request_id=None, session_binding=None):
         with self.db.session() as connection:
             recent = connection.execute("SELECT created_at FROM otp_challenges WHERE destination=? AND purpose=? ORDER BY created_at DESC LIMIT 1", (destination, purpose)).fetchone()
             if recent and datetime.fromisoformat(recent["created_at"]) + __import__('datetime').timedelta(seconds=OTP_COOLDOWN_SECONDS) > utcnow(): raise ValueError("otp_cooldown")
             code = generate_code(); challenge_id = __import__('uuid').uuid4().hex; now = utcnow().isoformat()
             connection.execute("UPDATE otp_challenges SET consumed_at=? WHERE destination=? AND purpose=? AND consumed_at IS NULL", (now, destination, purpose))
-            connection.execute("INSERT INTO otp_challenges(id,user_id,destination,purpose,code_hash,expires_at,attempts,max_attempts,created_at,provider_request_id) VALUES(?,?,?,?,?,?,?,?,?,?)", (challenge_id,user_id,destination,purpose,code_hash(code, secret),expires_at(),0, OTP_MAX_ATTEMPTS,now,provider_request_id))
+            connection.execute("INSERT INTO otp_challenges(id,user_id,destination,purpose,code_hash,expires_at,attempts,max_attempts,created_at,provider_request_id,session_binding) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (challenge_id,user_id,destination,purpose,code_hash(code, secret),expires_at(),0, OTP_MAX_ATTEMPTS,now,provider_request_id,session_binding))
         return challenge_id, code
 
-    def verify_otp(self, challenge_id, code, *, secret):
+    def verify_otp(self, challenge_id, code, *, secret, session_binding=None):
         with self.db.session() as connection:
             row = connection.execute("SELECT * FROM otp_challenges WHERE id=?", (challenge_id,)).fetchone()
-            if not row or row["consumed_at"] or datetime.fromisoformat(row["expires_at"]) <= utcnow() or row["attempts"] >= row["max_attempts"]: return None
-            if not __import__('hmac').compare_digest(row["code_hash"], code_hash(str(code), secret)):
-                connection.execute("UPDATE otp_challenges SET attempts=attempts+1 WHERE id=?", (challenge_id,)); return None
-            connection.execute("UPDATE otp_challenges SET consumed_at=? WHERE id=?", (utcnow().isoformat(), challenge_id))
+            if not row or row["consumed_at"] or datetime.fromisoformat(row["expires_at"]) <= utcnow() or row["attempts"] >= row["max_attempts"]:
+                return None
+            if session_binding is not None and str(row["session_binding"] or "") != str(session_binding):
+                return None
+            submitted_hash = code_hash(str(code), secret)
+            if not __import__('hmac').compare_digest(row["code_hash"], submitted_hash):
+                connection.execute(
+                    "UPDATE otp_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts < max_attempts",
+                    (challenge_id,),
+                )
+                return None
+            cursor = connection.execute(
+                """UPDATE otp_challenges SET consumed_at=?
+                   WHERE id=? AND consumed_at IS NULL AND attempts < max_attempts
+                     AND expires_at>? AND code_hash=?""",
+                (utcnow().isoformat(), challenge_id, utcnow().isoformat(), submitted_hash),
+            )
+            if cursor.rowcount != 1:
+                return None
         return row["user_id"]
+
+    @staticmethod
+    def _mfa_fernet(secret: str) -> Fernet:
+        key = base64.urlsafe_b64encode(hashlib.sha256(str(secret).encode()).digest())
+        return Fernet(key)
+
+    def create_mfa_enrollment(self, user_id: int, *, session_binding: str, secret: str):
+        """Create a short-lived, single-use TOTP enrollment ceremony."""
+        from .totp import generate_secret, provisioning_uri
+        now = utcnow()
+        enrollment_secret = generate_secret()
+        challenge_id = secrets.token_urlsafe(24)
+        encrypted = self._mfa_fernet(secret).encrypt(enrollment_secret.encode()).decode()
+        with self.db.session() as connection:
+            row = connection.execute("SELECT onboarding_state, mfa_enabled, email FROM users WHERE id=?", (user_id,)).fetchone()
+            if not row or row["onboarding_state"] != OnboardingState.MFA_ENROLLMENT_REQUIRED or row["mfa_enabled"]:
+                raise ValueError("mfa_enrollment_not_allowed")
+            connection.execute("UPDATE mfa_enrollment_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL", (now.isoformat(), user_id))
+            connection.execute("INSERT INTO mfa_enrollment_challenges(id,user_id,secret_ciphertext,session_binding,created_at,expires_at,attempts,max_attempts) VALUES(?,?,?,?,?,?,?,?)", (challenge_id, user_id, encrypted, session_binding, now.isoformat(), (now + timedelta(minutes=10)).isoformat(), 0, 5))
+        return challenge_id, provisioning_uri(enrollment_secret, row["email"])
+
+    def verify_mfa_enrollment(self, challenge_id: str, user_id: int, code: str, *, secret: str, session_binding: str):
+        """Confirm a TOTP ceremony and atomically enable MFA plus recovery codes."""
+        now = utcnow()
+        with self.db.session() as connection:
+            row = connection.execute("SELECT * FROM mfa_enrollment_challenges WHERE id=? AND user_id=?", (challenge_id, user_id)).fetchone()
+            if not row or row["consumed_at"] or row["session_binding"] != session_binding or datetime.fromisoformat(row["expires_at"]) <= now or row["attempts"] >= row["max_attempts"]:
+                return None
+            try:
+                totp_secret = self._mfa_fernet(secret).decrypt(row["secret_ciphertext"].encode(), ttl=900).decode()
+            except (InvalidToken, ValueError):
+                return None
+            if not verify_totp(totp_secret, code):
+                connection.execute("UPDATE mfa_enrollment_challenges SET attempts=attempts+1 WHERE id=? AND attempts < max_attempts", (challenge_id,))
+                return None
+            connection.execute("UPDATE mfa_enrollment_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL", (now.isoformat(), challenge_id))
+            updated = connection.execute("UPDATE users SET mfa_enabled=1, mfa_secret_ciphertext=?, mfa_enrolled_at=?, onboarding_state=? WHERE id=? AND onboarding_state=? AND COALESCE(mfa_enabled,0)=0", (row["secret_ciphertext"], now.isoformat(), OnboardingState.AUTHENTICATED, user_id, OnboardingState.MFA_ENROLLMENT_REQUIRED))
+            if updated.rowcount != 1: return None
+            recovery_codes = [secrets.token_hex(8).upper() for _ in range(8)]
+            for value in recovery_codes:
+                connection.execute("INSERT INTO mfa_recovery_codes(id,user_id,code_hash,created_at) VALUES(?,?,?,?)", (secrets.token_urlsafe(16), user_id, code_hash(value, secret), now.isoformat()))
+        return recovery_codes
+
+    def verify_mfa_code(self, user_id: int, code: str, *, secret: str) -> bool:
+        with self.db.session() as connection:
+            row = connection.execute("SELECT mfa_secret_ciphertext, mfa_enabled FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row or not row["mfa_enabled"] or not row["mfa_secret_ciphertext"]: return False
+        try:
+            totp_secret = self._mfa_fernet(secret).decrypt(row["mfa_secret_ciphertext"].encode()).decode()
+        except InvalidToken: return False
+        return verify_totp(totp_secret, code)
+
+    def consume_mfa_recovery_code(self, user_id: int, value: str, *, secret: str) -> bool:
+        submitted = code_hash(str(value or "").strip().upper(), secret)
+        with self.db.session() as connection:
+            cursor = connection.execute("UPDATE mfa_recovery_codes SET used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL", (utcnow().isoformat(), user_id, submitted))
+            return cursor.rowcount == 1
+
+    def transition_onboarding(self, user_id: int, target: str, *, connection=None) -> User | None:
+        """Advance one user through a valid server-side onboarding transition."""
+        target = OnboardingState.validate(target)
+
+        def advance(owned_connection):
+            row = owned_connection.execute(
+                "SELECT onboarding_state FROM users WHERE id=?", (user_id,)
+            ).fetchone()
+            if not row:
+                return None
+            current = str(row["onboarding_state"] or OnboardingState.AUTHENTICATED)
+            if current == OnboardingState.MFA_ENROLLMENT_REQUIRED and target == OnboardingState.AUTHENTICATED:
+                enabled = owned_connection.execute("SELECT mfa_enabled FROM users WHERE id=?", (user_id,)).fetchone()
+                if not enabled or not enabled["mfa_enabled"]:
+                    raise ValueError("mfa_enrollment_required")
+            next_state = OnboardingState.next(current, target)
+            owned_connection.execute(
+                "UPDATE users SET onboarding_state=? WHERE id=?",
+                (next_state, user_id),
+            )
+            return next_state
+
+        if connection is None:
+            with self.db.session() as owned_connection:
+                advance(owned_connection)
+            return self.get_by_id(user_id)
+        advance(connection)
+        row = connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        return self._user(row) if row else None
+
+    def complete_verified_onboarding(self, user_id: int) -> User | None:
+        """Atomically complete the verified browser registration lifecycle."""
+        sequence = (
+            OnboardingState.VERIFICATION_METHOD_SELECTED,
+            OnboardingState.VERIFICATION_SENT,
+            OnboardingState.VERIFIED,
+            OnboardingState.PROFILE_REQUIRED,
+            OnboardingState.PROFILE_COMPLETED,
+            OnboardingState.WORKSPACE_PROVISIONING,
+            OnboardingState.WORKSPACE_READY,
+            OnboardingState.MFA_ENROLLMENT_REQUIRED,
+        )
+        with self.db.session() as connection:
+            row = connection.execute(
+                """SELECT onboarding_state, email_verified_at, phone_verified_at,
+                          phone_number, date_of_birth, verification_method
+                     FROM users WHERE id=?""",
+                (user_id,),
+            ).fetchone()
+            if not row or not row["verification_method"] or not row["date_of_birth"]:
+                return None
+            method = str(row["verification_method"])
+            if method == "email" and not row["email_verified_at"]: return None
+            if method == "phone" and not row["phone_verified_at"]: return None
+            if method not in {"email", "phone"}: return None
+            current = str(row["onboarding_state"] or OnboardingState.NEW)
+            if current == OnboardingState.AUTHENTICATED:
+                row = connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                return self._user(row) if row else None
+            for target in sequence:
+                current = OnboardingState.next(current, target)
+                connection.execute(
+                    "UPDATE users SET onboarding_state=? WHERE id=?",
+                    (current, user_id),
+                )
+            row = connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        return self._user(row) if row else None
 
     @staticmethod
     def _hash_token(value):
@@ -342,6 +519,8 @@ class AuthService:
         """Return an active user only when the signed session epoch is current."""
         user = self.get_by_id(user_id)
         if not user or not user.is_active or user.revocation_status != "active":
+            return None
+        if user.onboarding_state != OnboardingState.AUTHENTICATED:
             return None
         if user.expires_at:
             try:
@@ -364,4 +543,7 @@ class AuthService:
             row["actor_id"], row["date_of_birth"], row["email_verified_at"],
             int(row["session_version"] or 0), row["expires_at"],
             str(row["revocation_status"] or "active"), row["audit_correlation_id"],
+            str(row["onboarding_state"] or OnboardingState.AUTHENTICATED),
+            row["verification_method"] if "verification_method" in row.keys() else None,
+            bool(row["mfa_enabled"]) if "mfa_enabled" in row.keys() else False,
         )

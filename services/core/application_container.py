@@ -12,6 +12,7 @@ runtime instances.
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
 from services.core.service_registry import (
@@ -76,6 +77,7 @@ from services.pilot_reports.service import PilotReportService
 from services.pilot_management.service import PilotManagementService
 from services.pilot_management.authorization import PilotAuthorizationService
 from services.pilot_management.provisioning import PilotAccountProvisioningService
+from services.controlled_analyst_pilot import ControlledAnalystPilotService
 from services.support.service import SupportService
 from services.exercises.service import ExerciseService
 from services.case_studies.service import CaseStudyService
@@ -144,6 +146,7 @@ from lab.lab_content.simulation_runner import SimulationRunner
 from services.customer_zero.demo_pipeline import CustomerZeroDemoPipeline
 from services.operations_hardening.service import OperationsHardeningService
 from services.pilot_simulation.service import PilotSimulationService
+from services.favp_operations import FAVPOperationsRepository, FAVPOperationsService, FAVPExecutionService
 from services.compliance.governance import GovernanceService
 from services.identity_security.service import IdentitySecurityService
 from services.identity.canonical_authority import CanonicalAuthorityService
@@ -310,6 +313,12 @@ def build_container() -> ServiceRegistry:
         pilot_authorization_service=pilot_authorization_service,
         audit_service=audit_service,
     )
+    controlled_analyst_pilot_service = ControlledAnalystPilotService(
+        database,
+        canonical_authority=canonical_authority,
+        audit_service=audit_service,
+        provisioning_service=pilot_account_provisioning_service,
+    )
     support_service = SupportService()
     exercise_service = ExerciseService(); case_study_service = CaseStudyService()
     readiness_service = ReadinessService(service_lookup=lambda name: registry.get(name) if registry.has(name) else None)
@@ -333,6 +342,20 @@ def build_container() -> ServiceRegistry:
     customer_zero_demo_pipeline = CustomerZeroDemoPipeline()
     operations_hardening = OperationsHardeningService()
     pilot_simulation = PilotSimulationService()
+    favp_operations = None
+    favp_execution = None
+    # FAVP is an internal, explicitly opt-in operations layer.  Keeping the
+    # service absent in production means it cannot create tables or expose a
+    # route in a production process by accident.
+    if (
+        os.getenv("SENTINEL_DNA_FAVP_OPERATIONS_ENABLED", "0") == "1"
+        and os.getenv("SENTINEL_DNA_ENV", "").strip().lower() != "production"
+    ):
+        favp_operations = FAVPOperationsService(
+            FAVPOperationsRepository(database),
+            audit_service,
+        )
+        favp_execution = FAVPExecutionService(favp_operations, audit_service)
     governance_compliance = GovernanceService()
     identity_security = IdentitySecurityService()
     data_security = DataSecurityService()
@@ -418,6 +441,7 @@ def build_container() -> ServiceRegistry:
     registry.register("pilot_management_service", pilot_management_service)
     registry.register("pilot_authorization_service", pilot_authorization_service)
     registry.register("pilot_account_provisioning_service", pilot_account_provisioning_service)
+    registry.register("controlled_analyst_pilot_service", controlled_analyst_pilot_service)
     registry.register("support_service", support_service)
     registry.register("exercise_service", exercise_service); registry.register("case_study_service", case_study_service)
     registry.register("readiness_service", readiness_service)
@@ -443,6 +467,8 @@ def build_container() -> ServiceRegistry:
     registry.register("customer_zero_demo_pipeline", customer_zero_demo_pipeline)
     registry.register("operations_hardening", operations_hardening)
     registry.register("pilot_simulation", pilot_simulation)
+    registry.register("favp_operations", favp_operations)
+    registry.register("favp_execution", favp_execution)
     registry.register("governance_compliance", governance_compliance)
     registry.register("identity_security", identity_security)
     registry.register("data_security", data_security)

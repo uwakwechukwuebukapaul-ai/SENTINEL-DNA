@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "gate": "GATE4",
+  "evidence_type": "external_artifact_onboarding_verification",
+  "status": "BLOCKED_WITH_REASON",
+  "provider_verification": {
+    "status": "BLOCKED_WITH_REASON",
+    "failure_category": "TB_RUNTIME_UNAVAILABLE"
+  },
+  "activation": {
+    "status": "BLOCKED_WITH_REASON",
+    "codes": [
+      "TB_PROVIDER_MANIFEST_MISSING",
+      "TB_RUNTIME_UNAVAILABLE"
+    ]
+  },
+  "checks": {
+    "runtime_module_exists": {
+      "name": "runtime_module_exists",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    },
+    "runtime_digest_matches_manifest": {
+      "name": "runtime_digest_matches_manifest",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    },
+    "manifest_integrity": {
+      "name": "manifest_integrity",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_MISSING"
+    },
+    "image_digest_binding": {
+      "name": "image_digest_binding",
+      "status": "NOT_RUN"
+    },
+    "provider_verification": {
+      "name": "provider_verification",
+      "status": "BLOCKED",
+      "code": "TB_RUNTIME_UNAVAILABLE"
+    },
+    "certified_origin_binding": {
+      "name": "certified_origin_binding",
+      "status": "BLOCKED",
+      "code": "TB_PROVIDER_MANIFEST_MISSING"
+    }
+  },
+  "artifact_identity": {
+    "runtime_module_digest": null,
+    "image_digest": "sha256:17bf71b3ce57a3c1e3c6f840caa541a862cce74d6cfddc3dce9fd3d816e13653",
+    "certified_origin": "https://sentinel-dna-staging:18443"
+  },
+  "controls": {
+    "credentials_included": false,
+    "cookies_included": false,
+    "tokens_included": false,
+    "sessions_included": false,
+    "browserAuth_invoked": false,
+    "security_controls_bypassed": false
+  },
+  "blockers": [
+    "TB_PROVIDER_MANIFEST_MISSING",
+    "TB_RUNTIME_UNAVAILABLE"
+  ],
+  "remediation": [
+    "Obtain the approved activation custody manifest and configure its non-secret path; do not use the checked-in fixture.",
+    "Obtain the reviewed Playwright/RPC runtime from approved custody, verify its SHA-256 digest, and rerun onboarding."
+  ],
+  "evidence_sha256": "f35478cb82b16582a5d365180e6c882fb3d3aa5923a27bd5a722e70c574e9450"
+}

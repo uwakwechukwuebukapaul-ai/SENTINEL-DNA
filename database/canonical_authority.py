@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 from uuid import uuid4
 
-from .connection import DatabaseConnection, database
 from .portability import execute_script, identity_primary_key
+
+if TYPE_CHECKING:
+    from .backend import DatabaseBackend
 
 
 def _now() -> str:
@@ -122,7 +124,15 @@ def ensure_canonical_schema(connection: Any, *, commit: bool = True) -> None:
 class CanonicalUnitOfWork:
     """One SQLite connection shared by canonical repositories and audit."""
 
-    def __init__(self, db: DatabaseConnection = database) -> None:
+    def __init__(self, db: "DatabaseBackend | None" = None) -> None:
+        if db is None:
+            # Keep the application convenience default lazy. Migration
+            # rehearsal loads schema modules against an explicit disposable
+            # connection and must not resolve the host production backend as
+            # an import side effect.
+            from .connection import database
+
+            db = database
         self.db = db
         self.connection: Any | None = None
 

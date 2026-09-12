@@ -36,6 +36,7 @@ def test_v3_signup_phone_dob_and_analyst_binding(app):
     assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
     created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
     assert created.status_code == 201 and created.get_json()["role"] == "analyst"
+    assert created.get_json()["onboarding_state"] == "AUTHENTICATED"
     assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
 
 def test_v3_csrf_and_dob_rejection(app):
@@ -58,6 +59,48 @@ def test_v3_email_otp_authentication_and_replay_protection(app):
     code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
     assert client.post("/api/auth/email/verify-code", json={"challenge_id":challenge,"code":code}, headers={"X-CSRF-Token":csrf}).status_code == 200
     assert client.post("/api/auth/email/verify-code", json={"challenge_id":challenge,"code":code}, headers={"X-CSRF-Token":csrf}).status_code == 400
+
+def test_v3_registration_otp_cannot_cross_signed_auth_flows(app):
+    first = app.test_client(); first_csrf = token(first)
+    sent = first.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "bound@example.test"},
+        headers={"X-CSRF-Token": first_csrf},
+    )
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
+
+    second = app.test_client(); second_csrf = token(second)
+    denied = second.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": challenge, "code": code},
+        headers={"X-CSRF-Token": second_csrf},
+    )
+    assert denied.status_code == 400
+
+    accepted = first.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": challenge, "code": code},
+        headers={"X-CSRF-Token": first_csrf},
+    )
+    assert accepted.status_code == 200
+
+def test_onboarding_state_is_server_owned_and_invalid_transitions_fail_closed(app):
+    service = app.container.require("auth_service")
+    user = service.register(
+        "state-user", "state@example.test", PASSWORD,
+        onboarding_state="NEW",
+    )
+    assert service.authenticate("state@example.test", PASSWORD) is None
+    with pytest.raises(ValueError, match="invalid_onboarding_transition"):
+        service.transition_onboarding(user.id, "AUTHENTICATED")
+    assert service.complete_verified_onboarding(user.id) is None
+
+def test_password_strength_is_enforced_by_the_server(app):
+    service = app.container.require("auth_service")
+    with pytest.raises(ValueError, match="invalid_user_registration"):
+        service.register("weak-user", "weak@example.test", "longpassword")
 
 def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):
@@ -82,7 +125,7 @@ def test_v3_password_recovery_is_single_use_and_revokes_sessions(app):
     assert app.container.require("auth_service").authenticate("recovery@example.test", NEW_PASSWORD) is not None
     assert client.post("/api/auth/password-reset/confirm", json={"challenge_id":challenge,"code":code,"password":ANOTHER_PASSWORD}, headers={"X-CSRF-Token":token(client)}).status_code == 400
 
-def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
+def test_v3_google_first_cannot_bypass_verified_onboarding(monkeypatch, app):
     class StubGoogle:
         def complete(self, *args): return GoogleClaims("google-sub-1", "google-first@example.test", "Google Analyst")
     monkeypatch.setattr("services.auth.routes.GoogleOIDC", StubGoogle)
@@ -90,10 +133,76 @@ def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
     with client.session_transaction() as state:
         state["google_state"] = "state-1"; state["google_nonce"] = "nonce-1"
     response = client.get("/api/auth/google/callback?code=one&state=state-1")
-    assert response.status_code == 302 and response.headers["Location"].endswith("/")
-    user = app.container.require("auth_service").get_by_email("google-first@example.test")
-    assert user and user.role == "analyst" and user.actor_id is not None
-    assert app.container.require("auth_service").identity_user("google", "google-sub-1").id == user.id
+    assert response.status_code == 403
+    assert response.get_json() == {"error": "onboarding_required"}
+    assert app.container.require("auth_service").get_by_email("google-first@example.test") is None
+    with client.session_transaction() as state:
+        assert "user_id" not in state
+
+def test_v3_google_begin_provider_failure_is_unavailable(monkeypatch, app):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", random_secret())
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "https://staging.example.test/api/auth/google/callback")
+
+    class FailedResponse:
+        def raise_for_status(self): raise ValueError("malformed discovery")
+
+    monkeypatch.setattr("services.auth.oauth.requests.get", lambda *args, **kwargs: FailedResponse())
+    response = app.test_client().get("/api/auth/google/start")
+    assert response.status_code == 503
+    assert response.get_json() == {"error": "google_authentication_unavailable"}
+
+def test_registration_email_only_uses_one_contact_verification_and_stops_for_mfa(app):
+    client = app.test_client(); csrf = token(client)
+    sent = client.post("/api/auth/verification/send-code", json={"method": "email", "email": "email-only@example.test"}, headers={"X-CSRF-Token": csrf})
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
+    assert client.post("/api/auth/verification/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).get_json() == {"verified": True, "method": "email"}
+    created = client.post("/api/auth/register", json={"username": "email-only", "email": "email-only@example.test", "password": PASSWORD, "date_of_birth": "2000-01-02"}, headers={"X-CSRF-Token": csrf})
+    assert created.status_code == 201
+    body = created.get_json()
+    assert body["email_verified"] is True and body["phone_verified"] is False
+    assert body["verification_method"] == "email"
+    assert body["onboarding_state"] == "MFA_ENROLLMENT_REQUIRED"
+    assert client.get("/api/auth/me").status_code == 401
+
+def test_primary_registration_rejects_phone_verification_without_sms_dependency(app):
+    client = app.test_client(); csrf = token(client)
+    sent = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert sent.status_code == 400
+    assert sent.get_json() == {"error": "invalid_verification_method"}
+
+def test_unified_registration_verification_rejects_missing_or_invalid_method(app):
+    client = app.test_client(); csrf = token(client)
+    for payload in ({}, {"method": "sms"}):
+        response = client.post("/api/auth/verification/send-code", json=payload, headers={"X-CSRF-Token": csrf})
+        assert response.status_code == 400
+        assert response.get_json()["error"] == ("invalid_verification_method")
+
+def test_country_contract_is_authoritative_and_phone_region_mismatch_fails_closed(app):
+    countries = app.test_client().get("/api/auth/countries")
+    assert countries.status_code == 200
+    by_region = {item["region"]: item for item in countries.get_json()["countries"]}
+    assert by_region["NG"]["calling_code"] == "+234" and by_region["NG"]["name"] == "Nigeria"
+    assert by_region["GH"]["calling_code"] == "+233" and by_region["US"]["calling_code"] == "+1"
+    assert by_region["GB"]["calling_code"] == "+44"
+    client = app.test_client(); csrf = token(client)
+    response = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "US", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 400 and response.get_json()["error"] == "invalid_verification_method"
+
+def test_unified_registration_verification_requires_csrf(app):
+    response = app.test_client().post("/api/auth/verification/send-code", json={"method": "email", "email": "csrf@example.test"})
+    assert response.status_code == 403 and response.get_json() == {"error": "csrf_validation_failed"}
+
+def test_primary_phone_delivery_failure_is_generic_and_does_not_bind_registration(app):
+    app.config["SMS_PROVIDER"] = None
+    client = app.test_client(); csrf = token(client)
+    response = client.post("/api/auth/verification/send-code", json={"method": "phone", "country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid_verification_method"}
+    with client.session_transaction() as state:
+        assert "registration_verification_challenge_id" not in state
 
 def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
     client = app.test_client(); csrf = token(client)

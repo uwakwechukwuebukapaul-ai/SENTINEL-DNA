@@ -117,8 +117,10 @@ cd ~/SENTINEL-DNA
 export STAGING_ENV_FILE=/etc/sentinel-dna/staging.env
 docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml config
 sh deployment/scripts/deploy.sh
-docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml run --rm migration
-docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml run --rm migration
+# Set SENTINEL_DNA_FAVP_OPERATIONS_ENABLED=1 in the approved staging
+# environment only when the FAVP schema and evidence custody are in scope.
+docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml run --rm --build migration
+docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml run --rm --build migration
 ```
 
 Expected migration output:
@@ -128,13 +130,17 @@ database migrations applied: 1,2,3,4,5,6,7,8
 database migrations applied: none
 ```
 
+If FAVP staging is explicitly enabled, the expected first-run output includes
+`1,2,3,4,5,6,7,8,9`; otherwise migration 9 remains disabled and the base
+staging chain ends at 8.
+
 Verify versions:
 
 ```bash
 docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml exec -T postgres psql -U sentinel -d sentinel_dna -c "SELECT version FROM schema_migrations ORDER BY version;"
 ```
 
-Expected rows are 1 through 8. Verify required tables:
+Expected rows are 1 through 9. Verify required tables:
 
 ```bash
 docker compose --env-file "$STAGING_ENV_FILE" -f deployment/staging/docker-compose.yml exec -T postgres psql -U sentinel -d sentinel_dna -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('schema_migrations','canonical_tenants','canonical_identities','canonical_memberships','canonical_identity_bindings','canonical_provider_tenant_trusts','billing_customers','crypto_payment_intents','investigation_memory','organizational_memory') ORDER BY table_name;"

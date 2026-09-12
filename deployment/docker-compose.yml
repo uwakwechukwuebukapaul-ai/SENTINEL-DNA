@@ -20,7 +20,9 @@ services:
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - sentinel_dna_postgres_password
     depends_on:
       postgres: {condition: service_healthy}
     volumes:
@@ -48,8 +50,10 @@ services:
       SENTINEL_DNA_SECURE_COOKIES: "1"
       SENTINEL_DNA_DB_PATH: /var/lib/sentinel/soc.db
       DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      SENTINEL_DNA_POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
       REDIS_URL: redis://redis:6379/0
+    secrets:
+      - sentinel_dna_postgres_password
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -69,7 +73,9 @@ services:
     environment:
       POSTGRES_DB: sentinel_dna
       POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/sentinel_dna_postgres_password
+    secrets:
+      - sentinel_dna_postgres_password
     volumes: [sentinel-postgres:/var/lib/postgresql/data]
     healthcheck: {test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_dna"], interval: 10s, timeout: 5s, retries: 5}
   redis:
@@ -96,3 +102,7 @@ volumes:
   sentinel-data:
   sentinel-postgres:
   sentinel-redis:
+
+secrets:
+  sentinel_dna_postgres_password:
+    file: ${SENTINEL_DNA_POSTGRES_PASSWORD_FILE:?set external PostgreSQL password file}

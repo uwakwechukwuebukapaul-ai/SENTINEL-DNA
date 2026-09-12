@@ -1,0 +1,349 @@
+(() => {
+  "use strict";
+
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const state = { csrf: null, verificationChallenge: null, verificationMethod: null };
+
+  async function csrf() {
+    if (state.csrf) return state.csrf;
+    const response = await fetch("/api/auth/csrf", { credentials: "same-origin" });
+    if (!response.ok) throw new Error("csrf_unavailable");
+    state.csrf = (await response.json()).csrf_token;
+    return state.csrf;
+  }
+
+  async function request(path, options = {}) {
+    const headers = { "X-CSRF-Token": await csrf(), ...(options.headers || {}) };
+    const response = await fetch(path, { credentials: "same-origin", ...options, headers });
+    let body = {};
+    try { body = await response.json(); } catch (_) { /* keep safe generic response */ }
+    return { response, body };
+  }
+
+  function statusFor(element, message, tone = "") {
+    if (!element) return;
+    element.textContent = message;
+    element.classList.toggle("is-success", tone === "success");
+    element.classList.toggle("is-progress", tone === "progress");
+  }
+
+  function busy(button, busyState, label) {
+    if (!button) return;
+    if (busyState) {
+      button.dataset.originalLabel = button.textContent;
+      button.disabled = true;
+      button.classList.add("auth-loading");
+      button.setAttribute("aria-busy", "true");
+    } else {
+      button.disabled = false;
+      button.classList.remove("auth-loading");
+      button.removeAttribute("aria-busy");
+      if (label) button.textContent = label;
+    }
+  }
+
+  function cooldown(button, seconds, label = "Send code") {
+    if (!button) return;
+    let remaining = seconds;
+    button.disabled = true;
+    button.textContent = `${label} in ${remaining}s`;
+    const timer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) { window.clearInterval(timer); button.disabled = false; button.textContent = label; return; }
+      button.textContent = `${label} in ${remaining}s`;
+    }, 1000);
+    return () => { window.clearInterval(timer); button.disabled = false; button.textContent = label; };
+  }
+
+  function enablePasswordToggles() {
+    $$('[data-password-toggle]').forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = document.getElementById(button.dataset.passwordToggle);
+        if (!input) return;
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        button.textContent = showing ? "Show" : "Hide";
+        button.setAttribute("aria-label", `${showing ? "Show" : "Hide"} password`);
+      });
+    });
+  }
+
+  function showSignedOut() {
+    const marker = $("[data-signed-out]");
+    if (marker && new URLSearchParams(window.location.search).get("signed_out") === "true") {
+      marker.hidden = false;
+    }
+    const registered = $("[data-registered]");
+    if (registered && new URLSearchParams(window.location.search).get("registered") === "true") {
+      registered.hidden = false;
+    }
+  }
+
+  function initLogin() {
+    const form = $("[data-auth-form='login']");
+    if (!form) return;
+    const passwordMode = $("[data-login-mode='password']");
+    const emailMode = $("[data-login-mode='email']");
+    const passwordPanel = $("[data-login-panel='password']");
+    const emailPanel = $("[data-login-panel='email']");
+    const email = $("#login-email");
+    const password = $("#login-password");
+    const remember = $("#login-remember");
+    const status = $("[data-auth-status]");
+
+    function selectMode(mode) {
+      const emailSelected = mode === "email";
+      passwordPanel.hidden = emailSelected;
+      emailPanel.hidden = !emailSelected;
+      passwordMode.classList.toggle("is-selected", !emailSelected);
+      emailMode.classList.toggle("is-selected", emailSelected);
+      passwordMode.setAttribute("aria-selected", String(!emailSelected));
+      emailMode.setAttribute("aria-selected", String(emailSelected));
+      $("#login-username").required = !emailSelected;
+      password.required = !emailSelected;
+      email.required = emailSelected;
+      $("#login-code").required = emailSelected;
+      (emailSelected ? email : password).focus();
+      statusFor(status, "");
+    }
+    passwordMode?.addEventListener("click", () => selectMode("password"));
+    emailMode?.addEventListener("click", () => selectMode("email"));
+    [passwordMode, emailMode].forEach((tab, index, tabs) => tab?.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      tabs[next]?.focus();
+      selectMode(next === 1 ? "email" : "password");
+    }));
+
+    $("[data-login-send-code]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      if (!email.value.trim()) { statusFor(status, "Enter your account email first."); email.focus(); return; }
+      busy(button, true);
+      try {
+        const { response } = await request("/api/auth/email/send-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.value.trim() }) });
+        statusFor(status, response.ok ? "If the account is eligible, a verification code has been sent." : "Email verification is temporarily unavailable.", response.ok ? "progress" : "");
+        if (response.ok) $("#login-code")?.focus();
+      } catch (_) { statusFor(status, "Email verification is temporarily unavailable."); }
+      busy(button, false, "Send code");
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const isEmail = !emailPanel.hidden;
+      const button = $("[type='submit']", form);
+      busy(button, true);
+      try {
+        const payload = isEmail
+          ? { challenge_id: state.emailChallenge || undefined, code: $("#login-code").value.trim(), remember_me: remember.checked }
+          : { username: $("#login-username").value.trim(), password: password.value, remember_me: remember.checked };
+        const endpoint = isEmail ? "/api/auth/email/verify-code" : "/api/auth/login";
+        const { response, body } = await request(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (response.ok && (body.mfa_enrollment_required || body.status === "mfa_required")) { window.location.assign(body.mfa_enrollment_required ? "/mfa/enroll" : "/mfa/verify"); return; }
+        if (response.ok) { statusFor(status, "Identity verified. Opening your workspace…", "success"); window.location.assign("/"); }
+        else statusFor(status, isEmail ? "Verification failed or expired. Request a new code and try again." : "Sign-in failed. Check your credentials and try again.");
+      } catch (_) { statusFor(status, "Sign-in is temporarily unavailable. Try again shortly."); }
+      busy(button, false, isEmail ? "Verify and sign in" : "Sign in");
+    });
+  }
+
+  function initSignup() {
+    const form = $("[data-auth-form='signup']");
+    if (!form) return;
+    const status = $("[data-auth-status]");
+    const password = $("#signup-password");
+    const confirm = $("#confirm");
+    const strengthLabel = $("[data-strength-label]");
+    const strengthBars = $$('[data-strength-bar]');
+    const setStatus = (message, tone = "") => statusFor(status, message, tone);
+
+    const picker = $("[data-country-picker]");
+    const trigger = $(".country-trigger", picker);
+    const menu = $(".country-menu", picker);
+    const search = $("#signup-country-search");
+    const options = $("[data-country-options]", picker);
+    const label = $("[data-country-label]", picker);
+    let countries = [];
+    let highlighted = -1;
+    const flagFor = (region) => [...String(region || "")].map((letter) => String.fromCodePoint(letter.charCodeAt(0) + 127397)).join("");
+    const displayName = (item) => {
+      if (item && typeof item === "object") {
+        if (item.display_name && item.display_name !== item.region) return item.display_name;
+        if (item.name && item.name !== item.region) return item.name;
+      }
+      const region = item && typeof item === "object" ? item.region : item;
+      try { return new Intl.DisplayNames([navigator.language || "en"], { type: "region" }).of(region) || region; }
+      catch (_) { return region; }
+    };
+    function renderCountries() {
+      const query = (search?.value || "").trim().toLowerCase();
+      const visible = countries.filter((item) => `${displayName(item)} ${item.calling_code} ${item.region}`.toLowerCase().includes(query));
+      options.replaceChildren();
+      highlighted = visible.length ? 0 : -1;
+      visible.forEach((item, index) => {
+        const option = document.createElement("button");
+        option.type = "button"; option.className = "country-option"; option.setAttribute("role", "option");
+        option.dataset.region = item.region; option.setAttribute("aria-selected", String(index === highlighted));
+        const flag = document.createElement("span"); flag.className = "country-flag"; flag.setAttribute("aria-hidden", "true"); flag.textContent = flagFor(item.region);
+        const text = document.createElement("span"); text.textContent = `${displayName(item)} (${item.calling_code})`;
+        option.append(flag, text); option.addEventListener("click", () => chooseCountry(item)); options.append(option);
+      });
+      if (!visible.length) { const empty = document.createElement("div"); empty.className = "country-empty"; empty.textContent = "No matching country."; options.append(empty); }
+      return visible;
+    }
+    function chooseCountry(item) {
+      countryPicker.value = item.region;
+      label.textContent = `${flagFor(item.region)} ${displayName(item)} (${item.calling_code})`;
+      menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); trigger.focus();
+    }
+    function openCountries() { menu.hidden = false; trigger.setAttribute("aria-expanded", "true"); renderCountries(); search.focus(); }
+    trigger.addEventListener("click", () => menu.hidden ? openCountries() : (menu.hidden = true, trigger.setAttribute("aria-expanded", "false")));
+    search.addEventListener("input", renderCountries);
+    search.addEventListener("keydown", (event) => {
+      const visible = [...options.querySelectorAll(".country-option")];
+      if (!visible.length) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); highlighted = (highlighted + (event.key === "ArrowDown" ? 1 : visible.length - 1)) % visible.length; visible.forEach((item, index) => item.setAttribute("aria-selected", String(index === highlighted))); visible[highlighted].scrollIntoView({ block: "nearest" }); }
+      if (event.key === "Enter" && highlighted >= 0) { event.preventDefault(); visible[highlighted].click(); }
+      if (event.key === "Escape") { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); trigger.focus(); }
+    });
+    document.addEventListener("click", (event) => { if (picker && !picker.contains(event.target) && !menu.hidden) { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); } });
+
+    fetch("/api/auth/countries", { credentials: "same-origin" }).then((response) => {
+      if (!response.ok) throw new Error("countries_unavailable");
+      return response.json();
+    }).then((data) => {
+      countries = data.countries || [];
+      countryPicker.replaceChildren(new Option("Select country", ""));
+      countries.forEach((item) => countryPicker.add(new Option(`${displayName(item)} (${item.calling_code})`, item.region)));
+      label.textContent = "Select country";
+    }).catch(() => { countryPicker.replaceChildren(new Option("Country list unavailable", "")); setStatus("Country selection is temporarily unavailable."); });
+
+    function updateStrength() {
+      const value = password.value;
+      let score = 0;
+      if (value.length >= 10) score++;
+      if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score++;
+      if (/\d/.test(value)) score++;
+      if (/[^A-Za-z0-9]/.test(value)) score++;
+      strengthBars.forEach((bar, index) => bar.classList.toggle("is-on", index < score));
+      if (strengthLabel) strengthLabel.textContent = score < 2 ? "Use 10+ characters with mixed case, numbers, and symbols." : score < 4 ? "Good start — add another character type." : "Password meets the local strength guidance.";
+    }
+    password.addEventListener("input", updateStrength);
+
+    const methodInputs = $$('input[name="verification_method"]');
+    const selectedMethod = () => methodInputs.find((input) => input.checked)?.value || "";
+    const countryPicker = $("#signup-country");
+    const verificationCode = $("#signup-verification-code");
+    let cancelVerificationCooldown = null;
+    function selectVerificationMethod(method) {
+      cancelVerificationCooldown?.();
+      cancelVerificationCooldown = null;
+      methodInputs.forEach((input) => input.setAttribute("aria-selected", String(input.value === method)));
+      state.verificationChallenge = null;
+      state.verificationMethod = null;
+      verificationCode.value = "";
+      setStatus("");
+    }
+    methodInputs.forEach((input) => input.addEventListener("change", () => selectVerificationMethod(selectedMethod())));
+    selectVerificationMethod(selectedMethod());
+    const sendVerification = $("[data-signup-verification-send]");
+    sendVerification?.addEventListener("click", async () => {
+      const method = selectedMethod();
+      if (!method) { setStatus("Choose a verification method first."); return; }
+      const payload = { method, email: $("#signup-email").value.trim() };
+      let sent = false;
+      busy(sendVerification, true);
+      try {
+        const { response, body } = await request("/api/auth/verification/send-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (response.ok) { state.verificationMethod = method; state.verificationChallenge = body.challenge_id; setStatus("Verification code sent.", "progress"); verificationCode.focus(); sent = true; }
+        else setStatus("Unable to send an email code.");
+      } catch (_) { setStatus("Unable to send an email code."); }
+      busy(sendVerification, false, "Send verification code");
+      if (sent) cancelVerificationCooldown = cooldown(sendVerification, 60, "Send verification code");
+    });
+    $("[data-signup-verification-verify]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      if (state.verificationMethod !== selectedMethod() || !state.verificationChallenge) { setStatus("Send a new verification code first."); return; }
+      busy(button, true);
+      try {
+        const { response } = await request("/api/auth/verification/verify-code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: state.verificationChallenge, code: verificationCode.value.trim() }) });
+        setStatus(response.ok ? "Contact verified. Complete your account to continue to MFA enrollment." : "Verification failed or expired.", response.ok ? "success" : "");
+      } catch (_) { setStatus("Verification is temporarily unavailable."); }
+      busy(button, false, "Verify");
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (password.value !== confirm.value) { setStatus("Passwords do not match."); confirm.focus(); return; }
+      const method = selectedMethod();
+      const button = $("[type='submit']", form); busy(button, true);
+      try {
+        const payload = { username: $("#signup-username").value.trim(), email: $("#signup-email").value.trim(), password: password.value, date_of_birth: $("#signup-dob").value };
+        const { response } = await request("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (response.ok) { setStatus("Account created. Continue to sign in.", "success"); window.location.assign("/login?registered=true"); }
+        else setStatus("Unable to create the account. Check the information and verification status.");
+      } catch (_) { setStatus("Account creation is temporarily unavailable. Try again shortly."); }
+      busy(button, false, "Create analyst account");
+    });
+  }
+
+  function initRecovery() {
+    const form = $("[data-auth-form='recovery']");
+    if (!form) return;
+    const status = $("[data-auth-status]");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("[type='submit']", form); busy(button, true);
+      try {
+        const { response, body } = await request("/api/auth/password-reset/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("#recovery-email").value.trim() }) });
+        statusFor(status, body.message || "If the account is eligible, recovery instructions have been sent.", response.ok ? "progress" : "");
+        if (response.ok) $("#recovery-code")?.focus();
+      } catch (_) { statusFor(status, "Recovery is temporarily unavailable. Try again shortly."); }
+      busy(button, false, "Send recovery code");
+    });
+    $("[data-recovery-confirm]")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget; busy(button, true);
+      try {
+        const { response } = await request("/api/auth/password-reset/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: $("#recovery-code").value.trim(), password: $("#recovery-password").value }) });
+        statusFor(status, response.ok ? "Password updated. Sign in again." : "Recovery failed. Check the code and password policy.", response.ok ? "success" : "");
+      } catch (_) { statusFor(status, "Recovery is temporarily unavailable. Try again shortly."); }
+      busy(button, false, "Set new password");
+    });
+  }
+
+  function initMfa() {
+    const enrollForm = $("[data-mfa-enroll-form]");
+    const verifyForm = $("[data-mfa-verify-form]");
+    if (enrollForm) {
+      const message = $("[data-auth-status]"); const uri = $("[data-mfa-uri]");
+      request("/api/auth/mfa/enroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then(({ response, body }) => {
+        if (!response.ok) throw new Error(body.error || "mfa_enrollment_unavailable");
+        uri.href = body.provisioning_uri; uri.textContent = "Open provisioning URI in your authenticator"; uri.hidden = false; enrollForm.dataset.challengeId = body.challenge_id;
+      }).catch(() => statusFor(message, "MFA enrollment is temporarily unavailable."));
+      enrollForm.addEventListener("submit", async (event) => {
+        event.preventDefault(); const button = $("[type='submit']", enrollForm); busy(button, true);
+        try {
+          const { response, body } = await request("/api/auth/mfa/enroll/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: enrollForm.dataset.challengeId, code: $("#mfa-enroll-code").value.trim() }) });
+          if (!response.ok) throw new Error("mfa_verification_failed");
+          $("[data-mfa-enrollment]").hidden = true; $("[data-mfa-recovery]").hidden = false; $("[data-mfa-recovery-codes]").textContent = body.recovery_codes.join("\n"); statusFor(message, "MFA enabled. Save your recovery codes.", "success");
+        } catch (_) { statusFor(message, "Invalid or expired authenticator code."); }
+        busy(button, false, "Verify and enable MFA");
+      });
+    }
+    if (verifyForm) verifyForm.addEventListener("submit", async (event) => {
+      event.preventDefault(); const button = $("[type='submit']", verifyForm); busy(button, true);
+      try {
+        const recovery = $("#mfa-recovery-code").value.trim(); const { response } = await request("/api/auth/mfa/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: $("#mfa-code").value.trim(), recovery_code: recovery || undefined }) });
+        if (!response.ok) throw new Error("mfa_verification_failed"); window.location.assign("/");
+      } catch (_) { statusFor($("[data-auth-status]"), "MFA verification failed."); }
+      busy(button, false, "Verify and continue");
+    });
+  }
+
+  enablePasswordToggles();
+  showSignedOut();
+  initLogin();
+  initSignup();
+  initRecovery();
+  initMfa();
+})();
