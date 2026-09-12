@@ -2,7 +2,7 @@ services:
 
   # Run schema migrations once before the application accepts traffic.
   migration:
-    image: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196
+    image: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-2b88a981e2ff0eb7b76ef87818332df4cb0c3aae
     restart: "no"
     command:
       - python
@@ -25,7 +25,7 @@ services:
 
 
   sentinel-dna:
-    image: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-626eed8ecc83b67b90d8baf04112d1e05a685196
+    image: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna:sha-2b88a981e2ff0eb7b76ef87818332df4cb0c3aae
     restart: unless-stopped
     environment:
       SENTINEL_DNA_ENV: production
