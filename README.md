@@ -1,24 +1,31 @@
-🧬 Sentinel DNA
+# 🧬 Sentinel DNA
 
-<div align="center"><img src="assets/sentinel-dna-banner.png" width="900"/>Evidence-First AI Security Investigation Platform
+<div align="center">
 
-Turn security alerts into evidence-backed investigations.
+<img src="assets/sentinel-dna-banner.png" width="900" alt="Sentinel DNA banner"/>
+
+# Evidence-First AI Security Investigation Platform
+
+**Turn security alerts into evidence-backed investigations.**
 
 Collect evidence → correlate context → reconstruct attacks → explain reasoning → keep the analyst in control.
 
-""Python" (https://img.shields.io/badge/Python-3.14-blue)"
-""Flask" (https://img.shields.io/badge/Backend-Flask-black)"
-""Docker" (https://img.shields.io/badge/Deployment-Docker-blue)"
-""Security" (https://img.shields.io/badge/Focus-Cybersecurity-red)"
+[![Python](https://img.shields.io/badge/Python-3.14-blue)]()
+[![Flask](https://img.shields.io/badge/Backend-Flask-black)]()
+[![Docker](https://img.shields.io/badge/Deployment-Docker-blue)]()
+[![Security](https://img.shields.io/badge/Focus-Cybersecurity-red)]()
 
-</div>---
+</div>
 
-🔎 What is Sentinel DNA?
+---
 
-Sentinel DNA is an AI security investigation platform built around an evidence-first approach to SOC investigations.
+## 🔎 What is Sentinel DNA?
+
+Sentinel DNA is an AI security investigation platform built around an **evidence-first approach to SOC investigations**.
 
 Instead of treating AI as a chatbot layered over security alerts, Sentinel DNA is designed around a structured investigation pipeline:
 
+```
 Security Alert
       ↓
 Evidence Collection
@@ -38,16 +45,17 @@ Confidence & Evidence
 Investigation Report
       ↓
 Analyst Decision
+```
 
 The objective is simple:
 
-«Help security analysts move from an alert to an explainable understanding of what happened.»
+> Help security analysts move from an alert to an explainable understanding of what happened.
 
-Sentinel DNA is designed to support analyst decision-making — not replace analyst authority.
+Sentinel DNA is designed to support analyst decision-making — **not replace analyst authority**.
 
 ---
 
-🧠 The Core Idea
+## 🧠 The Core Idea
 
 Security operations generate enormous amounts of telemetry and alerts.
 
@@ -66,6 +74,7 @@ It is answering:
 
 Sentinel DNA is being built around that investigation layer.
 
+```
 Alert
   ↓
 Evidence
@@ -79,13 +88,15 @@ Reasoning
 Confidence
   ↓
 Analyst Decision
+```
 
 ---
 
-🏗️ Investigation Architecture
+## 🏗️ Investigation Architecture
 
 Sentinel DNA uses a modular investigation architecture designed to separate orchestration, evidence, intelligence, reasoning, and analyst interaction.
 
+```
                     SECURITY ALERT
                           │
                           ▼
@@ -100,7 +111,7 @@ Sentinel DNA uses a modular investigation architecture designed to separate orch
           ┌───────────────┼────────────────┐
           ▼               ▼                ▼
       Evidence       Intelligence      Reasoning
-      Services          Services         Services
+      Services         Services         Services
           │               │                │
           └───────────────┼────────────────┘
                           ▼
@@ -114,13 +125,15 @@ Sentinel DNA uses a modular investigation architecture designed to separate orch
                           │
                           ▼
                   Analyst Action
+```
 
-Investigation Context
+### Investigation Context
 
 Investigations operate around a tenant-scoped context containing the information required to preserve investigation boundaries and provenance.
 
 Conceptually:
 
+```
 InvestigationContext
 ├── Tenant
 ├── Case
@@ -130,47 +143,46 @@ InvestigationContext
 ├── Timeline
 ├── Intelligence
 └── Provenance
+```
 
 This architecture is intended to provide a foundation for increasingly sophisticated investigation capabilities without turning Sentinel DNA into a flat AI alert dashboard.
 
 ---
 
-🔬 Evidence-First AI
+## 🔬 Evidence-First AI
 
 A central design principle is that AI conclusions should remain connected to evidence.
 
 Sentinel DNA is designed so that investigation output can distinguish between:
 
-Evidence
-
+**Evidence**  
 Information directly observed or collected during an investigation.
 
-Correlation
-
+**Correlation**  
 Relationships established between evidence, entities, indicators, events, and intelligence.
 
-Inference
-
+**Inference**  
 A conclusion derived from available evidence but not directly observed.
 
-Confidence
-
+**Confidence**  
 A transparent indication of how strongly a claim is supported.
 
 The intended analyst experience is therefore:
 
+```
 AI Claim
    │
    ├── Supporting Evidence
    ├── Investigation Context
    ├── Reasoning
    └── Confidence
+```
 
 Low-confidence conclusions should remain visible as conclusions requiring analyst review rather than being presented as established facts.
 
 ---
 
-🛡️ Security & Trust Model
+## 🛡️ Security & Trust Model
 
 Sentinel DNA is being developed with security boundaries as part of the platform architecture.
 
@@ -194,12 +206,13 @@ Security decisions are intended to remain explicit and auditable rather than bei
 
 ---
 
-👨‍💻 Analyst-First AI
+## 👨‍💻 Analyst-First AI
 
 Sentinel DNA is not designed around autonomous security authority.
 
 The intended operating model is:
 
+```
 AI investigates
      ↓
 AI explains
@@ -211,6 +224,7 @@ AI communicates confidence
 Analyst evaluates
      ↓
 Analyst decides
+```
 
 The analyst remains responsible for consequential security decisions.
 
@@ -218,13 +232,13 @@ This distinction is fundamental to the platform's design.
 
 ---
 
-🧩 Investigation Capabilities
+## 🧩 Investigation Capabilities
 
-Evidence Collection
+### Evidence Collection
 
 Structured collection and organization of investigation evidence.
 
-IOC Intelligence
+### IOC Intelligence
 
 Enrichment and contextual analysis of indicators such as:
 
@@ -234,18 +248,19 @@ Enrichment and contextual analysis of indicators such as:
 - File hashes
 - Other security observables
 
-Threat Intelligence Correlation
+### Threat Intelligence Correlation
 
 Connect investigation evidence with available intelligence and reputation context.
 
-MITRE ATT&CK Mapping
+### MITRE ATT&CK Mapping
 
 Map observed or inferred behavior to relevant MITRE ATT&CK techniques and attack patterns.
 
-Attack Reconstruction
+### Attack Reconstruction
 
 Transform individual observations into a chronological investigation narrative.
 
+```
 Event
   ↓
 Evidence
@@ -255,8 +270,9 @@ Relationship
 Technique
   ↓
 Attack Sequence
+```
 
-AI Investigation Reports
+### AI Investigation Reports
 
 Generate structured investigation results containing:
 
@@ -269,16 +285,17 @@ Generate structured investigation results containing:
 - ATT&CK context
 - Analyst review points
 
-Analyst Workspace
+### Analyst Workspace
 
 Provide analysts with a centralized investigation view rather than forcing them to reconstruct the case manually from disconnected alerts.
 
 ---
 
-🧪 Validation & Development
+## 🧪 Validation & Development
 
 Sentinel DNA follows a controlled engineering progression:
 
+```
 Build
   ↓
 Test
@@ -290,8 +307,9 @@ Integrate
 Demonstrate
   ↓
 Commercialize
+```
 
-The project currently prioritizes credibility engineering and external validation rather than uncontrolled feature expansion.
+The project currently prioritizes **credibility engineering and external validation** rather than uncontrolled feature expansion.
 
 That means validating:
 
@@ -308,12 +326,13 @@ before making broader production claims.
 
 ---
 
-🎯 Current Development Focus
+## 🎯 Current Development Focus
 
-AI Investigator V1
+### AI Investigator V1
 
 The current strategic foundation centers on:
 
+```
 Evidence-first investigation
         +
 Explainable AI reasoning
@@ -321,11 +340,13 @@ Explainable AI reasoning
 Confidence transparency
         +
 Analyst control
+```
 
 The next major validation milestone is independent analyst evaluation using a controlled synthetic-data environment.
 
 The intended evaluation model is:
 
+```
 Dedicated Evaluation Tenant
           ↓
 Synthetic Investigation Cases
@@ -341,16 +362,17 @@ Structured Evaluation
 Preserved Evidence
           ↓
 External Findings
+```
 
 No production customer data is required for this evaluation.
 
 ---
 
-🗺️ Roadmap
+## 🗺️ Roadmap
 
-V1 — Evidence-First AI Investigation
+### V1 — Evidence-First AI Investigation
 
-Current strategic foundation
+Current strategic foundation:
 
 - Investigation orchestration
 - Evidence collection
@@ -363,9 +385,7 @@ Current strategic foundation
 - Investigation reporting
 - Analyst workspace
 
----
-
-V2.1 — Bounded Autonomous Investigation Runtime
+### V2.1 — Bounded Autonomous Investigation Runtime
 
 Future work may introduce controlled autonomous investigation tasks with explicit boundaries.
 
@@ -378,9 +398,7 @@ The emphasis will remain on:
 - Human oversight
 - Failure containment
 
----
-
-V2.2 — Organizational Cyber Memory
+### V2.2 — Organizational Cyber Memory
 
 A governed organizational memory layer can eventually connect historical investigations and organizational knowledge.
 
@@ -393,12 +411,11 @@ This depends on establishing strong foundations for:
 - Governance
 - Access control
 
----
-
-V3 — Organizational Cyber Intelligence Platform
+### V3 — Organizational Cyber Intelligence Platform
 
 Longer-term expansion may connect:
 
+```
 Investigations
       +
 Evidence
@@ -408,12 +425,13 @@ Organizational Knowledge
 Threat Intelligence
       +
 Security Operations
+```
 
 into a governed organizational cyber-intelligence platform.
 
 ---
 
-🏢 Enterprise Direction
+## 🏢 Enterprise Direction
 
 Sentinel DNA is being designed with enterprise security operations in mind.
 
@@ -432,9 +450,9 @@ The architecture is intentionally being developed so integrations can expand wit
 
 ---
 
-🛠️ Technology Stack
+## 🛠️ Technology Stack
 
-Backend
+### Backend
 
 - Python
 - Flask
@@ -443,14 +461,14 @@ Backend
 - Redis
 - Docker
 
-Frontend
+### Frontend
 
 - HTML
 - CSS
 - JavaScript
 - Bootstrap
 
-Security & Intelligence
+### Security & Intelligence
 
 - MFA / TOTP
 - MITRE ATT&CK
@@ -461,37 +479,44 @@ Security & Intelligence
 
 ---
 
-🚀 Running Locally
+## 🚀 Running Locally
 
 Clone the repository:
 
+```bash
 git clone https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA.git
-
 cd SENTINEL-DNA
+```
 
-Development Container
+### Development Container
 
+```bash
 docker build -t sentinel-dna .
 
 docker run --rm \
   --env-file .env \
   -p 5000:5000 \
   sentinel-dna
+```
 
 Open:
 
+```
 http://localhost:5000
+```
 
-Staging / Integration
+### Staging / Integration
 
 For self-contained staging and integration validation:
 
+```
 docker-compose.yml
         │
         ├── Sentinel DNA
         ├── PostgreSQL
         ├── Redis
         └── Nginx edge
+```
 
 The application port remains internal to the composed environment.
 
@@ -499,52 +524,48 @@ Operators should provide required secrets and configuration through the environm
 
 For controlled production deployment, use the dedicated production deployment configuration under:
 
+```
 deployment/docker-compose.yml
+```
 
 Immutable release metadata and protected configuration should be validated before startup.
 
 ---
 
-🔐 Security Principles
+## 🔐 Security Principles
 
 Sentinel DNA follows several core principles:
 
-Evidence over assertion
-
+**Evidence over assertion**  
 AI conclusions should be connected to supporting evidence.
 
-Transparency over false certainty
-
+**Transparency over false certainty**  
 Confidence and uncertainty should be visible.
 
-Analyst authority
-
+**Analyst authority**  
 AI assists investigations; analysts retain decision authority.
 
-Least privilege
-
+**Least privilege**  
 Users and services should receive only the permissions required for their role.
 
-Tenant isolation
-
+**Tenant isolation**  
 Investigation data must remain bounded by the appropriate tenant and authorization context.
 
-Auditability
-
+**Auditability**  
 Security-sensitive actions should produce appropriate audit evidence.
 
-Controlled autonomy
-
+**Controlled autonomy**  
 Future autonomous capabilities must operate within explicit technical and authorization boundaries.
 
 ---
 
-📈 Product Thesis
+## 📈 Product Thesis
 
 Traditional security platforms are highly effective at collecting telemetry, generating detections, and presenting alerts.
 
 Sentinel DNA is focused on the layer that follows:
 
+```
 Detection
    ↓
 Investigation
@@ -552,24 +573,26 @@ Investigation
 Understanding
    ↓
 Decision
+```
 
 The product thesis is that AI can make this investigation layer substantially more structured and efficient without hiding the evidence or removing the analyst from the decision loop.
 
 ---
 
-👨‍💻 Founder
+## 👨‍💻 Founder
 
-Uwakwe chukwuebuka paul
-
+**Uwakwe chukwuebuka paul**  
 Founder / Product Owner
 
 Repository namespace:
 
+```
 uwakwechukwuebukapaul-ai
+```
 
 Repository and documentation maintainer:
 
-Uwakwe chukwuebuka paul
+**Uwakwe chukwuebuka paul**
 
 This identity covers founder/product direction and repository/documentation custody only.
 
@@ -577,7 +600,7 @@ It does not assign production database, monitoring, on-call, incident response, 
 
 ---
 
-🤝 Collaboration
+## 🤝 Collaboration
 
 Sentinel DNA is open to discussions around:
 
@@ -592,12 +615,13 @@ Sentinel DNA is open to discussions around:
 
 ---
 
-⭐ Sentinel DNA
+## ⭐ Sentinel DNA
 
 Security alerts tell analysts that something happened.
 
 Sentinel DNA is being built to help investigate what happened — with evidence, context, reasoning, and analyst control.
 
+```
 ALERT
   ↓
 EVIDENCE
@@ -609,5 +633,6 @@ REASONING
 CONFIDENCE
   ↓
 DECISION
+```
 
-Evidence-first AI investigation for modern security operations.
+**Evidence-first AI investigation for modern security operations.**
