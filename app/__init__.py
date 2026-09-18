@@ -51,6 +51,15 @@ def create_app():
 
     from services.core.application_container import build_container
     app.container = build_container()
+    from services.auth.mfa import MFAService
+    app.container.register(
+        "mfa_service",
+        MFAService(
+            database,
+            secret_key_provider=lambda: app.secret_key,
+            audit_service=app.container.require("audit_service"),
+        ),
+    )
     # OIDC routes remain disabled until a concrete verifier, token client,
     # provider-tenant trust, and identity-binding wiring are supplied.
     app.config["OIDC_ROUTES_ENABLED"] = False
@@ -86,6 +95,7 @@ def create_app():
     from services.auth import auth_api
     from services.audit import audit_api
     from services.auth.routes import enforce_current_session, restore_persistent_session
+    from services.auth.mfa import mfa_boundary_response
     from services.core.pilot_boundary import enforce_pilot_analyst_boundary
     from dashboard.browser_routes import browser
     app.register_blueprint(auth_api)
@@ -124,6 +134,10 @@ def create_app():
     @app.before_request
     def enforce_authentication_epoch():
         enforce_current_session()
+
+    @app.before_request
+    def enforce_mfa_authentication():
+        return mfa_boundary_response()
 
     @app.before_request
     def enforce_pilot_boundary():

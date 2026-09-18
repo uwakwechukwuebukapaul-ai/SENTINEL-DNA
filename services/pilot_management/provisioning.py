@@ -269,6 +269,7 @@ class PilotAccountProvisioningService:
                 revocation_status="pending",
                 audit_correlation_id=audit_correlation_id,
                 is_active=False,
+                mfa_required=True,
                 connection=connection,
             )
             connection.execute(

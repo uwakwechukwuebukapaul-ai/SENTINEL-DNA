@@ -7,6 +7,7 @@ import re
 from flask import current_app, jsonify, request, session
 
 from services.core.security_context import request_context
+from services.auth.mfa import mfa_boundary_response
 
 
 PILOT_ALLOWED_PERMISSIONS = frozenset(
@@ -67,7 +68,7 @@ def pilot_path_allowed(path: str, method: str) -> bool:
         return method in readonly
     if path == "/api/auth/csrf":
         return method in readonly
-    if path == "/api/auth/logout":
+    if path in {"/api/auth/login", "/api/auth/logout", "/api/auth/mfa/enroll", "/api/auth/mfa/verify-enrollment", "/api/auth/mfa/verify", "/api/auth/password-reset/request", "/api/auth/password-reset/confirm"}:
         return method in {"POST", "OPTIONS"}
     if path in {"/investigate", "/api/investigations", "/api/investigations/jobs", "/api/investigations/run"}:
         return method == "POST" or (path == "/api/investigations" and method == "GET")
@@ -124,6 +125,9 @@ def enforce_pilot_analyst_boundary():
 
 def pilot_permission_allowed(permission: str):
     """Apply the same policy when a route is tested outside the app factory."""
+    mfa_response = mfa_boundary_response()
+    if mfa_response is not None:
+        return False, mfa_response
     if _pilot_user() is None:
         return True, None
     response = enforce_pilot_analyst_boundary()

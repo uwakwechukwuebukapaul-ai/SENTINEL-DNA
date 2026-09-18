@@ -9,10 +9,12 @@ from .oauth import GoogleOIDC
 from .phone import country_options, normalize_phone
 from .providers import email_provider
 from .security import csrf_token
+from .mfa import MFAError
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
 def _service(): return current_app.container.require("auth_service")
+def _mfa_service(): return current_app.container.require("mfa_service")
 def _audit(event, *, user_id=None, method=None, outcome=None, reason=None):
     try:
         _service().audit_event(event, user_id=user_id, actor_id=session.get("actor_id"), tenant_id=session.get("organization_id"), method=method, outcome=outcome, reason=reason, source_ip=request.remote_addr)
@@ -55,6 +57,12 @@ def _bind(user):
     return identity, membership
 def _login_session(user, remember=False, auth_method="password"):
     identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
+    if user.mfa_required:
+        session["auth_stage"] = "MFA_REQUIRED"
+        session.pop("mfa_session_token", None)
+        _audit("password_authenticated", user_id=user.id, method=auth_method, outcome="mfa_required")
+        return user.public()
+    session["auth_stage"] = "SOC_AUTHENTICATED"
     if remember:
         raw = secrets.token_urlsafe(48); sid = secrets.token_urlsafe(18); expires = datetime.now(timezone.utc) + timedelta(days=30)
         _service().create_persistent_session(user, raw, membership.tenant_id, sid, expires.isoformat(), user_agent=request.user_agent.string[:256], ip_address=request.remote_addr, auth_method=auth_method); session["persistent_session_id"] = sid; session.permanent = True
@@ -134,7 +142,10 @@ def login():
     if not user:
         _audit("login_failure", method="password", outcome="failure", reason="invalid_credentials")
         return jsonify({"error": "invalid_credentials"}), 401
-    return jsonify(_login_session(user, bool(data.get("remember_me"))))
+    result = _login_session(user, bool(data.get("remember_me")))
+    result["mfa_required"] = bool(user.mfa_required)
+    result["mfa_verified"] = not bool(user.mfa_required)
+    return jsonify(result)
 
 @auth_api.get("/csrf")
 def csrf(): return jsonify({"csrf_token": _ensure_csrf()})
@@ -142,6 +153,7 @@ def csrf(): return jsonify({"csrf_token": _ensure_csrf()})
 @auth_api.post("/logout")
 def logout():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    _mfa_service().revoke_session(session.get("mfa_session_token"))
     remembered = session.get("persistent_session_id")
     if remembered: _service().revoke_persistent_session(remembered)
     g.clear_remember_cookie = True
@@ -153,7 +165,52 @@ def logout():
 @auth_api.get("/me")
 def me():
     user = _service().session_user(session.get("user_id"), session.get("session_version"))
+    if user and user.mfa_required and not _mfa_service().session_verified(
+        user.id,
+        session.get("mfa_session_token"),
+        session_version=session.get("session_version"),
+        tenant_id=session.get("organization_id"),
+    ):
+        return jsonify({"error": "mfa_required"}), 401
     return jsonify(user.public()) if user else (jsonify({"error": "authentication_required"}), 401)
+
+
+@auth_api.post("/mfa/enroll")
+def mfa_enroll():
+    if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _service().session_user(session.get("user_id"), session.get("session_version"))
+    if user is None: return jsonify({"error": "authentication_required"}), 401
+    try:
+        provisioning_uri = _mfa_service().start_enrollment(user.id)
+    except MFAError:
+        return jsonify({"error": "mfa_enrollment_unavailable"}), 400
+    return jsonify({"status": "mfa_enrollment_started", "provisioning_uri": provisioning_uri}), 200
+
+
+def _complete_mfa(*, enrollment: bool):
+    if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
+    user = _service().session_user(session.get("user_id"), session.get("session_version"))
+    if user is None: return jsonify({"error": "authentication_required"}), 401
+    if not _allowed("mfa-verify|" + str(user.id), 5, 600):
+        return jsonify({"error": "mfa_verification_failed"}), 429
+    code = (request.get_json(silent=True) or {}).get("code")
+    try:
+        token = (_mfa_service().complete_enrollment if enrollment else _mfa_service().verify)(user.id, code)
+    except MFAError:
+        return jsonify({"error": "mfa_verification_failed"}), 400
+    session["mfa_session_token"] = token
+    session["auth_stage"] = "SOC_AUTHENTICATED"
+    return jsonify({"status": "mfa_verified", "mfa_verified": True}), 200
+
+
+@auth_api.post("/mfa/verify-enrollment")
+def mfa_verify_enrollment():
+    return _complete_mfa(enrollment=True)
+
+
+@auth_api.post("/mfa/verify")
+def mfa_verify():
+    return _complete_mfa(enrollment=False)
 
 @auth_api.get("/sessions")
 def sessions():

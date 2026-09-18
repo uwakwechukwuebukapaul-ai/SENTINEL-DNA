@@ -24,6 +24,8 @@ class User:
     expires_at: str | None = None
     revocation_status: str = "active"
     audit_correlation_id: str | None = None
+    mfa_required: bool = False
+    mfa_enrolled_at: str | None = None
 
     def public(self) -> dict[str, Any]:
         return {

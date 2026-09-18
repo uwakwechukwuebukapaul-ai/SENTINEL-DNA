@@ -38,6 +38,8 @@ class AuthService:
                 "email_verified_at",
                 "expires_at",
                 "audit_correlation_id",
+                "mfa_secret_ciphertext",
+                "mfa_enrolled_at",
             ):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
@@ -45,6 +47,10 @@ class AuthService:
                 connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+            if "mfa_required" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN mfa_required INTEGER NOT NULL DEFAULT 0")
+            if "mfa_last_counter" not in columns:
+                connection.execute("ALTER TABLE users ADD COLUMN mfa_last_counter INTEGER")
             connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_identities (
                 id {identity}, user_id INTEGER NOT NULL,
                 provider TEXT NOT NULL, provider_subject TEXT NOT NULL,
@@ -74,7 +80,7 @@ class AuthService:
         self.rate_limit_backend = DatabaseRateLimitBackend(self.db)
         self.rate_limit_service = RateLimitService(self.rate_limit_backend)
 
-    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, connection=None) -> User:
+    def register(self, username: str, email: str, password: str, role: str = "analyst", *, phone_number=None, phone_verified_at=None, tenant_id=None, actor_id=None, date_of_birth=None, email_verified_at=None, expires_at=None, revocation_status="active", audit_correlation_id=None, is_active=True, mfa_required=False, connection=None) -> User:
         if len(username.strip()) < 3 or "@" not in str(email) or len(password) < 10:
             raise ValueError("invalid_user_registration")
         normalized_role = str(role or "analyst").strip().lower()
@@ -85,9 +91,9 @@ class AuthService:
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
             row = connection.execute(
-                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0),
+                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,mfa_required)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, 1 if mfa_required else 0),
             ).fetchone()
             user_id = row["id"]
             connection.execute(
@@ -364,4 +370,5 @@ class AuthService:
             row["actor_id"], row["date_of_birth"], row["email_verified_at"],
             int(row["session_version"] or 0), row["expires_at"],
             str(row["revocation_status"] or "active"), row["audit_correlation_id"],
+            bool(row["mfa_required"]), row["mfa_enrolled_at"],
         )

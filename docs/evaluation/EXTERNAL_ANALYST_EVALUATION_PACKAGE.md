@@ -1,6 +1,6 @@
 # Zero-Cost External SOC Analyst Evaluation Package
 
-Status: `READY WITH BLOCKERS`
+Status: `TECHNICALLY ACCESS-READY; EXTERNAL EVALUATION NOT EXECUTED`
 
 This package prepares one independent cybersecurity/SOC professional to
 evaluate Sentinel DNA against synthetic data in an isolated, non-production
@@ -35,20 +35,23 @@ The current-main pilot flow already provides:
 - tenant-scoped investigation and feedback boundaries; and
 - audit records without passwords or activation values.
 
-The package is **not executable yet** because current-main password login does
-not enforce a second factor for the pilot analyst. Existing OTP routes cover
-registration, recovery, and email-OTP authentication flows; they are not an
-enforced MFA step after pilot password authentication. No analyst access may
-be issued until MFA is implemented and independently tested, or an existing
-current-main MFA enforcement is separately verified.
+Current main now enforces a server-side TOTP step for pilot analyst accounts
+before SOC authorization. Password authentication places an MFA-required
+account in a non-SOC authentication stage; protected pages and APIs reject
+requests until a valid, non-replayed TOTP code establishes a short-lived,
+server-bound MFA session. The TOTP seed is encrypted at rest, and the
+enrollment, verification, failure, blocking, logout, and revocation paths are
+audited without secrets. Existing registration, recovery, and email-OTP
+routes remain distinct from this MFA boundary.
 
-This is a fail-closed blocker, not permission to add an ad-hoc OTP flow in an
-operator script or to treat email delivery as MFA without an enforced server
-boundary.
+This implementation is covered by focused security tests and affected
+authentication/security regression tests. It does not activate an external
+analyst or establish independent external validation. Activation remains a
+separate, explicitly authorized non-production operation.
 
 ## Approved identity and access sequence
 
-The intended sequence, after the MFA blocker is resolved, is:
+The intended sequence is:
 
 1. An authorized `admin` or `soc_manager` authenticates in the isolated
    non-production environment.
@@ -160,10 +163,11 @@ the boundary is reviewed.
 
 ## Readiness decision
 
-`READY WITH BLOCKERS`
+`TECHNICALLY ACCESS-READY FOR EXPLICIT NON-PRODUCTION AUTHORIZATION; EXTERNAL
+EVALUATION NOT EXECUTED`
 
-Smallest next action: add and independently test an enforced MFA enrollment
-and authentication step for this bounded analyst account path. Until that
-step exists, no external analyst account may be activated or granted SOC
-access. Remote endpoint provisioning is a separate infrastructure action and
-is outside this package.
+The server-enforced MFA contract is implemented and covered by focused and
+affected regression tests. The next action is independent security review and
+explicit authorization of a separate non-production activation procedure.
+Remote endpoint provisioning is a separate infrastructure action and is
+outside this package.
