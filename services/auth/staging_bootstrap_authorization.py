@@ -195,13 +195,15 @@ def _require_active_context(principal: VerifiedBootstrapPrincipal, tenant_id: st
         raise StagingBootstrapAuthorizationError("principal_inactive")
 
 
-def _require_request_capability(principal: VerifiedBootstrapPrincipal) -> None:
-    if principal.context.role.lower() not in PERMISSIONS.get(REQUEST_CAPABILITY, set()):
+def _require_request_capability(principal: VerifiedBootstrapPrincipal, role: str | None = None) -> None:
+    effective_role = str(role or principal.context.role).lower()
+    if effective_role not in PERMISSIONS.get(REQUEST_CAPABILITY, set()):
         raise StagingBootstrapAuthorizationError("capability_denied")
 
 
-def _require_approval_capability(principal: VerifiedBootstrapPrincipal) -> None:
-    if principal.context.role.lower() not in PERMISSIONS.get(APPROVE_CAPABILITY, set()):
+def _require_approval_capability(principal: VerifiedBootstrapPrincipal, role: str | None = None) -> None:
+    effective_role = str(role or principal.context.role).lower()
+    if effective_role not in PERMISSIONS.get(APPROVE_CAPABILITY, set()):
         raise StagingBootstrapAuthorizationError("capability_denied")
 
 
@@ -260,6 +262,36 @@ class StagingBootstrapAuthorizationService:
             expires_at=row["expires_at"],
         )
 
+    def _require_live_principal(
+        self,
+        principal: VerifiedBootstrapPrincipal,
+        tenant_id: str,
+        connection: Any,
+    ) -> str:
+        """Re-resolve authorization state inside the caller's transaction."""
+
+        _require_active_context(principal, tenant_id)
+        tenant = self.authority.tenants.get(tenant_id, connection=connection)
+        identity = self.authority.identities.get(principal.actor_id, connection=connection)
+        membership = self.authority.memberships.get(tenant_id, principal.actor_id, connection=connection)
+        user = connection.execute(
+            """SELECT id FROM users
+               WHERE id=? AND actor_id=? AND tenant_id=? AND is_active=1
+                 AND COALESCE(revocation_status, 'active')='active'""",
+            (int(principal.user_id), principal.actor_id, tenant_id),
+        ).fetchone()
+        if not tenant or tenant.status != "active":
+            raise StagingBootstrapAuthorizationError("control_tenant_inactive")
+        if (
+            not identity
+            or identity.status != "active"
+            or not membership
+            or membership.status != "active"
+            or not user
+        ):
+            raise StagingBootstrapAuthorizationError("principal_inactive")
+        return membership.role
+
     def create_request(
         self,
         requester: VerifiedBootstrapPrincipal,
@@ -271,8 +303,6 @@ class StagingBootstrapAuthorizationService:
         expires_at: str | datetime,
         approval_transaction_id: str | None = None,
     ) -> BootstrapAuthorization:
-        _require_active_context(requester, control_tenant_id)
-        _require_request_capability(requester)
         transaction_id = str(approval_transaction_id or uuid4()).strip()
         expiry = _iso_utc(expires_at)
         if _utc(expiry) <= datetime.now(timezone.utc):
@@ -292,6 +322,8 @@ class StagingBootstrapAuthorizationService:
         )
         authorization_id = str(uuid4())
         with CanonicalUnitOfWork(self.db) as unit:
+            requester_role = self._require_live_principal(requester, control_tenant_id, unit.conn)
+            _require_request_capability(requester, requester_role)
             tenant = self.authority.tenants.get(control_tenant_id, connection=unit.conn)
             if not tenant or tenant.status != "active":
                 raise StagingBootstrapAuthorizationError("control_tenant_inactive")
@@ -343,59 +375,63 @@ class StagingBootstrapAuthorizationService:
         artifact: Mapping[str, str] | None = None,
     ) -> BootstrapAuthorization:
         current = self.get(authorization_id)
-        _require_active_context(reviewer, current.control_tenant_id)
-        if reviewer.actor_id == current.requester_actor_id:
-            raise StagingBootstrapAuthorizationError("requester_reviewer_same_identity")
-        _require_approval_capability(reviewer)
-        now = datetime.now(timezone.utc)
-        if current.status != "REQUESTED":
-            raise StagingBootstrapAuthorizationError("approval_state_invalid")
-        if _utc(current.expires_at) <= now:
-            self._expire(authorization_id)
-            raise StagingBootstrapAuthorizationError("approval_expired")
-        if artifact is not None and not hmac.compare_digest(artifact_hash(artifact), current.artifact_hash):
-            raise StagingBootstrapAuthorizationError("request_hash_mismatch")
+        expired = False
         with CanonicalUnitOfWork(self.db) as unit:
-            cursor = unit.conn.execute(
-                """UPDATE staging_bootstrap_authorizations
-                   SET status='APPROVED', reviewer_actor_id=?, reviewer_user_id=?,
-                       reviewer_provider=?, reviewer_subject=?, reviewer_credential_id=?,
-                       reviewer_verified_at=?, decided_at=?
-                   WHERE authorization_id=? AND status='REQUESTED'""",
-                (
-                    reviewer.actor_id, reviewer.user_id, reviewer.provider, reviewer.subject,
-                    reviewer.credential_id, reviewer.verified_at, now.isoformat(), authorization_id,
-                ),
-            )
-            if cursor.rowcount != 1:
+            reviewer_role = self._require_live_principal(reviewer, current.control_tenant_id, unit.conn)
+            if reviewer.actor_id == current.requester_actor_id:
+                raise StagingBootstrapAuthorizationError("requester_reviewer_same_identity")
+            _require_approval_capability(reviewer, reviewer_role)
+            now = datetime.now(timezone.utc)
+            if current.status != "REQUESTED":
                 raise StagingBootstrapAuthorizationError("approval_state_invalid")
-            self.audit.record(
-                "STAGING_BOOTSTRAP_APPROVED",
-                tenant_id=current.control_tenant_id,
-                actor_id=reviewer.actor_id,
-                user_id=reviewer.user_id,
-                operation=BOOTSTRAP_OPERATION,
-                outcome="approved",
-                metadata={
-                    "authorization_id": authorization_id,
-                    "requester_actor_id": current.requester_actor_id,
-                    "requester_user_id": current.requester_user_id,
-                    "reviewer_actor_id": reviewer.actor_id,
-                    "reviewer_user_id": reviewer.user_id,
-                },
-                connection=unit.conn,
-            )
+            if _utc(current.expires_at) <= now:
+                self._expire(authorization_id, connection=unit.conn)
+                expired = True
+            else:
+                if artifact is not None and not hmac.compare_digest(artifact_hash(artifact), current.artifact_hash):
+                    raise StagingBootstrapAuthorizationError("request_hash_mismatch")
+                cursor = unit.conn.execute(
+                    """UPDATE staging_bootstrap_authorizations
+                       SET status='APPROVED', reviewer_actor_id=?, reviewer_user_id=?,
+                           reviewer_provider=?, reviewer_subject=?, reviewer_credential_id=?,
+                           reviewer_verified_at=?, decided_at=?
+                       WHERE authorization_id=? AND status='REQUESTED'""",
+                    (
+                        reviewer.actor_id, reviewer.user_id, reviewer.provider, reviewer.subject,
+                        reviewer.credential_id, reviewer.verified_at, now.isoformat(), authorization_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise StagingBootstrapAuthorizationError("approval_state_invalid")
+                self.audit.record(
+                    "STAGING_BOOTSTRAP_APPROVED",
+                    tenant_id=current.control_tenant_id,
+                    actor_id=reviewer.actor_id,
+                    user_id=reviewer.user_id,
+                    operation=BOOTSTRAP_OPERATION,
+                    outcome="approved",
+                    metadata={
+                        "authorization_id": authorization_id,
+                        "requester_actor_id": current.requester_actor_id,
+                        "requester_user_id": current.requester_user_id,
+                        "reviewer_actor_id": reviewer.actor_id,
+                        "reviewer_user_id": reviewer.user_id,
+                    },
+                    connection=unit.conn,
+                )
+        if expired:
+            raise StagingBootstrapAuthorizationError("approval_expired")
         return self.get(authorization_id)
 
     def reject(self, reviewer: VerifiedBootstrapPrincipal, authorization_id: str) -> BootstrapAuthorization:
         current = self.get(authorization_id)
-        _require_active_context(reviewer, current.control_tenant_id)
-        if reviewer.actor_id == current.requester_actor_id:
-            raise StagingBootstrapAuthorizationError("requester_reviewer_same_identity")
-        _require_approval_capability(reviewer)
-        if current.status != "REQUESTED":
-            raise StagingBootstrapAuthorizationError("approval_state_invalid")
         with CanonicalUnitOfWork(self.db) as unit:
+            reviewer_role = self._require_live_principal(reviewer, current.control_tenant_id, unit.conn)
+            if reviewer.actor_id == current.requester_actor_id:
+                raise StagingBootstrapAuthorizationError("requester_reviewer_same_identity")
+            _require_approval_capability(reviewer, reviewer_role)
+            if current.status != "REQUESTED":
+                raise StagingBootstrapAuthorizationError("approval_state_invalid")
             cursor = unit.conn.execute(
                 "UPDATE staging_bootstrap_authorizations SET status='REJECTED', reviewer_actor_id=?, reviewer_user_id=?, reviewer_provider=?, reviewer_subject=?, reviewer_credential_id=?, reviewer_verified_at=?, decided_at=? WHERE authorization_id=? AND status='REQUESTED'",
                 (reviewer.actor_id, reviewer.user_id, reviewer.provider, reviewer.subject, reviewer.credential_id, reviewer.verified_at, datetime.now(timezone.utc).isoformat(), authorization_id),
@@ -442,6 +478,23 @@ class StagingBootstrapAuthorizationService:
             raise StagingBootstrapAuthorizationError("request_hash_mismatch")
         if artifact.get("control_tenant_id") != control_tenant_id or artifact.get("target_role") != BOOTSTRAP_ROLE:
             raise StagingBootstrapAuthorizationError("approval_scope_mismatch")
+        created = connection.execute(
+            """SELECT username, email, role, tenant_id, actor_id, is_active,
+                      COALESCE(revocation_status, 'active') AS revocation_status
+               FROM users WHERE id=?""",
+            (int(created_user_id),),
+        ).fetchone()
+        if (
+            not created
+            or str(created["actor_id"]) != str(created_actor_id)
+            or str(created["tenant_id"]) != control_tenant_id
+            or str(created["username"]) != str(artifact.get("target_username"))
+            or str(created["email"]).lower() != str(artifact.get("target_email")).lower()
+            or str(created["role"]).lower() != BOOTSTRAP_ROLE
+            or int(created["is_active"]) != 1
+            or str(created["revocation_status"]).lower() != "active"
+        ):
+            raise StagingBootstrapAuthorizationError("created_identity_mismatch")
         cursor = connection.execute(
             "UPDATE staging_bootstrap_authorizations SET status='CONSUMED', consumed_at=?, bootstrap_correlation_id=?, created_user_id=?, created_actor_id=? WHERE authorization_id=? AND status='APPROVED'",
             (now.isoformat(), correlation_id, int(created_user_id), str(created_actor_id), authorization_id),
