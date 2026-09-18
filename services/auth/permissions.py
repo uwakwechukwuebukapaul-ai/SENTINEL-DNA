@@ -100,6 +100,8 @@ PERMISSIONS = {
     "operations:view": {"admin", "soc_manager"},
     "pilot:read": {"admin", "soc_manager", "analyst", "viewer"}, "pilot:manage": {"admin", "soc_manager"}, "compliance:manage": {"admin", "soc_manager"},
     "identity:view": {"admin", "soc_manager", "analyst", "viewer"}, "identity:manage": {"admin", "soc_manager"}, "identity:review": {"admin", "soc_manager", "analyst"},
+    "identity:staging_bootstrap_request": {"admin", "soc_manager", "analyst", "viewer"},
+    "identity:staging_bootstrap_approve": {"admin", "soc_manager"},
     "data_security:view": {"admin", "soc_manager", "analyst", "viewer"}, "data_security:manage": {"admin", "soc_manager"},
     "decision:view": {"admin", "soc_manager", "analyst", "viewer"}, "decision:analyze": {"admin", "soc_manager", "analyst"},
     "copilot:view": {"admin", "soc_manager", "analyst", "viewer"}, "copilot:use": {"admin", "soc_manager", "analyst"},
