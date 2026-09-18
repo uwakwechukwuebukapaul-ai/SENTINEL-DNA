@@ -27,7 +27,11 @@ class AuthService:
                 id {identity}, username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'analyst', created_at TEXT NOT NULL,
-                last_login TEXT, is_active INTEGER NOT NULL DEFAULT 1)""")
+                last_login TEXT, is_active INTEGER NOT NULL DEFAULT 1,
+                mfa_secret_ciphertext TEXT,
+                mfa_enrolled_at TEXT,
+                mfa_required INTEGER NOT NULL DEFAULT 0,
+                mfa_last_counter INTEGER)""")
             columns = table_columns(connection, self.db.backend_name, "users")
             for name in (
                 "phone_number",
@@ -38,8 +42,6 @@ class AuthService:
                 "email_verified_at",
                 "expires_at",
                 "audit_correlation_id",
-                "mfa_secret_ciphertext",
-                "mfa_enrolled_at",
             ):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT")
@@ -47,10 +49,6 @@ class AuthService:
                 connection.execute("ALTER TABLE users ADD COLUMN revocation_status TEXT NOT NULL DEFAULT 'active'")
             if "session_version" not in columns:
                 connection.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
-            if "mfa_required" not in columns:
-                connection.execute("ALTER TABLE users ADD COLUMN mfa_required INTEGER NOT NULL DEFAULT 0")
-            if "mfa_last_counter" not in columns:
-                connection.execute("ALTER TABLE users ADD COLUMN mfa_last_counter INTEGER")
             connection.execute(f"""CREATE TABLE IF NOT EXISTS auth_identities (
                 id {identity}, user_id INTEGER NOT NULL,
                 provider TEXT NOT NULL, provider_subject TEXT NOT NULL,

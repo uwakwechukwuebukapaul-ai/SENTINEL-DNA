@@ -15,7 +15,7 @@ Nginx edge -> Gunicorn Flask app -> canonical tenant/identity authority
                                       -> AI Investigator V1/evidence projections
 ```
 
-The authoritative database registry contains migrations 001 through 008.
+The authoritative database registry contains migrations 001 through 009.
 Compose runs the one-shot `migration` service before the application; WSGI
 import does not run migrations. The analyst workspace is tenant-scoped and
 keeps AI findings advisory until an authenticated analyst submits a review.
@@ -31,7 +31,7 @@ canonical record fields. No second feedback store was added.
 
 The production runner previously registered only the normalized core schema.
 Fresh PostgreSQL targets therefore lacked `schema_migrations` and canonical
-authority tables. The remediation added the ordered 001-008 registry,
+authority tables. The remediation added the ordered 001-009 registry,
 contiguous-version validation, transactional execution, and an explicit
 migration service. The final pass also removed SQLite-only `rowid` ordering
 from feedback reads; ordering is now `created_at, feedback_id`, portable to

@@ -21,7 +21,7 @@ except ImportError:  # pragma: no cover - direct operator invocation
 
 
 # This is the exact table inventory owned by the authoritative default
-# migration registry (001-008). It intentionally excludes staging overlay 011
+# migration registry (001-009). It intentionally excludes staging overlay 011
 # and the legacy normalized-core schema contract in database.schema.
 AUTHORITATIVE_MIGRATION_TABLES = (
     "analyst_actions",
@@ -48,8 +48,10 @@ AUTHORITATIVE_MIGRATION_TABLES = (
     "iocs",
     "organizational_memory",
     "organizational_memory_audit",
+    "mfa_sessions",
     "schema_migrations",
     "timeline",
+    "users",
 )
 
 

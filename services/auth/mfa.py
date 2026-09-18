@@ -56,24 +56,6 @@ class MFAService:
         self.secret_key_provider = secret_key_provider
         self.audit_service = audit_service
         self.clock = clock
-        with self.db.session() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS mfa_sessions (
-                    token_hash TEXT PRIMARY KEY,
-                    user_id BIGINT NOT NULL,
-                    session_version INTEGER NOT NULL,
-                    tenant_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    expires_at TEXT NOT NULL,
-                    revoked_at TEXT
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_mfa_sessions_user_active "
-                "ON mfa_sessions(user_id, revoked_at, expires_at)"
-            )
 
     def _fernet(self) -> Fernet:
         secret_key = str(self.secret_key_provider() or "")

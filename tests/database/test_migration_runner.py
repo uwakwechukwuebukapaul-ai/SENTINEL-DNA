@@ -13,7 +13,7 @@ def test_migration_runner_is_idempotent(tmp_path):
     backend = SQLiteBackend(tmp_path / "runner.sqlite")
     runner = MigrationRunner(backend)
 
-    assert runner.run() == tuple(range(1, 9))
+    assert runner.run() == tuple(range(1, 10))
     assert runner.run() == ()
 
     with backend.session() as connection:
@@ -30,7 +30,7 @@ def test_migration_runner_is_idempotent(tmp_path):
             ).fetchall()
         ]
 
-    assert versions == list(range(1, 9))
+    assert versions == list(range(1, 10))
     assert {
         "schema_migrations",
         "cases",
@@ -41,7 +41,79 @@ def test_migration_runner_is_idempotent(tmp_path):
         "crypto_payment_intents",
         "investigation_memory",
         "organizational_memory",
+        "users",
+        "mfa_sessions",
     } <= tables
+
+
+def test_mfa_schema_is_authoritative_without_service_construction(tmp_path):
+    backend = SQLiteBackend(tmp_path / "mfa-schema.sqlite")
+    assert MigrationRunner(backend).run() == tuple(range(1, 10))
+
+    with backend.session() as connection:
+        before = {
+            row["name"]: row["sql"]
+            for row in connection.execute(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type IN ('table', 'index') AND name IN "
+                "('mfa_sessions', 'idx_mfa_sessions_user_active')"
+            ).fetchall()
+        }
+
+    from services.auth.mfa import MFAService
+
+    MFAService(backend, secret_key_provider=lambda: "x" * 40)
+
+    with backend.session() as connection:
+        after = {
+            row["name"]: row["sql"]
+            for row in connection.execute(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type IN ('table', 'index') AND name IN "
+                "('mfa_sessions', 'idx_mfa_sessions_user_active')"
+            ).fetchall()
+        }
+
+    assert set(before) == {"mfa_sessions", "idx_mfa_sessions_user_active"}
+    assert after == before
+
+
+def test_mfa_migration_upgrades_existing_users_table(tmp_path):
+    backend = SQLiteBackend(tmp_path / "mfa-upgrade.sqlite")
+    with backend.session() as connection:
+        connection.execute(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'analyst',
+                created_at TEXT NOT NULL,
+                last_login TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+
+    MigrationRunner(backend).run()
+
+    with backend.session() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(users)").fetchall()
+        }
+        mfa_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='mfa_sessions'"
+        ).fetchone()
+
+    assert {
+        "mfa_secret_ciphertext",
+        "mfa_enrolled_at",
+        "mfa_required",
+        "mfa_last_counter",
+    } <= columns
+    assert mfa_table["name"] == "mfa_sessions"
 
 
 def test_migration_runner_rolls_back_failed_migration(tmp_path):

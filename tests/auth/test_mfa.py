@@ -1,10 +1,15 @@
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
 import json
+import threading
 
 import pyotp
 import pytest
 
 from app import create_app
+from database.backend import SQLiteBackend
+from database.migration_runner import MigrationRunner
+from services.auth.mfa import MFAError, MFAService
 from tests.credential_helpers import random_password
 
 
@@ -14,7 +19,9 @@ PASSWORD = random_password()
 @pytest.fixture
 def mfa_application(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
-    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "mfa.sqlite"))
+    db_path = tmp_path / "mfa.sqlite"
+    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db_path))
+    MigrationRunner(SQLiteBackend(db_path)).run()
     application = create_app()
     application.config.update(TESTING=True, PILOT_ACCESS_REQUIRED=True)
     authority = application.container.require("canonical_authority")
@@ -149,19 +156,33 @@ def test_enrollment_is_bound_to_authenticated_user_and_secret_is_not_audit_data(
 
 def test_enrollment_cannot_target_another_user(mfa_application):
     application, analyst, _tenant_id, _authorization_id = mfa_application
+    auth = application.container.require("auth_service")
+    other = auth.register(
+        "mfa-other",
+        "other@mfa.example.test",
+        PASSWORD,
+        "analyst",
+        tenant_id=_tenant_id,
+        actor_id="mfa-other",
+        mfa_required=True,
+    )
     client = application.test_client()
     _login(client)
     response = client.post(
         "/api/auth/mfa/enroll",
-        json={"user_id": 999999, "actor_id": "other-user"},
+        json={"user_id": other.id, "actor_id": other.actor_id},
         headers={"X-CSRF-Token": _csrf(client)},
     )
     assert response.status_code == 200
     with application.container.require("auth_service").db.session() as connection:
-        row = connection.execute(
-            "SELECT mfa_secret_ciphertext FROM users WHERE id=?", (analyst.id,)
-        ).fetchone()
-    assert row["mfa_secret_ciphertext"]
+        rows = connection.execute(
+            "SELECT id, mfa_secret_ciphertext FROM users WHERE id IN (?, ?) ORDER BY id",
+            (analyst.id, other.id),
+        ).fetchall()
+    assert [row["id"] for row in rows] == sorted((analyst.id, other.id))
+    enrolled = {row["id"]: row["mfa_secret_ciphertext"] for row in rows}
+    assert enrolled[analyst.id]
+    assert enrolled[other.id] is None
 
 
 def test_mfa_code_replay_and_logout_invalidate_access(mfa_application):
@@ -185,6 +206,53 @@ def test_mfa_code_replay_and_logout_invalidate_access(mfa_application):
     logout = client.post("/api/auth/logout", headers={"X-CSRF-Token": _csrf(client)})
     assert logout.status_code == 200
     assert client.get("/api/pilot-authorizations/current").status_code == 401
+
+
+def test_concurrent_totp_verification_accepts_counter_once(mfa_application):
+    application, analyst, _tenant_id, _authorization_id = mfa_application
+    client = application.test_client()
+    _login(client)
+    totp = _enroll(client)
+    assert _verify_enrollment(client, totp).status_code == 200
+
+    service = MFAService(
+        application.container.require("auth_service").db,
+        secret_key_provider=lambda: application.secret_key,
+    )
+    with application.container.require("auth_service").db.session() as connection:
+        row = connection.execute(
+            "SELECT mfa_last_counter FROM users WHERE id=?", (analyst.id,)
+        ).fetchone()
+    accepted_counter = int(row["mfa_last_counter"]) + 1
+    code = totp.at(accepted_counter * 30)
+    barrier = threading.Barrier(2)
+
+    def attempt():
+        barrier.wait()
+        try:
+            service.verify(analyst.id, code)
+        except MFAError as exc:
+            return ("rejected", str(exc))
+        except Exception as exc:  # pragma: no cover - documents backend limits
+            return ("error", type(exc).__name__)
+        return ("success", None)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = [future.result() for future in (pool.submit(attempt), pool.submit(attempt))]
+
+    assert [outcome[0] for outcome in outcomes].count("success") == 1, outcomes
+    assert [outcome[0] for outcome in outcomes].count("rejected") == 1
+    assert next(outcome[1] for outcome in outcomes if outcome[0] == "rejected") == "mfa_code_replayed"
+    with application.container.require("auth_service").db.session() as connection:
+        final = connection.execute(
+            "SELECT mfa_last_counter FROM users WHERE id=?", (analyst.id,)
+        ).fetchone()
+        sessions = connection.execute(
+            "SELECT COUNT(*) AS count FROM mfa_sessions WHERE user_id=?",
+            (analyst.id,),
+        ).fetchone()
+    assert int(final["mfa_last_counter"]) == accepted_counter
+    assert int(sessions["count"]) == 2
 
 
 def test_revoked_pilot_authorization_cannot_regain_access_after_mfa(mfa_application):
