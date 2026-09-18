@@ -19,6 +19,7 @@ import tempfile
 from typing import Any, Iterable
 
 from deployment.disaster_recovery.sqlite_backup import SQLiteBackupService
+from database.migrations.registry import MIGRATION_MODULES
 
 
 MIGRATION_RE = re.compile(r"^(\d{3})_.+\.py$")
@@ -41,11 +42,12 @@ def _quote(value: str) -> str:
 
 
 def _migration_files(root: Path) -> list[tuple[int, Path]]:
-    directory = root / "database" / "migrations"
     result: list[tuple[int, Path]] = []
-    for path in sorted(directory.glob("[0-9][0-9][0-9]_*.py")):
+    directory = root / "database" / "migrations"
+    for module_name in MIGRATION_MODULES:
+        path = directory / f"{module_name.rsplit('.', 1)[-1]}.py"
         match = MIGRATION_RE.fullmatch(path.name)
-        if match:
+        if match and path.is_file():
             result.append((int(match.group(1)), path))
     return result
 
