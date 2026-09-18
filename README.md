@@ -311,6 +311,8 @@ Commercialize
 
 The project currently prioritizes **credibility engineering and external validation** rather than uncontrolled feature expansion.
 
+The current validation sequence is deliberately fail-closed: security and schema governance are validated before controlled external analyst access is authorized, while release custody and production authorization remain separate gates.
+
 That means validating:
 
 - Security boundaries
@@ -342,7 +344,7 @@ Confidence transparency
 Analyst control
 ```
 
-The next major validation milestone is independent analyst evaluation using a controlled synthetic-data environment.
+The next external validation milestone is independent analyst evaluation using a controlled synthetic-data environment, after the required security, schema-governance, and authorization checks are complete.
 
 The intended evaluation model is:
 
@@ -364,7 +366,7 @@ Preserved Evidence
 External Findings
 ```
 
-No production customer data is required for this evaluation.
+No production customer data is required for this evaluation. External evaluation access is not automatically granted by the documentation; it requires explicit authorization and the defined access controls.
 
 ---
 
