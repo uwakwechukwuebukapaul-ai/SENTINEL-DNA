@@ -40,6 +40,7 @@ MIGRATION_MODULES = (
     "database.migrations.006_crypto_intents",
     "database.migrations.007_investigation_memory",
     "database.migrations.008_organizational_cyber_memory",
+    "database.migrations.009_mfa_security",
 )
 
 STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE = "staging-first-privileged-identity"

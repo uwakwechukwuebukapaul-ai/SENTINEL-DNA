@@ -166,7 +166,7 @@ docker compose \
 
 Expected state:
 
-- `schema_migrations` contains versions 1 through 8.
+- `schema_migrations` contains versions 1 through 9.
 - All nine required tables are present.
 - The second migration run reports `database migrations applied: none`.
 - PostgreSQL and Redis are healthy.
@@ -174,7 +174,7 @@ Expected state:
 
 ## Security boundary validation
 
-The authoritative 001-008 migration files contain no `DROP`, `TRUNCATE`,
+The authoritative 001-009 migration files contain no `DROP`, `TRUNCATE`,
 destructive `DELETE`, user/role creation, default-user insertion, or admin
 account creation. No credentials are embedded in the migration chain or the
 Compose migration command. The migrations remain additive and preserve

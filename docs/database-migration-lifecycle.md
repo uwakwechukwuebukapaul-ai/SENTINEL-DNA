@@ -4,7 +4,7 @@
 
 The files under `database/migrations/` are the authoritative, ordered schema
 chain for the application persistence boundary. The registry in
-`database/migrations/registry.py` discovers versions 1 through 8 and rejects
+`database/migrations/registry.py` discovers versions 1 through 9 and rejects
 duplicate or non-contiguous version numbers before execution.
 
 The chain is additive and idempotent. It does not create users, tenants,
@@ -65,7 +65,7 @@ For each staging run:
 1. Confirm the reviewed commit, image digest, non-production environment
    classification, and disposable database target.
 2. Run the staging migration service and record its output.
-3. Verify versions `1` through `8` in `schema_migrations`.
+3. Verify versions `1` through `9` in `schema_migrations`.
 4. Verify canonical authority, provider trust, billing, crypto, investigation
    memory, and organizational memory tables.
 5. Verify `/health`, `/ready`, authentication, tenant isolation, audit writes,

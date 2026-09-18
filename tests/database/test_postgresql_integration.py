@@ -74,6 +74,6 @@ def test_postgresql_authoritative_migrations_are_complete_and_idempotent(postgre
             ).fetchone()["present"]
         }
 
-    assert versions == list(range(1, 9))
+    assert versions == list(range(1, 10))
     assert tables == required_tables
     assert runner.run() == ()
