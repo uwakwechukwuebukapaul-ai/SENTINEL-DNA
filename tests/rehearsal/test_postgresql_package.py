@@ -97,8 +97,10 @@ def test_standalone_inventory_matches_authoritative_default_migrations():
         "iocs",
         "organizational_memory",
         "organizational_memory_audit",
+        "mfa_sessions",
         "schema_migrations",
         "timeline",
+        "users",
     )
     assert "staging_bootstrap_authorizations" not in authoritative_migration_table_names()
     assert "staging_bootstrap_consumptions" not in authoritative_migration_table_names()
