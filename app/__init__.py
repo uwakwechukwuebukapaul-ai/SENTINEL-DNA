@@ -17,6 +17,7 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 
 from config.runtime import RuntimeConfig
 from database.connection import database
+from database.migration_runner import MigrationRunner
 
 
 
@@ -32,6 +33,9 @@ def create_app():
         app.config.update(PROPAGATE_EXCEPTIONS=False, TRAP_HTTP_EXCEPTIONS=False)
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     database.database_path = runtime_config.database_path
+    # The application must consume the authoritative schema; AuthService does
+    # not bootstrap or migrate the users/MFA tables.
+    MigrationRunner(database).run()
 
     # Reuse the existing Analyst Workspace blueprint without importing the
     # separate dashboard application or duplicating workspace logic.

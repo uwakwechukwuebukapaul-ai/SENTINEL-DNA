@@ -6,6 +6,7 @@ import pytest
 from flask import Flask
 
 from database.connection import DatabaseConnection
+from database.migration_runner import MigrationRunner
 from services.audit.service import AuditService
 from services.auth.auth_service import AuthService
 from services.auth import auth_api
@@ -30,6 +31,7 @@ class Clock:
 @pytest.fixture
 def provisioning_services(tmp_path):
     db = DatabaseConnection(tmp_path / "pilot-provisioning.db")
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db, auth=auth)
     audit = AuditService(db)

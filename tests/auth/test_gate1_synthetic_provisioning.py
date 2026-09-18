@@ -8,6 +8,7 @@ import pytest
 import services.auth.gate1_synthetic_provisioning as gate1_module
 
 from database.connection import DatabaseConnection
+from database.migration_runner import MigrationRunner
 from services.audit.service import AuditService
 from services.auth.auth_service import AuthService
 from services.auth.gate1_synthetic_provisioning import (
@@ -37,6 +38,7 @@ ROTATED_DEMO_PASSWORDS = _fresh_demo_passwords()
 
 def build_services(tmp_path, monkeypatch, audit=None):
     db = DatabaseConnection(tmp_path / "gate1.sqlite")
+    MigrationRunner(db).run()
     trusted_metadata = tmp_path / "gate1-release.json"
     trusted_metadata.write_text(json.dumps({"release_sha": TEST_REVISION, "image_digest": "sha256:" + "a" * 64}), encoding="utf-8")
     trusted_metadata.chmod(0o444)
@@ -101,6 +103,7 @@ def test_service_rechecks_authorization_outside_cli(tmp_path, monkeypatch):
     monkeypatch.delenv("SENTINEL_DNA_GATE1_PROVISIONING", raising=False)
     monkeypatch.delenv("SENTINEL_DNA_GATE1_ROTATION", raising=False)
     db = DatabaseConnection(tmp_path / "guard.sqlite")
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db)
     service = Gate1SyntheticProvisioningService(auth, authority, AuditService(db), db, expected_revision=TEST_REVISION)
@@ -176,6 +179,7 @@ def test_transaction_rolls_back_all_identities_on_audit_failure(tmp_path, monkey
             return super().record(*args, **kwargs)
 
     db = DatabaseConnection(tmp_path / "rollback.sqlite")
+    MigrationRunner(db).run()
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
@@ -474,6 +478,7 @@ def test_rotation_audit_failure_rolls_back_every_selected_lane(tmp_path, monkeyp
             return super().record(event_type, *args, **kwargs)
 
     db = DatabaseConnection(tmp_path / "rotation-rollback.sqlite")
+    MigrationRunner(db).run()
     monkeypatch.setenv("SENTINEL_DNA_GATE1_PROVISIONING", "1")
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)

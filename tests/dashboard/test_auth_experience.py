@@ -3,6 +3,7 @@ from tests.credential_helpers import random_password
 
 import dashboard.app as dashboard_app
 from database.connection import DatabaseConnection
+from database.migration_runner import MigrationRunner
 from database.connection import database
 from services.auth.auth_service import AuthService
 
@@ -24,7 +25,9 @@ def auth_client(tmp_path, monkeypatch):
     auth_path = tmp_path / "auth.db"
     original_database_path = database.database_path
     database.database_path = str(auth_path)
-    registry.register("auth_service", AuthService(DatabaseConnection(auth_path)))
+    auth_db = DatabaseConnection(auth_path)
+    MigrationRunner(auth_db).run()
+    registry.register("auth_service", AuthService(auth_db))
     registry.register("audit_service", AuditStub())
     monkeypatch.setattr(dashboard_app, "dashboard_payload", lambda: {
         "stats": {}, "cases": [], "evidence": [], "timeline": [], "iocs": [], "actions": [], "notes": []

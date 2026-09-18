@@ -6,6 +6,7 @@ from flask import Flask
 from flask import session
 
 from database.connection import DatabaseConnection
+from database.migration_runner import MigrationRunner
 from services.audit.service import AuditService
 from services.auth.auth_service import AuthService
 from services.core.service_registry import ServiceRegistry
@@ -30,6 +31,7 @@ class Clock:
 @pytest.fixture
 def pilot_services(tmp_path):
     db = DatabaseConnection(tmp_path / "pilot-authorization.db")
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db, auth=auth)
     audit = AuditService(db)
