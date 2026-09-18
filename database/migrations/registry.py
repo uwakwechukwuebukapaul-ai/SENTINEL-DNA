@@ -166,6 +166,12 @@ STAGING_MIGRATION_MODULES = MIGRATION_MODULES + (
 CONTROLLED_ANALYST_PILOT_MIGRATION_MODULES = STAGING_MIGRATION_MODULES + (
     "database.migrations.010_controlled_analyst_pilot",
 )
+STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE_MIGRATION_SPECS = (
+    (
+        "database.migrations.011_staging_first_privileged_identity",
+        "05749c9ae89466646d4007e001c902120164a5a243d6d21985691d2e514af2f4",
+    ),
+)
 
 
 def migration_registry() -> tuple[Migration, ...]:
@@ -335,16 +341,43 @@ def controlled_analyst_pilot_migration_registry() -> tuple[Migration, ...]:
     return ordered
 
 
+def staging_first_privileged_identity_namespace_registry() -> tuple[NamespaceMigration, ...]:
+    """Load the explicitly selected staging bootstrap namespace overlay."""
+    migrations = list(NAMESPACE_MIGRATIONS)
+    for module_path, expected_digest in STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE_MIGRATION_SPECS:
+        module = import_module(module_path)
+        actual_digest, source_bytes = source_digest_for_module(module)
+        if expected_digest == "REPLACE_ME" or actual_digest != expected_digest:
+            raise ValueError(f"migration_source_digest_mismatch:{module_path}")
+        migrations.append(
+            NamespaceMigration(
+                namespace=module.NAMESPACE,
+                migration_key=module.MIGRATION_KEY,
+                name=module.DESCRIPTION,
+                upgrade=module.upgrade,
+                prerequisites=tuple(module.PREREQUISITES),
+                source_digest=expected_digest,
+                display_version=module.DISPLAY_VERSION,
+                module_path=module_path,
+                source_bytes=source_bytes,
+                _registry_token=_REGISTRY_TOKEN,
+            )
+        )
+    return validate_namespace_registry(tuple(migrations))
+
+
 MIGRATIONS = migration_registry()
 STAGING_MIGRATIONS = staging_migration_registry()
 CONTROLLED_ANALYST_PILOT_MIGRATIONS = controlled_analyst_pilot_migration_registry()
 NAMESPACE_MIGRATIONS = namespace_migration_registry()
+STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE_MIGRATIONS = staging_first_privileged_identity_namespace_registry()
 
 __all__ = [
     "MIGRATIONS",
     "MIGRATION_MODULES",
     "STAGING_MIGRATIONS",
     "CONTROLLED_ANALYST_PILOT_MIGRATIONS",
+    "STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE_MIGRATIONS",
     "STAGING_MIGRATION_MODULES",
     "CONTROLLED_ANALYST_PILOT_MIGRATION_MODULES",
     "Migration",
@@ -358,4 +391,5 @@ __all__ = [
     "validate_namespace_registry",
     "staging_migration_registry",
     "controlled_analyst_pilot_migration_registry",
+    "staging_first_privileged_identity_namespace_registry",
 ]

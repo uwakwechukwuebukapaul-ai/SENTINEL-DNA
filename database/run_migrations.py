@@ -10,7 +10,9 @@ from database.migration_runner import MigrationRunner
 from database.migrations.registry import (
     CONTROLLED_ANALYST_PILOT_MIGRATIONS,
     MIGRATIONS,
+    NAMESPACE_MIGRATIONS,
     STAGING_MIGRATIONS,
+    STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE_MIGRATIONS,
 )
 
 
@@ -19,6 +21,10 @@ def main() -> int:
     runtime.validate()
     favp_enabled = runtime.environment == "staging" and os.getenv("SENTINEL_DNA_FAVP_OPERATIONS_ENABLED") == "1"
     controlled_pilot_enabled = os.getenv("SENTINEL_DNA_CONTROLLED_ANALYST_PILOT_ENABLED") == "1"
+    first_privileged_bootstrap_enabled = (
+        runtime.environment == "staging"
+        and os.getenv("SENTINEL_DNA_STAGING_FIRST_PRIVILEGED_IDENTITY_BOOTSTRAP_ENABLED") == "1"
+    )
     if controlled_pilot_enabled and runtime.environment == "production":
         raise RuntimeError("controlled analyst pilot migration is not permitted in production")
     if favp_enabled:
@@ -34,7 +40,16 @@ def main() -> int:
         if controlled_pilot_enabled
         else (STAGING_MIGRATIONS if favp_enabled else MIGRATIONS)
     )
-    applied = MigrationRunner(backend, migrations=migrations).run()
+    namespace_migrations = (
+        STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE_MIGRATIONS
+        if first_privileged_bootstrap_enabled
+        else NAMESPACE_MIGRATIONS
+    )
+    applied = MigrationRunner(
+        backend,
+        migrations=migrations,
+        namespace_migrations=namespace_migrations,
+    ).run()
     if favp_enabled:
         from database.staging_favp_bootstrap import initialize_staging_artifacts
         initialize_staging_artifacts(backend, os.getenv("SENTINEL_DNA_FAVP_EVIDENCE_DIR"))

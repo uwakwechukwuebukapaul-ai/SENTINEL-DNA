@@ -36,6 +36,18 @@ class ApprovalWorkflowError(ValueError):
 
 
 @dataclass(frozen=True)
+class ConsumedBootstrapApproval:
+    approval_id: str
+    request_hash: str
+    approval_transaction_id: str
+    requester_user_id: int
+    requester_identity: tuple[str, str, str, str]
+    approver_user_id: int
+    approver_actor_id: str
+    approver_identity: tuple[str, str, str, str]
+
+
+@dataclass(frozen=True)
 class AuthenticatedEntraContext:
     """The verified identity/session boundary handed to workflow methods."""
 
@@ -238,6 +250,94 @@ class ApprovalWorkflow:
             self._audit(connection, approval_id, digest, context, "APPROVE_APPROVAL" if decision == "approved" else "REJECT_APPROVAL", now, approval_transaction_id, "pending", decision)
         return {"approval_id": approval_id, "request_hash": digest, "status": decision, "approval_transaction_id": approval_transaction_id}
 
+    def consume_staging_first_privileged_identity_approval(
+        self,
+        connection: Any,
+        *,
+        approval_id: str,
+        artifact: Mapping[str, Any],
+        approval_transaction_id: str,
+        expected_tenant_id: str,
+        expected_database_target_identity: str,
+    ) -> ConsumedBootstrapApproval:
+        """Verify and consume one approved bootstrap artifact transactionally."""
+        if getattr(connection, "backend_name", "sqlite") != "postgresql":
+            raise ApprovalWorkflowError("postgresql_required")
+        digest = request_hash(artifact)
+        expected = {
+            "operation": "staging_first_privileged_identity_bootstrap",
+            "purpose": "create_first_staging_control_tenant_soc_manager",
+            "environment": "staging",
+            "control_tenant_id": expected_tenant_id,
+            "tenant_id": expected_tenant_id,
+            "role": "soc_manager",
+            "database_target_identity": expected_database_target_identity,
+        }
+        if any(artifact.get(key) != value for key, value in expected.items()):
+            raise ApprovalWorkflowError("approval_scope_mismatch")
+        if not str(artifact.get("username") or "").strip() or not str(artifact.get("email") or "").strip():
+            raise ApprovalWorkflowError("approval_scope_mismatch")
+        row = connection.execute(
+            """SELECT r.approval_id, r.request_hash, r.status, r.expires_at,
+                      r.bootstrap_consumed_at, r.requester_user_id,
+                      r.requester_issuer, r.requester_tenant_id,
+                      r.requester_object_id, r.requester_subject_id,
+                      d.reviewer_user_id, d.reviewer_issuer,
+                      d.reviewer_tenant_id, d.reviewer_object_id,
+                      d.reviewer_subject_id, d.decision,
+                      d.approval_transaction_id, u.actor_id AS approver_actor_id,
+                      u.is_active AS approver_active
+                 FROM approval_requests r
+                 JOIN approval_decisions d ON d.approval_id=r.approval_id
+                 JOIN users u ON u.id=d.reviewer_user_id
+                WHERE r.approval_id=?"""
+            + " FOR UPDATE",
+            (approval_id,),
+        ).fetchone()
+        if not row:
+            raise ApprovalWorkflowError("approval_not_found")
+        consumed = connection.execute(
+            """SELECT 1 FROM staging_first_privileged_identity_bootstrap_consumptions
+               WHERE bootstrap_key=? AND approval_id=?""",
+            ("staging-first-privileged-identity-v1", approval_id),
+        ).fetchone()
+        if consumed:
+            raise ApprovalWorkflowError("approval_already_consumed")
+        if row["request_hash"] != digest:
+            raise ApprovalWorkflowError("request_hash_mismatch")
+        if row["status"] != "approved" or row["decision"] != "approved":
+            raise ApprovalWorkflowError("approval_not_approved")
+        if row["approval_transaction_id"] != approval_transaction_id:
+            raise ApprovalWorkflowError("approval_transaction_mismatch")
+        if row["bootstrap_consumed_at"]:
+            raise ApprovalWorkflowError("approval_already_consumed")
+        if str(row["expires_at"]) <= _now():
+            raise ApprovalWorkflowError("approval_expired")
+        if not row["approver_active"] or not row["approver_actor_id"]:
+            raise ApprovalWorkflowError("approver_identity_inactive")
+        requester_identity = tuple(row[key] for key in ("requester_issuer", "requester_tenant_id", "requester_object_id", "requester_subject_id"))
+        approver_identity = tuple(row[key] for key in ("reviewer_issuer", "reviewer_tenant_id", "reviewer_object_id", "reviewer_subject_id"))
+        if requester_identity == approver_identity:
+            raise ApprovalWorkflowError("requester_reviewer_same_identity")
+        updated = connection.execute(
+            "UPDATE approval_requests SET bootstrap_consumed_at=? "
+            "WHERE approval_id=? AND request_hash=? AND status='approved' "
+            "AND bootstrap_consumed_at IS NULL",
+            (_now(), approval_id, digest),
+        )
+        if updated.rowcount != 1:
+            raise ApprovalWorkflowError("approval_already_consumed")
+        return ConsumedBootstrapApproval(
+            approval_id=str(row["approval_id"]),
+            request_hash=str(row["request_hash"]),
+            approval_transaction_id=str(row["approval_transaction_id"]),
+            requester_user_id=int(row["requester_user_id"]),
+            requester_identity=requester_identity,
+            approver_user_id=int(row["reviewer_user_id"]),
+            approver_actor_id=str(row["approver_actor_id"]),
+            approver_identity=approver_identity,
+        )
+
     def list_audit(self, context: AuthenticatedEntraContext, approval_id: str) -> list[dict[str, Any]]:
         self._require(context, VIEW_APPROVAL_AUDIT)
         with self.db.session() as connection:
@@ -263,6 +363,7 @@ class ApprovalWorkflow:
 
 __all__ = [
     "ApprovalWorkflow", "ApprovalWorkflowError", "AuthenticatedEntraContext",
+    "ConsumedBootstrapApproval",
     "REQUEST_APPROVAL", "VIEW_OWN_REQUEST", "REVIEW_APPROVAL", "REJECT_APPROVAL",
     "VIEW_APPROVAL_AUDIT", "request_hash", "resolve_authenticated_entra_context",
 ]
