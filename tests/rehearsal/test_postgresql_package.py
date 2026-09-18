@@ -13,6 +13,7 @@ from rehearsal.postgresql.common import (
     output_path,
     require_authorized_url,
 )
+from rehearsal.postgresql.migrate import authoritative_migration_table_names
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -68,3 +69,36 @@ def test_compose_is_disposable_postgresql_16_only():
     assert "DATABASE_URL" not in compose
     assert "sentinel-postgres" not in compose
     assert "psycopg[binary]>=3.2,<4" in requirements
+
+
+def test_standalone_inventory_matches_authoritative_default_migrations():
+    assert authoritative_migration_table_names() == (
+        "analyst_actions",
+        "audit_events",
+        "billing_customers",
+        "billing_events",
+        "billing_subscriptions",
+        "billing_transactions",
+        "canonical_identities",
+        "canonical_identity_bindings",
+        "canonical_memberships",
+        "canonical_provider_tenant_trusts",
+        "canonical_schema_metadata",
+        "canonical_tenants",
+        "case_notes",
+        "cases",
+        "crypto_payment_intents",
+        "crypto_quotes",
+        "evidence",
+        "incidents",
+        "investigation_memory",
+        "investigation_memory_audit",
+        "investigation_memory_feedback",
+        "iocs",
+        "organizational_memory",
+        "organizational_memory_audit",
+        "schema_migrations",
+        "timeline",
+    )
+    assert "staging_bootstrap_authorizations" not in authoritative_migration_table_names()
+    assert "staging_bootstrap_consumptions" not in authoritative_migration_table_names()

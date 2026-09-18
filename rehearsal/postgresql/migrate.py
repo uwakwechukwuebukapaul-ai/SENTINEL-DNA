@@ -12,12 +12,51 @@ if str(REPO_ROOT) not in sys.path:
 
 from database.backend import PostgreSQLBackend  # noqa: E402
 from database.migration_runner import MigrationRunner  # noqa: E402
-from database.schema import normalized_table_names  # noqa: E402
+from database.migrations.registry import MIGRATIONS  # noqa: E402
 
 try:  # noqa: E402 - supports both module and direct-script execution
     from .common import digest
 except ImportError:  # pragma: no cover - direct operator invocation
     from common import digest
+
+
+# This is the exact table inventory owned by the authoritative default
+# migration registry (001-008). It intentionally excludes staging overlay 011
+# and the legacy normalized-core schema contract in database.schema.
+AUTHORITATIVE_MIGRATION_TABLES = (
+    "analyst_actions",
+    "audit_events",
+    "billing_customers",
+    "billing_events",
+    "billing_subscriptions",
+    "billing_transactions",
+    "canonical_identities",
+    "canonical_identity_bindings",
+    "canonical_memberships",
+    "canonical_provider_tenant_trusts",
+    "canonical_schema_metadata",
+    "canonical_tenants",
+    "case_notes",
+    "cases",
+    "crypto_payment_intents",
+    "crypto_quotes",
+    "evidence",
+    "incidents",
+    "investigation_memory",
+    "investigation_memory_audit",
+    "investigation_memory_feedback",
+    "iocs",
+    "organizational_memory",
+    "organizational_memory_audit",
+    "schema_migrations",
+    "timeline",
+)
+
+
+def authoritative_migration_table_names() -> tuple[str, ...]:
+    """Return the fail-closed inventory for the default migration chain."""
+
+    return AUTHORITATIVE_MIGRATION_TABLES
 
 
 def _table_names(backend: PostgreSQLBackend) -> list[str]:
@@ -47,7 +86,7 @@ def run_migration(backend: PostgreSQLBackend, *, require_empty: bool = True) -> 
     first = runner.run()
     second = runner.run()
     tables = _table_names(backend)
-    expected = sorted(normalized_table_names())
+    expected = sorted(authoritative_migration_table_names())
     if tables != expected:
         raise RuntimeError("representative_schema_inventory_mismatch")
     return {
@@ -55,7 +94,7 @@ def run_migration(backend: PostgreSQLBackend, *, require_empty: bool = True) -> 
         "migration_versions_second_run": list(second),
         "schema_tables": tables,
         "schema_digest": digest(tables),
-        "migration_ordering": first == (1,),
+        "migration_ordering": first == tuple(migration.version for migration in MIGRATIONS),
         "migration_idempotency": second == (),
         "schema_compatibility": tables == expected,
     }
