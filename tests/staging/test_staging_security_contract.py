@@ -146,7 +146,7 @@ def test_staging_compose_and_deploy_contract_are_explicit():
     assert "staging_internal:" in compose
     assert "internal: true" in compose
     rendered = yaml.safe_load(compose)
-    assert rendered["services"]["edge"]["ports"] == ["0.0.0.0:8443:443"]
+    assert rendered["services"]["edge"]["ports"] == ["127.0.0.1:18443:443"]
     assert "ports" not in rendered["services"]["app"]
     assert rendered["services"]["app"]["expose"] == ["5000"]
     assert "ports" not in rendered["services"]["postgres"]
@@ -231,7 +231,7 @@ def test_staging_compose_config_uses_secret_sources_without_rendering_values(tmp
 
 def test_staging_environment_declares_stable_tls_identity_and_configured_lan_ip():
     env_example = (ROOT / "deployment" / "staging" / ".env.example").read_text()
-    assert "SENTINEL_DNA_BASE_URL=https://sentinel-dna-staging:8443" in env_example
+    assert "SENTINEL_DNA_BASE_URL=https://sentinel-dna-staging:18443" in env_example
     assert "SENTINEL_DNA_STAGING_TLS_IP=192.168.1.115" in env_example
     assert "SENTINEL_DNA_SECRET_KEY=__INJECT_NON_PRODUCTION_SECRET__" in env_example
     assert "SENTINEL_DNA_POSTGRES_PASSWORD=__INJECT_DISPOSABLE_STAGING_PASSWORD__" in env_example

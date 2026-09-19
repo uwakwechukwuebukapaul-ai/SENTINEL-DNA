@@ -6,7 +6,9 @@ services:
       app:
         condition: service_healthy
     ports:
-      - "0.0.0.0:8443:443"
+      # The external evaluation edge is intentionally loopback-only. Private
+      # access must be provided by an approved host-side private access path.
+      - "127.0.0.1:18443:443"
     volumes:
       - type: bind
         source: ${SENTINEL_DNA_STAGING_EDGE_CONFIG_FILE:?set external edge configuration}
