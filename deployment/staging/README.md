@@ -30,11 +30,11 @@ store and never commit the populated file or use the repository `.env`.
 The supported browser endpoint is:
 
 ```text
-https://sentinel-dna-staging:8443/
+https://sentinel-dna-staging:18443/
 ```
 
 TLS terminates at the Nginx edge on container port `443`; Docker publishes
-that edge as `0.0.0.0:8443:443`. Gunicorn remains private on the Docker
+that edge as `127.0.0.1:18443:443`. Gunicorn remains private on the Docker
 network at `app:5000`. Use the checked-in
 [`nginx.conf`](nginx.conf) as the reviewed source for the external edge
 configuration file. It references `/etc/nginx/tls/staging.crt` and
@@ -97,8 +97,8 @@ not disable TLS verification or trust a private key:
 
 ```powershell
 Import-Certificate -FilePath .\staging.crt -CertStoreLocation Cert:\CurrentUser\Root
-Test-NetConnection sentinel-dna-staging -Port 8443
-curl.exe -I https://sentinel-dna-staging:8443/
+Test-NetConnection sentinel-dna-staging -Port 18443
+curl.exe -I https://sentinel-dna-staging:18443/
 ```
 
 The expected application result for the final request is HTTP `401` with the
