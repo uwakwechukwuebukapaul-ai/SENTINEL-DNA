@@ -21,7 +21,7 @@ or infrastructure credentials.
 - Synthetic tenant identifier: `NOT_RECORDED`
 - Pilot authorization identifier: `NOT_RECORDED`
 - Authorization expiry (UTC): `NOT_RECORDED`
-- MFA enforcement verification reference: `BLOCKED_PENDING_IMPLEMENTATION`
+- MFA enforcement verification reference: `NOT_VERIFIED_FOR_THIS_EVALUATION`
 
 ## Scope
 
