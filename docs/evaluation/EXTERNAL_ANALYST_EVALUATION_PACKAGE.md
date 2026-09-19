@@ -156,10 +156,10 @@ production, image release, or any deployment.
 
 Stop the evaluation and revoke the account if there is suspected cross-tenant
 access, privilege escalation, MFA bypass, credential or activation-value
-exposure, customer-data exposure, unexpected external notification, or any
-destructive action. Preserve the non-secret audit references and report the
-incident through the protected operator channel. Do not restart access until
-the boundary is reviewed.
+exposure, customer-data exposure, production-data exposure, unexpected
+external notification, or any destructive action. Preserve the non-secret
+audit references and report the incident through the protected operator
+channel. Do not restart access until the boundary is reviewed.
 
 ## Readiness decision
 
