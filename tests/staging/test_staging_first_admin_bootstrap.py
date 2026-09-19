@@ -8,6 +8,7 @@ import pytest
 
 from database.canonical_authority import CanonicalUnitOfWork
 from database.connection import DatabaseConnection
+from database.migration_runner import MigrationRunner
 from services.audit.service import AuditService
 from services.auth.auth_service import AuthService
 from services.auth.privileged_provisioning import PrivilegedIdentityProvisioningService
@@ -34,6 +35,7 @@ PASSWORD = "Strong staging password 123!"
 
 def services_for(tmp_path):
     db = DatabaseConnection(tmp_path / "bootstrap.sqlite")
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db)
     audit = AuditService(db)

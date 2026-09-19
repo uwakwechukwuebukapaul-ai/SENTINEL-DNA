@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from database.connection import DatabaseConnection
+from database.migration_runner import MigrationRunner
 from services.audit.service import AuditService
 from services.auth.auth_service import AuthService
 from services.auth.gate1_synthetic_provisioning import (
@@ -62,6 +63,7 @@ def _guard(expected_revision: str) -> None:
 
 def _service() -> Gate1SyntheticProvisioningService:
     db = DatabaseConnection(os.environ["SENTINEL_DNA_DB_PATH"])
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db, auth=auth)
     audit = AuditService(db)

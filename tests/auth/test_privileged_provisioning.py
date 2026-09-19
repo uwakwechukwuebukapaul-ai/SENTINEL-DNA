@@ -6,6 +6,7 @@ import pytest
 
 from database.connection import DatabaseConnection
 from database.connection import database
+from database.migration_runner import MigrationRunner
 from services.audit.service import AuditService
 from services.auth.auth_service import AuthService
 from services.auth.privileged_provisioning import (
@@ -24,6 +25,7 @@ TEST_REVISION = "d6" * 20
 
 def services_for(tmp_path):
     db = DatabaseConnection(tmp_path / "privileged.sqlite")
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db)
     audit = AuditService(db)
@@ -140,7 +142,9 @@ def test_cli_requires_guard_and_never_prints_password(tmp_path, monkeypatch, cap
     monkeypatch.setenv("SENTINEL_DNA_SECURE_COOKIES", "1")
     monkeypatch.setenv("SENTINEL_DNA_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "cli.sqlite"))
-    AuthService(DatabaseConnection(tmp_path / "cli.sqlite"))
+    cli_db = DatabaseConnection(tmp_path / "cli.sqlite")
+    MigrationRunner(cli_db).run()
+    AuthService(cli_db)
     monkeypatch.setattr(module, "input", lambda _: "n", raising=False)
 
     result = module.main(
@@ -169,6 +173,7 @@ def test_cli_success_does_not_print_password_or_hash(tmp_path, monkeypatch, caps
 
     db_path = tmp_path / "cli-success.sqlite"
     db = DatabaseConnection(db_path)
+    MigrationRunner(db).run()
     auth = AuthService(db)
     authority = CanonicalAuthorityService(db)
     audit = AuditService(db)

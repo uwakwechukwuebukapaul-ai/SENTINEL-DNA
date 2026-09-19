@@ -78,6 +78,53 @@ def test_mfa_schema_is_authoritative_without_service_construction(tmp_path):
     assert after == before
 
 
+def test_auth_service_does_not_create_authoritative_user_or_mfa_schema(tmp_path):
+    backend = SQLiteBackend(tmp_path / "auth-without-migrations.sqlite")
+
+    from services.auth.auth_service import AuthService
+
+    AuthService(backend)
+
+    with backend.session() as connection:
+        authoritative_tables = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('users', 'mfa_sessions')"
+            ).fetchall()
+        }
+
+    assert authoritative_tables == set()
+
+
+def test_auth_service_uses_schema_created_by_migration_009(tmp_path):
+    backend = SQLiteBackend(tmp_path / "auth-after-migrations.sqlite")
+    assert MigrationRunner(backend).run() == tuple(range(1, 10))
+
+    from services.auth.auth_service import AuthService
+
+    auth = AuthService(backend)
+    user = auth.register(
+        "migrated-user",
+        "migrated-user@example.test",
+        "migration-password",
+        mfa_required=True,
+    )
+
+    with backend.session() as connection:
+        row = connection.execute(
+            "SELECT mfa_required, mfa_secret_ciphertext FROM users WHERE id=?",
+            (user.id,),
+        ).fetchone()
+        mfa_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='mfa_sessions'"
+        ).fetchone()
+
+    assert int(row["mfa_required"]) == 1
+    assert row["mfa_secret_ciphertext"] is None
+    assert mfa_table["name"] == "mfa_sessions"
+
+
 def test_mfa_migration_upgrades_existing_users_table(tmp_path):
     backend = SQLiteBackend(tmp_path / "mfa-upgrade.sqlite")
     with backend.session() as connection:
