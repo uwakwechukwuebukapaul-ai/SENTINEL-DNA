@@ -68,6 +68,9 @@ def test_login_page_is_available(auth_client):
     assert response.status_code == 200
     assert b"Sign in to the SOC Command Center" in response.data
     assert b"/api/auth/login" in response.data
+    assert b"/api/auth/mfa/enroll" in response.data
+    assert b"/api/auth/mfa/verify" in response.data
+    assert b"mfa-panel" in response.data
 
 
 def test_signup_page_is_available_without_role_or_tenant_controls(auth_client):

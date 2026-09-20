@@ -300,6 +300,7 @@ class Gate1SyntheticProvisioningService:
             and membership
             and user.is_active
             and user.role == "analyst"
+            and bool(user.mfa_required)
             and user.phone_verified_at
             and user.email_verified_at
             and tenant.status == "active"
@@ -448,6 +449,40 @@ class Gate1SyntheticProvisioningService:
             states = {spec.lane: self._state(spec, unit.conn) for spec in specs}
             for spec in specs:
                 self._assert_no_conflict(spec, states[spec.lane])
+            # Repair reserved identities created before mandatory MFA was added.
+            if all(all(value is not None for value in states[spec.lane]) for spec in specs):
+                repairable = True
+                repair_specs = []
+                for spec in specs:
+                    user, tenant, identity, membership = states[spec.lane]
+                    repairable = repairable and self._user_matches(user, spec)
+                    repairable = repairable and tenant.status == "active" and identity.status == "active"
+                    repairable = repairable and membership.status == "active" and membership.role == "analyst"
+                    repairable = repairable and user.role == "analyst"
+                    if not bool(user.mfa_required):
+                        repair_specs.append(spec)
+                if repairable:
+                    for spec in repair_specs:
+                        user = states[spec.lane][0]
+                        updated = unit.conn.execute(
+                            "UPDATE users SET mfa_required=1 WHERE id=? AND role='analyst' AND mfa_required=0",
+                            (user.id,),
+                        )
+                        if updated.rowcount != 1:
+                            raise Gate1ProvisioningError(f"synthetic_mfa_repair_failed_{spec.lane}")
+                        self.audit.record(
+                            "GATE1_SYNTHETIC_MFA_REQUIRED_REPAIRED",
+                            user_id=user.id,
+                            tenant_id=spec.tenant_id,
+                            actor_id=GATE1_ACTOR,
+                            resource_type="synthetic_identity",
+                            resource_id=spec.actor_id,
+                            operation="require_mfa",
+                            outcome="success",
+                            metadata={"synthetic": True, "gate": "gate1", "lane": spec.lane},
+                            connection=unit.conn,
+                        )
+                    states = {spec.lane: self._state(spec, unit.conn) for spec in specs}
             if all(self._complete(spec, states[spec.lane]) for spec in specs):
                 for spec in specs:
                     self.audit.record(
@@ -488,6 +523,7 @@ class Gate1SyntheticProvisioningService:
                     actor_id=spec.actor_id,
                     date_of_birth=dob,
                     email_verified_at=verified_at,
+                    mfa_required=True,
                     connection=unit.conn,
                 )
                 if not (tenant and identity and membership and user):
