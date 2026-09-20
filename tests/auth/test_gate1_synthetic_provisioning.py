@@ -5,6 +5,7 @@ import secrets
 from pathlib import Path
 
 import pytest
+import pyotp
 import services.auth.gate1_synthetic_provisioning as gate1_module
 
 from database.connection import DatabaseConnection
@@ -122,11 +123,17 @@ def test_provision_creates_verified_canonical_identities_and_is_idempotent(tmp_p
     assert [item.state for item in second] == ["already_provisioned", "already_provisioned"]
     for spec in synthetic_identity_specs():
         user = auth.get_by_username(spec.username)
-        assert user and user.is_active and user.email_verified_at and user.phone_verified_at
+        assert user and user.is_active and user.email_verified_at and user.phone_verified_at and user.mfa_required
         assert auth.authenticate(spec.username, passwords[spec.lane]) is not None
         tenant, identity, membership = authority.resolve(spec.tenant_id, spec.actor_id)
         assert tenant.status == identity.status == membership.status == "active"
         assert membership.role == "analyst"
+
+    with db.session() as connection:
+        connection.execute("UPDATE users SET mfa_required=0 WHERE username=?", (synthetic_identity_specs()[0].username,))
+    repaired = service.provision(passwords)
+    assert [item.state for item in repaired] == ["already_provisioned", "already_provisioned"]
+    assert auth.get_by_username(synthetic_identity_specs()[0].username).mfa_required
 
 
 def test_refuses_to_overwrite_real_tenant_or_user(tmp_path, monkeypatch):
@@ -276,6 +283,19 @@ def test_provisioned_users_are_tenant_isolated_through_application_api(tmp_path,
                 headers={"X-CSRF-Token": csrf},
             )
             assert login.status_code == 200
+            csrf = client.get("/api/auth/csrf").get_json()["csrf_token"]
+            enrollment = client.post(
+                "/api/auth/mfa/enroll",
+                headers={"X-CSRF-Token": csrf},
+            )
+            assert enrollment.status_code == 200
+            code = pyotp.parse_uri(enrollment.get_json()["provisioning_uri"]).now()
+            verified = client.post(
+                "/api/auth/mfa/verify-enrollment",
+                json={"code": code},
+                headers={"X-CSRF-Token": csrf},
+            )
+            assert verified.status_code == 200
             created = client.post(
                 "/api/investigations",
                 json={
