@@ -23,10 +23,12 @@ try:  # noqa: E402 - supports both module and direct-script execution
     from .common import digest, report_metadata, require_authorized_url, write_report
     from .migrate import run_migration
     from .rollback import run_rollback
+    from .staging_overlays import run_staging_overlays
 except ImportError:  # pragma: no cover - direct operator invocation
     from common import digest, report_metadata, require_authorized_url, write_report
     from migrate import run_migration
     from rollback import run_rollback
+    from staging_overlays import run_staging_overlays
 
 
 def _seed_core_case(backend: PostgreSQLBackend) -> dict[str, Any]:
@@ -139,6 +141,7 @@ def run_rehearsal(url: str) -> dict[str, Any]:
         raise RuntimeError("disposable_postgresql_health_check_failed")
     migration = run_migration(backend)
     rollback = run_rollback(backend)
+    staging_overlays = run_staging_overlays(backend)
     case = _seed_core_case(backend)
     memory = _seed_memory(backend)
     checks = {
@@ -154,6 +157,15 @@ def run_rehearsal(url: str) -> dict[str, Any]:
         "investigation_record_preservation": bool(memory["investigation_digest"]),
         "rollback_capability": rollback["transaction_rollback"] and rollback["migration_rollback"],
         "backup_restore_rehearsal": rollback["backup_restore_rehearsal"],
+        "staging_overlays": (
+            staging_overlays["migration_011_first_run"] == [11]
+            and staging_overlays["migration_011_second_run"] == []
+            and staging_overlays["migration_012_first_run"] == [12]
+            and staging_overlays["migration_012_second_run"] == []
+            and staging_overlays["namespace_bookkeeping_isolated"]
+            and staging_overlays["authoritative_history_intact"]
+            and staging_overlays["tables_queryable"]
+        ),
     }
     report = {
         "report_version": "sentinel-dna-postgresql-live-rehearsal.v1",
@@ -162,6 +174,7 @@ def run_rehearsal(url: str) -> dict[str, Any]:
         "checks": checks,
         "migration": migration,
         "rollback": rollback,
+        "staging_overlays": staging_overlays,
         "synthetic_record_counts": memory["memory_record_counts"],
         "provenance_digest": memory["provenance_digest"],
         "audit_digest": memory["audit_digest"],

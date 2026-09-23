@@ -47,6 +47,10 @@ STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE = "staging-first-privileged-identity
 STAGING_FIRST_PRIVILEGED_IDENTITY_MIGRATION_MODULE = (
     "database.migrations.011_staging_first_privileged_identity"
 )
+STAGING_AUTHORITY_ENROLLMENT_NAMESPACE = "staging-authority-enrollment"
+STAGING_AUTHORITY_ENROLLMENT_MIGRATION_MODULE = (
+    "database.migrations.012_staging_provider_credentials"
+)
 
 
 def _load_migrations(module_names: tuple[str, ...]) -> tuple[Migration, ...]:
@@ -143,6 +147,69 @@ def apply_staging_first_privileged_identity_namespace(
     return tuple(applied_now)
 
 
+def staging_authority_enrollment_namespace_registry(
+    environment: str,
+    *,
+    enabled: bool,
+) -> tuple[Migration, ...]:
+    """Load migration 012 only for an explicitly selected disposable staging overlay."""
+
+    if str(environment).strip().lower() != "staging":
+        raise RuntimeError("staging_authority_enrollment_namespace_requires_staging")
+    if not enabled:
+        raise RuntimeError("staging_authority_enrollment_namespace_requires_explicit_opt_in")
+    migrations = _load_migrations((STAGING_AUTHORITY_ENROLLMENT_MIGRATION_MODULE,))
+    if len(migrations) != 1 or migrations[0].version != 12:
+        raise ValueError("invalid_staging_authority_enrollment_migration")
+    return migrations
+
+
+def apply_staging_authority_enrollment_namespace(
+    backend: Any,
+    *,
+    environment: str,
+    enabled: bool,
+) -> tuple[int, ...]:
+    """Apply migration 012 without changing default or migration 011 history."""
+
+    migrations = staging_authority_enrollment_namespace_registry(
+        environment,
+        enabled=enabled,
+    )
+    applied_now: list[int] = []
+    with backend.session() as connection:
+        if getattr(backend, "backend_name", "sqlite") == "sqlite":
+            connection.execute("BEGIN")
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS namespace_migrations (
+                namespace TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                applied_at TEXT NOT NULL,
+                PRIMARY KEY(namespace, version)
+            )"""
+        )
+        applied = {
+            int(row["version"])
+            for row in connection.execute(
+                "SELECT version FROM namespace_migrations WHERE namespace=?",
+                (STAGING_AUTHORITY_ENROLLMENT_NAMESPACE,),
+            ).fetchall()
+        }
+        for migration in migrations:
+            if migration.version in applied:
+                continue
+            migration.apply(connection, backend.backend_name)
+            connection.execute(
+                """INSERT INTO namespace_migrations(namespace, version, name, applied_at)
+                   VALUES(?,?,?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(namespace, version) DO NOTHING""",
+                (STAGING_AUTHORITY_ENROLLMENT_NAMESPACE, migration.version, migration.name),
+            )
+            applied_now.append(migration.version)
+    return tuple(applied_now)
+
+
 MIGRATIONS = migration_registry()
 
 __all__ = [
@@ -151,7 +218,11 @@ __all__ = [
     "Migration",
     "STAGING_FIRST_PRIVILEGED_IDENTITY_MIGRATION_MODULE",
     "STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE",
+    "STAGING_AUTHORITY_ENROLLMENT_NAMESPACE",
+    "STAGING_AUTHORITY_ENROLLMENT_MIGRATION_MODULE",
     "migration_registry",
     "apply_staging_first_privileged_identity_namespace",
     "staging_first_privileged_identity_namespace_registry",
+    "staging_authority_enrollment_namespace_registry",
+    "apply_staging_authority_enrollment_namespace",
 ]

@@ -61,6 +61,7 @@ class VerifiedBootstrapPrincipal:
         *,
         boundary: CanonicalAuthenticationBoundary,
         db: DatabaseConnection = database,
+        connection: Any | None = None,
     ) -> "VerifiedBootstrapPrincipal":
         if not isinstance(principal, AuthenticatedProviderPrincipal):
             raise StagingBootstrapAuthorizationError("verified_principal_required")
@@ -85,18 +86,24 @@ class VerifiedBootstrapPrincipal:
         if context.tenant_id != principal.tenant_id or context.actor_id != principal.actor_id:
             raise StagingBootstrapAuthorizationError("verified_principal_mismatch")
         external_subject = principal.external_subject.strip() or principal.subject.strip()
-        with db.session() as connection:
-            binding = connection.execute(
+        def resolve(owned_connection):
+            binding = owned_connection.execute(
                 """SELECT actor_id FROM canonical_identity_bindings
                    WHERE provider=? AND external_subject=? AND actor_id=? AND status='active'""",
                 (principal.provider.strip(), external_subject, principal.actor_id.strip()),
             ).fetchone()
-            user = connection.execute(
+            user = owned_connection.execute(
                 """SELECT id FROM users
                    WHERE actor_id=? AND tenant_id=? AND is_active=1
                      AND COALESCE(revocation_status, 'active')='active'""",
                 (principal.actor_id.strip(), principal.tenant_id.strip()),
             ).fetchone()
+            return binding, user
+        if connection is None:
+            with db.session() as owned_connection:
+                binding, user = resolve(owned_connection)
+        else:
+            binding, user = resolve(connection)
         if not binding or not user:
             raise StagingBootstrapAuthorizationError("verified_identity_provenance_required")
         return cls(
@@ -216,6 +223,7 @@ class BootstrapAuthorization:
     control_tenant_id: str
     requester_actor_id: str
     requester_user_id: int
+    requester_credential_id: str
     reviewer_actor_id: str | None
     reviewer_user_id: int | None
     target_username: str
@@ -252,6 +260,7 @@ class StagingBootstrapAuthorizationService:
             control_tenant_id=row["control_tenant_id"],
             requester_actor_id=row["requester_actor_id"],
             requester_user_id=int(row["requester_user_id"]),
+            requester_credential_id=row["requester_credential_id"],
             reviewer_actor_id=row["reviewer_actor_id"],
             reviewer_user_id=int(row["reviewer_user_id"]) if row["reviewer_user_id"] is not None else None,
             target_username=row["target_username"],
@@ -380,6 +389,28 @@ class StagingBootstrapAuthorizationService:
             reviewer_role = self._require_live_principal(reviewer, current.control_tenant_id, unit.conn)
             if reviewer.actor_id == current.requester_actor_id:
                 raise StagingBootstrapAuthorizationError("requester_reviewer_same_identity")
+            if reviewer.credential_id == current.requester_credential_id:
+                raise StagingBootstrapAuthorizationError("requester_reviewer_same_credential")
+            if reviewer.provider == "sentinel-staging-authority-v1":
+                try:
+                    enrollment = unit.conn.execute(
+                        """SELECT requester_subject, requester_fingerprint, reviewer_subject,
+                                  reviewer_key_id, reviewer_fingerprint
+                           FROM staging_authority_enrollments
+                           WHERE control_tenant_id=? AND status='ENROLLED'
+                             AND requester_subject=? AND reviewer_subject=?""",
+                        (current.control_tenant_id, current.requester_subject, reviewer.subject),
+                    ).fetchone()
+                except Exception:
+                    enrollment = None
+                if (
+                    not enrollment
+                    or not getattr(reviewer, "key_fingerprint", "")
+                    or enrollment["reviewer_key_id"] != reviewer.credential_id
+                    or enrollment["reviewer_fingerprint"] != reviewer.key_fingerprint
+                    or enrollment["requester_fingerprint"] == reviewer.key_fingerprint
+                ):
+                    raise StagingBootstrapAuthorizationError("requester_reviewer_same_key")
             _require_approval_capability(reviewer, reviewer_role)
             now = datetime.now(timezone.utc)
             if current.status != "REQUESTED":

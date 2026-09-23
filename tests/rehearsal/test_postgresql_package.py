@@ -104,3 +104,14 @@ def test_standalone_inventory_matches_authoritative_default_migrations():
     )
     assert "staging_bootstrap_authorizations" not in authoritative_migration_table_names()
     assert "staging_bootstrap_consumptions" not in authoritative_migration_table_names()
+
+
+def test_staging_overlay_rehearsal_is_explicit_and_isolated():
+    source = (ROOT / "rehearsal" / "postgresql" / "staging_overlays.py").read_text(encoding="utf-8")
+    runner = (ROOT / "rehearsal" / "postgresql" / "run_rehearsal.py").read_text(encoding="utf-8")
+    assert "apply_staging_first_privileged_identity_namespace" in source
+    assert "apply_staging_authority_enrollment_namespace" in source
+    assert 'environment="staging"' in source
+    assert "enabled=True" in source
+    assert "MIGRATIONS =" not in source
+    assert "run_staging_overlays(backend)" in runner

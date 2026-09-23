@@ -26,8 +26,12 @@ def run_rollback(backend: PostgreSQLBackend) -> dict[str, Any]:
     finally:
         connection.close()
 
+    # The authoritative chain is already applied through version 9.  Version
+    # 10 is the first genuinely unapplied contiguous version; using an
+    # existing version would make MigrationRunner reject the synthetic set
+    # before executing it.
     failing = Migration(
-        version=2,
+        version=10,
         name="intentional_failure_for_rehearsal",
         statements=lambda _backend: (
             "CREATE TABLE rollback_migration_probe (value TEXT NOT NULL)",
@@ -49,7 +53,12 @@ def run_rollback(backend: PostgreSQLBackend) -> dict[str, Any]:
             "SELECT to_regclass('public.rollback_migration_probe') AS table_name"
         ).fetchone()
     versions = [int(row["version"]) for row in version_rows]
-    migration_rollback = migration_failure_observed and versions == [1] and probe["table_name"] is None
+    migration_rollback = (
+        migration_failure_observed
+        and versions == [migration.version for migration in CORE_MIGRATIONS]
+        and 10 not in versions
+        and probe["table_name"] is None
+    )
     return {
         "transaction_rollback": transaction_rollback,
         "migration_failure_observed": migration_failure_observed,

@@ -4,7 +4,10 @@ from flask import current_app, jsonify, session
 from services.core.pilot_boundary import pilot_permission_allowed
 from services.core.security_context import request_context
 
-ROLE_ALIASES = {"ADMIN": "admin", "SOC_MANAGER": "soc_manager", "ANALYST": "analyst", "VIEWER": "viewer"}
+ROLE_ALIASES = {
+    "ADMIN": "admin", "SOC_MANAGER": "soc_manager", "ANALYST": "analyst",
+    "VIEWER": "viewer", "STAGING_BOOTSTRAP_REVIEWER": "staging_bootstrap_reviewer",
+}
 PERMISSIONS = {
     "investigations:read": {"admin", "soc_manager", "analyst", "viewer"},
     "investigations:run": {"admin", "soc_manager", "analyst"},
@@ -100,8 +103,8 @@ PERMISSIONS = {
     "operations:view": {"admin", "soc_manager"},
     "pilot:read": {"admin", "soc_manager", "analyst", "viewer"}, "pilot:manage": {"admin", "soc_manager"}, "compliance:manage": {"admin", "soc_manager"},
     "identity:view": {"admin", "soc_manager", "analyst", "viewer"}, "identity:manage": {"admin", "soc_manager"}, "identity:review": {"admin", "soc_manager", "analyst"},
-    "identity:staging_bootstrap_request": {"admin", "soc_manager", "analyst", "viewer"},
-    "identity:staging_bootstrap_approve": {"admin", "soc_manager"},
+    "identity:staging_bootstrap_request": {"admin", "soc_manager", "analyst", "viewer", "staging_bootstrap_reviewer"},
+    "identity:staging_bootstrap_approve": {"admin", "soc_manager", "staging_bootstrap_reviewer"},
     "data_security:view": {"admin", "soc_manager", "analyst", "viewer"}, "data_security:manage": {"admin", "soc_manager"},
     "decision:view": {"admin", "soc_manager", "analyst", "viewer"}, "decision:analyze": {"admin", "soc_manager", "analyst"},
     "copilot:view": {"admin", "soc_manager", "analyst", "viewer"}, "copilot:use": {"admin", "soc_manager", "analyst"},

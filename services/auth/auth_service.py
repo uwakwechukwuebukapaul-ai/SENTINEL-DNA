@@ -17,7 +17,7 @@ from services.rate_limiting import RateLimitPolicy, RateLimitRequest, RateLimitS
 
 
 class AuthService:
-    ROLES = {"admin", "soc_manager", "analyst", "viewer"}
+    ROLES = {"admin", "soc_manager", "analyst", "viewer", "staging_bootstrap_reviewer"}
 
     def __init__(self, db: DatabaseConnection | None = None) -> None:
         self.db = db or database
@@ -62,11 +62,19 @@ class AuthService:
         now = datetime.now(timezone.utc).isoformat()
         def create_user(connection):
             if phone_number and connection.execute("SELECT 1 FROM users WHERE phone_number=?", (phone_number,)).fetchone(): raise ValueError("phone_already_registered")
-            row = connection.execute(
-                """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,mfa_required)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
-                (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, 1 if mfa_required else 0),
-            ).fetchone()
+            columns = table_columns(connection, self.db.backend_name, "users")
+            if "password_authentication_enabled" in columns:
+                row = connection.execute(
+                    """INSERT INTO users(username,email,password_hash,password_authentication_enabled,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,mfa_required)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                    (username.strip(), email.strip().lower(), hash_password(password), 1, normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, 1 if mfa_required else 0),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """INSERT INTO users(username,email,password_hash,role,created_at,phone_number,phone_verified_at,tenant_id,actor_id,date_of_birth,email_verified_at,session_version,expires_at,revocation_status,audit_correlation_id,is_active,mfa_required)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                    (username.strip(), email.strip().lower(), hash_password(password), normalized_role, now, phone_number, phone_verified_at, tenant_id, actor_id, normalized_dob, email_verified_at, 0, expires_at, str(revocation_status or "active"), audit_correlation_id, 1 if is_active else 0, 1 if mfa_required else 0),
+                ).fetchone()
             user_id = row["id"]
             connection.execute(
                 """INSERT INTO auth_identities(user_id,provider,provider_subject,normalized_identifier,verified_at,created_at,last_used_at)
@@ -81,13 +89,84 @@ class AuthService:
         user_id = create_user(connection)
         return self._user(connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone())
 
+    def register_provider_only(
+        self, username: str, email: str, provider: str, provider_subject: str,
+        role: str = "staging_bootstrap_reviewer", *, tenant_id=None, actor_id=None,
+        credential_id: str | None = None, mfa_required: bool = False,
+        connection=None,
+    ) -> User:
+        """Create a provider-only user; requires the staging credential schema."""
+        username = str(username or "").strip()
+        email = str(email or "").strip().lower()
+        provider = str(provider or "").strip()
+        provider_subject = str(provider_subject or "").strip()
+        normalized_role = str(role or "").strip().lower()
+        if len(username) < 3 or "@" not in email or not provider or not provider_subject:
+            raise ValueError("invalid_provider_identity")
+        if normalized_role not in self.ROLES:
+            raise ValueError("invalid_user_role")
+        now = utcnow().isoformat()
+        def create(owned):
+            columns = table_columns(owned, self.db.backend_name, "users")
+            if "password_authentication_enabled" not in columns:
+                raise ValueError("provider_credential_schema_required")
+            row = owned.execute(
+                """INSERT INTO users(
+                   username,email,password_hash,password_authentication_enabled,role,
+                   created_at,tenant_id,actor_id,email_verified_at,session_version,
+                   revocation_status,is_active,mfa_required)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
+                (username, email, None, 0, normalized_role, now, tenant_id, actor_id,
+                 now, 0, "active", 1, 1 if mfa_required else 0),
+            ).fetchone()
+            user_id = row["id"]
+            owned.execute(
+                """INSERT INTO auth_identities(
+                   user_id,provider,provider_subject,normalized_identifier,
+                   verified_at,created_at,last_used_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (user_id, provider, provider_subject, email, now, now, now),
+            )
+            return user_id
+        if connection is None:
+            with self.db.session() as owned:
+                user_id = create(owned)
+            return self.get_by_id(user_id)
+        user_id = create(connection)
+        return self._user(connection.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone())
+
     def authenticate(self, username: str, password: str) -> User | None:
         with self.db.session() as connection:
             row = connection.execute("SELECT * FROM users WHERE (username=? OR email=?) AND is_active=1 AND (expires_at IS NULL OR expires_at>?) AND COALESCE(revocation_status, 'active')='active'", (username, username.strip().lower(), datetime.now(timezone.utc).isoformat())).fetchone()
-            if not row or not verify_password(row["password_hash"], password):
+            if not row or not self._password_enabled(row) or not row["password_hash"]:
+                return None
+            if not verify_password(row["password_hash"], password):
                 return None
             now = datetime.now(timezone.utc).isoformat()
             connection.execute("UPDATE users SET last_login=? WHERE id=?", (now, row["id"]))
+        return self.get_by_id(row["id"])
+
+    def authenticate_provider(self, provider: str, subject: str, *, authentication_method: str, credential_id: str) -> User | None:
+        """Resolve an already-verified provider subject without password fallback."""
+        if not str(provider or "").strip() or not str(subject or "").strip():
+            return None
+        if authentication_method == "password" or not str(credential_id or "").strip():
+            return None
+        with self.db.session() as connection:
+            row = connection.execute(
+                """SELECT u.* FROM users u
+                   JOIN auth_identities i ON i.user_id=u.id
+                   WHERE i.provider=? AND i.provider_subject=?
+                     AND u.is_active=1
+                     AND (u.expires_at IS NULL OR u.expires_at>?)
+                     AND COALESCE(u.revocation_status, 'active')='active'""",
+                (str(provider).strip(), str(subject).strip(), datetime.now(timezone.utc).isoformat()),
+            ).fetchone()
+            if not row:
+                return None
+            connection.execute(
+                "UPDATE users SET last_login=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), row["id"])
+            )
         return self.get_by_id(row["id"])
 
     def create_persistent_session(self, user, raw_token, tenant_id, session_id, expires, *, user_agent=None, ip_address=None, auth_method="password"):
@@ -164,7 +243,17 @@ class AuthService:
     def reset_password(self, user_id, password, *, connection=None):
         if len(str(password or "")) < 10: raise ValueError("invalid_password")
         def reset(owned_connection):
+            columns = table_columns(owned_connection, self.db.backend_name, "users")
+            if "password_authentication_enabled" in columns:
+                eligible = owned_connection.execute(
+                    "SELECT 1 FROM users WHERE id=? AND password_authentication_enabled=1",
+                    (user_id,),
+                ).fetchone()
+                if not eligible:
+                    raise ValueError("password_authentication_disabled")
             owned_connection.execute(
+                "UPDATE users SET password_hash=?, password_authentication_enabled=1, session_version=COALESCE(session_version, 0)+1 WHERE id=?"
+                if "password_authentication_enabled" in columns else
                 "UPDATE users SET password_hash=?, session_version=COALESCE(session_version, 0)+1 WHERE id=?",
                 (hash_password(password), user_id),
             )
@@ -337,6 +426,7 @@ class AuthService:
     def _user(row: Any) -> User:
         return User(
             row["id"], row["username"], row["email"], row["password_hash"],
+            bool(row["password_authentication_enabled"]) if "password_authentication_enabled" in row.keys() else True,
             row["role"], row["created_at"], row["last_login"], bool(row["is_active"]),
             row["phone_number"], row["phone_verified_at"], row["tenant_id"],
             row["actor_id"], row["date_of_birth"], row["email_verified_at"],
@@ -344,3 +434,7 @@ class AuthService:
             str(row["revocation_status"] or "active"), row["audit_correlation_id"],
             bool(row["mfa_required"]), row["mfa_enrolled_at"],
         )
+
+    @staticmethod
+    def _password_enabled(row: Any) -> bool:
+        return bool(row["password_authentication_enabled"]) if "password_authentication_enabled" in row.keys() else True

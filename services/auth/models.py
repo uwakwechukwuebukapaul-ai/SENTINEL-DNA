@@ -9,7 +9,8 @@ class User:
     id: int | None
     username: str
     email: str
-    password_hash: str
+    password_hash: str | None
+    password_authentication_enabled: bool
     role: str
     created_at: str
     last_login: str | None

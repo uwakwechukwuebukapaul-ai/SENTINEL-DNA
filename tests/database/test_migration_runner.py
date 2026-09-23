@@ -188,6 +188,30 @@ def test_migration_runner_rolls_back_failed_migration(tmp_path):
         ).fetchone() is None
 
 
+def test_unapplied_synthetic_migration_failure_preserves_existing_history(tmp_path):
+    backend = SQLiteBackend(tmp_path / "synthetic-rollback.sqlite")
+    assert MigrationRunner(backend).run() == tuple(range(1, 10))
+    failing = Migration(
+        10,
+        "intentional_failure_after_authoritative_chain",
+        statements=lambda _backend: (
+            "CREATE TABLE synthetic_migration_probe (value TEXT)",
+            "THIS IS NOT VALID SQL",
+        ),
+    )
+
+    with pytest.raises(DatabaseError):
+        MigrationRunner(backend, migrations=MigrationRunner(backend).migrations + (failing,)).run()
+
+    with backend.session() as connection:
+        assert [row[0] for row in connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()] == list(range(1, 10))
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='synthetic_migration_probe'"
+        ).fetchone() is None
+
+
 def test_sqlite_core_conversion_preserves_counts_and_rejects_noncanonical_source(tmp_path):
     source = tmp_path / "source.sqlite"
     source_backend = SQLiteBackend(source)

@@ -34,6 +34,8 @@ class AuthenticatedProviderPrincipal:
     credential_id: str
     claims: tuple[tuple[str, str], ...] = ()
     external_subject: str = ""
+    key_id: str = ""
+    key_fingerprint: str = ""
 
 
 class TrustedAuthenticationProvider(Protocol):

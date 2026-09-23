@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import secrets
 from flask import Blueprint, current_app, g, jsonify, redirect, request, session, url_for
 from database.errors import DatabaseError
-from database.portability import integrity_error
+from database.portability import integrity_error, table_columns
 from .age import validate_minimum_age
 from .oauth import GoogleOIDC
 from .phone import country_options, normalize_phone
@@ -60,7 +60,7 @@ def _login_session(user, remember=False, auth_method="password"):
     if user.mfa_required:
         session["auth_stage"] = "MFA_REQUIRED"
         session.pop("mfa_session_token", None)
-        _audit("password_authenticated", user_id=user.id, method=auth_method, outcome="mfa_required")
+        _audit("provider_authenticated" if auth_method != "password" else "password_authenticated", user_id=user.id, method=auth_method, outcome="mfa_required")
         return user.public()
     session["auth_stage"] = "SOC_AUTHENTICATED"
     if remember:
@@ -70,7 +70,7 @@ def _login_session(user, remember=False, auth_method="password"):
         _audit("persistent_session_created", user_id=user.id, method="remember_me", outcome="success")
     else:
         g.clear_remember_cookie = True
-    _audit("login_success", user_id=user.id, method=auth_method, outcome="success")
+    _audit("provider_login_success" if auth_method != "password" else "login_success", user_id=user.id, method=auth_method, outcome="success")
     return user.public()
 
 def restore_persistent_session():
@@ -297,6 +297,8 @@ def email_verify_code():
     data = request.get_json(silent=True) or {}; user_id = _service().verify_otp(data.get("challenge_id"), data.get("code", ""), secret=current_app.secret_key)
     if not user_id: return jsonify({"error": "verification_failed"}), 400
     user = _service().get_by_id(user_id)
+    if user and not user.password_authentication_enabled:
+        user = None
     if not user: _audit("email_otp_failed", method="email_otp", outcome="failure", reason="invalid_or_expired")
     else: _audit("email_otp_verified", user_id=user.id, method="email_otp", outcome="success")
     return jsonify(_login_session(user, bool(data.get("remember_me")))) if user else (jsonify({"error": "verification_failed"}), 400)
@@ -307,7 +309,10 @@ def password_reset_request():
     destination = str((request.get_json(silent=True) or {}).get("email", "")).strip().lower()
     if not _allowed(f"password-reset|{destination}", 5, 3600): return jsonify({"message": "If the account is eligible, recovery instructions have been sent."}), 202
     try:
-        with _service().db.session() as connection: row = connection.execute("SELECT id FROM users WHERE email=? AND is_active=1", (destination,)).fetchone()
+        with _service().db.session() as connection:
+            columns = table_columns(connection, _service().db.backend_name, "users")
+            mode_clause = " AND password_authentication_enabled=1" if "password_authentication_enabled" in columns else ""
+            row = connection.execute(f"SELECT id FROM users WHERE email=? AND is_active=1{mode_clause}", (destination,)).fetchone()
         provider = current_app.config.get("EMAIL_PROVIDER") or email_provider(testing=current_app.testing)
         challenge, code = _service().issue_otp(destination, "password_reset", user_id=row["id"] if row else None, secret=current_app.secret_key)
         session["recovery_challenge_id"] = challenge
@@ -423,8 +428,8 @@ def google_callback():
                     suffix += 1
             _service().add_identity(user.id, "google", claims.subject, claims.email)
             _audit("google_login_success", user_id=user.id, method="google", outcome="account_created")
-            return redirect("/") if _login_session(user) else (jsonify({"error": "authentication_failed"}), 401)
-        return redirect("/") if _login_session(user) else (jsonify({"error": "authentication_failed"}), 401)
+            return redirect("/") if _login_session(user, auth_method="google") else (jsonify({"error": "authentication_failed"}), 401)
+        return redirect("/") if _login_session(user, auth_method="google") else (jsonify({"error": "authentication_failed"}), 401)
     except Exception:
         _audit("google_login_failure", method="google", outcome="failure", reason="oidc_validation_failed")
         return jsonify({"error": "authentication_failed"}), 401
