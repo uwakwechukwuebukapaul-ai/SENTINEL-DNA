@@ -43,7 +43,8 @@
     <p id="mfa-status" class="status" role="alert"></p>
   </section>
   <p class="muted">Need a code? <button id="email-otp" type="button">Sign in with email code</button></p>
-  <p class="muted">Don't have an account? <a href="/signup">Create an analyst account</a></p>
+  <p class="muted">Don't have an account? <a href="/signup">Create an ordinary analyst account</a></p>
+  <p class="muted" role="note">External evaluator access is founder/manager-provisioned and must not be created through self-registration. An evaluator receives a one-time activation mechanism from the Sentinel DNA manager.</p>
 </main>
 <script>
   if(new URLSearchParams(location.search).get('signed_out')==='true')document.getElementById('signed-out').hidden=false;
