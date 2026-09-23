@@ -73,6 +73,8 @@ identity, requester actor, approval transaction ID, and expiry.
 The existing implementation provides:
 
 - requester/reviewer separation;
+- explicit requester/reviewer subject-to-key fingerprint binding in the signed
+  trust manifest;
 - provider principal validation and active identity provenance checks;
 - tenant and canonical-membership binding;
 - canonical approval-artifact hashing;
@@ -81,6 +83,14 @@ The existing implementation provides:
 - fail-closed target, environment, database, role, expiry, and replay checks;
 - immutable bootstrap consumption state;
 - audit and provenance records with password/token exclusion.
+
+The signed trust manifest must include `requester_subject` and
+`reviewer_subject` alongside each role's key ID and public-key fingerprint.
+Verification requires the payload subject, manifest subject, registered key ID,
+resolved public key, fingerprint, and role signature to agree; requester and
+reviewer subjects and keys must remain distinct. A key rotation therefore
+requires a new explicitly bound manifest and does not rewrite historical
+authorization identity.
 
 Migration 011 adds only the staging bootstrap authorization and consumption
 state. It does not create an authority source or bypass provider verification.

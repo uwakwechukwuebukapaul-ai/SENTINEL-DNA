@@ -37,8 +37,8 @@ PAYLOAD_FIELDS = frozenset({
 })
 ENVELOPE_FIELDS = frozenset({"payload", "requester_signature", "reviewer_signature"})
 MANIFEST_FIELDS = frozenset({
-    "authority_id", "environment", "requester_key_id",
-    "requester_public_key_fingerprint", "reviewer_key_id",
+    "authority_id", "environment", "requester_subject", "requester_key_id",
+    "requester_public_key_fingerprint", "reviewer_subject", "reviewer_key_id",
     "reviewer_public_key_fingerprint", "allowed_database_target_identity",
     "allowed_application_commit", "allowed_repository_tree", "allowed_image_digest",
     "manifest_version", "manifest_expiry", "manifest_digest", "authority_status",
@@ -142,8 +142,10 @@ def _target_is_staging(value: str) -> bool:
 class StagingTrustManifest:
     authority_id: str
     environment: str
+    requester_subject: str
     requester_key_id: str
     requester_public_key_fingerprint: str
+    reviewer_subject: str
     reviewer_key_id: str
     reviewer_public_key_fingerprint: str
     allowed_database_target_identity: str
@@ -166,6 +168,15 @@ class StagingTrustManifest:
             raise StagingAuthorityVerificationError("manifest_scope_invalid")
         if manifest.requester_key_status != "active" or manifest.reviewer_key_status != "active":
             raise StagingAuthorityVerificationError("manifest_key_revoked")
+        if (
+            not isinstance(manifest.requester_subject, str)
+            or not SAFE_ID.fullmatch(manifest.requester_subject)
+            or not isinstance(manifest.reviewer_subject, str)
+            or not SAFE_ID.fullmatch(manifest.reviewer_subject)
+        ):
+            raise StagingAuthorityVerificationError("manifest_identity_invalid")
+        if manifest.requester_subject == manifest.reviewer_subject:
+            raise StagingAuthorityVerificationError("manifest_identities_not_distinct")
         if not HEX64.fullmatch(manifest.requester_public_key_fingerprint) or not HEX64.fullmatch(manifest.reviewer_public_key_fingerprint):
             raise StagingAuthorityVerificationError("manifest_fingerprint_invalid")
         if not HEX64.fullmatch(manifest.manifest_digest):
@@ -228,6 +239,13 @@ class StagingAuthorityArtifactVerifier:
             raise StagingAuthorityVerificationError("staging_scope_invalid")
         if payload["authority_id"] != manifest.authority_id or payload["requester_key_id"] != manifest.requester_key_id or payload["reviewer_key_id"] != manifest.reviewer_key_id:
             raise StagingAuthorityVerificationError("manifest_binding_mismatch")
+        if (
+            payload["requester_subject"] != manifest.requester_subject
+            or payload["reviewer_subject"] != manifest.reviewer_subject
+        ):
+            raise StagingAuthorityVerificationError("identity_binding_mismatch")
+        if payload["requester_subject"] == payload["reviewer_subject"]:
+            raise StagingAuthorityVerificationError("identities_not_distinct")
         if payload["database_target_identity"] != manifest.allowed_database_target_identity:
             raise StagingAuthorityVerificationError("database_target_mismatch")
         if payload["application_commit"] != manifest.allowed_application_commit or payload["repository_tree"] != manifest.allowed_repository_tree or payload["image_digest"] != manifest.allowed_image_digest:

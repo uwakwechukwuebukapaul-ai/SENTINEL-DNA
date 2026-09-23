@@ -70,8 +70,10 @@ def _fixture(tmp_path, monkeypatch):
     unsigned_manifest = {
         "authority_id": payload["authority_id"],
         "environment": "staging",
+        "requester_subject": payload["requester_subject"],
         "requester_key_id": payload["requester_key_id"],
         "requester_public_key_fingerprint": hashlib.sha256(requester_public).hexdigest(),
+        "reviewer_subject": payload["reviewer_subject"],
         "reviewer_key_id": payload["reviewer_key_id"],
         "reviewer_public_key_fingerprint": hashlib.sha256(reviewer_public).hexdigest(),
         "allowed_database_target_identity": payload["database_target_identity"],
@@ -101,6 +103,19 @@ def _fixture(tmp_path, monkeypatch):
     return db, payload, manifest, envelope, resolver
 
 
+def _signed_envelope(payload, requester, reviewer):
+    payload_bytes = json.dumps(
+        dict(sorted(payload.items())), separators=(",", ":"), ensure_ascii=False
+    ).encode()
+    artifact_hash = hashlib.sha256(payload_bytes).hexdigest()
+    message = SIGNATURE_DOMAIN + b"\0" + bytes.fromhex(artifact_hash)
+    return {
+        "payload": payload,
+        "requester_signature": base64.b64encode(requester.sign(message)).decode(),
+        "reviewer_signature": base64.b64encode(reviewer.sign(message)).decode(),
+    }
+
+
 def test_verifier_accepts_valid_pinned_dual_signature(tmp_path, monkeypatch):
     db, _payload, manifest, envelope, resolver = _fixture(tmp_path, monkeypatch)
     ceremony = StagingAuthorityArtifactVerifier().verify(envelope, manifest, resolver)
@@ -120,6 +135,109 @@ def test_verifier_rejects_duplicate_unknown_and_altered_fields(tmp_path, monkeyp
     duplicate = '{"payload":' + json.dumps(payload) + ',"payload":' + json.dumps(payload) + ',"requester_signature":"x","reviewer_signature":"x"}'
     with pytest.raises(StagingAuthorityVerificationError, match="duplicate"):
         StagingAuthorityArtifactVerifier().verify(duplicate, manifest, resolver)
+
+
+def test_verifier_binds_subjects_to_manifest_keys_and_signatures(tmp_path, monkeypatch):
+    _db, payload, manifest, envelope, resolver = _fixture(tmp_path, monkeypatch)
+    requester = Ed25519PrivateKey.generate()
+    reviewer = Ed25519PrivateKey.generate()
+    requester_public = _public_bytes(requester)
+    reviewer_public = _public_bytes(reviewer)
+
+    swapped_resolver = {
+        payload["requester_key_id"]: reviewer_public,
+        payload["reviewer_key_id"]: requester_public,
+    }
+    with pytest.raises(StagingAuthorityVerificationError, match="fingerprint_mismatch"):
+        StagingAuthorityArtifactVerifier().verify(envelope, manifest, swapped_resolver)
+
+    altered_payload = dict(payload, requester_subject="unknown-requester")
+    altered_envelope = _signed_envelope(altered_payload, requester, reviewer)
+    with pytest.raises(StagingAuthorityVerificationError, match="identity_binding_mismatch"):
+        StagingAuthorityArtifactVerifier().verify(altered_envelope, manifest, resolver)
+
+    wrong_requester_signature = dict(
+        envelope, requester_signature=envelope["reviewer_signature"]
+    )
+    with pytest.raises(StagingAuthorityVerificationError, match="signature_verification_failed"):
+        StagingAuthorityArtifactVerifier().verify(wrong_requester_signature, manifest, resolver)
+    wrong_reviewer_signature = dict(
+        envelope, reviewer_signature=envelope["requester_signature"]
+    )
+    with pytest.raises(StagingAuthorityVerificationError, match="signature_verification_failed"):
+        StagingAuthorityArtifactVerifier().verify(wrong_reviewer_signature, manifest, resolver)
+
+    mismatched_unsigned = dict(manifest)
+    mismatched_unsigned["requester_subject"] = "different-requester"
+    mismatched_unsigned.pop("manifest_digest")
+    mismatched_manifest = dict(
+        mismatched_unsigned,
+        manifest_digest=hashlib.sha256(
+            json.dumps(
+                dict(sorted(mismatched_unsigned.items())),
+                separators=(",", ":"), ensure_ascii=False,
+            ).encode()
+        ).hexdigest(),
+    )
+    with pytest.raises(StagingAuthorityVerificationError, match="identity_binding_mismatch"):
+        StagingAuthorityArtifactVerifier().verify(envelope, mismatched_manifest, resolver)
+
+
+def test_key_rotation_requires_explicit_new_manifest_and_preserves_history(tmp_path, monkeypatch):
+    _db, payload, manifest, envelope, resolver = _fixture(tmp_path, monkeypatch)
+    verifier = StagingAuthorityArtifactVerifier()
+    assert verifier.verify(envelope, manifest, resolver).payload == payload
+
+    rotated = Ed25519PrivateKey.generate()
+    rotated_reviewer = Ed25519PrivateKey.generate()
+    rotated_public = _public_bytes(rotated)
+    rotated_reviewer_public = _public_bytes(rotated_reviewer)
+    rotated_payload = dict(
+        payload,
+        requester_key_id="requester-key-rotated",
+        reviewer_key_id="reviewer-key-rotated",
+    )
+    rotated_unsigned = dict(
+        manifest,
+        requester_key_id="requester-key-rotated",
+        requester_public_key_fingerprint=hashlib.sha256(rotated_public).hexdigest(),
+        reviewer_key_id="reviewer-key-rotated",
+        reviewer_public_key_fingerprint=hashlib.sha256(rotated_reviewer_public).hexdigest(),
+    )
+    rotated_unsigned.pop("manifest_digest")
+    rotated_manifest = dict(
+        rotated_unsigned,
+        manifest_digest=hashlib.sha256(
+            json.dumps(
+                dict(sorted(rotated_unsigned.items())),
+                separators=(",", ":"), ensure_ascii=False,
+            ).encode()
+        ).hexdigest(),
+    )
+    rotated_resolver = dict(
+        resolver,
+        **{
+            "requester-key-rotated": rotated_public,
+            "reviewer-key-rotated": rotated_reviewer_public,
+        },
+    )
+    rotated_hash = hashlib.sha256(
+        json.dumps(
+            dict(sorted(rotated_payload.items())),
+            separators=(",", ":"), ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    rotated_message = SIGNATURE_DOMAIN + b"\0" + bytes.fromhex(rotated_hash)
+    rotated_envelope = {
+        "payload": rotated_payload,
+        "requester_signature": base64.b64encode(rotated.sign(rotated_message)).decode(),
+        "reviewer_signature": base64.b64encode(
+            rotated_reviewer.sign(rotated_message)
+        ).decode(),
+    }
+    with pytest.raises(StagingAuthorityVerificationError):
+        verifier.verify(envelope, rotated_manifest, resolver)
+    assert verifier.verify(rotated_envelope, rotated_manifest, rotated_resolver).payload == rotated_payload
 
 
 def test_enrollment_is_provider_only_and_canonical(tmp_path, monkeypatch):
