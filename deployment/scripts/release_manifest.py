@@ -355,7 +355,13 @@ def build_manifest(
     _assert_clean_worktree(root)
 
     branch = repository_branch(root, selected_sha)
-    if not branch:
+    # A local validation checkout is commonly cloned from a detached source
+    # revision and therefore has no symbolic branch ref. That is not a
+    # release-authority failure: the release identity remains bound to the
+    # checked-out commit and its Git tree below. GitHub Actions is different;
+    # there the branch/ref is part of the protected workflow contract and
+    # repository_branch() must establish it from authenticated event metadata.
+    if not branch and os.environ.get("GITHUB_ACTIONS") == "true":
         raise ReleaseManifestError("release branch is unavailable")
     tree_id = _git_text(root, "rev-parse", f"{selected_sha}^{{tree}}")
     files: dict[str, dict[str, str]] = {}
@@ -514,6 +520,11 @@ def verify_manifest(
     if require_current_head:
         _assert_clean_worktree(root)
         current_branch = repository_branch(root, release_sha)
+        # In CI, an unavailable branch must remain a hard failure. Otherwise
+        # an empty branch in a tampered manifest could compare equal to an
+        # unavailable authenticated branch and bypass release-ref validation.
+        if not current_branch and os.environ.get("GITHUB_ACTIONS") == "true":
+            raise ReleaseManifestError("release branch is unavailable")
         if current_branch != repository["branch"]:
             raise ReleaseManifestError("release manifest branch does not match checked-out branch")
 
