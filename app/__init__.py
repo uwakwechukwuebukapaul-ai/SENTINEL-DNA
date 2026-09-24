@@ -197,19 +197,6 @@ def create_app():
     # HEALTH CHECK
     # ==================================
 
-    @app.route("/")
-    def home():
-
-        return {
-
-            "status": "running",
-
-            "service": "Sentinel DNA",
-
-            "version": "1.0",
-
-        }
-
     @app.get("/health")
     def health():
         try:
