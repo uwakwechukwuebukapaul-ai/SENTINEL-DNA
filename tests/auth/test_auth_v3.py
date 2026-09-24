@@ -6,6 +6,7 @@ from app import create_app
 from services.auth.providers import TestEmailProvider, TestSMSProvider, email_provider, sms_provider
 from services.auth.oauth import GoogleOIDC
 from services.auth.oauth import GoogleClaims
+from services.identity.authentication import AuthenticatedProviderPrincipal
 from services.auth.rate_limit import RedisRateLimitBackend
 from tests.credential_helpers import random_password, random_secret
 
@@ -63,6 +64,12 @@ def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):
         GoogleOIDC("client", random_secret(), "http://127.0.0.1/callback").complete("code", "attacker-state", "expected-state", "nonce", "nonce")
 
+
+def test_oidc_routes_and_login_control_are_absent_when_not_ready(app):
+    assert app.config["OIDC_ROUTES_ENABLED"] is False
+    assert not any(rule.rule.startswith("/auth/oidc") for rule in app.url_map.iter_rules())
+    assert b"Continue with Microsoft" not in app.test_client().get("/login").data
+
 def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
     monkeypatch.delenv("SENTINEL_DNA_EMAIL_PROVIDER", raising=False); monkeypatch.delenv("SENTINEL_DNA_SMS_PROVIDER", raising=False)
@@ -94,6 +101,35 @@ def test_v3_google_first_creates_canonical_analyst(monkeypatch, app):
     user = app.container.require("auth_service").get_by_email("google-first@example.test")
     assert user and user.role == "analyst" and user.actor_id is not None
     assert app.container.require("auth_service").identity_user("google", "google-sub-1").id == user.id
+
+
+def test_oidc_provider_session_reuses_application_session_and_tenant_membership(app):
+    auth = app.container.require("auth_service")
+    authority = app.container.require("canonical_authority")
+    user = auth.register("entra-user", "entra-user@example.test", PASSWORD, "analyst")
+    identity = authority.identities.create(user.email, display_name=user.username, actor_id="entra-actor")
+    tenant = authority.tenants.create("Entra tenant", tenant_id="entra-tenant")
+    authority.memberships.add(tenant.tenant_id, identity.actor_id, "analyst")
+    with auth.db.session() as connection:
+        connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, tenant.tenant_id, user.id))
+    auth.add_identity(user.id, "entra", "entra-subject")
+    principal = AuthenticatedProviderPrincipal(
+        provider="entra", subject="entra-subject", tenant_id=tenant.tenant_id,
+        actor_id=identity.actor_id, authentication_method="oidc",
+        credential_id="oidc", external_subject="entra-subject",
+    )
+    from services.auth.routes import login_provider_session
+    client = app.test_client()
+    with client.session_transaction():
+        pass
+    with app.test_request_context("/"):
+        from flask import session
+        result = login_provider_session(principal)
+        assert result["username"] == user.username
+        assert session["user_id"] == user.id
+        assert session["actor_id"] == identity.actor_id
+        assert session["organization_id"] == tenant.tenant_id
+        assert session["auth_stage"] == "SOC_AUTHENTICATED"
 
 def test_v3_remember_me_uses_dedicated_http_only_cookie(app):
     client = app.test_client(); csrf = token(client)

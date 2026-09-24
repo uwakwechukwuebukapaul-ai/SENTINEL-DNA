@@ -16,8 +16,8 @@ class OidcRouteConfiguration:
         configuration = OidcRuntimeConfiguration.from_environment(environ)
         return configuration.readiness(OidcSecretProvider(environ), production=(environ or os.environ).get("SENTINEL_DNA_ENV", "development") == "production")
 
-def create_oidc_blueprint(flow: OidcAuthorizationCodeFlow | None):
-    if flow is None: return None
+def create_oidc_blueprint(flow: OidcAuthorizationCodeFlow | None, on_authenticated=None):
+    if flow is None or not callable(on_authenticated): return None
     bp = Blueprint("oidc_auth", __name__, url_prefix="/auth/oidc")
     @bp.get("/login")
     def login():
@@ -26,10 +26,15 @@ def create_oidc_blueprint(flow: OidcAuthorizationCodeFlow | None):
     @bp.get("/callback")
     def callback():
         try:
-            flow.complete(session, request.args)
+            principal = flow.complete(session, request.args)
+            on_authenticated(principal)
             return redirect("/")
-        except OidcBrowserError: return jsonify({"error": "authentication_failed"}), 401
-        except Exception: return jsonify({"error": "authentication_failed"}), 401
+        except OidcBrowserError:
+            session.clear()
+            return jsonify({"error": "authentication_failed"}), 401
+        except Exception:
+            session.clear()
+            return jsonify({"error": "authentication_failed"}), 401
     @bp.post("/logout")
     def logout():
         flow.logout(session)

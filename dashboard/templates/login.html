@@ -23,6 +23,9 @@
   <p class="muted">Sign in to the SOC Command Center. Authenticate to continue to your evidence-backed investigations.</p>
   <p id="signed-out" class="muted" hidden>You have been signed out.</p>
   <a class="oauth" href="/api/auth/google/start">Continue with Google</a>
+  {% if config.get('OIDC_ROUTES_ENABLED') and config.get('OIDC_LOGIN_URL') %}
+  <a class="oauth" href="{{ config.get('OIDC_LOGIN_URL') }}">Continue with Microsoft</a>
+  {% endif %}
   <p class="muted">or sign in with password</p>
   <form id="login-form">
     <label for="username">Email or username</label>

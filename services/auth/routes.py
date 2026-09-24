@@ -10,6 +10,7 @@ from .phone import country_options, normalize_phone
 from .providers import email_provider
 from .security import csrf_token
 from .mfa import MFAError
+from services.identity.authentication import AuthenticatedProviderPrincipal
 
 auth_api = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 REMEMBER_COOKIE = "sentinel_remember"
@@ -44,19 +45,23 @@ def _csrf_ok():
 def _ensure_csrf():
     if "csrf_token" not in session: session["csrf_token"] = csrf_token()
     return session["csrf_token"]
-def _bind(user):
+def _bind(user, tenant_id=None):
     authority = current_app.container.require("canonical_authority")
     identity = authority.identities.get_by_email(user.email) or authority.identities.create(user.email, display_name=user.username, actor_id=user.actor_id or f"user-{user.id}")
     memberships = [m for m in authority.memberships.list_for_actor(identity.actor_id) if m.status == "active"]
     if not memberships:
         tenant = authority.tenants.create(f"{user.username} workspace", tenant_id=user.tenant_id or f"tenant-{user.id}")
         memberships = [authority.memberships.add(tenant.tenant_id, identity.actor_id, str(user.role).lower())]
+    if tenant_id:
+        memberships = [item for item in memberships if item.tenant_id == tenant_id]
+    if not memberships:
+        raise ValueError("canonical_membership_required")
     membership = sorted(memberships, key=lambda item: item.tenant_id)[0]
     with _service().db.session() as connection:
         connection.execute("UPDATE users SET actor_id=?, tenant_id=? WHERE id=?", (identity.actor_id, membership.tenant_id, user.id))
     return identity, membership
-def _login_session(user, remember=False, auth_method="password"):
-    identity, membership = _bind(user); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
+def _login_session(user, remember=False, auth_method="password", tenant_id=None):
+    identity, membership = _bind(user, tenant_id=tenant_id); session.clear(); session.update(user_id=user.id, session_version=user.session_version, actor_id=identity.actor_id, organization_id=membership.tenant_id, canonical_principal={"actor_id": identity.actor_id, "tenant_id": membership.tenant_id}, csrf_token=csrf_token(), auth_time=datetime.now(timezone.utc).isoformat())
     if user.mfa_required:
         session["auth_stage"] = "MFA_REQUIRED"
         session.pop("mfa_session_token", None)
@@ -72,6 +77,27 @@ def _login_session(user, remember=False, auth_method="password"):
         g.clear_remember_cookie = True
     _audit("provider_login_success" if auth_method != "password" else "login_success", user_id=user.id, method=auth_method, outcome="success")
     return user.public()
+
+
+def login_provider_session(principal: AuthenticatedProviderPrincipal, *, remember=False):
+    """Enter an already verified provider principal through the normal user session path."""
+    if not isinstance(principal, AuthenticatedProviderPrincipal):
+        raise ValueError("provider_principal_invalid")
+    if not principal.external_subject or not principal.tenant_id or not principal.actor_id:
+        raise ValueError("provider_principal_incomplete")
+    authority = current_app.container.require("canonical_authority")
+    tenant, identity, membership = authority.resolve(principal.tenant_id, principal.actor_id)
+    if tenant.status != "active" or identity.status != "active" or membership.status != "active":
+        raise ValueError("canonical_membership_denied")
+    user = _service().authenticate_provider(
+        principal.provider,
+        principal.external_subject,
+        authentication_method=principal.authentication_method,
+        credential_id=principal.credential_id,
+    )
+    if user is None or str(user.actor_id or "") != str(principal.actor_id):
+        raise ValueError("provider_identity_not_registered")
+    return _login_session(user, remember=remember, auth_method="oidc", tenant_id=principal.tenant_id)
 
 def restore_persistent_session():
     if session.get("user_id") or not request.cookies.get(REMEMBER_COOKIE): return

@@ -12,8 +12,8 @@ class Adapter:
 def flow(): return OidcAuthorizationCodeFlow(OidcBrowserConfiguration("https://idp.example/authorize","https://app.example/auth/callback","client"),Adapter(),TokenClient())
 def test_begin_generates_state_nonce_and_pkce():
     session={}; url=flow().begin(session); assert session["oidc_transaction"]["state"] in url and "code_challenge_method=S256" in url
-def test_complete_consumes_transaction_and_establishes_minimal_session():
-    f=flow(); session={}; f.begin(session); state=session["oidc_transaction"]["state"]; principal=f.complete(session,{"state":state,"code":"code"}); assert principal.actor_id=="actor" and "oidc_transaction" not in session
+def test_complete_consumes_transaction_and_returns_verified_principal():
+    f=flow(); session={}; f.begin(session); state=session["oidc_transaction"]["state"]; principal=f.complete(session,{"state":state,"code":"code"}); assert principal.actor_id=="actor" and "oidc_transaction" not in session and "canonical_principal" not in session
 def test_invalid_state_and_missing_code_fail_closed():
     f=flow(); session={}; f.begin(session)
     try: f.complete(session,{"state":"wrong","code":"code"}); assert False

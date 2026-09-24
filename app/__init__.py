@@ -64,9 +64,8 @@ def create_app():
             audit_service=app.container.require("audit_service"),
         ),
     )
-    # OIDC routes remain disabled until a concrete verifier, token client,
-    # provider-tenant trust, and identity-binding wiring are supplied.
     app.config["OIDC_ROUTES_ENABLED"] = False
+    app.config["OIDC_LOGIN_URL"] = None
     from services.automation import automation_api
     from services.integrations import integrations_api
     from services.detection import detection_api
@@ -98,10 +97,15 @@ def create_app():
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
     from services.audit import audit_api
-    from services.auth.routes import enforce_current_session, restore_persistent_session
+    from services.auth.routes import enforce_current_session, restore_persistent_session, login_provider_session
     from services.auth.mfa import mfa_boundary_response
     from services.core.pilot_boundary import enforce_pilot_analyst_boundary
     from dashboard.browser_routes import browser
+    oidc_blueprint = _build_oidc_blueprint(app, login_provider_session)
+    if oidc_blueprint is not None:
+        app.register_blueprint(oidc_blueprint)
+        app.config["OIDC_ROUTES_ENABLED"] = True
+        app.config["OIDC_LOGIN_URL"] = "/auth/oidc/login"
     app.register_blueprint(auth_api)
     app.register_blueprint(audit_api)
     app.register_blueprint(browser)
@@ -243,3 +247,83 @@ def create_app():
 
 
     return app
+
+
+def _build_oidc_blueprint(app, login_provider_session):
+    """Build the generic OIDC flow only when configuration and trust are ready."""
+    try:
+        from services.identity.bindings import IdentityBindingService
+        from services.identity.oidc import OidcProviderAdapter, OidcProviderConfiguration, PyJwtOidcVerifier
+        from services.identity.oidc_browser import OidcAuthorizationCodeFlow, OidcBrowserConfiguration
+        from services.identity.oidc_config import OidcRuntimeConfiguration, OidcSecretProvider
+        from services.identity.oidc_routes import create_oidc_blueprint
+        from services.identity.oidc_token import OidcTokenExchangeClient
+        from services.identity.provider_tenant_trust import ProviderTenantTrustService
+
+        configuration = OidcRuntimeConfiguration.from_environment()
+        secret_provider = OidcSecretProvider()
+        trust_service = ProviderTenantTrustService(
+            authorization=app.container.require("canonical_authorization"),
+            db=database,
+            audit=app.container.require("audit_service"),
+        )
+        production = os.getenv("SENTINEL_DNA_ENV", "development") == "production"
+        readiness = _oidc_startup_readiness(configuration, secret_provider, trust_service)
+        if readiness.status != "READY":
+            return None
+
+        provider_config = OidcProviderConfiguration(
+            provider=configuration.provider,
+            issuer=configuration.issuer,
+            client_id=configuration.client_id,
+            audience=configuration.audience,
+            redirect_uri=configuration.redirect_uri,
+            trusted_tenant_id=configuration.external_tenant_id,
+        )
+        verifier = PyJwtOidcVerifier(
+            configuration.jwks_uri,
+            allowed_algorithms=configuration.signing_algorithms,
+            tenant_claim=configuration.provider_tenant_claim,
+        )
+        adapter = OidcProviderAdapter(
+            provider_config,
+            verifier,
+            IdentityBindingService(db=database, audit=app.container.require("audit_service")),
+        )
+        token_client = OidcTokenExchangeClient(
+            configuration.token_endpoint,
+            configuration.client_id,
+            secret_provider.get(configuration.client_secret_reference),
+        )
+        flow = OidcAuthorizationCodeFlow(
+            OidcBrowserConfiguration(
+                authorization_endpoint=configuration.authorization_endpoint,
+                redirect_uri=configuration.redirect_uri,
+                client_id=configuration.client_id,
+                scope=("openid", "profile", "email"),
+            ),
+            adapter,
+            token_client,
+        )
+        return create_oidc_blueprint(flow, on_authenticated=login_provider_session)
+    except Exception:
+        app.logger.warning("OIDC integration unavailable; routes remain disabled", exc_info=True)
+        return None
+
+
+def _oidc_startup_readiness(configuration, secret_provider, trust_service, metadata_transport=None):
+    """Compose the existing complete OIDC readiness pipeline."""
+    from services.identity.oidc_metadata import OidcMetadataValidator
+    from services.identity.oidc_readiness import OidcDeploymentReadinessValidator
+
+    if metadata_transport is None:
+        def metadata_transport(url, **kwargs):
+            import requests
+            response = requests.get(url, **kwargs)
+            return response.status_code, response.text
+
+    return OidcDeploymentReadinessValidator(
+        secret_provider=secret_provider,
+        trust_service=trust_service,
+        production=os.getenv("SENTINEL_DNA_ENV", "development") == "production",
+    ).validate(configuration, OidcMetadataValidator(metadata_transport))

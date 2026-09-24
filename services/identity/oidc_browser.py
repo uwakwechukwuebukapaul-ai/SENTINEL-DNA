@@ -47,10 +47,7 @@ class OidcAuthorizationCodeFlow:
         if not isinstance(token, dict) or not token.get("id_token") or token.get("token_type", "Bearer").lower() != "bearer": raise OidcBrowserError("oidc_token_response_invalid")
         try: principal = self.provider_adapter.authenticate(token["id_token"], transaction["state"], transaction["nonce"], transaction["verifier"])
         except Exception as exc: raise OidcBrowserError("oidc_authentication_failed") from exc
-        session.clear()
-        session["canonical_principal"] = {"provider": principal.provider, "external_subject": principal.external_subject, "tenant_id": principal.tenant_id, "actor_id": principal.actor_id}
         return principal
 
     @staticmethod
     def logout(session): session.clear()
-
