@@ -285,6 +285,20 @@ class StagingAuthorityArtifactVerifier:
                 raise StagingAuthorityVerificationError("signature_verification_failed") from exc
         return VerifiedStagingAuthorityCeremony(dict(payload), artifact_hash, requester_key, reviewer_key, manifest)
 
+    @staticmethod
+    def verify_detached_signature(payload: Mapping[str, Any], signature: str, public_key: bytes | str) -> str:
+        """Verify one signature using the same canonical enrollment protocol."""
+        artifact_hash = _digest(payload, PAYLOAD_FIELDS)
+        key = _public_key(public_key)
+        try:
+            Ed25519PublicKey.from_public_bytes(key).verify(
+                _decode_signature(signature),
+                SIGNATURE_DOMAIN + b"\0" + bytes.fromhex(artifact_hash),
+            )
+        except Exception as exc:
+            raise StagingAuthorityVerificationError("signature_verification_failed") from exc
+        return artifact_hash
+
 
 class StagingAuthorityEnrollmentService:
     """Atomically enroll two provider-only canonical staging principals."""

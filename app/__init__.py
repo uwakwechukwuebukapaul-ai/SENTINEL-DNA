@@ -96,6 +96,7 @@ def create_app():
     from services.support.routes import support_api
     from services.exercises.routes import exercise_api
     from services.auth import auth_api
+    from services.auth.local_two_human_staging_ceremony import local_two_human_ceremony_api
     from services.audit import audit_api
     from services.auth.routes import enforce_current_session, restore_persistent_session, login_provider_session
     from services.auth.mfa import mfa_boundary_response
@@ -107,6 +108,7 @@ def create_app():
         app.config["OIDC_ROUTES_ENABLED"] = True
         app.config["OIDC_LOGIN_URL"] = "/auth/oidc/login"
     app.register_blueprint(auth_api)
+    app.register_blueprint(local_two_human_ceremony_api)
     app.register_blueprint(audit_api)
     app.register_blueprint(browser)
     app.register_blueprint(automation_api)

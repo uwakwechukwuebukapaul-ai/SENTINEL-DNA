@@ -51,6 +51,13 @@ STAGING_AUTHORITY_ENROLLMENT_NAMESPACE = "staging-authority-enrollment"
 STAGING_AUTHORITY_ENROLLMENT_MIGRATION_MODULE = (
     "database.migrations.012_staging_provider_credentials"
 )
+STAGING_TWO_HUMAN_CEREMONY_NAMESPACE = "staging-two-human-ceremony"
+STAGING_TWO_HUMAN_CEREMONY_MIGRATION_MODULE = (
+    "database.migrations.013_local_two_human_staging_ceremony"
+)
+STAGING_TWO_HUMAN_APPROVAL_BINDING_MIGRATION_MODULE = (
+    "database.migrations.014_local_two_human_approval_binding"
+)
 
 
 def _load_migrations(module_names: tuple[str, ...]) -> tuple[Migration, ...]:
@@ -210,6 +217,66 @@ def apply_staging_authority_enrollment_namespace(
     return tuple(applied_now)
 
 
+def staging_two_human_ceremony_namespace_registry(
+    environment: str,
+    *,
+    enabled: bool,
+) -> tuple[Migration, ...]:
+    """Load migrations 013 and 014 only for an explicitly selected staging overlay."""
+
+    if str(environment).strip().lower() != "staging":
+        raise RuntimeError("staging_two_human_ceremony_requires_staging")
+    if not enabled:
+        raise RuntimeError("staging_two_human_ceremony_requires_explicit_opt_in")
+    migrations = _load_migrations((STAGING_TWO_HUMAN_CEREMONY_MIGRATION_MODULE, STAGING_TWO_HUMAN_APPROVAL_BINDING_MIGRATION_MODULE))
+    if len(migrations) != 2 or tuple(item.version for item in migrations) != (13, 14):
+        raise ValueError("invalid_staging_two_human_ceremony_migration")
+    return migrations
+
+
+def apply_staging_two_human_ceremony_namespace(
+    backend: Any,
+    *,
+    environment: str,
+    enabled: bool,
+) -> tuple[int, ...]:
+    """Apply migrations 013 and 014 without changing the default or 012 namespace."""
+
+    migrations = staging_two_human_ceremony_namespace_registry(environment, enabled=enabled)
+    applied_now: list[int] = []
+    with backend.session() as connection:
+        if getattr(backend, "backend_name", "sqlite") == "sqlite":
+            connection.execute("BEGIN")
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS namespace_migrations (
+                namespace TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                applied_at TEXT NOT NULL,
+                PRIMARY KEY(namespace, version)
+            )"""
+        )
+        applied = {
+            int(row["version"])
+            for row in connection.execute(
+                "SELECT version FROM namespace_migrations WHERE namespace=?",
+                (STAGING_TWO_HUMAN_CEREMONY_NAMESPACE,),
+            ).fetchall()
+        }
+        for migration in migrations:
+            if migration.version in applied:
+                continue
+            migration.apply(connection, backend.backend_name)
+            connection.execute(
+                """INSERT INTO namespace_migrations(namespace, version, name, applied_at)
+                   VALUES(?,?,?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(namespace, version) DO NOTHING""",
+                (STAGING_TWO_HUMAN_CEREMONY_NAMESPACE, migration.version, migration.name),
+            )
+            applied_now.append(migration.version)
+    return tuple(applied_now)
+
+
 MIGRATIONS = migration_registry()
 
 __all__ = [
@@ -220,9 +287,14 @@ __all__ = [
     "STAGING_FIRST_PRIVILEGED_IDENTITY_NAMESPACE",
     "STAGING_AUTHORITY_ENROLLMENT_NAMESPACE",
     "STAGING_AUTHORITY_ENROLLMENT_MIGRATION_MODULE",
+    "STAGING_TWO_HUMAN_CEREMONY_NAMESPACE",
+    "STAGING_TWO_HUMAN_CEREMONY_MIGRATION_MODULE",
+    "STAGING_TWO_HUMAN_APPROVAL_BINDING_MIGRATION_MODULE",
     "migration_registry",
     "apply_staging_first_privileged_identity_namespace",
     "staging_first_privileged_identity_namespace_registry",
     "staging_authority_enrollment_namespace_registry",
     "apply_staging_authority_enrollment_namespace",
+    "staging_two_human_ceremony_namespace_registry",
+    "apply_staging_two_human_ceremony_namespace",
 ]
