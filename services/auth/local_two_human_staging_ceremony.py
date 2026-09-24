@@ -36,9 +36,9 @@ CEREMONY_STATES = frozenset({
 })
 ACTIVE_STATES = frozenset({"REQUESTED", "REQUESTER_APPROVED", "REVIEWER_APPROVED"})
 EXPECTED_RELEASE = {
-    "application_commit": "c5e7e789ef4f99394218612f8585fd115f32beba",
-    "repository_tree": "252db5689e4fce6fe2cb1094c1efd73711b54a19",
-    "image_digest": "sha256:a759b179796650c33f6522423d14f16e80b4c9f7d7c08bd764c2c48bc38a8a6c",
+    "application_commit": "0f734c3341799b93e8a66397f1a1da782fd3869d",
+    "repository_tree": "42ba7a2e55a88029df2f9af0ea1812696a9d05ea",
+    "image_digest": "sha256:34f610a61e02483b1d30c666d69d94452b27ea71c0feaca162c0e2e2df25d0f6",
     "environment": "staging",
     "database_target_identity": "postgresql://sentinel@postgres:5432/sentinel_dna",
 }

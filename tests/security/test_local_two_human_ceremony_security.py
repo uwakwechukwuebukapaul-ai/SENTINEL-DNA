@@ -16,9 +16,9 @@ from services.auth.local_two_human_staging_ceremony import (
 
 def test_release_constants_are_exact():
     assert EXPECTED_RELEASE == {
-        "application_commit": "c5e7e789ef4f99394218612f8585fd115f32beba",
-        "repository_tree": "252db5689e4fce6fe2cb1094c1efd73711b54a19",
-        "image_digest": "sha256:a759b179796650c33f6522423d14f16e80b4c9f7d7c08bd764c2c48bc38a8a6c",
+        "application_commit": "0f734c3341799b93e8a66397f1a1da782fd3869d",
+        "repository_tree": "42ba7a2e55a88029df2f9af0ea1812696a9d05ea",
+        "image_digest": "sha256:34f610a61e02483b1d30c666d69d94452b27ea71c0feaca162c0e2e2df25d0f6",
         "environment": "staging",
         "database_target_identity": "postgresql://sentinel@postgres:5432/sentinel_dna",
     }
@@ -27,6 +27,9 @@ def test_release_constants_are_exact():
 @pytest.mark.parametrize(
     ("field", "stale_value"),
     (
+        ("application_commit", "c5e7e789ef4f99394218612f8585fd115f32beba"),
+        ("repository_tree", "252db5689e4fce6fe2cb1094c1efd73711b54a19"),
+        ("image_digest", "sha256:a759b179796650c33f6522423d14f16e80b4c9f7d7c08bd764c2c48bc38a8a6c"),
         ("application_commit", "e5a71f16a56e2cddf7c4c3c3295aaa53eee10f38"),
         ("repository_tree", "8577fadc6c1dedb665f57f0c82378f4613d71a1e"),
         ("image_digest", "sha256:b4aaede8c74ab0609ce3932b16e42980eb1793c42590e77766c400afffe952ed"),

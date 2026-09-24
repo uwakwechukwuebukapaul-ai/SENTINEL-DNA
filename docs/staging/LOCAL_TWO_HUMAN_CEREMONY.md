@@ -9,9 +9,9 @@ This coordinator supports a same-machine ceremony in which two distinct authenti
 
 The ceremony is bound exactly to:
 
-- commit `c5e7e789ef4f99394218612f8585fd115f32beba`;
-- repository tree `252db5689e4fce6fe2cb1094c1efd73711b54a19`;
-- image digest `sha256:a759b179796650c33f6522423d14f16e80b4c9f7d7c08bd764c2c48bc38a8a6c`;
+- commit `0f734c3341799b93e8a66397f1a1da782fd3869d`;
+- repository tree `42ba7a2e55a88029df2f9af0ea1812696a9d05ea`;
+- image digest `sha256:34f610a61e02483b1d30c666d69d94452b27ea71c0feaca162c0e2e2df25d0f6`;
 - database target `postgresql://sentinel@postgres:5432/sentinel_dna`;
 - environment `staging`.
 
