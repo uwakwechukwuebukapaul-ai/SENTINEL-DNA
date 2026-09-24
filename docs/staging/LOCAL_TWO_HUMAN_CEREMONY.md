@@ -7,13 +7,14 @@
 
 This coordinator supports a same-machine ceremony in which two distinct authenticated Sentinel DNA application principals approve one exact staging authority payload in sequence. It does not perform authority enrollment automatically.
 
-The ceremony is bound exactly to:
-
-- commit `0f734c3341799b93e8a66397f1a1da782fd3869d`;
-- repository tree `42ba7a2e55a88029df2f9af0ea1812696a9d05ea`;
-- image digest `sha256:34f610a61e02483b1d30c666d69d94452b27ea71c0feaca162c0e2e2df25d0f6`;
-- database target `postgresql://sentinel@postgres:5432/sentinel_dna`;
-- environment `staging`.
+The ceremony is bound to an external, read-only staging release-binding
+manifest. The source contains no final image digest. The manifest is created
+only after the immutable image build and is independently custody-protected by
+the existing release-manifest/trusted-metadata process. It must contain the
+exact commit, source tree, image digest, repository, staging environment, and
+database target; its canonical `manifest_hash` is matched to a separately
+protected trust record. Mutable tags, request fields, environment variables,
+and runtime self-reported metadata are not authoritative.
 
 ## Ceremony flow
 
@@ -36,7 +37,7 @@ Every mutation requires CSRF, a valid MFA-backed session, an active non-expired 
 - Migration 013 creates the ceremony namespace only for explicit staging opt-in. Migration 014 independently enforces the same staging-only runtime guard before adding approval-binding columns.
 - Requester and reviewer overlap is rejected for user ID, actor ID, provider subject, credential ID, MFA-session hash, key ID, and public-key fingerprint.
 - Approval signatures are verified at submission using the existing canonical payload hash and Ed25519 signature domain. Finalization re-verifies both signatures, manifest digest, fingerprints, timestamps, release binding, and staging database target with `StagingAuthorityArtifactVerifier`.
-- Each approval stores a signed payload hash and counterparty binding. The final artifact contains `artifact_integrity_hash`, which canonically binds the ceremony ID, artifact hash, approval evidence, and verification metadata. Any alteration causes offline verification failure.
+- Each approval stores a signed payload hash and counterparty binding. The final artifact contains `artifact_integrity_hash`, which canonically binds the ceremony ID, artifact hash, approval evidence, verification metadata, and the complete external release-binding manifest. Any alteration causes offline verification failure.
 - Expiry is transitioned atomically to terminal `EXPIRED`; cancellation and finalization are terminal, and duplicate/replayed transitions are rejected.
 - Approval audit events include approval ID, ceremony ID, role, key ID, public-key fingerprint, hashed MFA-session reference, and exact release-binding hash. Raw MFA tokens, passwords, TOTP secrets, private keys, and unnecessary personal data are excluded.
 

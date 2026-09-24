@@ -8,20 +8,45 @@ from flask import Flask
 import pytest
 
 from services.auth.local_two_human_staging_ceremony import (
-    EXPECTED_RELEASE,
     _release_confirmation,
     local_two_human_ceremony_api,
 )
+from services.auth.staging_release_binding import load_release_binding
+
+
+EXPECTED_RELEASE = {
+    "application_commit": "0f734c3341799b93e8a66397f1a1da782fd3869d",
+    "repository_tree": "42ba7a2e55a88029df2f9af0ea1812696a9d05ea",
+    "image_digest": "sha256:" + "1" * 64,
+    "environment": "staging",
+    "database_target_identity": "postgresql://sentinel@postgres:5432/sentinel_dna",
+    "release_binding_manifest_hash": "0" * 64,
+}
+
+
+@pytest.fixture(autouse=True)
+def external_binding_fixture(tmp_path, monkeypatch):
+    manifest = {
+        "schema_version": "sentinel-dna-staging-release-binding-v1", "release_id": "test-release",
+        "environment": "staging", "repository": "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA.git",
+        "commit": EXPECTED_RELEASE["application_commit"], "tree": EXPECTED_RELEASE["repository_tree"],
+        "image_repository": "staging-app", "image_digest": EXPECTED_RELEASE["image_digest"],
+        "database_target_identity": EXPECTED_RELEASE["database_target_identity"],
+        "created_at": "2026-09-24T00:00:00Z", "expires_at": "2099-09-24T00:00:00Z",
+    }
+    unsigned = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    manifest["manifest_hash"] = __import__("hashlib").sha256(unsigned).hexdigest()
+    EXPECTED_RELEASE["release_binding_manifest_hash"] = manifest["manifest_hash"]
+    manifest_path = tmp_path / "release-binding.json"
+    trust_path = tmp_path / "release-binding-trust.json"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    trust_path.write_text(json.dumps({"schema_version": manifest["schema_version"], "manifest_hash": manifest["manifest_hash"], "commit": manifest["commit"], "tree": manifest["tree"], "image_digest": manifest["image_digest"]}), encoding="utf-8")
+    monkeypatch.setenv("SENTINEL_DNA_RELEASE_BINDING_MANIFEST_FILE", str(manifest_path))
+    monkeypatch.setenv("SENTINEL_DNA_RELEASE_BINDING_TRUST_FILE", str(trust_path))
 
 
 def test_release_constants_are_exact():
-    assert EXPECTED_RELEASE == {
-        "application_commit": "0f734c3341799b93e8a66397f1a1da782fd3869d",
-        "repository_tree": "42ba7a2e55a88029df2f9af0ea1812696a9d05ea",
-        "image_digest": "sha256:34f610a61e02483b1d30c666d69d94452b27ea71c0feaca162c0e2e2df25d0f6",
-        "environment": "staging",
-        "database_target_identity": "postgresql://sentinel@postgres:5432/sentinel_dna",
-    }
+    assert load_release_binding() == EXPECTED_RELEASE
 
 
 @pytest.mark.parametrize(

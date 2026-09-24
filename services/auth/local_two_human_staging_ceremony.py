@@ -28,6 +28,7 @@ from services.auth.staging_authority_enrollment import (
     _public_key,
 )
 from services.audit.service import AuditService
+from services.auth.staging_release_binding import load_release_binding, load_release_binding_document, validate_release_binding
 
 
 CEREMONY_STATES = frozenset({
@@ -35,13 +36,6 @@ CEREMONY_STATES = frozenset({
     "EXPIRED", "CANCELLED",
 })
 ACTIVE_STATES = frozenset({"REQUESTED", "REQUESTER_APPROVED", "REVIEWER_APPROVED"})
-EXPECTED_RELEASE = {
-    "application_commit": "0f734c3341799b93e8a66397f1a1da782fd3869d",
-    "repository_tree": "42ba7a2e55a88029df2f9af0ea1812696a9d05ea",
-    "image_digest": "sha256:34f610a61e02483b1d30c666d69d94452b27ea71c0feaca162c0e2e2df25d0f6",
-    "environment": "staging",
-    "database_target_identity": "postgresql://sentinel@postgres:5432/sentinel_dna",
-}
 PROVIDER = "sentinel-local-human-mfa-v1"
 CEREMONY_TTL = timedelta(minutes=30)
 APPROVAL_BINDING_FIELDS = frozenset({"ceremony_id", "approval_evidence", "verification_metadata", "artifact_hash"})
@@ -78,13 +72,17 @@ def _session_reference_hash(token: str, ceremony_id: str) -> str:
 
 
 def _release_confirmation(value: Mapping[str, Any]) -> dict[str, str]:
-    expected = set(EXPECTED_RELEASE) | {"authority_id", "control_tenant_id"}
+    try:
+        expected_release = load_release_binding()
+    except Exception as exc:
+        raise LocalTwoHumanCeremonyError("external_release_binding_invalid") from exc
+    expected = set(expected_release) | {"authority_id", "control_tenant_id"}
     if not isinstance(value, Mapping) or set(value) != expected:
         raise LocalTwoHumanCeremonyError("release_confirmation_fields_invalid")
     normalized = {key: str(value[key]) for key in expected}
     if any(not normalized[key] for key in expected):
         raise LocalTwoHumanCeremonyError("release_confirmation_required")
-    if any(normalized[key] != EXPECTED_RELEASE[key] for key in EXPECTED_RELEASE):
+    if any(normalized[key] != expected_release[key] for key in expected_release):
         raise LocalTwoHumanCeremonyError("release_confirmation_mismatch")
     return normalized
 
@@ -288,7 +286,7 @@ class LocalTwoHumanStagingCeremony:
             if not row:
                 raise LocalTwoHumanCeremonyError("ceremony_not_found")
             self._ensure_active(connection, row, now)
-            if any(row[key] != release_confirmation[key] for key in set(EXPECTED_RELEASE) | {"authority_id", "control_tenant_id"}):
+            if any(row[key] != release_confirmation[key] for key in {"environment", "database_target_identity", "application_commit", "repository_tree", "image_digest", "authority_id", "control_tenant_id"}):
                 raise LocalTwoHumanCeremonyError("release_confirmation_mismatch")
             if role == "requester":
                 if row["status"] != "REQUESTED" or human.user_id != int(row["requester_user_id"]):
@@ -402,6 +400,16 @@ class LocalTwoHumanStagingCeremony:
             ).fetchall()
             if len(approvals) != 2 or {item["role"] for item in approvals} != {"requester", "reviewer"}:
                 raise LocalTwoHumanCeremonyError("both_approvals_required")
+            external_binding = load_release_binding()
+            current_binding = _release_confirmation({
+                **external_binding,
+                "authority_id": row["authority_id"],
+                "control_tenant_id": row["control_tenant_id"],
+            })
+            expected_release_hash = _release_hash(current_binding)
+            if any(item["release_binding_hash"] != expected_release_hash for item in approvals):
+                raise LocalTwoHumanCeremonyError("release_binding_manifest_mismatch")
+            release_binding_document = load_release_binding_document()
             requester = next(item for item in approvals if item["role"] == "requester")
             reviewer = next(item for item in approvals if item["role"] == "reviewer")
             if finalizer.user_id != int(reviewer["human_user_id"]):
@@ -470,10 +478,12 @@ class LocalTwoHumanStagingCeremony:
                     "verifier": "StagingAuthorityArtifactVerifier",
                     "signature_domain": SIGNATURE_DOMAIN.decode("ascii"),
                     "key_resolver": resolver,
+                    "release_binding_manifest_hash": current_binding["release_binding_manifest_hash"],
                 },
+                "release_binding_manifest": release_binding_document,
             }
             artifact["artifact_integrity_hash"] = _artifact_integrity_hash(
-                artifact["artifact_hash"], artifact["approval_evidence"], artifact["verification_metadata"], ceremony_id
+                artifact["artifact_hash"], artifact["approval_evidence"], artifact["verification_metadata"], artifact["release_binding_manifest"], ceremony_id
             )
             updated = connection.execute(
                 "UPDATE staging_two_human_ceremonies SET status='FINALIZED', artifact_hash=?, finalized_at=? "
@@ -510,11 +520,12 @@ def _release_hash(release: Mapping[str, str]) -> str:
     return hashlib.sha256(json.dumps(dict(sorted(release.items())), separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-def _artifact_integrity_hash(artifact_hash: str, evidence: list[Mapping[str, Any]], metadata: Mapping[str, Any], ceremony_id: str) -> str:
+def _artifact_integrity_hash(artifact_hash: str, evidence: list[Mapping[str, Any]], metadata: Mapping[str, Any], release_binding: Mapping[str, Any], ceremony_id: str) -> str:
     binding = {
         "artifact_hash": artifact_hash,
         "approval_evidence_json": json.dumps(evidence, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
         "verification_metadata_json": json.dumps(metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+        "release_binding_manifest_json": json.dumps(release_binding, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
         "ceremony_id": ceremony_id,
     }
     return _digest(binding, frozenset(binding))
@@ -522,16 +533,31 @@ def _artifact_integrity_hash(artifact_hash: str, evidence: list[Mapping[str, Any
 
 def verify_final_artifact(artifact: Mapping[str, Any]) -> dict[str, Any]:
     """Offline verification adapter for a finalized artifact."""
-    required = {"ceremony_id", "payload", "manifest", "envelope", "artifact_hash", "approval_evidence", "verification_metadata", "artifact_integrity_hash"}
+    required = {"ceremony_id", "payload", "manifest", "envelope", "artifact_hash", "approval_evidence", "verification_metadata", "artifact_integrity_hash", "release_binding_manifest"}
     if set(artifact) != required:
         raise StagingAuthorityVerificationError("final_artifact_fields_invalid")
     envelope = artifact["envelope"]
     manifest = artifact["manifest"]
     payload = artifact["payload"]
+    release_binding = artifact["release_binding_manifest"]
+    expected_release = {
+        "commit": payload["application_commit"], "tree": payload["repository_tree"],
+        "image_digest": payload["image_digest"], "environment": payload["environment"],
+        "database_target_identity": payload["database_target_identity"],
+        "manifest_hash": artifact["verification_metadata"].get("release_binding_manifest_hash"),
+    }
+    if any(release_binding.get(key) != value for key, value in expected_release.items()):
+        raise StagingAuthorityVerificationError("final_artifact_release_binding_mismatch")
+    if not isinstance(release_binding.get("manifest_hash"), str) or len(release_binding["manifest_hash"]) != 64:
+        raise StagingAuthorityVerificationError("final_artifact_release_binding_invalid")
+    try:
+        validate_release_binding(release_binding, require_active=False)
+    except Exception as exc:
+        raise StagingAuthorityVerificationError("final_artifact_release_binding_invalid") from exc
     if artifact["artifact_hash"] != _digest(payload, PAYLOAD_FIELDS):
         raise StagingAuthorityVerificationError("final_artifact_hash_mismatch")
     if artifact["artifact_integrity_hash"] != _artifact_integrity_hash(
-        artifact["artifact_hash"], artifact["approval_evidence"], artifact["verification_metadata"], artifact["ceremony_id"]
+        artifact["artifact_hash"], artifact["approval_evidence"], artifact["verification_metadata"], artifact["release_binding_manifest"], artifact["ceremony_id"]
     ):
         raise StagingAuthorityVerificationError("final_artifact_integrity_hash_mismatch")
     evidence = artifact["approval_evidence"]
@@ -556,7 +582,7 @@ def verify_final_artifact(artifact: Mapping[str, Any]) -> dict[str, Any]:
     return {"verified": True, "artifact_hash": ceremony.artifact_hash, "payload": dict(ceremony.payload)}
 
 
-__all__ = ["EXPECTED_RELEASE", "LocalTwoHumanCeremonyError", "LocalTwoHumanStagingCeremony", "verify_final_artifact"]
+__all__ = ["LocalTwoHumanCeremonyError", "LocalTwoHumanStagingCeremony", "verify_final_artifact"]
 
 
 local_two_human_ceremony_api = Blueprint(

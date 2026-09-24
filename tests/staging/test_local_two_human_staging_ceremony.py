@@ -19,12 +19,39 @@ from database.migrations.registry import (
 )
 from services.audit.service import AuditService
 from services.auth.local_two_human_staging_ceremony import (
-    EXPECTED_RELEASE,
     LocalTwoHumanCeremonyError,
     LocalTwoHumanStagingCeremony,
     verify_final_artifact,
 )
 from services.auth.staging_authority_enrollment import PAYLOAD_FIELDS, SIGNATURE_DOMAIN, _canonical
+from services.auth.staging_release_binding import load_release_binding
+
+
+def _install_release_binding(tmp_path, monkeypatch):
+    manifest = {
+        "schema_version": "sentinel-dna-staging-release-binding-v1",
+        "release_id": "test-release",
+        "environment": "staging",
+        "repository": "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA.git",
+        "commit": "0f734c3341799b93e8a66397f1a1da782fd3869d",
+        "tree": "42ba7a2e55a88029df2f9af0ea1812696a9d05ea",
+        "image_repository": "staging-app",
+        "image_digest": "sha256:" + "1" * 64,
+        "database_target_identity": "postgresql://sentinel@postgres:5432/sentinel_dna",
+        "created_at": "2026-09-24T00:00:00Z",
+        "expires_at": "2099-09-24T00:00:00Z",
+    }
+    unsigned = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    manifest["manifest_hash"] = hashlib.sha256(unsigned).hexdigest()
+    manifest_path = tmp_path / "release-binding.json"
+    trust_path = tmp_path / "release-binding-trust.json"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    trust_path.write_text(json.dumps({
+        "schema_version": manifest["schema_version"], "manifest_hash": manifest["manifest_hash"],
+        "commit": manifest["commit"], "tree": manifest["tree"], "image_digest": manifest["image_digest"],
+    }, sort_keys=True), encoding="utf-8")
+    monkeypatch.setenv("SENTINEL_DNA_RELEASE_BINDING_MANIFEST_FILE", str(manifest_path))
+    monkeypatch.setenv("SENTINEL_DNA_RELEASE_BINDING_TRUST_FILE", str(trust_path))
 
 
 def _raw_public(key):
@@ -52,7 +79,7 @@ def _user(user_id, actor_id, tenant_id="control-tenant"):
 
 
 def _release(authority="authority-demo", tenant="control-tenant"):
-    return dict(EXPECTED_RELEASE, authority_id=authority, control_tenant_id=tenant)
+    return dict(load_release_binding(), authority_id=authority, control_tenant_id=tenant)
 
 
 def _session(user_id, token, tenant_id="control-tenant"):
@@ -65,6 +92,7 @@ def _session(user_id, token, tenant_id="control-tenant"):
 @pytest.fixture
 def ceremony_fixture(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    _install_release_binding(tmp_path, monkeypatch)
     monkeypatch.setenv("SENTINEL_DNA_DATABASE_TARGET_CLASSIFICATION", "disposable_staging")
     db = DatabaseConnection(tmp_path / "ceremony.sqlite")
     MigrationRunner(db).run()
@@ -121,7 +149,7 @@ def test_two_distinct_mfa_sessions_finalize_to_offline_artifact(ceremony_fixture
     service.approve(created["ceremony_id"], "reviewer", _session(2, "session-b"), _release(), **reviewer)
     artifact = service.finalize(created["ceremony_id"], _session(2, "session-b"))
     assert verify_final_artifact(artifact)["verified"] is True
-    assert artifact["payload"]["application_commit"] == EXPECTED_RELEASE["application_commit"]
+    assert artifact["payload"]["application_commit"] == load_release_binding()["application_commit"]
     with pytest.raises(LocalTwoHumanCeremonyError, match="duplicate_finalization"):
         service.finalize(created["ceremony_id"], _session(2, "session-b"))
     tampered = dict(artifact, payload=dict(artifact["payload"], image_digest="sha256:" + "0" * 64))
