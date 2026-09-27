@@ -10,6 +10,7 @@ from deployment.aws.b3_disposable_integration.disposable_provider_config import 
     config_from_mapping,
 )
 from deployment.aws.b3_disposable_integration.safety import SafetyError
+from deployment.aws.b3_disposable_integration.build_disposable_package import SOURCE_FILES
 
 
 def provider_values() -> dict[str, str]:
@@ -79,3 +80,35 @@ def test_deterministic_package_and_provenance(tmp_path: Path) -> None:
     second = build_package(source_root, zip_two, manifest_two, "source-revision-1", config)
     assert zip_one.read_bytes() == zip_two.read_bytes()
     assert first == second
+
+
+def test_committed_disposable_provider_source_is_buildable(tmp_path: Path) -> None:
+    source_root = Path("deployment/aws/b3_disposable_integration/provider_source")
+    source_hashes = validate_source(source_root)
+    assert tuple(source_hashes) == SOURCE_FILES
+    config = config_from_mapping(provider_values())
+    manifest = build_package(
+        source_root,
+        tmp_path / "provider.zip",
+        tmp_path / "provider-manifest.json",
+        "offline-test-revision",
+        config,
+    )
+    assert manifest["source_revision"] == "offline-test-revision"
+    assert manifest["configuration_contract"]["contract"] == "sentinel-dna-b3-disposable-provider-v1"
+
+
+def test_disposable_runtime_contract_is_explicit() -> None:
+    config = config_from_mapping(provider_values())
+    runtime = config.environment_variables()
+    assert runtime["SENTINEL_DNA_DISPOSABLE_PROVIDER"] == "sentinel-dna-b3-disposable-provider-v1"
+    assert runtime["SENTINEL_DNA_DISPOSABLE_AWS_ACCOUNT_ID"] == "123456789012"
+    assert runtime["SENTINEL_DNA_DISPOSABLE_TABLE_NAME"] == config.table_name
+    assert runtime["SENTINEL_DNA_DISPOSABLE_EVIDENCE_BUCKET"] == config.evidence_bucket
+    assert runtime["SENTINEL_DNA_DISPOSABLE_KMS_KEY_ARN"] == config.kms_key_arn
+
+
+def test_disposable_provider_preserves_contract_operations() -> None:
+    source = Path("deployment/aws/b3_disposable_integration/provider_source/services/auth/custody_provider_boundary.py").read_text(encoding="utf-8")
+    for operation in ("RESERVE", "RECONCILE", "INSPECT", "VERIFY", "CONSUME", "ABORT"):
+        assert operation in source

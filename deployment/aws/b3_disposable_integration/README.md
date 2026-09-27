@@ -30,15 +30,15 @@ versioned/Object-Lock-enabled S3 bucket with 30-day GOVERNANCE retention, and
 an ECC P-256 KMS signing key plus unique alias. IAM/provider resources are not
 created by default.
 
-The reviewed provider implementation is hard-pinned to the existing Trust
-table, bucket, KMS key, and B3 environment. The disposable provider contract
-is therefore a separate, identifiable configuration (`sentinel-dna-b3-
-disposable-provider-v1`) and the deterministic builder rejects source that
-contains Trust identifiers. The current Trust-pinned source is intentionally
-rejected; a separately reviewed parameterized provider source is required
-before a disposable Lambda package can be built or deployed. The live provider
-boundary is reported as `PENDING_REVIEWED_DISPOSABLE_PROVIDER_BUILD` in that
-state.
+The production Trust provider remains unchanged and hard-pinned to its own
+scope. The disposable path is a separate five-file source tree under
+`provider_source/`, selected only by the explicit
+`sentinel-dna-b3-disposable-provider-v1` contract. Its table, bucket, KMS ARN,
+region, and environment are supplied through the disposable configuration
+contract; missing or Trust-scoped values fail closed. The deterministic
+builder rejects Trust identifiers and emits the same five-file Lambda package
+shape used by the reviewed packaging contract. The resulting ZIP is a local
+artifact only and is not deployed by this source change.
 
 ## Evidence and cleanup
 
@@ -75,3 +75,10 @@ requires the exact five provider source files, rejects all known Trust account,
 resource, and key identifiers, writes a deterministic ZIP, and emits a
 source-revision/package/configuration manifest. ZIP and runtime evidence remain
 uncommitted artifacts.
+
+The disposable provider source preserves `RESERVE`, `RECONCILE`, `INSPECT`,
+`VERIFY`, `CONSUME`, and `ABORT`, together with binding normalization,
+conditional replay protection, idempotent consume handling, KMS integrity
+checks, S3 Object Lock evidence, and fail-closed configuration. Production
+environment names do not enable this source: the disposable marker and all
+resource settings must be present before client construction.

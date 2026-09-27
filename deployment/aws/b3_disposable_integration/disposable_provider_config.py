@@ -52,6 +52,13 @@ class DisposableProviderConfig:
 
     def environment_variables(self) -> dict[str, str]:
         return {
+            "SENTINEL_DNA_DISPOSABLE_PROVIDER": DISPOSABLE_PROVIDER_CONTRACT,
+            "SENTINEL_DNA_DISPOSABLE_AWS_ACCOUNT_ID": self.account_id,
+            "SENTINEL_DNA_DISPOSABLE_AWS_REGION": self.region,
+            "SENTINEL_DNA_DISPOSABLE_PROVIDER_ENVIRONMENT": self.environment,
+            "SENTINEL_DNA_DISPOSABLE_TABLE_NAME": self.table_name,
+            "SENTINEL_DNA_DISPOSABLE_EVIDENCE_BUCKET": self.evidence_bucket,
+            "SENTINEL_DNA_DISPOSABLE_KMS_KEY_ARN": self.kms_key_arn,
             "AWS_REGION": self.region,
             "SENTINEL_DNA_ENV": self.environment,
             "SENTINEL_DNA_EXTERNAL_REPLAY_PROVIDER": "AWS_DYNAMODB_S3_PROVIDER_BOUNDARY",
@@ -91,4 +98,3 @@ def config_from_mapping(values: Mapping[str, str]) -> DisposableProviderConfig:
     if missing:
         raise SafetyError("missing disposable provider configuration: " + ", ".join(missing))
     return DisposableProviderConfig(**{field: values[env_name].strip() for field, env_name in required.items()})
-
