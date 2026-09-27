@@ -31,11 +31,14 @@ an ECC P-256 KMS signing key plus unique alias. IAM/provider resources are not
 created by default.
 
 The reviewed provider implementation is hard-pinned to the existing Trust
-table, bucket, KMS key, and B3 environment. Consequently this repository does
-not permit a safe disposable Lambda deployment without a separately reviewed
-disposable-provider build/configuration. The live provider boundary is
-therefore reported as `PENDING_REVIEWED_DISPOSABLE_PROVIDER_BUILD`; no live
-custody test is claimed or run by this harness in that state.
+table, bucket, KMS key, and B3 environment. The disposable provider contract
+is therefore a separate, identifiable configuration (`sentinel-dna-b3-
+disposable-provider-v1`) and the deterministic builder rejects source that
+contains Trust identifiers. The current Trust-pinned source is intentionally
+rejected; a separately reviewed parameterized provider source is required
+before a disposable Lambda package can be built or deployed. The live provider
+boundary is reported as `PENDING_REVIEWED_DISPOSABLE_PROVIDER_BUILD` in that
+state.
 
 ## Evidence and cleanup
 
@@ -64,3 +67,11 @@ No generated AWS artifacts are committed. This harness does not close Gate 5,
 does not claim independent authority validation, and does not claim a live AWS
 custody lifecycle passed.
 
+## Disposable provider build contract
+
+The future package must be built with explicit values for account, region,
+environment, table, bucket, KMS key, function name, and role name. The builder
+requires the exact five provider source files, rejects all known Trust account,
+resource, and key identifiers, writes a deterministic ZIP, and emits a
+source-revision/package/configuration manifest. ZIP and runtime evidence remain
+uncommitted artifacts.
