@@ -23,7 +23,7 @@ LABEL org.opencontainers.image.revision="${VCS_REF_FULL}" \
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SENTINEL_DNA_ENV=__RUNTIME_ENV_REQUIRED__
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 180 --retries 8 -r requirements.txt
 COPY . .
 RUN useradd --create-home --uid 10001 sentinel && mkdir -p /var/lib/sentinel && chown -R sentinel:sentinel /app /var/lib/sentinel
 USER sentinel
