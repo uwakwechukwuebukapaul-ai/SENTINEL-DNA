@@ -53,6 +53,29 @@ def test_manifest_is_deterministic_and_excludes_its_output(tmp_path: Path, clean
     assert first["image"]["digest"] is None
 
 
+def test_manifest_supports_local_detached_checkout(
+    tmp_path: Path, clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    subprocess.run(
+        ["git", "checkout", "--detach", "HEAD"],
+        cwd=clean_repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    manifest = build_manifest(repository_root=clean_repository)
+    manifest_path = tmp_path / "detached-release-manifest.json"
+    write_manifest(manifest, output=manifest_path, repository_root=clean_repository)
+    verify_manifest(manifest_path=manifest_path, repository_root=clean_repository)
+
+    assert manifest["repository"]["release_sha"] == subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True
+    ).strip()
+    assert manifest["repository"]["branch"] == ""
+
+
 def test_manifest_rejects_dirty_worktree(clean_repository: Path) -> None:
     tracked_file = clean_repository / "Dockerfile"
     tracked_file.write_text(tracked_file.read_text(encoding="utf-8") + "\n", encoding="utf-8")

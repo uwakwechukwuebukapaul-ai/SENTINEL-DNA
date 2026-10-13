@@ -355,7 +355,10 @@ def build_manifest(
     _assert_clean_worktree(root)
 
     branch = repository_branch(root, selected_sha)
-    if not branch:
+    # Local validation may run from an intentionally detached checkout. The
+    # release SHA and tree remain bound to HEAD; CI still requires a branch
+    # established by the protected workflow identity contract.
+    if not branch and os.environ.get("GITHUB_ACTIONS") == "true":
         raise ReleaseManifestError("release branch is unavailable")
     tree_id = _git_text(root, "rev-parse", f"{selected_sha}^{{tree}}")
     files: dict[str, dict[str, str]] = {}
@@ -514,6 +517,8 @@ def verify_manifest(
     if require_current_head:
         _assert_clean_worktree(root)
         current_branch = repository_branch(root, release_sha)
+        if not current_branch and os.environ.get("GITHUB_ACTIONS") == "true":
+            raise ReleaseManifestError("release branch is unavailable")
         if current_branch != repository["branch"]:
             raise ReleaseManifestError("release manifest branch does not match checked-out branch")
 
