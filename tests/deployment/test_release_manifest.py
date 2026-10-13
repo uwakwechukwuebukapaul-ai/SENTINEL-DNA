@@ -53,7 +53,10 @@ def test_manifest_is_deterministic_and_excludes_its_output(tmp_path: Path, clean
     assert first["image"]["digest"] is None
 
 
-def test_manifest_supports_local_detached_checkout(tmp_path: Path, clean_repository: Path) -> None:
+def test_manifest_supports_local_detached_checkout(
+    tmp_path: Path, clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     subprocess.run(
         ["git", "checkout", "--detach", "HEAD"],
         cwd=clean_repository,
