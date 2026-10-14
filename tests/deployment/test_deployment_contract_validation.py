@@ -57,7 +57,8 @@ def _evidence_inputs(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
         repository_root=repository_root,
         image_digest=digest,
         image_id="sha256:image-id",
-        image_created="1970-01-01T00:00:00Z",
+        image_created=metadata["SENTINEL_DNA_IMAGE_CREATED"],
+        trusted_metadata_path=trusted,
     )
     release_manifest = tmp_path / "release-manifest.json"
     write_manifest(manifest, output=release_manifest, repository_root=repository_root)

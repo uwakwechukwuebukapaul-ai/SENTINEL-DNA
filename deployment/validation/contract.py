@@ -365,8 +365,14 @@ class DeploymentContractValidator:
                 verify_manifest(
                     manifest_path=self.release_manifest,
                     repository_root=self.repository_root,
+                    require_image=True,
                     expected_release_sha=values.get("SENTINEL_DNA_IMAGE_REVISION_FULL") or None,
                     expected_image_digest=values.get("SENTINEL_DNA_IMAGE_DIGEST") or None,
+                    expected_image_created=values.get("SENTINEL_DNA_IMAGE_CREATED") or None,
+                    trusted_metadata_path=Path(values["SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"])
+                    if values.get("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE")
+                    else None,
+                    require_trusted_metadata=True,
                 )
                 checks["release_manifest_verified"] = True
             except (ReleaseManifestError, OSError, ValueError):

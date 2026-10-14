@@ -578,15 +578,27 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
         assert {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}.issubset(_step(workflow, name)["env"])
 
     metadata = _step(workflow, "Prepare candidate-bound trusted release metadata")
-    assert "prepare_trusted_release_metadata.py" in _step_text(metadata)
-    assert "PUBLISHED_IMAGE_DIGEST" in _step_text(metadata)
-    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in _step_text(metadata)
+    metadata_text = _step_text(metadata)
+    assert "prepare_trusted_release_metadata.py" in metadata_text
+    assert "PUBLISHED_IMAGE_DIGEST" in metadata_text
+    assert '--expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"' in metadata_text
+    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in metadata_text
     manifest = _step(workflow, "Generate image-bound release manifest")
-    assert "PUBLISHED_IMAGE_DIGEST" in _step_text(manifest)
-    assert "PUBLISHED_IMAGE_ID" in _step_text(manifest)
-    assert "SENTINEL_DNA_IMAGE_CREATED" in _step_text(manifest)
+    manifest_text = _step_text(manifest)
+    assert "PUBLISHED_IMAGE_DIGEST" in manifest_text
+    assert "PUBLISHED_IMAGE_ID" in manifest_text
+    assert "SENTINEL_DNA_IMAGE_CREATED" in manifest_text
+    assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in manifest_text
+    published = _step(workflow, "Publish immutable candidate image to private GHCR")
+    assert 'os.environ["OCI_CREATED"] != os.environ["SENTINEL_DNA_IMAGE_CREATED"]' in _step_text(published)
     verify_manifest = _step(workflow, "Verify image-bound release manifest")
-    assert "--require-image" in _step_text(verify_manifest)
+    verify_text = _step_text(verify_manifest)
+    assert "--require-image" in verify_text
+    assert "--require-trusted-metadata" in verify_text
+    assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in verify_text
+    assert '--expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"' in verify_text
+    assert '--expected-image-digest "$PUBLISHED_IMAGE_DIGEST"' in verify_text
+    assert '--expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"' in verify_text
     upload = _step(workflow, "Upload non-secret image release evidence")
     assert "sentinel-dna-image-provenance.json" in upload["with"]["path"]
     assert "sentinel-dna-release-manifest-image-bound.json" in upload["with"]["path"]
