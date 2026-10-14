@@ -199,6 +199,12 @@ app.config["PILOT_ACCESS_REQUIRED"] = (
     os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"
 )
 
+# Preserve the local-development migration path, but never enable unverified
+# legacy registration in staging or production.
+app.config["AUTH_LEGACY_JSON_COMPAT"] = os.getenv(
+    "SENTINEL_DNA_ENV", os.getenv("FLASK_ENV", "development")
+).strip().lower() in {"development", "testing", "test"}
+
 app.config["OBSERVABILITY"] = ObservabilityService()
 
 app.config["HUNT_DB_PATH"] = str(DB_PATH)
