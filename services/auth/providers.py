@@ -56,6 +56,7 @@ class SMTPEmailProvider(EmailProvider):
             + str(code)
             + "\n\nIf you did not request this code, you can ignore this message."
         )
+        refused = {}
         try:
             if self.security == "ssl":
                 with smtplib.SMTP_SSL(
@@ -64,7 +65,7 @@ class SMTPEmailProvider(EmailProvider):
                 ) as client:
                     if self.username:
                         client.login(self.username, self.password)
-                    client.send_message(message)
+                    refused = client.send_message(message)
             else:
                 with smtplib.SMTP(self.host, self.port, timeout=10) as client:
                     client.ehlo()
@@ -72,10 +73,12 @@ class SMTPEmailProvider(EmailProvider):
                     client.ehlo()
                     if self.username:
                         client.login(self.username, self.password)
-                    client.send_message(message)
+                    refused = client.send_message(message)
         except Exception:
             # Never include the destination, OTP, credentials, or provider
             # response in logs or client-visible error details.
+            return DeliveryResult(False, failure="email_delivery_failed")
+        if refused:
             return DeliveryResult(False, failure="email_delivery_failed")
         return DeliveryResult(True, "smtp-" + secrets.token_hex(8))
 
