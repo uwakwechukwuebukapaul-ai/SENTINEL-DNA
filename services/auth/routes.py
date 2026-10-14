@@ -113,6 +113,7 @@ def register():
             and request.is_json
             and not data.get("date_of_birth")
             and not data.get("phone")
+            and not data.get("email_challenge_id")
         )
         email = str(data.get("email", "")).strip().lower()
         dob = validate_minimum_age(data.get("date_of_birth")) if data.get("date_of_birth") else None
