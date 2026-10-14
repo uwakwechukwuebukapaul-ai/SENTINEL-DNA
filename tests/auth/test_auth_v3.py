@@ -84,7 +84,6 @@ def test_v3_registration_rejects_unverified_or_cross_session_email(app):
             "email": "unverified@example.test",
             "password": PASSWORD,
             "email_challenge_id": challenge,
-            "date_of_birth": "2000-01-02",
         },
         headers={"X-CSRF-Token": csrf},
     )
@@ -98,7 +97,6 @@ def test_v3_registration_rejects_unverified_or_cross_session_email(app):
             "email": "unverified@example.test",
             "password": PASSWORD,
             "email_challenge_id": challenge,
-            "date_of_birth": "2000-01-02",
         },
         headers={"X-CSRF-Token": other_csrf},
     )
