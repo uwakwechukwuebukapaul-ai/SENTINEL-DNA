@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import create_app
-from services.auth.providers import TestEmailProvider, TestSMSProvider, email_provider, sms_provider
+from services.auth.providers import SMTPEmailProvider, TestEmailProvider, TestSMSProvider, email_provider, sms_provider
 from services.auth.oauth import GoogleOIDC
 from services.auth.oauth import GoogleClaims
 from services.auth.rate_limit import RedisRateLimitBackend
@@ -126,6 +126,61 @@ def test_v3_email_otp_authentication_and_replay_protection(app):
 def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):
         GoogleOIDC("client", random_secret(), "http://127.0.0.1/callback").complete("code", "attacker-state", "expected-state", "nonce", "nonce")
+
+def test_v3_smtp_email_provider_uses_tls_and_sends_code_without_logging(monkeypatch):
+    from email.message import EmailMessage
+
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["connection"] = (host, port, timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def ehlo(self):
+            sent["ehlo"] = True
+
+        def starttls(self, context):
+            sent["tls"] = context is not None
+
+        def login(self, username, password):
+            sent["login"] = (username, password)
+
+        def send_message(self, message):
+            sent["message"] = message
+
+    monkeypatch.setattr("services.auth.providers.smtplib.SMTP", FakeSMTP)
+    provider = SMTPEmailProvider(
+        host="smtp.example.test",
+        port=587,
+        from_address="sentinel@example.test",
+        username="smtp-user",
+        password="not-a-real-secret",
+    )
+    result = provider.send_code("analyst@example.test", "123456", "registration_email")
+
+    assert result.accepted is True
+    assert result.provider_request_id.startswith("smtp-")
+    assert sent["connection"] == ("smtp.example.test", 587, 10)
+    assert sent["tls"] is True
+    assert sent["login"] == ("smtp-user", "not-a-real-secret")
+    assert isinstance(sent["message"], EmailMessage)
+    assert "123456" in sent["message"].get_content()
+
+
+def test_v3_staging_email_provider_requires_explicit_smtp_configuration(monkeypatch):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_PROVIDER", "smtp")
+    monkeypatch.delenv("SENTINEL_DNA_SMTP_HOST", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_EMAIL_FROM", raising=False)
+    with pytest.raises(RuntimeError, match="email_provider_not_configured"):
+        email_provider()
+
 
 def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
