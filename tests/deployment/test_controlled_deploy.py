@@ -472,6 +472,38 @@ def test_adapter_validates_release_metadata_and_compose_without_deploying(tmp_pa
     assert "COMPOSE_PROJECT_NAME" not in adapter.runner.last_env
 
 
+def test_adapter_manifest_validation_binds_authorized_metadata_and_timestamp(tmp_path):
+    adapter, _, metadata_file = _fixture(tmp_path)
+    evidence = adapter.validate()
+    assert evidence.release_sha == RELEASE_SHA
+    assert evidence.image_digest == RELEASE_DIGEST
+    assert evidence.oci_created == RELEASE_CREATED
+    assert metadata_file == adapter.metadata_file
+
+
+@pytest.mark.parametrize(
+    ("binding", "value", "error"),
+    (
+        ("timestamp", "1970-01-01T00:00:01Z", "release_manifest_invalid"),
+        ("metadata_sha", "0" * 40, "configuration_invalid"),
+        ("metadata_digest", "sha256:" + "0" * 64, "configuration_invalid"),
+    ),
+)
+def test_adapter_manifest_validation_rejects_untrusted_bindings(tmp_path, binding, value, error):
+    metadata = None
+    if binding != "timestamp":
+        metadata = {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}
+        metadata["release_sha" if binding == "metadata_sha" else "image_digest"] = value
+    adapter, env_file, _ = _fixture(tmp_path, metadata=metadata)
+    if binding == "timestamp":
+        env_file.write_text(
+            env_file.read_text(encoding="utf-8").replace(RELEASE_CREATED, value),
+            encoding="utf-8",
+        )
+    with pytest.raises(ControlledDeploymentError, match=error):
+        adapter.validate()
+
+
 @pytest.mark.parametrize(
     ("metadata", "error"),
     (

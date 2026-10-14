@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +14,7 @@ from deployment.scripts.release_manifest import (
     RELEASE_FILE_SET,
     SCHEMA_VERSION,
     ReleaseManifestError,
+    _assert_regular_nonreparse,
     build_manifest,
     verify_manifest,
     write_manifest,
@@ -48,6 +52,8 @@ def test_manifest_is_deterministic_and_excludes_its_output(tmp_path: Path, clean
     assert first == second
     assert first["schema_version"] == SCHEMA_VERSION
     assert tuple(first["files"]) == RELEASE_FILE_SET
+    assert "deployment/scripts/validate_deployment_contract.py" in RELEASE_FILE_SET
+    assert "deployment/validation/contract.py" in RELEASE_FILE_SET
     assert "deployment/release-manifest.json" not in first["files"]
     assert first["manifest_policy"]["self_hash"] == "excluded"
     assert first["image"]["digest"] is None
@@ -109,6 +115,175 @@ def test_manifest_rejects_output_inside_repository(clean_repository: Path) -> No
         )
 
 
+def test_manifest_verification_rejects_symlink_path(tmp_path: Path, clean_repository: Path) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    target_path = tmp_path / "valid-release-manifest.json"
+    write_manifest(manifest, output=target_path, repository_root=clean_repository)
+    link_path = tmp_path / "release-manifest-link.json"
+    try:
+        link_path.symlink_to(target_path)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ReleaseManifestError, match="release manifest must not be a symlink or reparse point"):
+        verify_manifest(manifest_path=link_path, repository_root=clean_repository)
+
+
+def test_manifest_verification_rejects_intermediate_symlink(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    target_directory = tmp_path / "manifest-target"
+    target_directory.mkdir()
+    target_path = target_directory / "manifest.json"
+    write_manifest(manifest, output=target_path, repository_root=clean_repository)
+    link_directory = tmp_path / "manifest-link-directory"
+    try:
+        link_directory.symlink_to(target_directory, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ReleaseManifestError, match="release manifest must not be a symlink or reparse point"):
+        verify_manifest(manifest_path=link_directory / target_path.name, repository_root=clean_repository)
+
+
+def test_manifest_verification_checks_reparse_point_before_resolving(
+    tmp_path: Path, clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    component_path = tmp_path / "manifest-reparse-directory"
+    manifest_path = component_path / "manifest.json"
+    fake_stat = SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_file_attributes=0x400)
+    original_lstat = Path.lstat
+    original_resolve = Path.resolve
+
+    def lstat(path: Path):
+        if path == component_path:
+            return fake_stat
+        return original_lstat(path)
+
+    def resolve(path: Path, *args, **kwargs):
+        if path == manifest_path:
+            raise AssertionError("manifest path was resolved before component validation")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ReleaseManifestError, match="release manifest must not be a symlink or reparse point"):
+        verify_manifest(manifest_path=manifest_path, repository_root=clean_repository)
+
+
+def test_manifest_writer_rejects_symlink_output(tmp_path: Path, clean_repository: Path) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    target_path = tmp_path / "manifest-target.json"
+    link_path = tmp_path / "release-manifest-link.json"
+    try:
+        link_path.symlink_to(target_path)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ReleaseManifestError, match="manifest output must not be a symlink or reparse point"):
+        write_manifest(manifest, output=link_path, repository_root=clean_repository)
+    assert not target_path.exists()
+
+
+def test_manifest_writer_rejects_intermediate_symlink(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    target_directory = tmp_path / "output-target"
+    target_directory.mkdir()
+    link_directory = tmp_path / "output-link-directory"
+    try:
+        link_directory.symlink_to(target_directory, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ReleaseManifestError, match="manifest output must not be a symlink or reparse point"):
+        write_manifest(
+            manifest,
+            output=link_directory / "manifest.json",
+            repository_root=clean_repository,
+        )
+    assert not (target_directory / "manifest.json").exists()
+
+
+def test_trusted_metadata_rejects_intermediate_symlink(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    release_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True
+    ).strip()
+    target_directory = tmp_path / "metadata-target"
+    target_directory.mkdir()
+    target_path = target_directory / "metadata.json"
+    target_path.write_text(
+        json.dumps({"release_sha": release_sha, "image_digest": "sha256:" + "a" * 64}),
+        encoding="utf-8",
+    )
+    link_directory = tmp_path / "metadata-link-directory"
+    try:
+        link_directory.symlink_to(target_directory, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ReleaseManifestError, match="trusted release metadata must not be a symlink or reparse point"):
+        build_manifest(
+            repository_root=clean_repository,
+            trusted_metadata_path=link_directory / target_path.name,
+        )
+
+
+def test_trusted_metadata_rejects_intermediate_windows_reparse_component(
+    tmp_path: Path, clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    component_path = tmp_path / "metadata-reparse-directory"
+    metadata_path = component_path / "metadata.json"
+    fake_stat = SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_file_attributes=0x400)
+    original_lstat = Path.lstat
+    original_resolve = Path.resolve
+
+    def lstat(path: Path):
+        if path == component_path:
+            return fake_stat
+        return original_lstat(path)
+
+    def resolve(path: Path, *args, **kwargs):
+        if path == metadata_path:
+            raise AssertionError("metadata path was resolved before component validation")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ReleaseManifestError, match="trusted release metadata must not be a symlink or reparse point"):
+        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+
+
+def test_manifest_writer_checks_reparse_output_before_resolving(
+    tmp_path: Path, clean_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    component_path = tmp_path / "manifest-reparse-directory"
+    output = component_path / "manifest.json"
+    fake_stat = SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_file_attributes=0x400)
+    original_lstat = Path.lstat
+    original_resolve = Path.resolve
+
+    def lstat(path: Path):
+        if path == component_path:
+            return fake_stat
+        return original_lstat(path)
+
+    def resolve(path: Path, *args, **kwargs):
+        if path == output:
+            raise AssertionError("output path was resolved before component validation")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ReleaseManifestError, match="manifest output must not be a symlink or reparse point"):
+        write_manifest(manifest, output=output, repository_root=clean_repository)
+
+
 def test_manifest_rejects_tampered_hash(tmp_path: Path, clean_repository: Path) -> None:
     manifest = build_manifest(repository_root=clean_repository)
     manifest_path = tmp_path / "sentinel-dna-release-manifest.json"
@@ -128,6 +303,16 @@ def _write_manifest_for_verification(tmp_path: Path, clean_repository: Path, man
     manifest_path = tmp_path / "sentinel-dna-release-manifest.json"
     write_manifest(manifest, output=manifest_path, repository_root=clean_repository)
     return manifest_path
+
+
+def _trusted_metadata(tmp_path: Path, release_sha: str, digest: str) -> Path:
+    metadata_path = tmp_path / "trusted" / "metadata.json"
+    metadata_path.parent.mkdir(parents=True)
+    metadata_path.write_text(
+        json.dumps({"release_sha": release_sha, "image_digest": digest}) + "\n",
+        encoding="utf-8",
+    )
+    return metadata_path
 
 
 @pytest.mark.parametrize(
@@ -196,6 +381,7 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
         require_image=True,
         expected_release_sha=manifest["repository"]["release_sha"],
         expected_image_digest=digest,
+        expected_image_created="1970-01-01T00:00:00Z",
     )
 
     manifest["image"][secret] = "unexpected"
@@ -208,8 +394,271 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
             require_image=True,
             expected_release_sha=manifest["repository"]["release_sha"],
             expected_image_digest=digest,
+            expected_image_created="1970-01-01T00:00:00Z",
         )
     assert secret not in str(failure.value)
+
+
+def test_image_bound_manifest_binds_trusted_metadata_and_creation_time(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    digest = "sha256:" + "a" * 64
+    created = "1970-01-01T00:00:00Z"
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_reference="deployment-app:current-release",
+        image_digest=digest,
+        image_id="sha256:image-id",
+        image_revision=release_sha,
+        image_created=created,
+        trusted_metadata_path=trusted_metadata,
+    )
+
+    assert manifest["repository"]["release_sha"] == release_sha
+    assert manifest["image"]["digest"] == digest
+    assert manifest["image"]["oci_created"] == created
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+    verify_manifest(
+        manifest_path=manifest_path,
+        repository_root=clean_repository,
+        require_image=True,
+        require_trusted_metadata=True,
+        trusted_metadata_path=trusted_metadata,
+        expected_release_sha=release_sha,
+        expected_image_digest=digest,
+        expected_image_created=created,
+    )
+
+
+@pytest.mark.parametrize(
+    ("metadata_sha", "metadata_digest", "release_sha", "image_digest", "error"),
+    (
+        ("0" * 40, "sha256:" + "a" * 64, None, "sha256:" + "a" * 64, "release SHA must equal the checked-out HEAD"),
+        (None, "sha256:" + "b" * 64, None, "sha256:" + "a" * 64, "image digest does not match trusted release metadata"),
+    ),
+)
+def test_manifest_build_rejects_trusted_metadata_mismatch(
+    tmp_path: Path,
+    clean_repository: Path,
+    metadata_sha: str | None,
+    metadata_digest: str,
+    release_sha: str | None,
+    image_digest: str,
+    error: str,
+) -> None:
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    metadata_path = _trusted_metadata(tmp_path, metadata_sha or head, metadata_digest)
+    with pytest.raises(ReleaseManifestError, match=error):
+        build_manifest(
+            repository_root=clean_repository,
+            release_sha=release_sha or None,
+            image_digest=image_digest,
+            image_id="sha256:image-id",
+            image_created="1970-01-01T00:00:00Z",
+            trusted_metadata_path=metadata_path,
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "error"),
+    (
+        ({"release_sha": "a" * 40}, "trusted release metadata fields are invalid"),
+        ({"release_sha": "a" * 40, "image_digest": "sha256:" + "b" * 64, "extra": True}, "trusted release metadata fields are invalid"),
+        ({"release_sha": "bad", "image_digest": "sha256:" + "b" * 64}, "release SHA must be a 40-character lowercase Git SHA"),
+        ({"release_sha": "a" * 40, "image_digest": "bad"}, "image digest must be a full lowercase sha256 digest"),
+    ),
+)
+def test_trusted_metadata_requires_exact_fields_and_valid_values(
+    tmp_path: Path, clean_repository: Path, payload: dict, error: str
+) -> None:
+    metadata_path = tmp_path / "trusted-metadata.json"
+    metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ReleaseManifestError, match=error):
+        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+
+
+def test_trusted_metadata_rejects_malformed_json(tmp_path: Path, clean_repository: Path) -> None:
+    metadata_path = tmp_path / "trusted-metadata.json"
+    metadata_path.write_text('{"release_sha":', encoding="utf-8")
+    with pytest.raises(ReleaseManifestError, match="trusted release metadata is not valid JSON"):
+        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        '{"release_sha":"' + "a" * 40 + '","release_sha":"' + "b" * 40 + '","image_digest":"sha256:' + "c" * 64 + '"}',
+        '{"release_sha":"' + "a" * 40 + '","image_digest":"sha256:' + "c" * 64 + '","image_digest":"sha256:' + "d" * 64 + '"}',
+        '{"release_sha":"' + "a" * 40 + '","image_digest":"sha256:' + "c" * 64 + '","extra":"private-marker","extra":"second"}',
+        '{"release_sha":"' + "a" * 40 + '","image_digest":"sha256:' + "c" * 64 + '","extra":{"key":"one","key":"private-marker"}}',
+    ),
+)
+def test_trusted_metadata_rejects_duplicate_keys_without_echoing_input(
+    tmp_path: Path, clean_repository: Path, payload: str
+) -> None:
+    metadata_path = tmp_path / "trusted-metadata-duplicate.json"
+    metadata_path.write_text(payload, encoding="utf-8")
+    with pytest.raises(ReleaseManifestError, match="trusted release metadata is not valid JSON") as failure:
+        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+    assert "private-marker" not in str(failure.value)
+
+
+def test_trusted_metadata_must_be_outside_repository(tmp_path: Path, clean_repository: Path) -> None:
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    metadata_path = _trusted_metadata(tmp_path, head, "sha256:" + "a" * 64)
+    in_repository = clean_repository / "trusted-metadata.json"
+    in_repository.write_bytes(metadata_path.read_bytes())
+    with pytest.raises(ReleaseManifestError, match="outside the repository"):
+        build_manifest(repository_root=clean_repository, trusted_metadata_path=in_repository)
+
+
+def test_trusted_metadata_rejects_symlink(tmp_path: Path, clean_repository: Path) -> None:
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    metadata_path = _trusted_metadata(tmp_path, head, "sha256:" + "a" * 64)
+    link_path = tmp_path / "trusted-metadata-link.json"
+    try:
+        link_path.symlink_to(metadata_path)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+    with pytest.raises(ReleaseManifestError, match="symlink or reparse point"):
+        build_manifest(repository_root=clean_repository, trusted_metadata_path=link_path)
+
+
+def test_trusted_metadata_rejects_windows_reparse_attribute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    metadata_path = tmp_path / "trusted-metadata.json"
+    metadata_path.write_text("{}", encoding="utf-8")
+    fake_stat = SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_file_attributes=0x400)
+    monkeypatch.setattr(Path, "lstat", lambda _path: fake_stat)
+    with pytest.raises(ReleaseManifestError, match="symlink or reparse point"):
+        _assert_regular_nonreparse(metadata_path, "trusted release metadata")
+
+
+def test_image_bound_certification_requires_trusted_metadata(tmp_path: Path, clean_repository: Path) -> None:
+    digest = "sha256:" + "a" * 64
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_digest=digest,
+        image_id="sha256:image-id",
+        image_created="1970-01-01T00:00:00Z",
+    )
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+    with pytest.raises(ReleaseManifestError, match="trusted release metadata is required"):
+        verify_manifest(
+            manifest_path=manifest_path,
+            repository_root=clean_repository,
+            require_image=True,
+            expected_release_sha=manifest["repository"]["release_sha"],
+            expected_image_digest=digest,
+            expected_image_created="1970-01-01T00:00:00Z",
+            require_trusted_metadata=True,
+        )
+
+
+def test_image_bound_certification_requires_expected_creation_timestamp(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    digest = "sha256:" + "a" * 64
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_digest=digest,
+        image_id="sha256:image-id",
+        image_created="1970-01-01T00:00:00Z",
+        trusted_metadata_path=trusted_metadata,
+    )
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+    with pytest.raises(ReleaseManifestError, match="expected image creation timestamp is required"):
+        verify_manifest(
+            manifest_path=manifest_path,
+            repository_root=clean_repository,
+            require_image=True,
+            require_trusted_metadata=True,
+            trusted_metadata_path=trusted_metadata,
+            expected_release_sha=release_sha,
+            expected_image_digest=digest,
+        )
+
+
+@pytest.mark.parametrize(
+    ("metadata_sha", "metadata_digest", "expected_sha", "expected_digest", "expected_created", "error"),
+    (
+        ("0" * 40, "sha256:" + "a" * 64, None, "sha256:" + "a" * 64, "1970-01-01T00:00:00Z", "release manifest SHA does not match trusted release metadata"),
+        (None, "sha256:" + "b" * 64, None, "sha256:" + "a" * 64, "1970-01-01T00:00:00Z", "release manifest image digest does not match trusted release metadata"),
+        (None, "sha256:" + "a" * 64, None, "sha256:" + "b" * 64, "1970-01-01T00:00:00Z", "release manifest image digest does not match requested digest"),
+        (None, "sha256:" + "a" * 64, "0" * 40, "sha256:" + "a" * 64, "1970-01-01T00:00:00Z", "release manifest SHA does not match requested release"),
+        (None, "sha256:" + "a" * 64, None, "sha256:" + "a" * 64, "1970-01-01T00:00:01Z", "release manifest image creation timestamp does not match requested timestamp"),
+    ),
+)
+def test_image_bound_certification_rejects_metadata_and_identity_mismatches(
+    tmp_path: Path,
+    clean_repository: Path,
+    metadata_sha: str | None,
+    metadata_digest: str,
+    expected_sha: str | None,
+    expected_digest: str,
+    expected_created: str,
+    error: str,
+) -> None:
+    digest = "sha256:" + "a" * 64
+    created = "1970-01-01T00:00:00Z"
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    trusted_metadata = _trusted_metadata(tmp_path, metadata_sha or release_sha, metadata_digest)
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_digest=digest,
+        image_id="sha256:image-id",
+        image_created=created,
+        trusted_metadata_path=_trusted_metadata(tmp_path / "build", release_sha, digest),
+    )
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    with pytest.raises(ReleaseManifestError, match=error):
+        verify_manifest(
+            manifest_path=manifest_path,
+            repository_root=clean_repository,
+            require_image=True,
+            require_trusted_metadata=True,
+            trusted_metadata_path=trusted_metadata,
+            expected_release_sha=expected_sha or release_sha,
+            expected_image_digest=expected_digest,
+            expected_image_created=expected_created,
+        )
+
+
+def test_image_bound_manifest_cli_passes_trusted_metadata_and_timestamp(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    digest = "sha256:" + "a" * 64
+    created = "1970-01-01T00:00:00Z"
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    manifest_path = tmp_path / "cli-release-manifest.json"
+    script = REPOSITORY_ROOT / "deployment" / "scripts" / "release_manifest.py"
+    subprocess.run(
+        [
+            sys.executable, str(script), "build", "--repository-root", str(clean_repository),
+            "--output", str(manifest_path), "--image-digest", digest, "--image-id", "sha256:image-id",
+            "--image-revision", release_sha, "--image-created", created,
+            "--trusted-metadata", str(trusted_metadata),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            sys.executable, str(script), "verify", "--repository-root", str(clean_repository),
+            "--manifest", str(manifest_path), "--require-image", "--require-trusted-metadata",
+            "--trusted-metadata", str(trusted_metadata), "--expected-release-sha", release_sha,
+            "--expected-image-digest", digest, "--expected-image-created", created,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_image_bound_manifest_requires_creation_timestamp(clean_repository: Path) -> None:
