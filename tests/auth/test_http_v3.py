@@ -14,7 +14,12 @@ def test_canonical_wsgi_http_v3_journey(tmp_path, monkeypatch):
         client = requests.Session(); base = "http://127.0.0.1:5000"
         password = random_password()
         assert client.get(base + "/login").status_code == 200
-        assert client.get(base + "/signup").status_code == 200
+        signup_page = client.get(base + "/signup")
+        assert signup_page.status_code == 200
+        assert "Send email code" in signup_page.text
+        assert "/api/auth/email/verify-registration-code" in signup_page.text
+        assert "/api/auth/register" in signup_page.text
+        assert "phone" not in signup_page.text.lower()
         csrf = client.get(base + "/api/auth/csrf").json()["csrf_token"]
         email_request = client.post(base + "/api/auth/email/send-registration-code", json={"email":"http-v3@example.test"}, headers={"X-CSRF-Token":csrf}); assert email_request.status_code == 202
         email_challenge = email_request.json()["challenge_id"]
