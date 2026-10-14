@@ -490,16 +490,16 @@ def test_adapter_manifest_validation_binds_authorized_metadata_and_timestamp(tmp
     ),
 )
 def test_adapter_manifest_validation_rejects_untrusted_bindings(tmp_path, binding, value, error):
-    adapter, env_file, metadata_file = _fixture(tmp_path)
+    metadata = None
+    if binding != "timestamp":
+        metadata = {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}
+        metadata["release_sha" if binding == "metadata_sha" else "image_digest"] = value
+    adapter, env_file, _ = _fixture(tmp_path, metadata=metadata)
     if binding == "timestamp":
         env_file.write_text(
             env_file.read_text(encoding="utf-8").replace(RELEASE_CREATED, value),
             encoding="utf-8",
         )
-    else:
-        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-        metadata["release_sha" if binding == "metadata_sha" else "image_digest"] = value
-        metadata_file.write_text(json.dumps(metadata), encoding="utf-8")
     with pytest.raises(ControlledDeploymentError, match=error):
         adapter.validate()
 
