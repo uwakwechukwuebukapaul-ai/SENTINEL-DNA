@@ -23,20 +23,86 @@ def app(tmp_path, monkeypatch):
 
 def token(client): return client.get("/api/auth/csrf").get_json()["csrf_token"]
 
-def test_v3_signup_phone_dob_and_analyst_binding(app):
+def test_v3_signup_email_only_and_analyst_binding(app):
     client = app.test_client(); csrf = token(client)
-    assert client.post("/api/auth/email/send-registration-code", json={"email":"v3@example.test"}, headers={"X-CSRF-Token":csrf}).status_code == 202
+    sent = client.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "v3@example.test"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert sent.status_code == 202
+    email_challenge = sent.get_json()["challenge_id"]
     email_code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
-    email_challenge = app.container.require("auth_service").db.connect().execute("SELECT id FROM otp_challenges WHERE purpose='registration_email' ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
-    assert client.post("/api/auth/email/verify-registration-code", json={"challenge_id":email_challenge,"code":email_code}, headers={"X-CSRF-Token":csrf}).status_code == 200
-    send = client.post("/api/auth/phone/send-code", json={"country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert send.status_code == 202
-    challenge = send.get_json()["challenge_id"]
-    code = app.config["SMS_PROVIDER"].messages[-1]["code"]
-    assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
-    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
-    assert created.status_code == 201 and created.get_json()["role"] == "analyst"
-    assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
+
+    # A challenge ID is bound to the browser session that requested it.
+    other_client = app.test_client()
+    other_csrf = token(other_client)
+    cross_session = other_client.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": email_challenge, "code": email_code},
+        headers={"X-CSRF-Token": other_csrf},
+    )
+    assert cross_session.status_code == 400
+
+    verified = client.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": email_challenge, "code": email_code},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert verified.status_code == 200 and verified.get_json()["verified"] is True
+    created = client.post(
+        "/api/auth/register",
+        json={
+            "username": "v3-analyst",
+            "email": "v3@example.test",
+            "password": PASSWORD,
+            "email_challenge_id": email_challenge,
+            "date_of_birth": "2000-01-02",
+            "role": "admin",
+            "tenant_id": "attacker",
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert created.status_code == 201
+    assert created.get_json()["role"] == "analyst"
+    assert created.get_json()["email"] == "v3@example.test"
+
+
+def test_v3_registration_rejects_unverified_or_cross_session_email(app):
+    client = app.test_client(); csrf = token(client)
+    sent = client.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "unverified@example.test"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    blocked = client.post(
+        "/api/auth/register",
+        json={
+            "username": "unverified-user",
+            "email": "unverified@example.test",
+            "password": PASSWORD,
+            "email_challenge_id": challenge,
+            "date_of_birth": "2000-01-02",
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert blocked.status_code == 400
+
+    other = app.test_client(); other_csrf = token(other)
+    forged = other.post(
+        "/api/auth/register",
+        json={
+            "username": "cross-session-user",
+            "email": "unverified@example.test",
+            "password": PASSWORD,
+            "email_challenge_id": challenge,
+            "date_of_birth": "2000-01-02",
+        },
+        headers={"X-CSRF-Token": other_csrf},
+    )
+    assert forged.status_code == 400
 
 def test_v3_csrf_and_dob_rejection(app):
     client = app.test_client()
