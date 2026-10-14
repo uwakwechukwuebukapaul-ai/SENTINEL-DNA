@@ -54,7 +54,7 @@ class SMTPEmailProvider(EmailProvider):
         message.set_content(
             "Your Sentinel DNA verification code is: "
             + str(code)
-            + "\\n\\nIf you did not request this code, you can ignore this message."
+            + "\n\nIf you did not request this code, you can ignore this message."
         )
         try:
             if self.security == "ssl":
