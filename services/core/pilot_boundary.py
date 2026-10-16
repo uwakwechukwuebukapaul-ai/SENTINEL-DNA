@@ -87,8 +87,10 @@ def pilot_path_allowed(path: str, method: str) -> bool:
         return method in readonly
     if path == "/api/pilot-provisioning/activate":
         return method in {"POST", "OPTIONS"}
-    if path == "/workspace/":
+    if path in {"/workspace", "/workspace/"}:
         return method in readonly
+    if re.fullmatch(r"/workspace/investigation/[^/]+/feedback", path):
+        return method == "POST"
     if re.fullmatch(r"/workspace/(?:investigation|analyst)/[^/]+", path):
         return method in readonly
     if re.fullmatch(r"/workspace/investigation/[^/]+/report", path):

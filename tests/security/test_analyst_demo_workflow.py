@@ -1,40 +1,24 @@
 from unittest.mock import patch
 
 import pytest
-from tests.credential_helpers import random_password
+import dashboard.app as dashboard_app
+from tests.security.conftest import register_and_login_analyst
 
 
 @pytest.fixture
-def application(tmp_path, monkeypatch):
-    monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "workflow.sqlite"))
-    monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
-    from app import create_app
-
-    app = create_app()
-    app.config.update(TESTING=True, DEMO_DATA_ENABLED=True)
-    return app
-
-
-def login(client, username="workflow-user", email="workflow@example.test"):
-    password = random_password()
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
+def application(canonical_application):
+    canonical_application.config["DEMO_DATA_ENABLED"] = True
+    return canonical_application
 
 
 def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
     client = application.test_client()
-    login(client)
+    register_and_login_analyst(client, "workflow-user", "workflow@example.test")
 
     response = client.get("/workspace/")
     assert response.status_code == 200
     assert b"DEMO-PS-" in response.data
     assert b"Synthetic" in response.data
-    dashboard = client.get("/")
-    assert b"Threat level" in dashboard.data
-    assert b"Risk distribution" in dashboard.data
-    assert b"Confidence distribution" in dashboard.data
-    assert b"MITRE ATT&amp;CK coverage" in dashboard.data
-    assert b"Recent investigation activity" in dashboard.data
     assert b"Tenant-scoped investigations" in response.data
     assert b"MITRE ATT&CK coverage" in response.data
 
@@ -54,14 +38,35 @@ def test_workspace_provisions_one_tenant_scoped_synthetic_case(application):
     assert snapshot["visualizations"]["activity"]
 
 
+def test_workspace_slash_forms_share_authorization_and_queue(canonical_application):
+    client = canonical_application.test_client()
+    assert client.get("/workspace").status_code == 401
+    assert client.get("/workspace/").status_code == 401
+
+    canonical_application.config["DEMO_DATA_ENABLED"] = True
+    register_and_login_analyst(client, "slash-user", "slash@example.test")
+    without_slash = client.get("/workspace")
+    with_slash = client.get("/workspace/")
+    assert without_slash.status_code == with_slash.status_code == 200
+    assert b"Tenant-scoped investigations" in without_slash.data
+    assert b"Tenant-scoped investigations" in with_slash.data
+
+
+def test_demo_data_setting_defaults_and_override():
+    assert dashboard_app._demo_data_enabled("development", None) is True
+    assert dashboard_app._demo_data_enabled("testing", None) is True
+    assert dashboard_app._demo_data_enabled("production", None) is False
+    assert dashboard_app._demo_data_enabled("development", "0") is False
+    assert dashboard_app._demo_data_enabled("production", "1") is True
+
+
 def test_start_uses_canonical_coordinator_and_report(application):
     client = application.test_client()
-    login(client, "start-user", "start@example.test")
+    register_and_login_analyst(client, "start-user", "start@example.test")
     client.get("/workspace/")
-    case_id = next(iter(application.container.require("investigation_coordinator").get_workspace_snapshot("tenant-1")["investigations"]), {}).get("case_id")
-    if not case_id:
-        with client.session_transaction() as state:
-            case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(state["organization_id"])
+    with client.session_transaction() as state:
+        tenant_id = state["organization_id"]
+    case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(tenant_id)
 
     token = client.get("/api/auth/csrf").get_json()["csrf_token"]
     coordinator = application.container.require("investigation_coordinator")
@@ -75,6 +80,10 @@ def test_start_uses_canonical_coordinator_and_report(application):
     assert investigated.call_args.kwargs["actor_id"]
     assert investigated.call_args.kwargs["evidence"]
     assert investigated.call_args.kwargs["iocs"]
+    executions = coordinator.execution_repository.list_for_tenant(tenant_id, investigation_id=case_id)
+    assert executions
+    assert executions[0]["status"].lower() == "completed"
+    assert executions[0]["evidence_references"]
     detail = client.get(f"/workspace/investigation/{case_id}")
     report = client.get(f"/workspace/investigation/{case_id}/report")
     assert detail.status_code == 200
@@ -85,30 +94,81 @@ def test_start_uses_canonical_coordinator_and_report(application):
     assert b"synthetic_demo" in report.data
 
 
+def test_start_failure_returns_safe_unavailable_response(application):
+    client = application.test_client()
+    register_and_login_analyst(client, "start-failure", "start-failure@example.test")
+    client.get("/workspace/")
+    with client.session_transaction() as state:
+        tenant_id = state["organization_id"]
+    case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(tenant_id)
+    token = client.get("/api/auth/csrf").get_json()["csrf_token"]
+    coordinator = application.container.require("investigation_coordinator")
+    with patch.object(coordinator, "investigate", side_effect=RuntimeError("START_FAILURE_SENTINEL")):
+        response = client.post(f"/workspace/investigation/{case_id}/start", headers={"X-CSRF-Token": token})
+    assert response.status_code == 503
+    assert b"START_FAILURE_SENTINEL" not in response.data
+    assert b"Traceback" not in response.data
+
+
+def test_report_projection_failure_returns_safe_unavailable_response(application):
+    client = application.test_client()
+    register_and_login_analyst(client, "report-failure", "report-failure@example.test")
+    client.get("/workspace/")
+    with client.session_transaction() as state:
+        tenant_id = state["organization_id"]
+    case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(tenant_id)
+    with patch("dashboard.browser_routes.AIInvestigatorReportService.build", side_effect=RuntimeError("REPORT_FAILURE_SENTINEL")):
+        response = client.get(f"/workspace/investigation/{case_id}/report")
+    assert response.status_code == 503
+    assert b"REPORT_FAILURE_SENTINEL" not in response.data
+    assert b"Traceback" not in response.data
+
+
+def test_feedback_persistence_failure_returns_safe_unavailable_response(application):
+    client = application.test_client()
+    register_and_login_analyst(client, "feedback-failure", "feedback-failure@example.test")
+    client.get("/workspace/")
+    with client.session_transaction() as state:
+        tenant_id = state["organization_id"]
+    case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(tenant_id)
+    token = client.get("/api/auth/csrf").get_json()["csrf_token"]
+    coordinator = application.container.require("investigation_coordinator")
+    with patch.object(coordinator, "submit_feedback", side_effect=RuntimeError("FEEDBACK_FAILURE_SENTINEL")):
+        response = client.post(
+            f"/workspace/investigation/{case_id}/feedback",
+            json={"decision": "accepted", "helpful_rating": 5},
+            headers={"X-CSRF-Token": token},
+        )
+    assert response.status_code == 503
+    assert b"FEEDBACK_FAILURE_SENTINEL" not in response.data
+    assert b"Traceback" not in response.data
+    assert coordinator.get_feedback(case_id, tenant_id) == []
+
+
 def test_disabled_demo_mode_preserves_honest_empty_states(application):
     application.config["DEMO_DATA_ENABLED"] = False
     client = application.test_client()
-    login(client, "empty-user", "empty@example.test")
-    assert b"No investigations are available" in client.get("/").data
+    register_and_login_analyst(client, "empty-user", "empty@example.test")
+    assert b"No active investigations" in client.get("/workspace").data
     assert b"No active investigations" in client.get("/workspace/").data
 
 
 def test_demo_case_is_not_readable_across_tenants(application):
     first = application.test_client()
-    login(first, "first-user", "first@example.test")
+    register_and_login_analyst(first, "first-user", "first@example.test")
     first.get("/workspace/")
     with first.session_transaction() as state:
         case_id = application.container.require("analyst_demo_scenario").case_id_for_tenant(state["organization_id"])
 
     second = application.test_client()
-    login(second, "second-user", "second@example.test")
+    register_and_login_analyst(second, "second-user", "second@example.test")
     assert second.get(f"/workspace/investigation/{case_id}").status_code == 404
     assert second.get(f"/workspace/investigation/{case_id}/report").status_code == 404
 
 
 def test_analyst_feedback_is_authenticated_tenant_scoped_and_persistent(application):
     client = application.test_client()
-    login(client, "feedback-user", "feedback@example.test")
+    register_and_login_analyst(client, "feedback-user", "feedback@example.test")
     client.get("/workspace/")
     with client.session_transaction() as state:
         tenant_id = state["organization_id"]
@@ -136,7 +196,7 @@ def test_analyst_feedback_is_authenticated_tenant_scoped_and_persistent(applicat
     assert feedback[0]["created_at"]
 
     other = application.test_client()
-    login(other, "other-feedback-user", "other-feedback@example.test")
+    register_and_login_analyst(other, "other-feedback-user", "other-feedback@example.test")
     other_csrf = other.get("/api/auth/csrf").get_json()["csrf_token"]
     assert other.post(
         f"/workspace/investigation/{case_id}/feedback",

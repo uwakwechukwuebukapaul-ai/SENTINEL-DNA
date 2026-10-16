@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from app import create_app
-from tests.credential_helpers import random_password
+from tests.security.conftest import register_and_login_analyst
 
 
 @pytest.fixture
@@ -14,16 +14,12 @@ def authenticated_client(tmp_path, monkeypatch):
     monkeypatch.delenv("SENTINEL_DNA_SECURE_COOKIES", raising=False)
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "intake-api.sqlite"))
     app = create_app()
-    app.config["TESTING"] = True
+    from services.auth.providers import TestEmailProvider
+    app.config.update(TESTING=True, EMAIL_PROVIDER=TestEmailProvider())
     client = app.test_client()
     client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
     username = f"intake-{uuid.uuid4().hex[:10]}"
-    password = random_password()
-    assert client.post(
-        "/api/auth/register",
-        json={"username": username, "email": f"{username}@example.test", "password": password},
-    ).status_code == 201
-    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
+    register_and_login_analyst(client, username, f"{username}@example.test")
     return app, client
 
 

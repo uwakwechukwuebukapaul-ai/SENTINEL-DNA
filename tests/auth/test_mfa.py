@@ -6,10 +6,15 @@ import threading
 import pyotp
 import pytest
 
-from app import create_app
+import dashboard.app as dashboard_app
+from database.connection import DatabaseConnection, database
 from database.backend import SQLiteBackend
 from database.migration_runner import MigrationRunner
+from services.auth.auth_service import AuthService
 from services.auth.mfa import MFAError, MFAService
+from services.audit.service import AuditService
+from services.identity.canonical_authority import CanonicalAuthorityService
+from services.pilot_management.authorization import PilotAuthorizationService
 from tests.credential_helpers import random_password
 
 
@@ -21,11 +26,25 @@ def mfa_application(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
     db_path = tmp_path / "mfa.sqlite"
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(db_path))
+    monkeypatch.setattr(dashboard_app, "DB_PATH", db_path)
     MigrationRunner(SQLiteBackend(db_path)).run()
-    application = create_app()
+    application = dashboard_app.app
+    registry = application.container
+    keys = ("auth_service", "canonical_authority", "mfa_service", "audit_service", "pilot_authorization_service")
+    previous = {key: registry.get(key) for key in keys}
+    old_path = database.database_path
+    db = DatabaseConnection(db_path)
+    auth = AuthService(db)
+    authority = CanonicalAuthorityService(db, auth=auth)
+    audit = AuditService(db)
+    registry.register("auth_service", auth)
+    registry.register("canonical_authority", authority)
+    registry.register("mfa_service", MFAService(db, secret_key_provider=lambda: application.secret_key, audit_service=audit))
+    registry.register("audit_service", audit)
+    pilot_auth = PilotAuthorizationService(db, auth_service=auth, canonical_authority=authority, audit_service=audit)
+    registry.register("pilot_authorization_service", pilot_auth)
+    old_config = {key: application.config.get(key) for key in ("TESTING", "PILOT_ACCESS_REQUIRED")}
     application.config.update(TESTING=True, PILOT_ACCESS_REQUIRED=True)
-    authority = application.container.require("canonical_authority")
-    auth = application.container.require("auth_service")
     tenant = authority.tenants.create("Synthetic MFA pilot", "mfa-pilot-tenant")
     authority.identities.create("manager@mfa.example.test", actor_id="mfa-manager")
     authority.identities.create("analyst@mfa.example.test", actor_id="mfa-analyst")
@@ -48,7 +67,7 @@ def mfa_application(tmp_path, monkeypatch):
         actor_id="mfa-analyst",
         mfa_required=True,
     )
-    authorization = application.container.require("pilot_authorization_service").create(
+    authorization = pilot_auth.create(
         analyst_id=analyst.actor_id,
         tenant_id=tenant.tenant_id,
         authorized_by="mfa-manager",
@@ -56,7 +75,12 @@ def mfa_application(tmp_path, monkeypatch):
         approved_scenarios=["phishing_compromise"],
         audit_correlation_id="mfa-test-authorization",
     )
-    return application, analyst, tenant.tenant_id, authorization.authorization_id
+    try:
+        yield application, analyst, tenant.tenant_id, authorization.authorization_id
+    finally:
+        for key, value in previous.items(): registry.register(key, value)
+        application.config.update(old_config)
+        database.database_path = old_path
 
 
 def _csrf(client):

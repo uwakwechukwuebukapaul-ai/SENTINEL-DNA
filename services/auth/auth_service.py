@@ -296,13 +296,23 @@ class AuthService:
         return challenge_id, code
 
     def verify_otp(self, challenge_id, code, *, secret):
+        verified, user_id = self.verify_otp_challenge(challenge_id, code, secret=secret)
+        return user_id if verified else None
+
+    def verify_otp_challenge(self, challenge_id, code, *, secret):
+        """Consume an OTP once and separately report success for registration OTPs."""
         with self.db.session() as connection:
             row = connection.execute("SELECT * FROM otp_challenges WHERE id=?", (challenge_id,)).fetchone()
-            if not row or row["consumed_at"] or datetime.fromisoformat(row["expires_at"]) <= utcnow() or row["attempts"] >= row["max_attempts"]: return None
+            if not row or row["consumed_at"] or datetime.fromisoformat(row["expires_at"]) <= utcnow() or row["attempts"] >= row["max_attempts"]: return False, None
             if not __import__('hmac').compare_digest(row["code_hash"], code_hash(str(code), secret)):
-                connection.execute("UPDATE otp_challenges SET attempts=attempts+1 WHERE id=?", (challenge_id,)); return None
-            connection.execute("UPDATE otp_challenges SET consumed_at=? WHERE id=?", (utcnow().isoformat(), challenge_id))
-        return row["user_id"]
+                connection.execute("UPDATE otp_challenges SET attempts=attempts+1 WHERE id=?", (challenge_id,)); return False, None
+            cursor = connection.execute(
+                "UPDATE otp_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>? AND attempts<max_attempts",
+                (utcnow().isoformat(), challenge_id, utcnow().isoformat()),
+            )
+            if cursor.rowcount != 1:
+                return False, None
+        return True, row["user_id"]
 
     @staticmethod
     def _hash_token(value):

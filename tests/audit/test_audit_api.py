@@ -2,6 +2,7 @@ import json
 
 import pytest
 from tests.credential_helpers import random_password
+from tests.security.conftest import register_and_login_analyst
 
 
 PASSWORD = random_password()
@@ -13,9 +14,10 @@ def application(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "testing")
 
     from app import create_app
+    from services.auth.providers import TestEmailProvider
 
     app = create_app()
-    app.config["TESTING"] = True
+    app.config.update(TESTING=True, EMAIL_PROVIDER=TestEmailProvider())
     return app
 
 
@@ -74,18 +76,12 @@ def test_analyst_without_audit_permission_is_denied(application):
 
 def test_public_registration_cannot_self_assign_audit_permission(application):
     client = application.test_client()
-    response = client.post(
-        "/api/auth/register",
-        json={
-            "username": "self-promoted-admin",
-            "email": "self-promoted-admin@example.test",
-            "password": PASSWORD,
-            "role": "admin",
-        },
+    register_and_login_analyst(
+        client,
+        "self-promoted-admin",
+        "self-promoted-admin@example.test",
+        registration_overrides={"role": "admin", "tenant_id": "attacker-tenant"},
     )
-
-    assert response.status_code == 201
-    login(client, "self-promoted-admin")
     audit_response = client.get("/api/admin/audit")
     assert audit_response.status_code == 403
 

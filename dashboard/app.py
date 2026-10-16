@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flask import (
     Flask,
+    g,
     jsonify,
     render_template,
     request,
@@ -19,6 +20,8 @@ from flask import (
 )
 
 from jinja2 import ChoiceLoader, FileSystemLoader
+
+from config.runtime import RuntimeConfig
 
 
 # Core platform services
@@ -36,9 +39,10 @@ from services.api.investigations.controller import InvestigationController
 from services.auth import auth_api
 from services.auth.security import csrf_token
 from services.auth.permissions import current_role, permission_required
-from services.auth.routes import enforce_current_session, restore_persistent_session
+from services.auth.routes import REMEMBER_COOKIE, enforce_current_session, restore_persistent_session
 from services.auth.mfa import MFAService, mfa_boundary_response
 from services.core.security_context import request_context
+from services.core.pilot_boundary import enforce_pilot_analyst_boundary
 
 # Case management
 from services.cases import cases_api
@@ -150,8 +154,19 @@ from services.platform_experience.routes import experience_api
 # BASE CONFIGURATION
 # ---------------------------------------------------------
 
+RUNTIME_CONFIG = RuntimeConfig.from_environment()
+RUNTIME_CONFIG.validate()
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = resolve_database_path()
+
+
+def _demo_data_enabled(environment: str | None = None, configured_value: str | None = None) -> bool:
+    """Resolve synthetic demo availability using the shared environment contract."""
+    environment = (environment or os.getenv("SENTINEL_DNA_ENV", os.getenv("FLASK_ENV", "development"))).lower()
+    configured_value = os.getenv("SENTINEL_DNA_DEMO_DATA") if configured_value is None else configured_value
+    default = "0" if environment == "production" else "1"
+    return (configured_value if configured_value is not None else default) == "1"
 
 
 app = Flask(
@@ -175,10 +190,7 @@ app.jinja_loader = ChoiceLoader(
 )
 
 
-app.secret_key = os.getenv(
-    "SENTINEL_DNA_SECRET_KEY",
-    "development-only-change-me"
-)
+app.secret_key = RUNTIME_CONFIG.secret_key
 
 
 app.config.update(
@@ -198,6 +210,8 @@ app.config["JSON_SORT_KEYS"] = False
 app.config["PILOT_ACCESS_REQUIRED"] = (
     os.getenv("SENTINEL_DNA_PILOT_ACCESS_REQUIRED", "0").strip() == "1"
 )
+app.config["ENVIRONMENT"] = RUNTIME_CONFIG.environment
+app.config["DEMO_DATA_ENABLED"] = _demo_data_enabled(app.config["ENVIRONMENT"])
 
 app.config["OBSERVABILITY"] = ObservabilityService()
 
@@ -233,6 +247,34 @@ app.register_blueprint(analyst_workspace)
 app.register_blueprint(auth_api)
 app.register_blueprint(cases_api)
 
+# Keep the canonical investigation browser handlers available in the WSGI app
+# without registering duplicate home/login/profile routes from the blueprint.
+from dashboard import browser_routes as investigation_browser
+app.add_url_rule(
+    "/workspace/investigation/<investigation_id>",
+    endpoint="browser.investigation_detail",
+    view_func=investigation_browser.investigation_detail,
+    methods=["GET"],
+)
+app.add_url_rule(
+    "/workspace/investigation/<investigation_id>/report",
+    endpoint="browser.investigation_report",
+    view_func=investigation_browser.investigation_report,
+    methods=["GET"],
+)
+app.add_url_rule(
+    "/workspace/investigation/<investigation_id>/feedback",
+    endpoint="browser.investigation_feedback",
+    view_func=investigation_browser.investigation_feedback,
+    methods=["POST"],
+)
+app.add_url_rule(
+    "/workspace/investigation/<investigation_id>/start",
+    endpoint="browser.start_investigation",
+    view_func=investigation_browser.start_investigation,
+    methods=["POST"],
+)
+
 
 @app.before_request
 def restore_authentication_cookie():
@@ -247,6 +289,11 @@ def enforce_authentication_epoch():
 @app.before_request
 def enforce_mfa_boundary():
     return mfa_boundary_response()
+
+
+@app.before_request
+def enforce_pilot_boundary():
+    return enforce_pilot_analyst_boundary()
 
 app.register_blueprint(hunting_api)
 app.register_blueprint(automation_api)
@@ -448,6 +495,24 @@ def add_security_headers(response):
         status=response.status_code,
     )
 
+    return response
+
+
+@app.after_request
+def persist_authentication_cookies(response):
+    remember_cookie = getattr(g, "remember_cookie", None)
+    if remember_cookie:
+        response.set_cookie(
+            REMEMBER_COOKIE,
+            remember_cookie,
+            max_age=30 * 24 * 60 * 60,
+            httponly=True,
+            secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+            samesite="Lax",
+            path="/",
+        )
+    if getattr(g, "clear_remember_cookie", False):
+        response.delete_cookie(REMEMBER_COOKIE, path="/")
     return response
 
 
@@ -808,15 +873,15 @@ def dashboard_api():
 
 
 
-@app.get("/workspace")
+@app.get("/workspace", strict_slashes=False)
 @permission_required("investigations:read")
 def workspace_home():
-    payload = dashboard_payload()
-    payload["analyst"] = analyst_identity()
-    return render_template(
-        "dashboard.html",
-        **payload
-    )
+    # Keep the existing permission boundary, then render the tenant-scoped
+    # analyst workflow through its canonical request-context authorization.
+    principal = investigation_browser._principal()
+    if principal is None:
+        return jsonify({"error": "authentication_required"}), 401
+    return investigation_browser.workspace_page(principal)
 
 
 

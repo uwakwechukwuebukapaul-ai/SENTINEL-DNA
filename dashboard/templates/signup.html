@@ -1,1 +1,204 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Create analyst account | Sentinel DNA</title><style>:root{--bg:#07111f;--panel:#0d1b2d;--line:#243852;--text:#e7eef8;--muted:#91a4bd;--blue:#42a5f5;--red:#fb7185;--green:#4ade80}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 80% 10%,#123b58 0,#07111f 42%);color:var(--text);font:15px/1.5 Inter,Arial,sans-serif}main{width:min(600px,calc(100% - 32px));padding:36px;background:rgba(13,27,45,.96);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 80px #0008}h1{margin:0;color:var(--blue)}.eyebrow{color:#7dd3fc;text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}label{display:block;margin:14px 0 6px;color:var(--muted)}input,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:8px;background:#1976d2;color:white;font-weight:700;cursor:pointer}.password{position:relative}.password button{position:absolute;right:4px;top:4px;width:auto;margin:0;padding:7px;background:transparent;color:#b8d9ff}.muted{color:var(--muted)}#status{min-height:24px;color:var(--red)}.ok{color:var(--green)}a{color:#b8d9ff}@media(max-width:600px){.grid{grid-template-columns:1fr}}</style></head><body><main><p class="eyebrow">Sentinel DNA · SOC Command Center</p><h1>Create your analyst account</h1><p class="muted">Email and phone verification protect your analyst identity. Your role and workspace are assigned by Sentinel DNA.</p><form id="signup"><div class="grid"><div><label for="username">Username</label><input id="username" minlength="3" required autocomplete="username"></div><div><label for="email">Email</label><input id="email" type="email" required autocomplete="email"><button id="send-email" type="button">Send email code</button></div><div><label for="email-code">Email verification code</label><input id="email-code" inputmode="numeric" maxlength="6"><button id="verify-email" type="button">Verify email</button></div><div><label for="dob">Date of birth</label><input id="dob" type="date" required></div><div><label for="country">Country</label><select id="country" required><option value="">Loading countries…</option></select></div><div><label for="phone">Phone number</label><input id="phone" required autocomplete="tel"><button id="send-phone" type="button">Send phone code</button></div><div><label for="phone-code">Phone verification code</label><input id="phone-code" inputmode="numeric" maxlength="6"><button id="verify-phone" type="button">Verify phone</button></div><div><label for="password">Password</label><div class="password"><input id="password" type="password" minlength="10" required autocomplete="new-password"><button type="button" data-for="password">Show</button></div></div><div><label for="confirm">Confirm password</label><div class="password"><input id="confirm" type="password" minlength="10" required autocomplete="new-password"><button type="button" data-for="confirm">Show</button></div></div></div><p id="status" role="alert" aria-live="polite"></p><button type="submit">Create analyst account</button></form><p class="muted">Already registered? <a href="/login">Sign in</a></p></main><script>let emailChallenge='',phoneChallenge='',emailVerified=false,phoneVerified=false;const csrf=async()=>{const r=await fetch('/api/auth/csrf');return(await r.json()).csrf_token};fetch('/api/auth/countries').then(r=>r.json()).then(d=>country.innerHTML='<option value="">Select country</option>'+d.countries.map(c=>`<option value="${c.region}">${c.name} (${c.calling_code})</option>`).join(''));document.querySelectorAll('[data-for]').forEach(b=>b.onclick=()=>{const i=document.getElementById(b.dataset.for);i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'Show':'Hide'});sendEmail.onclick=async()=>{const r=await fetch('/api/auth/email/send-registration-code',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':await csrf()},body:JSON.stringify({email:email.value})});if(r.ok){emailChallenge='pending';status.textContent='If eligible, an email verification code has been sent.'}};verifyEmail.onclick=async()=>{const id=emailChallenge==='pending'?undefined:emailChallenge;const r=await fetch('/api/auth/email/verify-registration-code',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':await csrf()},body:JSON.stringify({challenge_id:id,code:emailCode.value})});emailVerified=r.ok;if(!r.ok)status.textContent='Email verification failed or expired.';else status.textContent='Email verified.'};sendPhone.onclick=async()=>{const r=await fetch('/api/auth/phone/send-code',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':await csrf()},body:JSON.stringify({country:country.value,phone:phone.value})});const d=await r.json();if(r.ok){phoneChallenge=d.challenge_id;status.textContent='Phone code sent.'}else status.textContent='Unable to send a phone code.'};verifyPhone.onclick=async()=>{const r=await fetch('/api/auth/phone/verify-code',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':await csrf()},body:JSON.stringify({challenge_id:phoneChallenge,code:phoneCode.value})});phoneVerified=r.ok;if(!r.ok)status.textContent='Phone verification failed or expired.';else status.textContent='Phone verified.'};signup.onsubmit=async e=>{e.preventDefault();if(password.value!==confirm.value){status.textContent='Passwords do not match.';return}if(!emailVerified||!phoneVerified){status.textContent='Verify both email and phone before creating the account.';return}const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':await csrf()},body:JSON.stringify({username:username.value,email:email.value,password:password.value,date_of_birth:dob.value,country:country.value,phone:phone.value,phone_challenge_id:phoneChallenge,email_challenge_id:emailChallenge})});if(r.ok)location='/login?registered=true';else status.textContent='Unable to create the account. Check the information and try again.'};</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create analyst account | Sentinel DNA</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --panel:#0d1b2d; --line:#29415c; --text:#e7eef8; --muted:#a8b8cc; --blue:#42a5f5; --red:#ff8796; --green:#62e69a; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px 0; background:radial-gradient(circle at 80% 10%,#123b58 0,#07111f 42%); color:var(--text); font:16px/1.5 Inter,Arial,sans-serif; }
+    main { width:min(620px,calc(100% - 32px)); padding:clamp(22px,5vw,38px); background:rgba(13,27,45,.97); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 80px #0008; }
+    h1 { margin:0; color:var(--blue); font-size:clamp(1.65rem,5vw,2rem); }
+    .eyebrow { color:#7dd3fc; text-transform:uppercase; letter-spacing:.14em; font-size:.72rem; font-weight:700; }
+    .muted { color:var(--muted); }
+    .field { margin-top:16px; }
+    label { display:block; margin-bottom:6px; color:var(--muted); }
+    input,select { width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+    input:focus,select:focus,button:focus-visible,a:focus-visible { outline:3px solid #7dd3fc; outline-offset:2px; }
+    .inline { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; }
+    button { min-height:44px; padding:10px 14px; border:0; border-radius:8px; background:#1976d2; color:white; font:inherit; font-weight:700; cursor:pointer; }
+    button.secondary { border:1px solid var(--line); background:#142941; }
+    button:disabled { opacity:.62; cursor:wait; }
+    .password-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+    .password-row button { min-width:76px; }
+    .phone-box { margin-top:22px; padding:16px; border:1px solid var(--line); border-radius:10px; }
+    .phone-box legend { padding:0 6px; color:var(--muted); }
+    #status { min-height:1.6em; margin:18px 0 0; color:var(--red); }
+    #status[data-kind="success"] { color:var(--green); }
+    .submit { width:100%; margin-top:14px; }
+    a { color:#b8d9ff; }
+    @media(max-width:520px) { .inline { grid-template-columns:1fr; } .inline button { width:100%; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Sentinel DNA · SOC Command Center</p>
+    <h1>Create your analyst account</h1>
+    <p class="muted">Verify your email to create an account. Sentinel DNA assigns your role and workspace.</p>
+    <form id="signup-form" novalidate>
+      <div class="field"><label for="username">Username</label><input id="username" name="username" minlength="3" autocomplete="username" required></div>
+      <div class="field"><label for="email">Email address</label><div class="inline"><input id="email" name="email" type="email" autocomplete="email" required><button id="send-email" class="secondary" type="button">Send code</button></div></div>
+      <div class="field"><label for="email-code">Email verification code</label><div class="inline"><input id="email-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="email-help"><button id="verify-email" class="secondary" type="button">Verify email</button></div><small id="email-help" class="muted">Codes expire after 10 minutes. If it expires, request another code.</small></div>
+      <div class="field"><label for="dob">Date of birth</label><input id="dob" name="date_of_birth" type="date" autocomplete="bday" required></div>
+      <div class="field"><label for="password">Password</label><div class="password-row"><input id="password" name="password" type="password" minlength="10" autocomplete="new-password" required><button class="secondary" type="button" data-toggle="password" aria-label="Show password">Show</button></div></div>
+      <div class="field"><label for="confirm">Confirm password</label><div class="password-row"><input id="confirm" name="confirm" type="password" minlength="10" autocomplete="new-password" required><button class="secondary" type="button" data-toggle="confirm" aria-label="Show password confirmation">Show</button></div></div>
+      <fieldset class="phone-box">
+        <legend>Recovery phone (optional)</legend>
+        <p class="muted">A phone number is optional. If you add one, it must be verified before it is saved.</p>
+        <div class="field"><label for="country">Country</label><select id="country"><option value="">Select country</option></select></div>
+        <div class="field"><label for="phone">Phone number</label><input id="phone" type="tel" autocomplete="tel"></div>
+        <div class="inline"><button id="send-phone" class="secondary" type="button">Send phone code</button><span aria-hidden="true"></span></div>
+        <div class="field"><label for="phone-code">Phone verification code</label><div class="inline"><input id="phone-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"><button id="verify-phone" class="secondary" type="button">Verify phone</button></div></div>
+      </fieldset>
+      <p id="status" role="status" aria-live="polite"></p>
+      <button id="submit-signup" class="submit" type="submit">Create analyst account</button>
+    </form>
+    <p class="muted">Already registered? <a href="/login">Sign in</a></p>
+  </main>
+  <script>
+    (() => {
+      "use strict";
+      const form = document.querySelector("#signup-form");
+      const emailInput = document.querySelector("#email");
+      const emailCode = document.querySelector("#email-code");
+      const usernameInput = document.querySelector("#username");
+      const dobInput = document.querySelector("#dob");
+      const passwordInput = document.querySelector("#password");
+      const confirmInput = document.querySelector("#confirm");
+      const countryInput = document.querySelector("#country");
+      const phoneInput = document.querySelector("#phone");
+      const phoneCode = document.querySelector("#phone-code");
+      const status = document.querySelector("#status");
+      const submitButton = document.querySelector("#submit-signup");
+      const sendEmailButton = document.querySelector("#send-email");
+      const verifyEmailButton = document.querySelector("#verify-email");
+      const sendPhoneButton = document.querySelector("#send-phone");
+      const verifyPhoneButton = document.querySelector("#verify-phone");
+      let emailChallengeId = "";
+      let emailChallengeAddress = "";
+      let verifiedEmail = "";
+      let phoneChallengeId = "";
+      let verifiedPhone = "";
+      let submitting = false;
+
+      function setStatus(message, kind = "error") {
+        status.textContent = message;
+        status.dataset.kind = kind;
+      }
+      async function readJson(response) {
+        try { return await response.json(); } catch { return null; }
+      }
+      async function requestJson(path, payload) {
+        const tokenResponse = await fetch("/api/auth/csrf", { credentials: "same-origin" });
+        const tokenData = await readJson(tokenResponse);
+        if (!tokenResponse.ok || !tokenData || typeof tokenData.csrf_token !== "string") throw new Error("csrf");
+        const response = await fetch(path, {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": tokenData.csrf_token },
+          body: JSON.stringify(payload)
+        });
+        return { response, data: await readJson(response) };
+      }
+      function setBusy(button, busy, busyText) {
+        if (busy) { button.dataset.originalText = button.textContent; button.disabled = true; button.textContent = busyText; }
+        else { button.disabled = false; if (button.dataset.originalText) button.textContent = button.dataset.originalText; }
+      }
+      function normalizedEmail() { return emailInput.value.trim().toLowerCase(); }
+      function clearEmailProof() { emailChallengeId = ""; emailChallengeAddress = ""; verifiedEmail = ""; emailCode.value = ""; }
+      function clearPhoneProof() { phoneChallengeId = ""; verifiedPhone = ""; phoneCode.value = ""; }
+
+      emailInput.addEventListener("input", () => {
+        if ((emailChallengeAddress && normalizedEmail() !== emailChallengeAddress) || (verifiedEmail && normalizedEmail() !== verifiedEmail)) clearEmailProof();
+      });
+      phoneInput.addEventListener("input", () => {
+        if (verifiedPhone && phoneInput.value.trim() !== verifiedPhone) clearPhoneProof();
+      });
+      document.querySelectorAll("[data-toggle]").forEach(button => {
+        button.addEventListener("click", () => {
+          const input = document.getElementById(button.dataset.toggle);
+          const showing = input.type === "password";
+          input.type = showing ? "text" : "password";
+          button.textContent = showing ? "Hide" : "Show";
+          button.setAttribute("aria-label", `${showing ? "Hide" : "Show"} ${input.id === "confirm" ? "password confirmation" : "password"}`);
+        });
+      });
+      fetch("/api/auth/countries", { credentials: "same-origin" }).then(readJson).then(data => {
+        if (!data || !Array.isArray(data.countries)) return;
+        for (const country of data.countries) {
+          if (!country || typeof country.region !== "string" || typeof country.name !== "string") continue;
+          const option = document.createElement("option"); option.value = country.region; option.textContent = `${country.name} (${country.calling_code || ""})`;
+          countryInput.append(option);
+        }
+      }).catch(() => { /* Phone is optional; email registration remains available. */ });
+
+      sendEmailButton.addEventListener("click", async () => {
+        const destination = normalizedEmail();
+        if (!emailInput.reportValidity()) return;
+        clearEmailProof(); setBusy(sendEmailButton, true, "Sending…");
+        try {
+          const { data } = await requestJson("/api/auth/email/send-registration-code", { email: destination });
+          if (!data || typeof data.challenge_id !== "string" || !data.challenge_id) {
+            setStatus("If this address can receive a code, one has been sent. Wait briefly before trying again."); return;
+          }
+          emailChallengeId = data.challenge_id;
+          emailChallengeAddress = destination;
+          setStatus("If this address can receive a code, one has been sent. Enter it here to verify your email.", "success");
+        } catch { setStatus("We could not request a code. Check your connection and try again."); }
+        finally { setBusy(sendEmailButton, false); }
+      });
+      verifyEmailButton.addEventListener("click", async () => {
+        if (!emailChallengeId) { setStatus("Request a new email code first."); return; }
+        setBusy(verifyEmailButton, true, "Verifying…");
+        try {
+          const { response, data } = await requestJson("/api/auth/email/verify-registration-code", { email: normalizedEmail(), challenge_id: emailChallengeId, code: emailCode.value.trim() });
+          if (!response.ok || !data || data.verified !== true) { clearEmailProof(); setStatus("The code is invalid or expired. Request a new code and try again."); return; }
+          verifiedEmail = normalizedEmail();
+          setStatus("Email verified.", "success");
+        } catch { setStatus("We could not verify that code. Check your connection and try again."); }
+        finally { setBusy(verifyEmailButton, false); }
+      });
+      sendPhoneButton.addEventListener("click", async () => {
+        if (!phoneInput.value.trim() || !countryInput.value) { setStatus("Choose a country and enter a phone number first."); return; }
+        clearPhoneProof(); setBusy(sendPhoneButton, true, "Sending…");
+        try {
+          const { response, data } = await requestJson("/api/auth/phone/send-code", { country: countryInput.value, phone: phoneInput.value.trim() });
+          if (!response.ok || !data || typeof data.challenge_id !== "string") { setStatus("We could not send a phone code. Check the number or leave this optional field blank."); return; }
+          phoneChallengeId = data.challenge_id;
+          setStatus("Phone code sent.", "success");
+        } catch { setStatus("We could not send a phone code. Check your connection or leave this optional field blank."); }
+        finally { setBusy(sendPhoneButton, false); }
+      });
+      verifyPhoneButton.addEventListener("click", async () => {
+        if (!phoneChallengeId) { setStatus("Request a phone code first, or leave the optional phone field blank."); return; }
+        setBusy(verifyPhoneButton, true, "Verifying…");
+        try {
+          const { response, data } = await requestJson("/api/auth/phone/verify-code", { challenge_id: phoneChallengeId, code: phoneCode.value.trim() });
+          if (!response.ok || !data || data.verified !== true) { clearPhoneProof(); setStatus("The phone code is invalid or expired. Request another code or leave the optional field blank."); return; }
+          verifiedPhone = phoneInput.value.trim();
+          setStatus("Phone verified.", "success");
+        } catch { setStatus("We could not verify that phone code. Try again or leave the optional field blank."); }
+        finally { setBusy(verifyPhoneButton, false); }
+      });
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (submitting) return;
+        if (!form.reportValidity()) return;
+        if (passwordInput.value !== confirmInput.value) { setStatus("Passwords do not match."); confirmInput.focus(); return; }
+        if (!emailChallengeId || verifiedEmail !== normalizedEmail()) { setStatus("Verify this email address before creating the account."); return; }
+        const phone = phoneInput.value.trim();
+        if (phone && (!verifiedPhone || !phoneChallengeId)) { setStatus("Verify the optional phone number or clear it before continuing."); return; }
+        submitting = true; setBusy(submitButton, true, "Creating account…");
+        try {
+          const payload = { username: usernameInput.value.trim(), email: normalizedEmail(), password: passwordInput.value, date_of_birth: dobInput.value, email_challenge_id: emailChallengeId };
+          if (phone) Object.assign(payload, { country: countryInput.value, phone, phone_challenge_id: phoneChallengeId });
+          const { response, data } = await requestJson("/api/auth/register", payload);
+          if (response.status === 201 && data && data.role === "analyst") { setStatus("Account created. Redirecting to sign in…", "success"); window.location.assign("/login?registered=true"); return; }
+          setStatus(response.status === 409 ? "We could not create this account with those details. Try different account details or sign in." : "We could not create the account. Check your details and verification, then try again.");
+        } catch { setStatus("We could not create the account because of a connection problem. Please try again."); }
+        finally { submitting = false; setBusy(submitButton, false); }
+      });
+    })();
+  </script>
+</body>
+</html>

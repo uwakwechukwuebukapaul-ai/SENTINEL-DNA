@@ -24,6 +24,7 @@ if str(ROOT) not in sys.path:
 
 from app import create_app  # noqa: E402  # type: ignore[import-not-found]
 from tests.credential_helpers import random_password
+from tests.security.conftest import register_and_login_analyst
 
 
 @pytest.fixture
@@ -36,8 +37,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_DB_PATH", str(tmp_path / "investigation-api.sqlite"))
 
     app = create_app()
-
-    app.config["TESTING"] = True
+    from services.auth.providers import TestEmailProvider
+    app.config.update(TESTING=True, EMAIL_PROVIDER=TestEmailProvider())
 
     return app.test_client()
 
@@ -47,10 +48,8 @@ def authenticated_client(client):
     import uuid
     username = f"investigator-test-{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.test"
-    password = random_password()
     client.environ_base["REMOTE_ADDR"] = f"198.51.100.{int(uuid.uuid4().int % 250) + 1}"
-    assert client.post("/api/auth/register", json={"username": username, "email": email, "password": password}).status_code == 201
-    assert client.post("/api/auth/login", json={"username": username, "password": password}).status_code == 200
+    register_and_login_analyst(client, username, email)
     return client
 
 

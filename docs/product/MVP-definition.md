@@ -1,44 +1,33 @@
 # Sentinel DNA MVP Definition
 
-## 1. MVP Goal
+## Goal
 
-The goal of Sentinel DNA MVP v1.0 is to provide an AI-assisted SOC analyst capable of detecting suspicious activity, analyzing indicators, and generating security incident reports.
+Provide an analyst with a usable, evidence-first investigation workflow over
+synthetic data: review a tenant-scoped case, run the canonical investigation,
+inspect evidence and an advisory report, record an attributed analyst decision,
+and sign out securely.
 
----
+## In scope
 
-# 2. MVP Core Features
+- Verified public analyst registration and authenticated sign-in.
+- The canonical WSGI workspace at `/workspace` and `/workspace/`.
+- A repeatable synthetic PowerShell investigation, disabled by default in
+  production and isolated by tenant.
+- Durable execution status and evidence references, with provenance,
+  uncertainty, and confidence visible to the analyst.
+- Tenant-scoped, append-only analyst feedback with CSRF and audit controls.
+- Safe, truthful behavior when investigation, report, or feedback operations
+  are unavailable.
 
-## 2.1 Security Data Analysis
+## Out of scope
 
-### Goal:
-Analyze security-related inputs and identify possible threats.
+Customer data, autonomous remediation, unreviewed AI decisions, real analyst
+activation, external evaluation, and production or staging release approval.
+These require separate authorization and operational evidence.
 
-Supported inputs:
+## Acceptance
 
-- Suspicious emails
-- URLs
-- Domains
-- User reports
-
-Status:
-
-🟢 Implemented
-
----
-
-# 2.2 IOC Extraction Engine
-
-### Goal:
-Automatically identify Indicators of Compromise.
-
-Detect:
-
-- URLs
-- Domains
-- IP addresses
-- Email addresses
-- Hash values
-
-Example:
-
-Input:
+The measurable workflow and its local synthetic demonstration are defined in
+[`SYNTHETIC_ANALYST_MVP_ACCEPTANCE.md`](SYNTHETIC_ANALYST_MVP_ACCEPTANCE.md).
+Release readiness remains tracked separately in
+[`SOC_ANALYST_PILOT_READINESS.md`](../release/SOC_ANALYST_PILOT_READINESS.md).
