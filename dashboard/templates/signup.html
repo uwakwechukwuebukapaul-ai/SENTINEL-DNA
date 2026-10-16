@@ -43,8 +43,8 @@
 
     <label for="password">Password</label>
     <input id="password" name="password" type="password" minlength="10" required autocomplete="new-password">
-    <label for="confirm-password">Confirm password</label>
-    <input id="confirm-password" name="confirm_password" type="password" minlength="10" required autocomplete="new-password">
+    <label for="confirm">Confirm password</label>
+    <input id="confirm" name="confirm_password" type="password" minlength="10" required autocomplete="new-password">
 
     <p id="status" role="status" aria-live="polite"></p>
     <button id="create-account" class="primary" type="submit">Create analyst account</button>
@@ -161,7 +161,7 @@
     const username = byId("username").value.trim();
     const password = byId("password").value;
     if (!form.reportValidity()) return;
-    if (password !== byId("confirm-password").value) {
+    if (password !== byId("confirm").value) {
       showStatus("The passwords do not match.");
       return;
     }
