@@ -13,6 +13,7 @@ from deployment.disaster_recovery.sqlite_backup import SQLiteBackupService
 from deployment.scripts.release_manifest import build_manifest, write_manifest
 from deployment.validation.contract import (
     DeploymentContractValidator,
+    _canonical_wsgi_application,
     write_immutable_report,
 )
 from deployment.scripts.release_metadata import derive_release_metadata
@@ -20,6 +21,12 @@ from tests.credential_helpers import random_password, random_secret
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_canonical_wsgi_application_accepts_supported_entrypoint_forms():
+    assert _canonical_wsgi_application("from dashboard.app import app as application\n")
+    assert _canonical_wsgi_application("from app import create_app\napplication = create_app()\n")
+    assert not _canonical_wsgi_application("application = object()\n")
 
 
 def _clean_repository(tmp_path: Path) -> Path:

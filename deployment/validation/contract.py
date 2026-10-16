@@ -8,6 +8,7 @@ database and backup restore uses a disposable temporary target.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -53,6 +54,38 @@ def _canonical(value: Any) -> bytes:
 
 def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _canonical_wsgi_application(source: str) -> bool:
+    try:
+        module = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    dashboard_application = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "dashboard.app"
+        and any(alias.name == "app" and alias.asname == "application" for alias in node.names)
+        for node in module.body
+    )
+    factory_names = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "app"
+        for alias in node.names
+        if alias.name == "create_app"
+    }
+    factory_application = any(
+        isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "application" for target in node.targets)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id in factory_names
+        and not node.value.args
+        and not node.value.keywords
+        for node in module.body
+    )
+    return dashboard_application or factory_application
 
 
 def _file_digest(path: Path) -> str:
@@ -298,8 +331,7 @@ class DeploymentContractValidator:
         image_checks = {
             "canonical_wsgi_entrypoint": (
                 wsgi.is_file()
-                and "from app import create_app" in wsgi_text
-                and re.search(r"^\s*application\s*=\s*create_app\(\)\s*$", wsgi_text, flags=re.MULTILINE)
+                and _canonical_wsgi_application(wsgi_text)
                 and "wsgi:application" in command
             ),
             "gunicorn_production_server": bool(command)
