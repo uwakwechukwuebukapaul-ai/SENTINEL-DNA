@@ -105,22 +105,45 @@ def register():
     if not _allowed("signup", 12, 3600): return jsonify({"error": "registration_unavailable"}), 429
     _audit("signup_started", method="password", outcome="started")
     try:
-        # Explicit migration boundary: legacy JSON callers remain compatible
-        # until a versioned API contract replaces this path. Browser-style
-        # registration always requires email and phone verification below.
-        legacy_api = current_app.config.get("AUTH_LEGACY_JSON_COMPAT", True) and request.is_json and not data.get("date_of_birth") and not data.get("phone")
+        # Legacy JSON compatibility is restricted to the explicitly configured
+        # non-production migration path. Browser registration uses email OTP;
+        # phone verification is optional and never blocks account creation.
+        legacy_api = (
+            current_app.config.get("AUTH_LEGACY_JSON_COMPAT", False)
+            and request.is_json
+            and not data.get("date_of_birth")
+            and not data.get("phone")
+            and not data.get("email_challenge_id")
+        )
+        email = str(data.get("email", "")).strip().lower()
         dob = validate_minimum_age(data.get("date_of_birth")) if data.get("date_of_birth") else None
         phone = normalize_phone(data.get("country", ""), data.get("phone", "")) if data.get("phone") else None
         email_verified_at = None
         if not legacy_api:
-            email_challenge_id = data.get("email_challenge_id")
-            if email_challenge_id == "pending": email_challenge_id = session.get("registration_email_challenge_id")
+            email_challenge_id = data.get("email_challenge_id") or session.get("registration_email_challenge_id")
+            session_challenge_id = session.get("registration_email_challenge_id")
+            if (
+                not email_challenge_id
+                or not session_challenge_id
+                or not secrets.compare_digest(str(email_challenge_id), str(session_challenge_id))
+                or session.get("registration_email_verified") != email
+            ):
+                raise ValueError("verification_required")
             with _service().db.session() as connection:
-                verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND consumed_at IS NOT NULL AND destination=?", (data.get("phone_challenge_id"), phone)).fetchone()
-                email_verified = connection.execute("SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_email' AND consumed_at IS NOT NULL AND destination=?", (email_challenge_id, str(data.get("email", "")).strip().lower())).fetchone()
-            if not verified or not email_verified: raise ValueError("verification_required")
+                email_verified = connection.execute(
+                    "SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_email' AND consumed_at IS NOT NULL AND destination=?",
+                    (email_challenge_id, email),
+                ).fetchone()
+                phone_verified = None
+                if phone:
+                    phone_verified = connection.execute(
+                        "SELECT 1 FROM otp_challenges WHERE id=? AND purpose='registration_phone' AND consumed_at IS NOT NULL AND destination=?",
+                        (data.get("phone_challenge_id"), phone),
+                    ).fetchone()
+            if not email_verified or (phone and not phone_verified):
+                raise ValueError("verification_required")
             email_verified_at = datetime.now(timezone.utc).isoformat()
-        user = _service().register(data.get("username", ""), data.get("email", ""), data.get("password", ""), "analyst", phone_number=phone, date_of_birth=dob, email_verified_at=email_verified_at)
+        user = _service().register(data.get("username", ""), email, data.get("password", ""), "analyst", phone_number=phone, date_of_birth=dob, email_verified_at=email_verified_at)
     except DatabaseError: return jsonify({"error": "registration_unavailable"}), 409
     except Exception as exc:
         if integrity_error(exc): return jsonify({"error": "registration_unavailable"}), 409
@@ -281,13 +304,29 @@ def email_send_registration_code():
 @auth_api.post("/email/verify-registration-code")
 def email_verify_registration_code():
     if not _csrf_ok(): return jsonify({"error": "csrf_validation_failed"}), 403
-    data = request.get_json(silent=True) or {}; challenge_id = data.get("challenge_id") or session.get("registration_email_challenge_id")
+    data = request.get_json(silent=True) or {}
+    challenge_id = data.get("challenge_id") or session.get("registration_email_challenge_id")
+    session_challenge_id = session.get("registration_email_challenge_id")
+    if (
+        not challenge_id
+        or not session_challenge_id
+        or not secrets.compare_digest(str(challenge_id), str(session_challenge_id))
+    ):
+        _audit("email_verification_failed", method="email_otp", outcome="failure", reason="challenge_session_mismatch")
+        return jsonify({"error": "verification_failed"}), 400
     if not _allowed("email-registration-verify", 10, 600): return jsonify({"error": "verification_failed"}), 400
-    _service().verify_otp(challenge_id, data.get("code", ""), secret=current_app.secret_key)
+    try:
+        _service().verify_otp(challenge_id, data.get("code", ""), secret=current_app.secret_key)
+    except Exception:
+        _audit("email_verification_failed", method="email_otp", outcome="failure", reason="invalid_or_expired")
+        return jsonify({"error": "verification_failed"}), 400
     with _service().db.session() as connection: row = connection.execute("SELECT destination,consumed_at FROM otp_challenges WHERE id=? AND purpose='registration_email'", (challenge_id,)).fetchone()
     verified = bool(row and row["consumed_at"])
-    if verified: session["registration_email_verified"] = row["destination"]; _audit("email_verified", method="email_otp", outcome="success")
-    else: _audit("email_verification_failed", method="email_otp", outcome="failure", reason="invalid_or_expired")
+    if verified:
+        session["registration_email_verified"] = row["destination"]
+        _audit("email_verified", method="email_otp", outcome="success")
+    else:
+        _audit("email_verification_failed", method="email_otp", outcome="failure", reason="invalid_or_expired")
     return jsonify({"verified": verified}), 200 if verified else 400
 
 @auth_api.post("/email/verify-code")
