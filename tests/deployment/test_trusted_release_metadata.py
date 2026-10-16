@@ -1,6 +1,9 @@
 import json
 import os
 from pathlib import Path
+import stat
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -106,6 +109,154 @@ def test_prepare_metadata_never_writes_inside_source_tree(tmp_path, monkeypatch)
             output=Path(__file__).parents[2] / "trusted-release-metadata.json",
             repository_root=Path(__file__).parents[2],
         )
+
+
+def test_prepare_metadata_rejects_symlinked_parent_directory(tmp_path, monkeypatch):
+    configure_fake_release(monkeypatch)
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    output_parent = tmp_path / "release"
+    output_parent.mkdir(mode=0o700)
+    output = output_parent / "metadata.json"
+    original_lstat = Path.lstat
+
+    def lstat_with_symlink(path):
+        file_stat = original_lstat(path)
+        if path == output_parent:
+            return SimpleNamespace(st_mode=stat.S_IFLNK | 0o777, st_file_attributes=0)
+        return file_stat
+
+    monkeypatch.setattr(Path, "lstat", lstat_with_symlink)
+
+    with pytest.raises(trusted.TrustedReleaseMetadataError, match="trusted_release_metadata_symlink_forbidden"):
+        trusted.prepare_metadata(
+            image="deployment-app:" + REVISION,
+            expected_revision=REVISION,
+            expected_digest=DIGEST,
+            expected_created=CREATED,
+            output=output,
+            repository_root=repository_root,
+        )
+
+    assert not output.exists()
+
+
+def test_prepare_metadata_rejects_real_junction_parent_before_canonicalization(tmp_path, monkeypatch):
+    if os.name != "nt":
+        pytest.skip("directory junctions require Windows")
+    configure_fake_release(monkeypatch)
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    target_parent = tmp_path / "release-target"
+    target_parent.mkdir(mode=0o700)
+    output_parent = tmp_path / "release-junction"
+    output = output_parent / "metadata.json"
+    result = subprocess.run(
+        [
+            os.environ.get("COMSPEC", "cmd.exe"),
+            "/c",
+            "mklink",
+            "/J",
+            str(output_parent),
+            str(target_parent),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"directory junction creation is unavailable: {result.stdout}{result.stderr}")
+
+    original_resolve = Path.resolve
+    resolve_calls = []
+
+    def track_resolve(path, *args, **kwargs):
+        resolve_calls.append(path)
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", track_resolve)
+    try:
+        with pytest.raises(
+            trusted.TrustedReleaseMetadataError,
+            match="trusted_release_metadata_symlink_forbidden",
+        ):
+            trusted.prepare_metadata(
+                image="deployment-app:" + REVISION,
+                expected_revision=REVISION,
+                expected_digest=DIGEST,
+                expected_created=CREATED,
+                output=output,
+                repository_root=repository_root,
+            )
+
+        assert resolve_calls == []
+        assert not (target_parent / "metadata.json").exists()
+    finally:
+        output_parent.rmdir()
+
+
+def test_prepare_metadata_rejects_reparse_component_before_canonicalization(tmp_path, monkeypatch):
+    configure_fake_release(monkeypatch)
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    output_parent = tmp_path / "release"
+    output_parent.mkdir(mode=0o700)
+    output = output_parent / "metadata.json"
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    original_lstat = Path.lstat
+    original_resolve = Path.resolve
+    resolve_calls = []
+
+    def lstat_with_reparse_point(path):
+        file_stat = original_lstat(path)
+        if path == output_parent:
+            return SimpleNamespace(
+                st_mode=file_stat.st_mode,
+                st_file_attributes=reparse_flag,
+            )
+        return file_stat
+
+    def track_resolve(path, *args, **kwargs):
+        resolve_calls.append(path)
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", lstat_with_reparse_point)
+    monkeypatch.setattr(Path, "resolve", track_resolve)
+
+    with pytest.raises(trusted.TrustedReleaseMetadataError, match="trusted_release_metadata_symlink_forbidden"):
+        trusted.prepare_metadata(
+            image="deployment-app:" + REVISION,
+            expected_revision=REVISION,
+            expected_digest=DIGEST,
+            expected_created=CREATED,
+            output=output,
+            repository_root=repository_root,
+        )
+
+    assert resolve_calls == []
+    assert not output.exists()
+
+
+def test_prepare_metadata_rejects_missing_parent_component(tmp_path, monkeypatch):
+    configure_fake_release(monkeypatch)
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    output = tmp_path / "missing" / "release" / "metadata.json"
+
+    with pytest.raises(
+        trusted.TrustedReleaseMetadataError,
+        match="trusted_release_metadata_parent_unavailable",
+    ):
+        trusted.prepare_metadata(
+            image="deployment-app:" + REVISION,
+            expected_revision=REVISION,
+            expected_digest=DIGEST,
+            expected_created=CREATED,
+            output=output,
+            repository_root=repository_root,
+        )
+
+    assert not output.parent.exists()
 
 
 def test_prepare_metadata_rejects_invalid_digest_without_writing(tmp_path, monkeypatch):

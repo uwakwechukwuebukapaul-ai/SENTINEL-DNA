@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -36,6 +37,34 @@ METADATA_KEYS = frozenset(("release_sha", "image_digest"))
 
 class TrustedReleaseMetadataError(RuntimeError):
     """Safe operator-facing release artifact failure."""
+
+
+def _reject_symlink_or_reparse_components(path: Path) -> None:
+    parts = path.parts
+    current = Path(parts[0])
+    components: list[tuple[Path, int]] = [(current, 0)]
+    for index, part in enumerate(parts[1:], start=1):
+        if part == "..":
+            current = current.parent
+            continue
+        if part in ("", "."):
+            continue
+        current = current / part
+        components.append((current, index))
+
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    for component, index in components:
+        try:
+            file_stat = component.lstat()
+        except FileNotFoundError as exc:
+            if index == len(parts) - 1:
+                continue
+            raise TrustedReleaseMetadataError("trusted_release_metadata_parent_unavailable") from exc
+        except (OSError, ValueError) as exc:
+            raise TrustedReleaseMetadataError("trusted_release_metadata_parent_unavailable") from exc
+        attributes = getattr(file_stat, "st_file_attributes", 0)
+        if stat.S_ISLNK(file_stat.st_mode) or attributes & reparse_flag:
+            raise TrustedReleaseMetadataError("trusted_release_metadata_symlink_forbidden")
 
 
 def _inspect_image(image: str, docker_executable: str = "docker") -> dict[str, Any]:
@@ -65,6 +94,7 @@ def _image_digest(info: dict[str, Any]) -> str:
 def _validate_output_path(output: Path, repository_root: Path) -> tuple[Path, Path]:
     if not output.is_absolute():
         raise TrustedReleaseMetadataError("trusted_release_metadata_path_must_be_absolute")
+    _reject_symlink_or_reparse_components(output)
     try:
         resolved_output = output.resolve()
         resolved_root = repository_root.resolve()
