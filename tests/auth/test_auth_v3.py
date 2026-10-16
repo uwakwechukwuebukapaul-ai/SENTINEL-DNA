@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import create_app
-from services.auth.providers import TestEmailProvider, TestSMSProvider, email_provider, sms_provider
+from services.auth.providers import SMTPEmailProvider, TestEmailProvider, TestSMSProvider, email_provider, sms_provider
 from services.auth.oauth import GoogleOIDC
 from services.auth.oauth import GoogleClaims
 from services.auth.rate_limit import RedisRateLimitBackend
@@ -23,20 +23,84 @@ def app(tmp_path, monkeypatch):
 
 def token(client): return client.get("/api/auth/csrf").get_json()["csrf_token"]
 
-def test_v3_signup_phone_dob_and_analyst_binding(app):
+def test_v3_signup_email_only_and_analyst_binding(app):
     client = app.test_client(); csrf = token(client)
-    assert client.post("/api/auth/email/send-registration-code", json={"email":"v3@example.test"}, headers={"X-CSRF-Token":csrf}).status_code == 202
+    sent = client.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "v3@example.test"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert sent.status_code == 202
+    email_challenge = sent.get_json()["challenge_id"]
     email_code = app.config["EMAIL_PROVIDER"].messages[-1]["code"]
-    email_challenge = app.container.require("auth_service").db.connect().execute("SELECT id FROM otp_challenges WHERE purpose='registration_email' ORDER BY created_at DESC LIMIT 1").fetchone()["id"]
-    assert client.post("/api/auth/email/verify-registration-code", json={"challenge_id":email_challenge,"code":email_code}, headers={"X-CSRF-Token":csrf}).status_code == 200
-    send = client.post("/api/auth/phone/send-code", json={"country": "NG", "phone": "08031234567"}, headers={"X-CSRF-Token": csrf})
-    assert send.status_code == 202
-    challenge = send.get_json()["challenge_id"]
-    code = app.config["SMS_PROVIDER"].messages[-1]["code"]
-    assert client.post("/api/auth/phone/verify-code", json={"challenge_id": challenge, "code": code}, headers={"X-CSRF-Token": csrf}).status_code == 200
-    created = client.post("/api/auth/register", json={"username":"v3-analyst","email":"v3@example.test","password":PASSWORD,"country":"NG","phone":"08031234567","phone_challenge_id":challenge,"email_challenge_id":email_challenge,"date_of_birth":"2000-01-02","role":"admin","tenant_id":"attacker"}, headers={"X-CSRF-Token": csrf})
-    assert created.status_code == 201 and created.get_json()["role"] == "analyst"
-    assert "+2348031234567" == created.get_json()["phone_number"] if "phone_number" in created.get_json() else True
+
+    # A challenge ID is bound to the browser session that requested it.
+    other_client = app.test_client()
+    other_csrf = token(other_client)
+    cross_session = other_client.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": email_challenge, "code": email_code},
+        headers={"X-CSRF-Token": other_csrf},
+    )
+    assert cross_session.status_code == 400
+
+    verified = client.post(
+        "/api/auth/email/verify-registration-code",
+        json={"challenge_id": email_challenge, "code": email_code},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert verified.status_code == 200 and verified.get_json()["verified"] is True
+    created = client.post(
+        "/api/auth/register",
+        json={
+            "username": "v3-analyst",
+            "email": "v3@example.test",
+            "password": PASSWORD,
+            "email_challenge_id": email_challenge,
+            "date_of_birth": "2000-01-02",
+            "role": "admin",
+            "tenant_id": "attacker",
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert created.status_code == 201
+    assert created.get_json()["role"] == "analyst"
+    assert created.get_json()["email"] == "v3@example.test"
+
+
+def test_v3_registration_rejects_unverified_or_cross_session_email(app):
+    client = app.test_client(); csrf = token(client)
+    sent = client.post(
+        "/api/auth/email/send-registration-code",
+        json={"email": "unverified@example.test"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert sent.status_code == 202
+    challenge = sent.get_json()["challenge_id"]
+    blocked = client.post(
+        "/api/auth/register",
+        json={
+            "username": "unverified-user",
+            "email": "unverified@example.test",
+            "password": PASSWORD,
+            "email_challenge_id": challenge,
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert blocked.status_code == 400
+
+    other = app.test_client(); other_csrf = token(other)
+    forged = other.post(
+        "/api/auth/register",
+        json={
+            "username": "cross-session-user",
+            "email": "unverified@example.test",
+            "password": PASSWORD,
+            "email_challenge_id": challenge,
+        },
+        headers={"X-CSRF-Token": other_csrf},
+    )
+    assert forged.status_code == 400
 
 def test_v3_csrf_and_dob_rejection(app):
     client = app.test_client()
@@ -62,6 +126,61 @@ def test_v3_email_otp_authentication_and_replay_protection(app):
 def test_v3_oidc_rejects_tampered_state_without_network(app):
     with pytest.raises(ValueError, match="oauth_state_invalid"):
         GoogleOIDC("client", random_secret(), "http://127.0.0.1/callback").complete("code", "attacker-state", "expected-state", "nonce", "nonce")
+
+def test_v3_smtp_email_provider_uses_tls_and_sends_code_without_logging(monkeypatch):
+    from email.message import EmailMessage
+
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["connection"] = (host, port, timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def ehlo(self):
+            sent["ehlo"] = True
+
+        def starttls(self, context):
+            sent["tls"] = context is not None
+
+        def login(self, username, password):
+            sent["login"] = (username, password)
+
+        def send_message(self, message):
+            sent["message"] = message
+
+    monkeypatch.setattr("services.auth.providers.smtplib.SMTP", FakeSMTP)
+    provider = SMTPEmailProvider(
+        host="smtp.example.test",
+        port=587,
+        from_address="sentinel@example.test",
+        username="smtp-user",
+        password="not-a-real-secret",
+    )
+    result = provider.send_code("analyst@example.test", "123456", "registration_email")
+
+    assert result.accepted is True
+    assert result.provider_request_id.startswith("smtp-")
+    assert sent["connection"] == ("smtp.example.test", 587, 10)
+    assert sent["tls"] is True
+    assert sent["login"] == ("smtp-user", "not-a-real-secret")
+    assert isinstance(sent["message"], EmailMessage)
+    assert "123456" in sent["message"].get_content()
+
+
+def test_v3_staging_email_provider_requires_explicit_smtp_configuration(monkeypatch):
+    monkeypatch.setenv("SENTINEL_DNA_ENV", "staging")
+    monkeypatch.setenv("SENTINEL_DNA_EMAIL_PROVIDER", "smtp")
+    monkeypatch.delenv("SENTINEL_DNA_SMTP_HOST", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_EMAIL_FROM", raising=False)
+    with pytest.raises(RuntimeError, match="email_provider_not_configured"):
+        email_provider()
+
 
 def test_v3_providers_fail_closed_without_explicit_configuration(monkeypatch):
     monkeypatch.setenv("SENTINEL_DNA_ENV", "production")
