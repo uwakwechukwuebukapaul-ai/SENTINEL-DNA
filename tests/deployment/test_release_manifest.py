@@ -10,6 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
+import deployment.scripts.release_manifest as release_manifest_module
+from deployment.scripts.trusted_release_metadata import (
+    TrustedReleaseMetadataError,
+    parse_trusted_release_metadata,
+)
 from deployment.scripts.release_manifest import (
     RELEASE_FILE_SET,
     SCHEMA_VERSION,
@@ -24,6 +29,23 @@ from tests.credential_helpers import random_token
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 IMAGE_ID = "sha256:" + "c" * 64
+
+
+@pytest.fixture
+def mock_trusted_metadata_reader(monkeypatch: pytest.MonkeyPatch):
+    """Explicitly stub only secure reads in downstream manifest logic tests on Windows."""
+
+    def install(responses: dict[Path, dict[str, str]]) -> None:
+        if os.name == "nt":
+            def read_metadata(path: str | os.PathLike[str], _repository_root: Path) -> dict[str, str]:
+                try:
+                    return responses[Path(path)]
+                except KeyError as exc:
+                    raise AssertionError("test did not provide a trusted metadata response") from exc
+
+            monkeypatch.setattr(release_manifest_module, "read_trusted_release_metadata", read_metadata)
+
+    return install
 
 
 @pytest.fixture
@@ -414,12 +436,17 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
 
 
 def test_image_bound_manifest_binds_trusted_metadata_and_creation_time(
-    tmp_path: Path, clean_repository: Path
+    tmp_path: Path,
+    clean_repository: Path,
+    mock_trusted_metadata_reader,
 ) -> None:
     digest = "sha256:" + "a" * 64
     created = "1970-01-01T00:00:00Z"
     release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
     trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    mock_trusted_metadata_reader(
+        {trusted_metadata: {"release_sha": release_sha, "image_digest": digest}}
+    )
     manifest = build_manifest(
         repository_root=clean_repository,
         image_reference="deployment-app:current-release",
@@ -461,9 +488,13 @@ def test_manifest_build_rejects_trusted_metadata_mismatch(
     release_sha: str | None,
     image_digest: str,
     error: str,
+    mock_trusted_metadata_reader,
 ) -> None:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
     metadata_path = _trusted_metadata(tmp_path, metadata_sha or head, metadata_digest)
+    mock_trusted_metadata_reader(
+        {metadata_path: {"release_sha": metadata_sha or head, "image_digest": metadata_digest}}
+    )
     with pytest.raises(ReleaseManifestError, match=error):
         build_manifest(
             repository_root=clean_repository,
@@ -485,19 +516,15 @@ def test_manifest_build_rejects_trusted_metadata_mismatch(
     ),
 )
 def test_trusted_metadata_requires_exact_fields_and_valid_values(
-    tmp_path: Path, clean_repository: Path, payload: dict, error: str
+    payload: dict, error: str
 ) -> None:
-    metadata_path = tmp_path / "trusted-metadata.json"
-    metadata_path.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(ReleaseManifestError, match=error):
-        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+    with pytest.raises(TrustedReleaseMetadataError, match=error):
+        parse_trusted_release_metadata(json.dumps(payload).encode("utf-8"))
 
 
-def test_trusted_metadata_rejects_malformed_json(tmp_path: Path, clean_repository: Path) -> None:
-    metadata_path = tmp_path / "trusted-metadata.json"
-    metadata_path.write_text('{"release_sha":', encoding="utf-8")
-    with pytest.raises(ReleaseManifestError, match="trusted release metadata is not valid JSON"):
-        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+def test_trusted_metadata_rejects_malformed_json() -> None:
+    with pytest.raises(TrustedReleaseMetadataError, match="trusted release metadata is not valid JSON"):
+        parse_trusted_release_metadata(b'{"release_sha":')
 
 
 @pytest.mark.parametrize(
@@ -510,12 +537,10 @@ def test_trusted_metadata_rejects_malformed_json(tmp_path: Path, clean_repositor
     ),
 )
 def test_trusted_metadata_rejects_duplicate_keys_without_echoing_input(
-    tmp_path: Path, clean_repository: Path, payload: str
+    payload: str,
 ) -> None:
-    metadata_path = tmp_path / "trusted-metadata-duplicate.json"
-    metadata_path.write_text(payload, encoding="utf-8")
-    with pytest.raises(ReleaseManifestError, match="trusted release metadata is not valid JSON") as failure:
-        build_manifest(repository_root=clean_repository, trusted_metadata_path=metadata_path)
+    with pytest.raises(TrustedReleaseMetadataError, match="trusted release metadata is not valid JSON") as failure:
+        parse_trusted_release_metadata(payload.encode("utf-8"))
     assert "private-marker" not in str(failure.value)
 
 
@@ -571,11 +596,16 @@ def test_image_bound_certification_requires_trusted_metadata(tmp_path: Path, cle
 
 
 def test_image_bound_certification_requires_expected_creation_timestamp(
-    tmp_path: Path, clean_repository: Path
+    tmp_path: Path,
+    clean_repository: Path,
+    mock_trusted_metadata_reader,
 ) -> None:
     digest = "sha256:" + "a" * 64
     release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
     trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    mock_trusted_metadata_reader(
+        {trusted_metadata: {"release_sha": release_sha, "image_digest": digest}}
+    )
     manifest = build_manifest(
         repository_root=clean_repository,
         image_digest=digest,
@@ -615,17 +645,28 @@ def test_image_bound_certification_rejects_metadata_and_identity_mismatches(
     expected_digest: str,
     expected_created: str,
     error: str,
+    mock_trusted_metadata_reader,
 ) -> None:
     digest = "sha256:" + "a" * 64
     created = "1970-01-01T00:00:00Z"
     release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
     trusted_metadata = _trusted_metadata(tmp_path, metadata_sha or release_sha, metadata_digest)
+    trusted_build_metadata = _trusted_metadata(tmp_path / "build", release_sha, digest)
+    mock_trusted_metadata_reader(
+        {
+            trusted_build_metadata: {"release_sha": release_sha, "image_digest": digest},
+            trusted_metadata: {
+                "release_sha": metadata_sha or release_sha,
+                "image_digest": metadata_digest,
+            },
+        }
+    )
     manifest = build_manifest(
         repository_root=clean_repository,
         image_digest=digest,
         image_id=IMAGE_ID,
         image_created=created,
-        trusted_metadata_path=_trusted_metadata(tmp_path / "build", release_sha, digest),
+        trusted_metadata_path=trusted_build_metadata,
     )
     manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
 
@@ -651,17 +692,23 @@ def test_image_bound_manifest_cli_passes_trusted_metadata_and_timestamp(
     trusted_metadata = _trusted_metadata(tmp_path, release_sha, digest)
     manifest_path = tmp_path / "cli-release-manifest.json"
     script = REPOSITORY_ROOT / "deployment" / "scripts" / "release_manifest.py"
-    subprocess.run(
+    build_result = subprocess.run(
         [
             sys.executable, str(script), "build", "--repository-root", str(clean_repository),
             "--output", str(manifest_path), "--image-digest", digest, "--image-id", IMAGE_ID,
             "--image-revision", release_sha, "--image-created", created,
             "--trusted-metadata", str(trusted_metadata),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if os.name != "posix":
+        assert build_result.returncode == 2
+        assert "trusted metadata is unsupported on this platform" in build_result.stderr
+        assert not manifest_path.exists()
+        return
+    assert build_result.returncode == 0, build_result.stderr
     subprocess.run(
         [
             sys.executable, str(script), "verify", "--repository-root", str(clean_repository),
@@ -730,11 +777,14 @@ def test_manifest_verification_rejects_malformed_image_id(tmp_path: Path, clean_
 
 
 def test_image_bound_manifest_rejects_inspected_image_id_mismatch(
-    tmp_path: Path, clean_repository: Path
+    tmp_path: Path,
+    clean_repository: Path,
+    mock_trusted_metadata_reader,
 ) -> None:
     digest = "sha256:" + "a" * 64
     release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
     metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    mock_trusted_metadata_reader({metadata: {"release_sha": release_sha, "image_digest": digest}})
     manifest = build_manifest(
         repository_root=clean_repository,
         image_digest=digest,
