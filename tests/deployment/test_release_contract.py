@@ -1,12 +1,13 @@
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
 from deployment.scripts.release_metadata import derive_release_metadata, format_metadata
-from deployment.scripts.validate_deployment_config import validate_configuration
+from deployment.scripts.validate_deployment_config import main, validate_configuration
 from tests.credential_helpers import random_password, random_secret
 
 
@@ -405,6 +406,7 @@ def test_controlled_production_validation_requires_postgresql_url():
         "SENTINEL_DNA_SECURE_COOKIES": "1",
         "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
         "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+        "SENTINEL_DNA_DB_PATH": "/tmp/sentinel.sqlite",
     }
 
     errors = validate_configuration(
@@ -414,6 +416,75 @@ def test_controlled_production_validation_requires_postgresql_url():
     )
 
     assert "DATABASE_URL:missing" in errors
+
+
+@pytest.mark.parametrize("database_url", ["sqlite:///tmp/sentinel.sqlite", "not-a-url", "postgresql://[invalid"])
+def test_controlled_production_validation_rejects_invalid_database_urls(database_url):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+        "SENTINEL_DNA_DB_PATH": "/tmp/sentinel.sqlite",
+        "DATABASE_URL": database_url,
+    }
+
+    errors = validate_configuration(environ=environment, repository_root=ROOT, require_postgresql=True)
+
+    assert "DATABASE_URL:invalid-postgresql-url" in errors
+
+
+def test_controlled_production_validation_accepts_postgresql_url(tmp_path):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "b" * 64
+    trusted = tmp_path / "trusted-metadata.json"
+    trusted.write_text(
+        '{"release_sha":"' + metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"] + '","image_digest":"' + digest + '"}\n',
+        encoding="utf-8",
+    )
+    trusted.chmod(0o444)
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+        "DATABASE_URL": "postgresql://sentinel@postgres:5432/sentinel_dna",
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
+    }
+
+    assert validate_configuration(environ=environment, repository_root=ROOT, require_postgresql=True) == []
+
+
+def test_normal_validator_cli_requires_postgresql_url(monkeypatch, tmp_path, capsys):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    digest = "sha256:" + "a" * 64
+    trusted = tmp_path / "trusted-metadata.json"
+    trusted.write_text(
+        '{"release_sha":"' + metadata["SENTINEL_DNA_IMAGE_REVISION_FULL"] + '","image_digest":"' + digest + '"}\n',
+        encoding="utf-8",
+    )
+    trusted.chmod(0o444)
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+        "SENTINEL_DNA_DB_PATH": str(tmp_path / "soc.db"),
+        "SENTINEL_DNA_IMAGE_DIGEST": digest,
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
+    }
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(sys, "argv", ["validate_deployment_config.py"])
+
+    assert main() == 1
+    assert "DATABASE_URL:missing" in capsys.readouterr().out
 
 
 def test_deployment_validation_rejects_missing_trusted_release_artifact(tmp_path):
@@ -538,6 +609,9 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert names.index("Publish immutable candidate image to private GHCR") < names.index("Prepare candidate-bound trusted release metadata")
     assert names.index("Prepare candidate-bound trusted release metadata") < names.index("Validate protected configuration and metadata")
     assert names.index("Validate protected configuration and metadata") < names.index("Generate image-bound release manifest")
+    configuration_step = _step(workflow, "Validate protected configuration and metadata")
+    assert configuration_step["run"] == "python deployment/scripts/validate_deployment_config.py"
+    assert configuration_step["env"]["DATABASE_URL"] == "postgresql://sentinel@postgres:5432/sentinel_dna"
     assert names.index("Verify image-bound release manifest") < names.index("Upload non-secret image release evidence")
 
     login = _step(workflow, "Authenticate to private GHCR")
