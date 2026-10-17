@@ -35,6 +35,7 @@ RELEASE_SHA = RELEASE_METADATA["SENTINEL_DNA_IMAGE_REVISION_FULL"]
 RELEASE_REVISION = RELEASE_METADATA["SENTINEL_DNA_IMAGE_REVISION"]
 RELEASE_CREATED = RELEASE_METADATA["SENTINEL_DNA_IMAGE_CREATED"]
 RELEASE_DIGEST = "sha256:9a212a06eed455a43675c75cf1324827b33bc44070c6f0ccd7d5f9df0be4b91d"
+IMAGE_ID = "sha256:" + "c" * 64
 SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 
 
@@ -146,7 +147,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
             release_sha=RELEASE_SHA,
             image_reference=f"deployment-app:{RELEASE_SHA}",
             image_digest=RELEASE_DIGEST,
-            image_id="sha256:image-id",
+            image_id=IMAGE_ID,
             image_revision=RELEASE_SHA,
             image_source=SOURCE,
             image_created=RELEASE_CREATED,
@@ -182,7 +183,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
     if os.name != "nt":
         env_file.chmod(0o600)
     image_info = {
-        "Id": "sha256:image-id",
+        "Id": IMAGE_ID,
         "RepoDigests": [f"deployment-app@{RELEASE_DIGEST}"],
         "Config": {
             "Labels": {
@@ -362,7 +363,7 @@ def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_v
         "--image-digest",
         RELEASE_DIGEST,
         "--image-id",
-        "sha256:image-id",
+        IMAGE_ID,
         "--image-revision",
         RELEASE_SHA,
         "--image-source",
@@ -481,10 +482,34 @@ def test_adapter_manifest_validation_binds_authorized_metadata_and_timestamp(tmp
     assert metadata_file == adapter.metadata_file
 
 
+@pytest.mark.skipif(os.name != "posix", reason="trusted metadata certification is unsupported on Windows")
+def test_adapter_rejects_oci_created_mismatch_after_manifest_validation(tmp_path):
+    adapter, env_file, _ = _fixture(tmp_path)
+    mismatched_created = "1970-01-01T00:00:01Z"
+    env_file.write_text(
+        env_file.read_text(encoding="utf-8").replace(RELEASE_CREATED, mismatched_created),
+        encoding="utf-8",
+    )
+    manifest = json.loads(adapter.release_manifest_file.read_text(encoding="utf-8"))
+    manifest["image"]["oci_created"] = mismatched_created
+    adapter.release_manifest_file.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlledDeploymentError, match="oci_created_mismatch"):
+        adapter.validate()
+
+
 @pytest.mark.parametrize(
     ("binding", "value", "error"),
     (
-        ("timestamp", "1970-01-01T00:00:01Z", "release_manifest_invalid"),
+        pytest.param(
+            "timestamp",
+            "1970-01-01T00:00:01Z",
+            "release_manifest_invalid",
+            marks=pytest.mark.skipif(
+                os.name != "posix",
+                reason="trusted metadata certification is unsupported on Windows",
+            ),
+        ),
         ("metadata_sha", "0" * 40, "configuration_invalid"),
         ("metadata_digest", "sha256:" + "0" * 64, "configuration_invalid"),
     ),
@@ -523,6 +548,28 @@ def test_adapter_rejects_wrong_image_digest(tmp_path):
     adapter.expected_digest = "sha256:" + "1" * 64
     with pytest.raises(ControlledDeploymentError, match="image_digest_mismatch"):
         adapter._validate_release(expected_created=RELEASE_CREATED)
+
+
+@pytest.mark.parametrize(
+    ("image_id", "error"),
+    ((None, "image_id_unavailable"), ("sha256:malformed", "image_id_invalid")),
+)
+def test_adapter_rejects_missing_or_malformed_inspected_image_id(tmp_path, image_id, error):
+    adapter, _, _ = _fixture(tmp_path)
+    adapter.runner.image_info["Id"] = image_id
+
+    with pytest.raises(ControlledDeploymentError, match=error):
+        adapter._validate_release(expected_created=RELEASE_CREATED)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="trusted metadata certification is unsupported on Windows")
+def test_adapter_rejects_release_manifest_image_id_mismatch(tmp_path):
+    adapter, _, _ = _fixture(tmp_path)
+    with pytest.raises(ControlledDeploymentError, match="release_manifest_invalid"):
+        adapter._validate_release_manifest(
+            expected_created=RELEASE_CREATED,
+            expected_image_id="sha256:" + "d" * 64,
+        )
 
 
 def test_adapter_rejects_wrong_image_revision(tmp_path):

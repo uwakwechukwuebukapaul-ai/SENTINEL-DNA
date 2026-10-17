@@ -21,11 +21,21 @@ import tarfile
 from pathlib import Path
 from typing import Any
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if __name__ == "__main__" and str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from deployment.scripts.trusted_release_metadata import (
+    TrustedReleaseMetadataError,
+    read_trusted_release_metadata,
+)
+
 
 SCHEMA_VERSION = "sentinel-dna-release-manifest-v2"
 EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 CREATED_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 MANIFEST_FIELDS = frozenset(
     (
@@ -47,7 +57,6 @@ VALIDATION_EVIDENCE_FIELDS = frozenset(("source", "report_digest", "replay_diges
 REPLAY_REFERENCE_FIELDS = frozenset(("source", "digest"))
 IMAGE_FIELDS = frozenset(("reference", "digest", "id", "oci_revision", "oci_source", "oci_created", "git_revision_full"))
 MANIFEST_POLICY_FIELDS = frozenset(("generated_output", "self_hash", "identity_excludes"))
-TRUSTED_METADATA_FIELDS = frozenset(("release_sha", "image_digest"))
 
 # This is the reviewed release boundary.  The generated manifest is not part
 # of this tuple and must be written outside the repository tree.
@@ -61,6 +70,7 @@ RELEASE_FILE_SET = (
     "deployment/scripts/controlled_deploy.py",
     "deployment/scripts/prepare_trusted_release_metadata.py",
     "deployment/scripts/release_manifest.py",
+    "deployment/scripts/trusted_release_metadata.py",
     "deployment/scripts/release_metadata.py",
     "deployment/scripts/validate_deployment_contract.py",
     "deployment/scripts/validate_deployment_config.py",
@@ -72,9 +82,11 @@ RELEASE_FILE_SET = (
     "docs/PRODUCTION_RUNBOOK.md",
     "tests/deployment/test_controlled_deploy.py",
     "tests/deployment/test_build_context_policy.py",
+    "tests/deployment/test_deployment_contract_validation.py",
     "tests/deployment/test_release_contract.py",
     "tests/deployment/test_release_manifest.py",
     "tests/deployment/test_trusted_release_metadata.py",
+    "tests/deployment/test_trusted_release_metadata_reader.py",
     "tests/security/test_production_entrypoint_reconciliation.py",
 )
 
@@ -282,48 +294,23 @@ def _assert_not_reparse_if_present(path: Path, label: str) -> None:
             raise ReleaseManifestError(f"{label} must not be a symlink or reparse point")
 
 
-def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """Build a JSON object while rejecting duplicate keys at every depth."""
-
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON object key")
-        result[key] = value
-    return result
-
-
 def _read_trusted_release_metadata(path: Path, repository_root: Path) -> dict[str, str]:
     """Read the protected Gate 1 binding without accepting partial evidence."""
+    _assert_regular_nonreparse(Path(path), "trusted release metadata")
+    try:
+        return read_trusted_release_metadata(path, repository_root)
+    except TrustedReleaseMetadataError as exc:
+        raise ReleaseManifestError(str(exc)) from exc
 
-    source_path = Path(path)
-    _assert_regular_nonreparse(source_path, "trusted release metadata")
-    metadata_path = source_path.resolve()
-    try:
-        metadata_path.relative_to(repository_root)
-    except ValueError:
-        pass
-    else:
-        raise ReleaseManifestError("trusted release metadata must be outside the repository")
-    try:
-        payload = json.loads(
-            metadata_path.read_text(encoding="utf-8"),
-            object_pairs_hook=_strict_json_object,
-        )
-    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ReleaseManifestError("trusted release metadata is not valid JSON") from exc
-    metadata = _require_exact_keys(
-        payload,
-        TRUSTED_METADATA_FIELDS,
-        "trusted release metadata fields are invalid",
-    )
-    release_sha = metadata["release_sha"]
-    image_digest = metadata["image_digest"]
-    if not isinstance(release_sha, str) or not isinstance(image_digest, str):
-        raise ReleaseManifestError("trusted release metadata values are invalid")
-    _validate_release_sha(release_sha)
-    _validate_digest(image_digest)
-    return {"release_sha": release_sha, "image_digest": image_digest}
+
+def _validate_image_id(image_id: Any) -> None:
+    if image_id is not None and (not isinstance(image_id, str) or not IMAGE_ID_RE.fullmatch(image_id)):
+        raise ReleaseManifestError("image ID must be a full lowercase sha256 image ID")
+
+
+def _validate_expected_image_id(actual_image_id: Any, expected_image_id: str | None) -> None:
+    if expected_image_id is not None and actual_image_id != expected_image_id:
+        raise ReleaseManifestError("release manifest image ID does not match inspected image")
 
 
 def _assert_clean_worktree(repository_root: Path) -> None:
@@ -433,6 +420,9 @@ def build_manifest(
     """Return deterministic release evidence for the current reviewed tree."""
 
     root = repository_root.resolve()
+    _validate_image_id(image_id)
+    if image_digest is not None and not image_id:
+        raise ReleaseManifestError("image ID is required for image-bound release certification")
     actual_head = _git_text(root, "rev-parse", "HEAD")
     trusted_metadata = (
         _read_trusted_release_metadata(Path(trusted_metadata_path), root)
@@ -441,6 +431,9 @@ def build_manifest(
     )
     selected_sha = release_sha or (trusted_metadata["release_sha"] if trusted_metadata else actual_head)
     _validate_release_sha(selected_sha)
+    effective_image_digest = image_digest or (trusted_metadata["image_digest"] if trusted_metadata else None)
+    if effective_image_digest is not None and not image_id:
+        raise ReleaseManifestError("image ID is required for image-bound release certification")
     if selected_sha != actual_head:
         raise ReleaseManifestError("release SHA must equal the checked-out HEAD")
     if trusted_metadata is not None and trusted_metadata["release_sha"] != selected_sha:
@@ -492,8 +485,6 @@ def build_manifest(
         raise ReleaseManifestError("image source identity is invalid")
     if image_digest is not None and image_created is None:
         raise ReleaseManifestError("image creation timestamp is required for image-bound release certification")
-    if image_digest is not None and not image_id:
-        raise ReleaseManifestError("image ID is required for image-bound release certification")
     image = {
         "reference": image_reference or f"deployment-app:{selected_sha}",
         "digest": image_digest,
@@ -565,6 +556,7 @@ def verify_manifest(
     require_image: bool = False,
     expected_release_sha: str | None = None,
     expected_image_digest: str | None = None,
+    expected_image_id: str | None = None,
     expected_image_created: str | None = None,
     artifact_paths: tuple[Path, ...] = (),
     require_artifact_references: bool = False,
@@ -624,6 +616,7 @@ def verify_manifest(
     if trusted_metadata is not None and trusted_metadata["release_sha"] != release_sha:
         raise ReleaseManifestError("release manifest SHA does not match trusted release metadata")
     _validate_digest(expected_image_digest)
+    _validate_image_id(expected_image_id)
     _validate_created(expected_image_created)
     expected_tree = _git_text(root, "rev-parse", f"{release_sha}^{{tree}}")
     if repository["tree_id"] != expected_tree:
@@ -745,14 +738,19 @@ def verify_manifest(
         _validate_digest(digest)
     if require_image and digest is None:
         raise ReleaseManifestError("verified image digest is required for release certification")
-    if require_image and (not isinstance(image["id"], str) or not image["id"]):
+    if require_image and not isinstance(image["id"], str):
         raise ReleaseManifestError("verified image ID is required for release certification")
+    if require_image:
+        _validate_image_id(image["id"])
+    elif image["id"] is not None:
+        _validate_image_id(image["id"])
     if require_image and created is None:
         raise ReleaseManifestError("verified image creation timestamp is required for release certification")
     if require_image and expected_image_created is None:
         raise ReleaseManifestError("expected image creation timestamp is required for release certification")
     if expected_image_digest is not None and digest != expected_image_digest:
         raise ReleaseManifestError("release manifest image digest does not match requested digest")
+    _validate_expected_image_id(image["id"], expected_image_id)
     if trusted_metadata is not None and digest != trusted_metadata["image_digest"]:
         raise ReleaseManifestError("release manifest image digest does not match trusted release metadata")
     if expected_image_created is not None and created != expected_image_created:

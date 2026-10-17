@@ -27,12 +27,17 @@ if __name__ == "__main__" and str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest
+from deployment.scripts.trusted_release_metadata import (
+    TrustedReleaseMetadataError,
+    read_trusted_release_metadata,
+)
 
 EXPECTED_IMAGE_SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
 EXPECTED_METADATA_FIELDS = frozenset(("release_sha", "image_digest"))
 EXPECTED_DOCKER_CONTEXT = "desktop-linux"
 EXPECTED_COMPOSE_PROJECT = "deployment"
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+IMAGE_ID_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 WRITE_RIGHTS = frozenset(("F", "M", "W", "D", "WD", "AD", "DC", "WA", "WEA"))
 PRIVILEGED_PRINCIPALS = frozenset(("NT AUTHORITY\\SYSTEM", "BUILTIN\\ADMINISTRATORS"))
 NORMALISED_PRIVILEGED_PRINCIPALS = frozenset(value.upper() for value in PRIVILEGED_PRINCIPALS)
@@ -398,7 +403,7 @@ class ControlledDeploymentAdapter:
         validate_protected_directory(tls_dir, self.repository_root, self.acl_inspector)
         return values
 
-    def _validate_release_manifest(self, *, expected_created: str) -> None:
+    def _validate_release_manifest(self, *, expected_created: str, expected_image_id: str) -> None:
         try:
             verify_manifest(
                 manifest_path=self.release_manifest_file,
@@ -407,6 +412,7 @@ class ControlledDeploymentAdapter:
                 require_image=True,
                 expected_release_sha=self.reviewed_sha,
                 expected_image_digest=self.expected_digest,
+                expected_image_id=expected_image_id,
                 expected_image_created=expected_created,
                 trusted_metadata_path=self.metadata_file,
                 require_trusted_metadata=True,
@@ -414,7 +420,7 @@ class ControlledDeploymentAdapter:
         except ReleaseManifestError as exc:
             raise ControlledDeploymentError("release_manifest_invalid") from exc
 
-    def _validate_release(self, *, expected_created: str) -> ReleaseEvidence:
+    def _validate_release(self, *, expected_created: str, defer_created_validation: bool = False) -> ReleaseEvidence:
         from deployment.scripts.release_metadata import derive_release_metadata
 
         derived = derive_release_metadata(repository_root=self.repository_root, source_date_epoch="0")
@@ -430,8 +436,11 @@ class ControlledDeploymentAdapter:
         labels = config.get("Labels") or {}
         if _exact_repo_digest(info, "image_digest_unavailable") != self.expected_digest:
             raise ControlledDeploymentError("image_digest_mismatch")
-        if not str(info.get("Id", "")):
+        image_id = info.get("Id")
+        if not isinstance(image_id, str) or not image_id:
             raise ControlledDeploymentError("image_id_unavailable")
+        if not IMAGE_ID_PATTERN.fullmatch(image_id):
+            raise ControlledDeploymentError("image_id_invalid")
         if labels.get("com.sentinel-dna.git.revision.full") != self.reviewed_sha:
             raise ControlledDeploymentError("image_revision_mismatch")
         if labels.get("org.opencontainers.image.revision") != self.reviewed_sha:
@@ -440,7 +449,7 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("image_source_mismatch")
         if labels.get("org.opencontainers.image.version") != self.reviewed_sha:
             raise ControlledDeploymentError("oci_version_mismatch")
-        if labels.get("org.opencontainers.image.created") != expected_created:
+        if not defer_created_validation and labels.get("org.opencontainers.image.created") != expected_created:
             raise ControlledDeploymentError("oci_created_mismatch")
         if config.get("User") != "sentinel":
             raise ControlledDeploymentError("image_runtime_user_mismatch")
@@ -453,7 +462,7 @@ class ControlledDeploymentAdapter:
         return ReleaseEvidence(
             release_sha=self.reviewed_sha,
             image=self.image,
-            image_id=str(info.get("Id", "")),
+            image_id=image_id,
             image_digest=self.expected_digest,
             oci_revision=str(labels.get("org.opencontainers.image.revision", "")),
             git_revision_full=str(labels.get("com.sentinel-dna.git.revision.full", "")),
@@ -466,10 +475,17 @@ class ControlledDeploymentAdapter:
         )
 
     def _validate_metadata(self) -> None:
-        metadata_path = validate_protected_file(self.metadata_file, self.repository_root, self.acl_inspector)
+        validate_protected_file(self.metadata_file, self.repository_root, self.acl_inspector)
         try:
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            metadata = read_trusted_release_metadata(self.metadata_file, self.repository_root)
+        except TrustedReleaseMetadataError as exc:
+            error = str(exc)
+            if "fields are invalid" in error:
+                raise ControlledDeploymentError("trusted_metadata_fields_invalid") from exc
+            if "release SHA" in error:
+                raise ControlledDeploymentError("trusted_metadata_revision_mismatch") from exc
+            if "image digest" in error:
+                raise ControlledDeploymentError("trusted_metadata_digest_mismatch") from exc
             raise ControlledDeploymentError("trusted_metadata_invalid") from exc
         if not isinstance(metadata, dict) or set(metadata) != EXPECTED_METADATA_FIELDS:
             raise ControlledDeploymentError("trusted_metadata_fields_invalid")
@@ -503,9 +519,17 @@ class ControlledDeploymentAdapter:
 
     def validate(self) -> ReleaseEvidence:
         configuration = self._validate_configuration()
-        self._validate_release_manifest(expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"])
         self._validate_metadata()
-        evidence = self._validate_release(expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"])
+        evidence = self._validate_release(
+            expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"],
+            defer_created_validation=True,
+        )
+        self._validate_release_manifest(
+            expected_created=configuration["SENTINEL_DNA_IMAGE_CREATED"],
+            expected_image_id=evidence.image_id,
+        )
+        if evidence.oci_created != configuration["SENTINEL_DNA_IMAGE_CREATED"]:
+            raise ControlledDeploymentError("oci_created_mismatch")
         self._validate_compose()
         return evidence
 
