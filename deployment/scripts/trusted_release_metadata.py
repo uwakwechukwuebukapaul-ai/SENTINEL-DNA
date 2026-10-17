@@ -29,17 +29,32 @@ def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def read_trusted_release_metadata(
+def parse_trusted_release_metadata(raw: bytes) -> dict[str, str]:
+    """Validate the bounded JSON payload independently of filesystem access."""
+
+    if not isinstance(raw, bytes):
+        raise TrustedReleaseMetadataError("trusted release metadata is not valid JSON")
+    if len(raw) > 4096:
+        raise TrustedReleaseMetadataError("trusted release metadata is not valid JSON")
+    try:
+        payload = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
+    except (UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise TrustedReleaseMetadataError("trusted release metadata is not valid JSON") from exc
+
+    if not isinstance(payload, dict) or set(payload) != FIELDS:
+        raise TrustedReleaseMetadataError("trusted release metadata fields are invalid")
+    release_sha = payload["release_sha"]
+    image_digest = payload["image_digest"]
+    if not isinstance(release_sha, str) or not REVISION_RE.fullmatch(release_sha):
+        raise TrustedReleaseMetadataError("release SHA must be a 40-character lowercase Git SHA")
+    if not isinstance(image_digest, str) or not DIGEST_RE.fullmatch(image_digest):
+        raise TrustedReleaseMetadataError("image digest must be a full lowercase sha256 digest")
+    return {"release_sha": release_sha, "image_digest": image_digest}
+
+
+def _validate_metadata_location(
     path: str | os.PathLike[str], repository_root: str | os.PathLike[str]
-) -> dict[str, str]:
-    """Open metadata through pinned POSIX directory descriptors.
-
-    Native Windows deliberately fails closed because this implementation's
-    no-follow, descriptor-relative guarantees are POSIX-specific.
-    """
-
-    if os.name != "posix":
-        raise TrustedReleaseMetadataError("trusted metadata is unsupported on this platform")
+) -> Path:
     candidate = Path(os.path.abspath(os.fspath(path)))
     if not Path(path).is_absolute() or ".." in Path(path).parts:
         raise TrustedReleaseMetadataError("trusted metadata path is invalid")
@@ -52,6 +67,21 @@ def read_trusted_release_metadata(
         raise TrustedReleaseMetadataError("trusted release metadata must be outside the repository")
     if len(candidate.parts) < 2:
         raise TrustedReleaseMetadataError("trusted metadata path is invalid")
+    return candidate
+
+
+def read_trusted_release_metadata(
+    path: str | os.PathLike[str], repository_root: str | os.PathLike[str]
+) -> dict[str, str]:
+    """Open metadata through pinned POSIX directory descriptors.
+
+    Native Windows deliberately fails closed because this implementation's
+    no-follow, descriptor-relative guarantees are POSIX-specific.
+    """
+
+    candidate = _validate_metadata_location(path, repository_root)
+    if os.name != "posix":
+        raise TrustedReleaseMetadataError("trusted metadata is unsupported on this platform")
 
     directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -72,9 +102,7 @@ def read_trusted_release_metadata(
         with os.fdopen(file_descriptor, "rb") as stream:
             file_descriptor = -1
             raw = stream.read(4097)
-        if len(raw) > 4096:
-            raise TrustedReleaseMetadataError("trusted release metadata is not valid JSON")
-        payload = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
+        return parse_trusted_release_metadata(raw)
     except TrustedReleaseMetadataError:
         raise
     except OSError as exc:
@@ -90,13 +118,3 @@ def read_trusted_release_metadata(
             os.close(descriptor)
         if "file_descriptor" in locals() and file_descriptor >= 0:
             os.close(file_descriptor)
-
-    if not isinstance(payload, dict) or set(payload) != FIELDS:
-        raise TrustedReleaseMetadataError("trusted release metadata fields are invalid")
-    release_sha = payload["release_sha"]
-    image_digest = payload["image_digest"]
-    if not isinstance(release_sha, str) or not REVISION_RE.fullmatch(release_sha):
-        raise TrustedReleaseMetadataError("release SHA must be a 40-character lowercase Git SHA")
-    if not isinstance(image_digest, str) or not DIGEST_RE.fullmatch(image_digest):
-        raise TrustedReleaseMetadataError("image digest must be a full lowercase sha256 digest")
-    return {"release_sha": release_sha, "image_digest": image_digest}

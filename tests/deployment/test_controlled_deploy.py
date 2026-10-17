@@ -23,6 +23,7 @@ from deployment.scripts.controlled_deploy import (
     validate_protected_file,
 )
 from deployment.scripts.release_metadata import derive_release_metadata
+import deployment.scripts.release_manifest as release_manifest_module
 from deployment.scripts.release_manifest import build_manifest, write_manifest
 
 
@@ -37,6 +38,24 @@ RELEASE_CREATED = RELEASE_METADATA["SENTINEL_DNA_IMAGE_CREATED"]
 RELEASE_DIGEST = "sha256:9a212a06eed455a43675c75cf1324827b33bc44070c6f0ccd7d5f9df0be4b91d"
 IMAGE_ID = "sha256:" + "c" * 64
 SOURCE = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+
+
+@pytest.fixture
+def mock_trusted_metadata_reader(monkeypatch: pytest.MonkeyPatch):
+    """Explicitly stub secure reads only for adapter logic tests on Windows."""
+
+    def install(responses: dict[Path, dict[str, str]]) -> None:
+        if os.name == "nt":
+            def read_metadata(path: str | os.PathLike[str], _repository_root: Path) -> dict[str, str]:
+                try:
+                    return responses[Path(path)]
+                except KeyError as exc:
+                    raise AssertionError("test did not provide a trusted metadata response") from exc
+
+            monkeypatch.setattr(controlled_deploy, "read_trusted_release_metadata", read_metadata)
+            monkeypatch.setattr(release_manifest_module, "read_trusted_release_metadata", read_metadata)
+
+    return install
 
 
 SAFE_ENTRIES = (
@@ -460,8 +479,13 @@ def test_only_checked_in_production_compose_file_is_approved(tmp_path):
         validate_compose_file(alternate, repository_root)
 
 
-def test_adapter_validates_release_metadata_and_compose_without_deploying(tmp_path):
+def test_adapter_validates_release_metadata_and_compose_without_deploying(
+    tmp_path, mock_trusted_metadata_reader
+):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     evidence = adapter.validate()
     assert evidence.release_sha == RELEASE_SHA
     assert evidence.image_digest == RELEASE_DIGEST
@@ -473,8 +497,13 @@ def test_adapter_validates_release_metadata_and_compose_without_deploying(tmp_pa
     assert "COMPOSE_PROJECT_NAME" not in adapter.runner.last_env
 
 
-def test_adapter_manifest_validation_binds_authorized_metadata_and_timestamp(tmp_path):
+def test_adapter_manifest_validation_binds_authorized_metadata_and_timestamp(
+    tmp_path, mock_trusted_metadata_reader
+):
     adapter, _, metadata_file = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     evidence = adapter.validate()
     assert evidence.release_sha == RELEASE_SHA
     assert evidence.image_digest == RELEASE_DIGEST
@@ -482,9 +511,13 @@ def test_adapter_manifest_validation_binds_authorized_metadata_and_timestamp(tmp
     assert metadata_file == adapter.metadata_file
 
 
-@pytest.mark.skipif(os.name != "posix", reason="trusted metadata certification is unsupported on Windows")
-def test_adapter_rejects_oci_created_mismatch_after_manifest_validation(tmp_path):
+def test_adapter_rejects_oci_created_mismatch_after_manifest_validation(
+    tmp_path, mock_trusted_metadata_reader
+):
     adapter, env_file, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     mismatched_created = "1970-01-01T00:00:01Z"
     env_file.write_text(
         env_file.read_text(encoding="utf-8").replace(RELEASE_CREATED, mismatched_created),
@@ -505,21 +538,23 @@ def test_adapter_rejects_oci_created_mismatch_after_manifest_validation(tmp_path
             "timestamp",
             "1970-01-01T00:00:01Z",
             "release_manifest_invalid",
-            marks=pytest.mark.skipif(
-                os.name != "posix",
-                reason="trusted metadata certification is unsupported on Windows",
-            ),
         ),
         ("metadata_sha", "0" * 40, "configuration_invalid"),
         ("metadata_digest", "sha256:" + "0" * 64, "configuration_invalid"),
     ),
 )
-def test_adapter_manifest_validation_rejects_untrusted_bindings(tmp_path, binding, value, error):
+def test_adapter_manifest_validation_rejects_untrusted_bindings(
+    tmp_path, binding, value, error, mock_trusted_metadata_reader
+):
     metadata = None
     if binding != "timestamp":
         metadata = {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}
         metadata["release_sha" if binding == "metadata_sha" else "image_digest"] = value
     adapter, env_file, _ = _fixture(tmp_path, metadata=metadata)
+    if binding == "timestamp":
+        mock_trusted_metadata_reader(
+            {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+        )
     if binding == "timestamp":
         env_file.write_text(
             env_file.read_text(encoding="utf-8").replace(RELEASE_CREATED, value),
@@ -537,9 +572,19 @@ def test_adapter_manifest_validation_rejects_untrusted_bindings(tmp_path, bindin
         ({"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST, "unexpected": "field"}, "fields_invalid"),
     ),
 )
-def test_adapter_rejects_invalid_trusted_metadata(tmp_path, metadata, error):
-    adapter, _, _ = _fixture(tmp_path, metadata=metadata)
+def test_adapter_rejects_invalid_trusted_metadata(
+    tmp_path, metadata, error, mock_trusted_metadata_reader
+):
+    adapter, _, metadata_file = _fixture(tmp_path, metadata=metadata)
+    mock_trusted_metadata_reader({metadata_file: metadata})
     with pytest.raises(ControlledDeploymentError, match=error):
+        adapter._validate_metadata()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="production trusted metadata reader fails closed on Windows")
+def test_adapter_propagates_windows_trusted_metadata_fail_closed(tmp_path):
+    adapter, _, _ = _fixture(tmp_path)
+    with pytest.raises(ControlledDeploymentError, match="trusted_metadata_invalid"):
         adapter._validate_metadata()
 
 
@@ -562,9 +607,13 @@ def test_adapter_rejects_missing_or_malformed_inspected_image_id(tmp_path, image
         adapter._validate_release(expected_created=RELEASE_CREATED)
 
 
-@pytest.mark.skipif(os.name != "posix", reason="trusted metadata certification is unsupported on Windows")
-def test_adapter_rejects_release_manifest_image_id_mismatch(tmp_path):
+def test_adapter_rejects_release_manifest_image_id_mismatch(
+    tmp_path, mock_trusted_metadata_reader
+):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     with pytest.raises(ControlledDeploymentError, match="release_manifest_invalid"):
         adapter._validate_release_manifest(
             expected_created=RELEASE_CREATED,
@@ -579,65 +628,97 @@ def test_adapter_rejects_wrong_image_revision(tmp_path):
         adapter._validate_release(expected_created=RELEASE_CREATED)
 
 
-def test_adapter_rejects_compose_public_internal_ports(tmp_path):
+def test_adapter_rejects_compose_public_internal_ports(tmp_path, mock_trusted_metadata_reader):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.runner.compose_info["services"]["app"]["ports"] = [{"published": 5000, "target": 5000}]
     with pytest.raises(ControlledDeploymentError, match="compose_app_boundary"):
         adapter.validate()
 
 
 @pytest.mark.parametrize("service", ["postgres", "redis"])
-def test_adapter_rejects_internal_service_host_ports(tmp_path, service):
+def test_adapter_rejects_internal_service_host_ports(
+    tmp_path, service, mock_trusted_metadata_reader
+):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.runner.compose_info["services"][service]["ports"] = [{"published": 5432, "target": 5432}]
     with pytest.raises(ControlledDeploymentError, match="compose_internal_port"):
         adapter.validate()
 
 
-def test_adapter_rejects_wrong_nginx_public_boundary(tmp_path):
+def test_adapter_rejects_wrong_nginx_public_boundary(tmp_path, mock_trusted_metadata_reader):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.runner.compose_info["services"]["nginx"]["ports"] = [{"published": 8443, "target": 443}]
     with pytest.raises(ControlledDeploymentError, match="compose_nginx_boundary"):
         adapter.validate()
 
 
-def test_adapter_rejects_wrong_image_source(tmp_path):
+def test_adapter_rejects_wrong_image_source(tmp_path, mock_trusted_metadata_reader):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.runner.image_info["Config"]["Labels"]["org.opencontainers.image.source"] = "https://untrusted.example"
     with pytest.raises(ControlledDeploymentError, match="image_source_mismatch"):
         adapter.validate()
 
 
-def test_adapter_rejects_wrong_runtime_user(tmp_path):
+def test_adapter_rejects_wrong_runtime_user(tmp_path, mock_trusted_metadata_reader):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.runner.image_info["Config"]["User"] = "root"
     with pytest.raises(ControlledDeploymentError, match="runtime_user_mismatch"):
         adapter.validate()
 
 
-def test_adapter_rejects_writable_metadata_mount(tmp_path):
+def test_adapter_rejects_writable_metadata_mount(tmp_path, mock_trusted_metadata_reader):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.runner.compose_info["services"]["app"]["volumes"][0]["read_only"] = False
     with pytest.raises(ControlledDeploymentError, match="metadata_mount"):
         adapter.validate()
 
 
-def test_adapter_never_propagates_command_stderr_or_secret_values(tmp_path):
+def test_adapter_never_propagates_command_stderr_or_secret_values(
+    tmp_path, mock_trusted_metadata_reader
+):
     adapter, _, _ = _fixture(tmp_path, runner=FakeRunner({}, {}, docker_error=True))
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     with pytest.raises(ControlledDeploymentError) as failure:
         adapter.validate()
     assert "production-secret-must-not-escape" not in str(failure.value)
 
 
-def test_execute_requires_all_validation_gates_before_up(tmp_path):
-    adapter, _, _ = _fixture(tmp_path, metadata={"release_sha": "wrong", "image_digest": RELEASE_DIGEST})
+def test_execute_requires_all_validation_gates_before_up(tmp_path, mock_trusted_metadata_reader):
+    metadata = {"release_sha": "wrong", "image_digest": RELEASE_DIGEST}
+    adapter, _, metadata_file = _fixture(tmp_path, metadata=metadata)
+    mock_trusted_metadata_reader({metadata_file: metadata})
     with pytest.raises(ControlledDeploymentError):
         adapter.execute()
     assert not any("up" in call for call in adapter.runner.calls)
 
 
-def test_execute_runs_pinned_migrations_before_recreating_app(tmp_path):
+def test_execute_runs_pinned_migrations_before_recreating_app(
+    tmp_path, mock_trusted_metadata_reader
+):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     adapter.verify_runtime = lambda: None
     evidence = adapter.execute()
     assert f"deployment-app@{RELEASE_DIGEST}" in adapter.runner.pin_contents
@@ -667,8 +748,11 @@ def test_cli_requires_an_explicit_non_deploying_or_execute_mode():
         )
 
 
-def test_safe_evidence_contains_no_secret_values(tmp_path):
+def test_safe_evidence_contains_no_secret_values(tmp_path, mock_trusted_metadata_reader):
     adapter, _, _ = _fixture(tmp_path)
+    mock_trusted_metadata_reader(
+        {adapter.metadata_file: {"release_sha": RELEASE_SHA, "image_digest": RELEASE_DIGEST}}
+    )
     evidence = adapter.validate()
     serialized = json.dumps(evidence.__dict__, sort_keys=True)
     assert "S" * 48 not in serialized
