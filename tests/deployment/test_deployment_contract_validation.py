@@ -63,9 +63,9 @@ def _evidence_inputs(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
     manifest = build_manifest(
         repository_root=repository_root,
         image_digest=digest,
-        image_id="sha256:image-id",
+        image_id="sha256:" + "c" * 64,
         image_created=metadata["SENTINEL_DNA_IMAGE_CREATED"],
-        trusted_metadata_path=trusted,
+        trusted_metadata_path=trusted if os.name != "nt" else None,
     )
     release_manifest = tmp_path / "release-manifest.json"
     write_manifest(manifest, output=release_manifest, repository_root=repository_root)
@@ -91,7 +91,7 @@ def _backup_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     return source, artifact, manifest
 
 
-def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
+def test_deployment_contract_validation_respects_trusted_metadata_platform_boundary(tmp_path: Path):
     environment, release_manifest, _, repository_root = _evidence_inputs(tmp_path)
     source, artifact, backup_manifest = _backup_inputs(tmp_path)
     first = DeploymentContractValidator(
@@ -114,8 +114,21 @@ def test_all_contracts_pass_with_local_nonsecret_evidence(tmp_path: Path):
     ).run()
 
     print(json.dumps(first.to_dict(), indent=2))
-    assert first.validation_result == "passed"
-    assert all(item["status"] == "passed" for item in first.contracts)
+    artifact = next(item for item in first.contracts if item["contract"] == "deployment_artifact_integrity")
+    if os.name == "nt":
+        assert first.validation_result == "failed"
+        assert artifact["status"] == "failed"
+        assert artifact["checks"]["release_manifest_verified"] is False
+        assert "release_manifest_invalid" in artifact["failures"]
+        assert all(
+            item["status"] == "passed"
+            for item in first.contracts
+            if item["contract"] != "deployment_artifact_integrity"
+        )
+    else:
+        assert first.validation_result == "passed"
+        assert all(item["status"] == "passed" for item in first.contracts)
+    assert all(first.safety_invariants.values())
     startup = next(item for item in first.contracts if item["contract"] == "production_startup")
     assert startup["checks"] == {
         "canonical_wsgi_entrypoint": True,

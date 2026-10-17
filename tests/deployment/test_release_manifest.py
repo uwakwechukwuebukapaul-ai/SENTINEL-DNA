@@ -23,6 +23,7 @@ from tests.credential_helpers import random_token
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+IMAGE_ID = "sha256:" + "c" * 64
 
 
 @pytest.fixture
@@ -57,6 +58,19 @@ def test_manifest_is_deterministic_and_excludes_its_output(tmp_path: Path, clean
     assert "deployment/release-manifest.json" not in first["files"]
     assert first["manifest_policy"]["self_hash"] == "excluded"
     assert first["image"]["digest"] is None
+
+
+def test_release_file_inventory_covers_trusted_release_boundary():
+    required = {
+        ".github/workflows/deployment-contract.yml",
+        "deployment/scripts/controlled_deploy.py",
+        "deployment/scripts/prepare_trusted_release_metadata.py",
+        "deployment/scripts/release_manifest.py",
+        "deployment/scripts/trusted_release_metadata.py",
+        "deployment/scripts/validate_deployment_config.py",
+    }
+
+    assert required <= set(RELEASE_FILE_SET)
 
 
 def test_manifest_supports_local_detached_checkout(
@@ -370,7 +384,7 @@ def test_image_bound_manifest_remains_verifiable_and_failures_do_not_expose_secr
         repository_root=clean_repository,
         image_reference="deployment-app:current-release",
         image_digest=digest,
-        image_id="sha256:image-id",
+        image_id=IMAGE_ID,
         image_created="1970-01-01T00:00:00Z",
     )
     valid_manifest_path = tmp_path / "valid-release-manifest.json"
@@ -410,7 +424,7 @@ def test_image_bound_manifest_binds_trusted_metadata_and_creation_time(
         repository_root=clean_repository,
         image_reference="deployment-app:current-release",
         image_digest=digest,
-        image_id="sha256:image-id",
+        image_id=IMAGE_ID,
         image_revision=release_sha,
         image_created=created,
         trusted_metadata_path=trusted_metadata,
@@ -455,7 +469,7 @@ def test_manifest_build_rejects_trusted_metadata_mismatch(
             repository_root=clean_repository,
             release_sha=release_sha or None,
             image_digest=image_digest,
-            image_id="sha256:image-id",
+            image_id=IMAGE_ID,
             image_created="1970-01-01T00:00:00Z",
             trusted_metadata_path=metadata_path,
         )
@@ -540,7 +554,7 @@ def test_image_bound_certification_requires_trusted_metadata(tmp_path: Path, cle
     manifest = build_manifest(
         repository_root=clean_repository,
         image_digest=digest,
-        image_id="sha256:image-id",
+        image_id=IMAGE_ID,
         image_created="1970-01-01T00:00:00Z",
     )
     manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
@@ -565,7 +579,7 @@ def test_image_bound_certification_requires_expected_creation_timestamp(
     manifest = build_manifest(
         repository_root=clean_repository,
         image_digest=digest,
-        image_id="sha256:image-id",
+        image_id=IMAGE_ID,
         image_created="1970-01-01T00:00:00Z",
         trusted_metadata_path=trusted_metadata,
     )
@@ -609,7 +623,7 @@ def test_image_bound_certification_rejects_metadata_and_identity_mismatches(
     manifest = build_manifest(
         repository_root=clean_repository,
         image_digest=digest,
-        image_id="sha256:image-id",
+        image_id=IMAGE_ID,
         image_created=created,
         trusted_metadata_path=_trusted_metadata(tmp_path / "build", release_sha, digest),
     )
@@ -640,7 +654,7 @@ def test_image_bound_manifest_cli_passes_trusted_metadata_and_timestamp(
     subprocess.run(
         [
             sys.executable, str(script), "build", "--repository-root", str(clean_repository),
-            "--output", str(manifest_path), "--image-digest", digest, "--image-id", "sha256:image-id",
+            "--output", str(manifest_path), "--image-digest", digest, "--image-id", IMAGE_ID,
             "--image-revision", release_sha, "--image-created", created,
             "--trusted-metadata", str(trusted_metadata),
         ],
@@ -666,7 +680,7 @@ def test_image_bound_manifest_requires_creation_timestamp(clean_repository: Path
         build_manifest(
             repository_root=clean_repository,
             image_digest="sha256:" + "a" * 64,
-            image_id="sha256:image-id",
+            image_id=IMAGE_ID,
         )
 
 
@@ -679,12 +693,68 @@ def test_manifest_rejects_tampered_full_git_revision(tmp_path: Path, clean_repos
         verify_manifest(manifest_path=manifest_path, repository_root=clean_repository)
 
 
-def test_image_bound_manifest_requires_image_id(clean_repository: Path) -> None:
+def test_image_bound_manifest_requires_image_id(tmp_path: Path) -> None:
     with pytest.raises(ReleaseManifestError, match="image ID is required"):
         build_manifest(
-            repository_root=clean_repository,
+            repository_root=tmp_path,
             image_digest="sha256:" + "a" * 64,
             image_created="1970-01-01T00:00:00Z",
+        )
+
+
+@pytest.mark.parametrize("image_id", ["sha256:image-id", "sha256:" + "A" * 64])
+def test_image_bound_manifest_rejects_malformed_image_id(tmp_path: Path, image_id: str) -> None:
+    with pytest.raises(ReleaseManifestError, match="full lowercase sha256 image ID"):
+        build_manifest(
+            repository_root=tmp_path,
+            image_digest="sha256:" + "a" * 64,
+            image_id=image_id,
+            image_created="1970-01-01T00:00:00Z",
+        )
+
+
+def test_manifest_rejects_inspected_image_id_mismatch_directly():
+    from deployment.scripts.release_manifest import _validate_expected_image_id
+
+    with pytest.raises(ReleaseManifestError, match="image ID does not match inspected image"):
+        _validate_expected_image_id(IMAGE_ID, "sha256:" + "d" * 64)
+
+
+def test_manifest_verification_rejects_malformed_image_id(tmp_path: Path, clean_repository: Path) -> None:
+    manifest = build_manifest(repository_root=clean_repository)
+    manifest["image"]["id"] = "sha256:malformed"
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    with pytest.raises(ReleaseManifestError, match="full lowercase sha256 image ID"):
+        verify_manifest(manifest_path=manifest_path, repository_root=clean_repository)
+
+
+def test_image_bound_manifest_rejects_inspected_image_id_mismatch(
+    tmp_path: Path, clean_repository: Path
+) -> None:
+    digest = "sha256:" + "a" * 64
+    release_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_repository, text=True).strip()
+    metadata = _trusted_metadata(tmp_path, release_sha, digest)
+    manifest = build_manifest(
+        repository_root=clean_repository,
+        image_digest=digest,
+        image_id=IMAGE_ID,
+        image_created="1970-01-01T00:00:00Z",
+        trusted_metadata_path=metadata,
+    )
+    manifest_path = _write_manifest_for_verification(tmp_path, clean_repository, manifest)
+
+    with pytest.raises(ReleaseManifestError, match="image ID does not match inspected image"):
+        verify_manifest(
+            manifest_path=manifest_path,
+            repository_root=clean_repository,
+            require_image=True,
+            expected_image_id="sha256:" + "d" * 64,
+            expected_release_sha=release_sha,
+            expected_image_digest=digest,
+            expected_image_created="1970-01-01T00:00:00Z",
+            trusted_metadata_path=metadata,
+            require_trusted_metadata=True,
         )
 
 
