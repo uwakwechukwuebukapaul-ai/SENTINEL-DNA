@@ -174,6 +174,8 @@ jobs:
           test -f tests/deployment/test_release_manifest.py
           test -f tests/deployment/test_build_context_policy.py
           test -f tests/deployment/test_trusted_release_metadata.py
+          test -f deployment/scripts/ghcr_tag_guard.py
+          test -f tests/deployment/test_ghcr_tag_guard.py
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -264,17 +266,13 @@ jobs:
         shell: bash
         env:
           GHCR_IMAGE: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
         run: |
           set -euo pipefail
-          ghcr_ref="${GHCR_IMAGE}:sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}"
-          if probe_output="$(docker manifest inspect "$ghcr_ref" 2>&1)"; then
-            echo "candidate GHCR tag already exists; refusing to overwrite"
-            exit 1
-          fi
-          case "$probe_output" in
-            *"manifest unknown"*|*"no such manifest"*|*"not found"*) ;;
-            *) echo "unable to prove candidate GHCR tag is absent" >&2; exit 1 ;;
-          esac
+          python deployment/scripts/ghcr_tag_guard.py \
+            --image "$GHCR_IMAGE" \
+            --tag "sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}"
 
       - name: Publish immutable candidate image to private GHCR
         shell: bash

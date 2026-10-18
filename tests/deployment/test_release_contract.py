@@ -626,8 +626,13 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "exactly one matching GHCR RepoDigest" in publish_text
     collision = _step(workflow, "Refuse an existing candidate tag")
     collision_text = _step_text(collision)
-    assert "docker manifest inspect" in collision_text
-    assert "refusing to overwrite" in collision_text
+    assert "ghcr_tag_guard.py" in collision_text
+    assert "GITHUB_TOKEN" in collision["env"]
+    assert "GITHUB_API_URL" in collision["env"]
+    assert "docker manifest inspect" not in collision_text
+    guard_source = (ROOT / "deployment" / "scripts" / "ghcr_tag_guard.py").read_text(encoding="utf-8")
+    assert "refusing to overwrite" in guard_source
+    assert "GitHub Packages API" in guard_source
 
     for step in _steps(workflow):
         text = _step_text(step)
