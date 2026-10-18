@@ -400,7 +400,12 @@ class ControlledDeploymentAdapter:
             raise ControlledDeploymentError("tls_directory_invalid")
         if tls_dir.is_symlink():
             raise ControlledDeploymentError("tls_directory_symlink_forbidden")
-        validate_protected_directory(tls_dir, self.repository_root, self.acl_inspector)
+        tls_dir = validate_protected_directory(tls_dir, self.repository_root, self.acl_inspector)
+        for filename in ("localhost.crt", "localhost.key"):
+            try:
+                validate_protected_file(tls_dir / filename, self.repository_root, self.acl_inspector)
+            except ControlledDeploymentError as exc:
+                raise ControlledDeploymentError("tls_material_invalid") from exc
         return values
 
     def _validate_release_manifest(self, *, expected_created: str, expected_image_id: str) -> None:

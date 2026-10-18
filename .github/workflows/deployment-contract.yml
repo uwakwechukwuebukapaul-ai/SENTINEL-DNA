@@ -205,6 +205,33 @@ jobs:
             --manifest "$manifest" \
             --expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
 
+      - name: Validate deployment Compose contract
+        shell: bash
+        env:
+          SENTINEL_DNA_SECRET_KEY: compose-validation-only
+          POSTGRES_PASSWORD: compose-validation-only
+          SENTINEL_DNA_IMAGE_DIGEST: compose-validation-only
+          SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE: ${{ runner.temp }}/sentinel-dna-compose-validation-metadata.json
+          SENTINEL_DNA_TLS_DIR: ${{ runner.temp }}/sentinel-dna-compose-validation-tls
+        run: |
+          set -euo pipefail
+          override_file="$RUNNER_TEMP/sentinel-dna-compose-validation.override.yml"
+          cat > "$override_file" <<'YAML'
+          services:
+            nginx:
+              volumes:
+                - type: volume
+                  source: compose-validation-tls
+                  target: /etc/nginx/tls
+                  read_only: true
+          volumes:
+            compose-validation-tls: {}
+          YAML
+          docker compose \
+            -f deployment/docker-compose.yml \
+            -f "$override_file" \
+            config --quiet
+
       - name: Verify Docker build-context policy
         shell: bash
         run: python deployment/scripts/build_context_policy.py --repository-root .
@@ -395,13 +422,6 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
         run: python deployment/scripts/validate_deployment_config.py
-
-      - name: Validate deployment Compose contract
-        shell: bash
-        env:
-          SENTINEL_DNA_SECRET_KEY: ${{ secrets.SENTINEL_DNA_SECRET_KEY }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        run: docker compose -f deployment/docker-compose.yml config --quiet
 
       - name: Generate image-bound release manifest
         shell: bash
