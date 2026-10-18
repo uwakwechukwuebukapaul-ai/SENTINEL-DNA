@@ -370,6 +370,7 @@ jobs:
         env:
           SENTINEL_DNA_SECRET_KEY: ${{ secrets.SENTINEL_DNA_SECRET_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
         run: python deployment/scripts/validate_deployment_config.py
 
       - name: Validate deployment Compose contract

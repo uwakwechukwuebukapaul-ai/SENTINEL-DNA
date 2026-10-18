@@ -21,6 +21,7 @@ import subprocess
 from typing import Any, Mapping
 
 from config.runtime import RuntimeConfig
+from database.backend import DatabaseConfigurationError, DatabaseSettings
 from deployment.scripts.build_context_policy import validate_policy
 from deployment.scripts.release_manifest import ReleaseManifestError, verify_manifest
 from deployment.scripts.validate_deployment_config import (
@@ -261,6 +262,7 @@ class DeploymentContractValidator:
         errors = validate_configuration(
             environ=values,
             repository_root=self.repository_root,
+            require_postgresql=True,
         )
         safe_errors = [
             str(error) if ":" not in str(error)
@@ -307,8 +309,11 @@ class DeploymentContractValidator:
             database_url=values.get("DATABASE_URL", "").strip(),
         )
         secret = config.secret_key.strip().lower()
-        parent = Path(config.database_path).expanduser().resolve().parent
-        database_configured = bool(config.database_url) or bool(values.get("SENTINEL_DNA_DB_PATH", "").strip())
+        try:
+            database_settings = DatabaseSettings.from_environment(values, require_postgresql=True)
+            database_configured = database_settings.backend == "postgresql"
+        except (DatabaseConfigurationError, ValueError):
+            database_configured = False
         checks["runtime_config_accepts_startup"] = (
             config.environment == "production"
             and len(secret) >= 32
@@ -316,7 +321,6 @@ class DeploymentContractValidator:
             and config.secure_cookies
             and not config.debug
             and database_configured
-            and (bool(config.database_url) or (parent.is_dir() and os.access(parent, os.W_OK)))
         )
         if not checks["runtime_config_accepts_startup"]:
             failures.append("runtime_startup_rejected")
@@ -344,7 +348,7 @@ class DeploymentContractValidator:
             # SQLite is process-local, so it must remain behind one Gunicorn
             # worker. PostgreSQL-backed production may use its configured
             # worker count (or Gunicorn's default) without this restriction.
-            "single_sqlite_worker_boundary": bool(config.database_url) or worker_count == "1",
+            "single_sqlite_worker_boundary": database_configured or worker_count == "1",
         }
         checks.update(image_checks)
         # Keep the public check name while making it describe the image
@@ -363,7 +367,7 @@ class DeploymentContractValidator:
                 "runtime_environment_source": "operator_environment_or_compose",
                 "image_command": list(command),
                 "image_runtime_user": runtime_user,
-                "sqlite_worker_boundary_required": not bool(config.database_url),
+                "sqlite_worker_boundary_required": not database_configured,
             },
         )
 

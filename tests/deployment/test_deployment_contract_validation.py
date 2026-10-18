@@ -56,6 +56,7 @@ def _evidence_inputs(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
         "POSTGRES_PASSWORD": random_password(),
         "SENTINEL_DNA_SECURE_COOKIES": "1",
         "SENTINEL_DNA_DB_PATH": str(tmp_path / "runtime" / "soc.db"),
+        "DATABASE_URL": "postgresql://sentinel@postgres:5432/sentinel_dna",
         "SENTINEL_DNA_IMAGE_DIGEST": digest,
         "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": str(trusted),
     }
@@ -162,6 +163,47 @@ def test_deployment_contract_validation_respects_trusted_metadata_platform_bound
     serialized = first.to_json()
     assert environment["SENTINEL_DNA_SECRET_KEY"] not in serialized
     assert environment["POSTGRES_PASSWORD"] not in serialized
+
+
+def _startup_environment(database_url: str | None = None) -> dict[str, str]:
+    environment = {
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECRET_KEY": random_secret(),
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_DB_PATH": "unused-sqlite-fallback.db",
+    }
+    if database_url is not None:
+        environment["DATABASE_URL"] = database_url
+    return environment
+
+
+def test_production_startup_rejects_missing_postgresql_url_with_sqlite_path():
+    startup = DeploymentContractValidator(
+        repository_root=ROOT,
+        environ=_startup_environment(),
+    ).production_startup()
+
+    assert startup["checks"]["runtime_config_accepts_startup"] is False
+    assert startup["status"] == "failed"
+
+
+@pytest.mark.parametrize("database_url", ["sqlite:///tmp/sentinel.sqlite", "not-a-url", "postgresql://[invalid"])
+def test_production_startup_rejects_invalid_or_non_postgresql_url(database_url):
+    startup = DeploymentContractValidator(
+        repository_root=ROOT,
+        environ=_startup_environment(database_url),
+    ).production_startup()
+
+    assert startup["checks"]["runtime_config_accepts_startup"] is False
+
+
+def test_production_startup_accepts_valid_postgresql_configuration():
+    startup = DeploymentContractValidator(
+        repository_root=ROOT,
+        environ=_startup_environment("postgresql://sentinel@postgres:5432/sentinel_dna"),
+    ).production_startup()
+
+    assert startup["checks"]["runtime_config_accepts_startup"] is True
 
 
 def test_missing_backup_evidence_fails_closed(tmp_path: Path):

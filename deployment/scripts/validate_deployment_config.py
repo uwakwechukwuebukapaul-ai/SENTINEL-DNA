@@ -13,7 +13,8 @@ from datetime import datetime
 from pathlib import Path
 import re
 from typing import Mapping
-from urllib.parse import urlparse
+
+from database.backend import DatabaseConfigurationError, DatabaseSettings
 
 try:
     from .release_metadata import derive_release_metadata
@@ -139,8 +140,12 @@ def validate_configuration(
     if not database_url and require_postgresql:
         errors.append("DATABASE_URL:missing")
     elif database_url:
-        parsed = urlparse(database_url)
-        if parsed.scheme not in {"postgres", "postgresql"} or not parsed.netloc:
+        try:
+            DatabaseSettings.from_environment(
+                database_url=database_url,
+                require_postgresql=require_postgresql,
+            )
+        except (DatabaseConfigurationError, ValueError):
             errors.append("DATABASE_URL:invalid-postgresql-url")
     return errors
 
@@ -149,7 +154,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path)
     args = parser.parse_args()
-    errors = validate_configuration(env_file=args.env_file)
+    errors = validate_configuration(env_file=args.env_file, require_postgresql=True)
     if errors:
         print("Deployment configuration invalid: " + ", ".join(errors))
         return 1
