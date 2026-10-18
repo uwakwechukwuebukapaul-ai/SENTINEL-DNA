@@ -693,6 +693,35 @@ def test_workflow_does_not_expose_production_secrets_to_build_or_test_steps():
             assert not secret_names.intersection(step.get("env", {}))
 
 
+def test_regression_test_job_uses_healthy_disposable_postgresql_service():
+    workflow = _workflow()
+    job = workflow["jobs"]["validate-release-contract"]
+    postgres = job["services"]["postgres"]
+    regression = _step(workflow, "Run deployment-adjacent regression tests")
+    steps = _steps(workflow)
+    names = [step["name"] for step in steps]
+
+    assert postgres["image"] == "postgres:16-alpine"
+    assert postgres["env"] == {
+        "POSTGRES_DB": "sentinel_dna_test",
+        "POSTGRES_USER": "sentinel_test",
+        "POSTGRES_PASSWORD": "sentinel_test_password",
+    }
+    assert postgres["ports"] == ["5432:5432"]
+    assert "pg_isready -U sentinel_test -d sentinel_dna_test" in postgres["options"]
+    assert "--health-interval 10s" in postgres["options"]
+    assert "--health-timeout 5s" in postgres["options"]
+    assert "--health-retries 5" in postgres["options"]
+    assert job["env"]["DATABASE_URL"] == (
+        "postgresql://sentinel_test:sentinel_test_password@localhost:5432/sentinel_dna_test"
+    )
+    assert names.index("Set up Python") < names.index("Install project dependencies")
+    assert names.index("Install project dependencies") < names.index(regression["name"])
+    assert _step(workflow, "Set up Python")["with"]["python-version"] == "3.12"
+    assert "pip install -r requirements.txt" in _step_text(_step(workflow, "Install project dependencies"))
+    assert "python -m pytest -q" in _step_text(regression)
+
+
 def test_dispatch_values_are_assertions_and_cannot_select_release_artifacts():
     workflow = _workflow()
     trigger = _trigger(workflow)
