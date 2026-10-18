@@ -756,3 +756,16 @@ def test_dispatch_values_are_assertions_and_cannot_select_release_artifacts():
         assert assertion in verify_text
 
     assert job["env"]["SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"] != "${{ inputs.authorized_sha }}"
+
+def test_deployment_validator_direct_cli_resolves_repository_packages():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "deployment" / "scripts" / "validate_deployment_config.py"), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout.lower()
+    assert "ModuleNotFoundError" not in result.stderr
