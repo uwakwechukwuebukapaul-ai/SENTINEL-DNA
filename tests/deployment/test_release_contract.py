@@ -504,12 +504,24 @@ def test_deployment_validation_rejects_missing_trusted_release_artifact(tmp_path
 
 def test_compose_preserves_internal_application_port_and_no_generated_env_mount():
     compose = (ROOT / "deployment" / "docker-compose.yml").read_text(encoding="utf-8")
+    nginx_service = yaml.safe_load(compose)["services"]["nginx"]
+    tls_mount = next(
+        volume
+        for volume in nginx_service["volumes"]
+        if isinstance(volume, dict) and volume.get("target") == "/etc/nginx/tls"
+    )
 
     assert "env_file:" not in compose
     assert "5000:5000" not in compose
     assert 'ports: ["80:80", "443:443"]' in compose
     assert "SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR" in compose
     assert "target: /etc/nginx/tls" in compose
+    assert tls_mount == {
+        "type": "bind",
+        "source": "${SENTINEL_DNA_TLS_DIR:?set SENTINEL_DNA_TLS_DIR}",
+        "target": "/etc/nginx/tls",
+        "read_only": True,
+    }
     assert "SENTINEL_DNA_SECRET_KEY:?set SENTINEL_DNA_SECRET_KEY" in compose
     assert "POSTGRES_PASSWORD:?set POSTGRES_PASSWORD" in compose
     assert "SENTINEL_DNA_IMAGE_DIGEST:?set SENTINEL_DNA_IMAGE_DIGEST" in compose
@@ -535,6 +547,51 @@ def test_nginx_contract_preserves_internal_app_and_secure_tls_forwarding():
     assert "ssl_certificate_key /etc/nginx/tls/localhost.key;" in nginx
     assert "proxy_pass http://app:5000;" in nginx
     assert "proxy_set_header X-Forwarded-Proto https;" in nginx
+
+
+def test_ci_compose_tls_override_is_temporary_static_and_precedes_publication():
+    workflow = _workflow()
+    step = _step(workflow, "Validate deployment Compose contract")
+    run = _step_text(step)
+    steps = _steps(workflow)
+    names = [candidate["name"] for candidate in steps]
+
+    assert step["env"] == {
+        "SENTINEL_DNA_SECRET_KEY": "compose-validation-only",
+        "POSTGRES_PASSWORD": "compose-validation-only",
+        "SENTINEL_DNA_IMAGE_DIGEST": "compose-validation-only",
+        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": "${{ runner.temp }}/sentinel-dna-compose-validation-metadata.json",
+        "SENTINEL_DNA_TLS_DIR": "${{ runner.temp }}/sentinel-dna-compose-validation-tls",
+    }
+    assert 'override_file="$RUNNER_TEMP/sentinel-dna-compose-validation.override.yml"' in run
+    override_match = re.search(r"<<'YAML'\n(?P<override>.*?)\n[ \t]*YAML", run, re.DOTALL)
+    assert override_match is not None
+    assert yaml.safe_load(override_match.group("override")) == {
+        "services": {
+            "nginx": {
+                "volumes": [
+                    {
+                        "type": "volume",
+                        "source": "compose-validation-tls",
+                        "target": "/etc/nginx/tls",
+                        "read_only": True,
+                    }
+                ]
+            }
+        },
+        "volumes": {"compose-validation-tls": {}},
+    }
+    assert "-f deployment/docker-compose.yml" in run
+    assert '-f "$override_file"' in run
+    assert "config --quiet" in run
+    assert "docker compose up" not in run
+    assert names.index(step["name"]) < names.index("Build immutable application image")
+    assert names.index(step["name"]) < names.index("Publish immutable candidate image to private GHCR")
+    assert all(
+        "sentinel-dna-compose-validation.override.yml" not in _step_text(candidate)
+        for candidate in steps
+        if candidate["name"] != step["name"]
+    )
 
 
 def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying():

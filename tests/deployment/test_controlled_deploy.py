@@ -135,7 +135,7 @@ def _clean_repository(tmp_path: Path) -> Path:
     return repository_root
 
 
-def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner=None):
+def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner=None, tls_dir_value=None):
     repository_root = _clean_repository(tmp_path)
 
     env_file = tmp_path / "protected" / ".env"
@@ -176,6 +176,8 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
     )
     tls_dir = tmp_path / "tls"
     tls_dir.mkdir()
+    (tls_dir / "localhost.crt").touch()
+    (tls_dir / "localhost.key").touch()
     if os.name != "nt":
         release_manifest_file.parent.chmod(0o700)
         release_manifest_file.chmod(0o600)
@@ -192,7 +194,7 @@ def _fixture(tmp_path, *, metadata=None, digest=RELEASE_DIGEST, acl=None, runner
                 f"SENTINEL_DNA_IMAGE_CREATED={RELEASE_CREATED}",
                 f"SENTINEL_DNA_IMAGE_DIGEST={digest}",
                 f"SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE={metadata_file}",
-                f"SENTINEL_DNA_TLS_DIR={tls_dir}",
+                f"SENTINEL_DNA_TLS_DIR={tls_dir if tls_dir_value is None else tls_dir_value}",
                 "SENTINEL_DNA_SECURE_COOKIES=1",
                 "DATABASE_URL=postgresql://sentinel:test@postgres.example:5432/sentinel_dna",
             )
@@ -348,6 +350,33 @@ def test_missing_protected_configuration_fails_closed(tmp_path):
         adapter.validate()
 
 
+def test_production_validation_rejects_missing_tls_directory(tmp_path):
+    adapter, _, _ = _fixture(tmp_path)
+    tls_dir = tmp_path / "tls"
+    (tls_dir / "localhost.crt").unlink()
+    (tls_dir / "localhost.key").unlink()
+    tls_dir.rmdir()
+
+    with pytest.raises(ControlledDeploymentError, match="tls_directory_invalid"):
+        adapter.validate()
+
+
+def test_production_validation_rejects_missing_tls_directory_setting(tmp_path):
+    adapter, _, _ = _fixture(tmp_path, tls_dir_value="")
+
+    with pytest.raises(ControlledDeploymentError, match="tls_directory_invalid"):
+        adapter.validate()
+
+
+@pytest.mark.parametrize("filename", ["localhost.crt", "localhost.key"])
+def test_production_validation_rejects_missing_tls_material(tmp_path, filename):
+    adapter, _, _ = _fixture(tmp_path)
+    (tmp_path / "tls" / filename).unlink()
+
+    with pytest.raises(ControlledDeploymentError, match="tls_material_invalid"):
+        adapter.validate()
+
+
 def test_direct_file_entrypoint_bootstraps_repository_import_for_configuration_validation(tmp_path, monkeypatch, capsys):
     repository_root = _clean_repository(tmp_path)
     script = repository_root / "deployment" / "scripts" / "controlled_deploy.py"
@@ -473,10 +502,10 @@ def test_missing_required_configuration_fails_without_secret_output(tmp_path):
 
 def test_only_checked_in_production_compose_file_is_approved(tmp_path):
     repository_root = Path(__file__).resolve().parents[2]
-    alternate = tmp_path / "compose.yml"
-    alternate.write_text("services: {}\n", encoding="utf-8")
+    validation_override = tmp_path / "sentinel-dna-compose-validation.override.yml"
+    validation_override.write_text("services: {}\n", encoding="utf-8")
     with pytest.raises(ControlledDeploymentError, match="compose_file_not_approved"):
-        validate_compose_file(alternate, repository_root)
+        validate_compose_file(validation_override, repository_root)
 
 
 def test_adapter_validates_release_metadata_and_compose_without_deploying(
