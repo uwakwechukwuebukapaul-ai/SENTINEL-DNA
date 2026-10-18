@@ -12,7 +12,14 @@ import os
 from datetime import datetime
 from pathlib import Path
 import re
+import sys
 from typing import Mapping
+
+# Direct execution sets sys.path[0] to deployment/scripts, not the repository root.
+# Add the root explicitly so the validator can import the project's database package.
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from database.backend import DatabaseConfigurationError, DatabaseSettings
 
