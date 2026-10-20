@@ -163,6 +163,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path)
     parser.add_argument(
+        "--repository-root",
+        type=Path,
+        help="application checkout root used to derive release metadata",
+    )
+    parser.add_argument(
         "--pre-image",
         action="store_true",
         help="validate protected configuration before the candidate digest and trusted metadata exist",
@@ -170,6 +175,7 @@ def main() -> int:
     args = parser.parse_args()
     errors = validate_configuration(
         env_file=args.env_file,
+        repository_root=args.repository_root,
         require_postgresql=True,
         require_image_evidence=not args.pre_image,
     )
