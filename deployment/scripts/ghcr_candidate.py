@@ -61,12 +61,14 @@ def resolve_manifest_digest(manifest: dict[str, Any], expected_digest: str) -> s
     return observed
 
 
-def verify_runtime_configuration(config: object, *, revision: str, image_created: str) -> dict[str, Any]:
+def verify_runtime_configuration(config: object, *, revision: str, image_version: str, image_created: str) -> dict[str, Any]:
     """Validate OCI identity and the Dockerfile runtime contract before publication."""
     if not isinstance(config, dict):
         raise CandidateVerificationError("candidate runtime configuration is incomplete")
     if not REVISION_RE.fullmatch(revision):
         raise CandidateVerificationError("authorized candidate revision is malformed")
+    if not REVISION_RE.fullmatch(image_version) or image_version != revision:
+        raise CandidateVerificationError("candidate image version must match the full authorized revision")
     _created(image_created, name="candidate creation metadata")
 
     labels = config.get("Labels")
@@ -75,7 +77,7 @@ def verify_runtime_configuration(config: object, *, revision: str, image_created
     expected_labels = {
         "org.opencontainers.image.revision": revision,
         "com.sentinel-dna.git.revision.full": revision,
-        "org.opencontainers.image.version": revision,
+        "org.opencontainers.image.version": image_version,
         "org.opencontainers.image.source": EXPECTED_SOURCE,
         "org.opencontainers.image.created": image_created,
     }
@@ -123,6 +125,7 @@ def verify_image_inspect(
     *,
     digest: str,
     revision: str,
+    image_version: str,
     candidate_tree: str,
     image_created: str,
     package_created_at: str,
@@ -160,7 +163,7 @@ def verify_image_inspect(
     if not isinstance(config, dict):
         raise CandidateVerificationError("candidate runtime configuration is incomplete")
 
-    verify_runtime_configuration(config, revision=revision, image_created=image_created)
+    verify_runtime_configuration(config, revision=revision, image_version=image_version, image_created=image_created)
 
     return {
         "candidate_sha": revision,
@@ -203,6 +206,7 @@ def main() -> int:
     parser.add_argument("--inspect-json", type=Path, required=True)
     parser.add_argument("--digest", required=True)
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--image-version", required=True)
     parser.add_argument("--candidate-tree", required=True)
     parser.add_argument("--image-created", required=True)
     parser.add_argument("--package-created-at", required=True)
@@ -216,6 +220,7 @@ def main() -> int:
             inspect_data,
             digest=args.digest,
             revision=args.revision,
+            image_version=args.image_version,
             candidate_tree=args.candidate_tree,
             image_created=args.image_created,
             package_created_at=args.package_created_at,

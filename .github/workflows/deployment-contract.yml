@@ -314,7 +314,7 @@ jobs:
             --tag "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" \
             --build-arg "VCS_REF=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
             --build-arg "VCS_REF_FULL=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
-            --build-arg "IMAGE_VERSION=${SENTINEL_DNA_IMAGE_TAG}" \
+            --build-arg "IMAGE_VERSION=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
             --build-arg "IMAGE_SOURCE=https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
             --build-arg "IMAGE_CREATED=${SENTINEL_DNA_IMAGE_CREATED}" \
             .
@@ -328,13 +328,13 @@ jobs:
           test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "sentinel"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "com.sentinel-dna.git.revision.full"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$SENTINEL_DNA_IMAGE_TAG"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')" = "$SENTINEL_DNA_IMAGE_CREATED"
           test "$(docker image inspect "$image" --format '{{json .Config.Cmd}}')" = '["gunicorn","wsgi:application","--bind","0.0.0.0:5000","--workers","1","--access-logfile","-","--error-logfile","-"]'
           test "$(docker image inspect "$image" --format '{{json .Config.ExposedPorts}}')" = '{"5000/tcp":{}}'
           docker image inspect "$image" --format '{{json .Config}}' > "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json"
-          python - "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$SENTINEL_DNA_IMAGE_CREATED" <<'PY'
+          python - "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$SENTINEL_DNA_IMAGE_CREATED" "$SENTINEL_DNA_IMAGE_REVISION_FULL" <<'PY'
           import json
           import sys
           from pathlib import Path
@@ -344,6 +344,7 @@ jobs:
                   json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")),
                   revision=sys.argv[2],
                   image_created=sys.argv[3],
+                  image_version=sys.argv[4],
               )
           except (OSError, ValueError, CandidateVerificationError) as exc:
               raise SystemExit(f"new candidate runtime verification failed: {exc}") from None
@@ -452,6 +453,7 @@ jobs:
             --inspect-json "$RUNNER_TEMP/sentinel-dna-candidate-inspect.json" \
             --digest "$expected_digest" \
             --revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
+            --image-version "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --candidate-tree "$candidate_tree" \
             --image-created "$expected_created" \
             --package-created-at "$PACKAGE_CREATED_AT" \

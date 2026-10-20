@@ -52,6 +52,7 @@ def _verify(inspect_data=None, **overrides):
     args = {
         "digest": DIGEST,
         "revision": REVISION,
+        "image_version": REVISION,
         "candidate_tree": "9" * 40,
         "image_created": IMAGE_CREATED,
         "package_created_at": PACKAGE_CREATED,
@@ -59,6 +60,11 @@ def _verify(inspect_data=None, **overrides):
     }
     args.update(overrides)
     return verify_image_inspect(_inspect() if inspect_data is None else inspect_data, **args)
+
+
+def test_explicit_image_version_must_match_revision():
+    with pytest.raises(CandidateVerificationError, match="image version must match"):
+        _verify(image_version="0" * 40)
 
 
 def test_absent_candidate_digest_is_required_for_verified_resolution():
@@ -79,6 +85,7 @@ def test_verified_candidate_metadata_is_bound_to_digest_and_full_revision():
     "change, expected_error",
     [
         (lambda data: data["Config"]["Labels"].update({"org.opencontainers.image.revision": "0" * 40}), "provenance mismatch"),
+        (lambda data: data["Config"]["Labels"].update({"org.opencontainers.image.version": "0" * 40}), "provenance mismatch"),
         (lambda data: data["Config"]["Labels"].update({"com.sentinel-dna.git.revision.full": "0" * 40}), "provenance mismatch"),
         (lambda data: data["Config"]["Labels"].update({"org.opencontainers.image.source": "https://example.invalid/source"}), "provenance mismatch"),
         (lambda data: data["Config"]["Labels"].update({"org.opencontainers.image.created": "2026-10-20T02:38:42Z"}), "provenance mismatch"),
