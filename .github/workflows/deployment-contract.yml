@@ -204,7 +204,10 @@ jobs:
           test -f "$verifier_root/tests/deployment/test_ghcr_candidate.py"
           test "$(git rev-parse HEAD)" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
           test "$(git rev-parse 'HEAD^{tree}')" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          test -z "$(git -C "$verifier_root" status --porcelain --untracked-files=all)"
           test -z "$(git status --porcelain --untracked-files=all -- . ':(exclude).ghcr-recovery-verifier/**')"
+          printf '\n/.ghcr-recovery-verifier/\n' >> .git/info/exclude
+          test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -513,6 +516,7 @@ jobs:
         run: |
           set -euo pipefail
           manifest="$RUNNER_TEMP/sentinel-dna-release-manifest-image-bound.json"
+          test -z "$(git -C "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" status --porcelain --untracked-files=all)"
           python deployment/scripts/release_manifest.py build \
             --output "$manifest" \
             --image-reference "$PUBLISHED_IMAGE_REFERENCE" \
