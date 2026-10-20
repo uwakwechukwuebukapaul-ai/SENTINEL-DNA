@@ -710,6 +710,9 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     isolation = _step_text(_step(workflow, "Verify recovery verifier checkout identity and isolation"))
     assert 'test "$(git -C "$verifier_root" rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"' in isolation
     assert "test -z \"$(git status --porcelain --untracked-files=all -- . ':(exclude).ghcr-recovery-verifier/**')\"" in isolation
+    assert 'git -C "$verifier_root" status --porcelain --untracked-files=all' in isolation
+    assert "printf '\\n/.ghcr-recovery-verifier/\\n' >> .git/info/exclude" in isolation
+    assert 'test -z "$(git status --porcelain --untracked-files=all)"' in isolation
     boundary = _step_text(_step(workflow, "Verify tracked deployment release boundary"))
     assert "ghcr_candidate.py" not in boundary
     assert "test_ghcr_candidate.py" not in boundary
@@ -813,6 +816,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in metadata_text
     manifest = _step(workflow, "Generate image-bound release manifest")
     manifest_text = _step_text(manifest)
+    assert 'git -C "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" status --porcelain --untracked-files=all' in manifest_text
     assert "PUBLISHED_IMAGE_DIGEST" in manifest_text
     assert "PUBLISHED_IMAGE_ID" in manifest_text
     assert "PUBLISHED_IMAGE_CREATED" in manifest_text
