@@ -86,10 +86,14 @@ def test_release_file_inventory_covers_trusted_release_boundary():
     required = {
         ".github/workflows/deployment-contract.yml",
         "deployment/scripts/controlled_deploy.py",
+        "deployment/scripts/ghcr_candidate.py",
+        "deployment/scripts/ghcr_tag_guard.py",
         "deployment/scripts/prepare_trusted_release_metadata.py",
         "deployment/scripts/release_manifest.py",
         "deployment/scripts/trusted_release_metadata.py",
         "deployment/scripts/validate_deployment_config.py",
+        "tests/deployment/test_ghcr_candidate.py",
+        "tests/deployment/test_ghcr_tag_guard.py",
     }
 
     assert required <= set(RELEASE_FILE_SET)

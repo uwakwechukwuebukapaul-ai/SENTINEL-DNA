@@ -398,6 +398,44 @@ def test_deployment_validation_requires_exact_trusted_release_artifact(tmp_path)
     assert validate_configuration(environ=environment, repository_root=ROOT) == []
 
 
+def test_pre_image_validation_checks_protected_inputs_without_image_evidence():
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    environment = {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+        "DATABASE_URL": "postgresql://sentinel@postgres:5432/sentinel_dna",
+    }
+
+    assert validate_configuration(
+        environ=environment,
+        repository_root=ROOT,
+        require_postgresql=True,
+        require_image_evidence=False,
+    ) == []
+
+
+def test_pre_image_validator_cli_does_not_require_candidate_evidence(monkeypatch, capsys):
+    metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
+    for name, value in {
+        **metadata,
+        "SENTINEL_DNA_ENV": "production",
+        "SENTINEL_DNA_SECURE_COOKIES": "1",
+        "SENTINEL_DNA_SECRET_KEY": TEST_SECRET,
+        "POSTGRES_PASSWORD": TEST_POSTGRES_PASSWORD,
+        "DATABASE_URL": "postgresql://sentinel@postgres:5432/sentinel_dna",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("SENTINEL_DNA_IMAGE_DIGEST", raising=False)
+    monkeypatch.delenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE", raising=False)
+    monkeypatch.setattr(sys, "argv", ["validate_deployment_config.py", "--pre-image"])
+
+    assert main() == 0
+    assert "pre-image deployment configuration valid" in capsys.readouterr().out.lower()
+
+
 def test_controlled_production_validation_requires_postgresql_url():
     metadata = derive_release_metadata(repository_root=ROOT, source_date_epoch="0")
     environment = {
@@ -599,8 +637,16 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert workflow["name"] == "deployment-contract"
     trigger = _trigger(workflow)
     dispatch = trigger["workflow_dispatch"]
-    assert set(dispatch["inputs"]) == {"authorized_ref", "authorized_sha", "authorized_tree"}
-    assert all(dispatch["inputs"][name]["required"] for name in dispatch["inputs"])
+    assert set(dispatch["inputs"]) == {
+        "authorized_ref",
+        "authorized_sha",
+        "authorized_tree",
+        "recovery_image_digest",
+        "recovery_image_created",
+    }
+    assert all(dispatch["inputs"][name]["required"] for name in ("authorized_ref", "authorized_sha", "authorized_tree"))
+    assert not dispatch["inputs"]["recovery_image_digest"]["required"]
+    assert not dispatch["inputs"]["recovery_image_created"]["required"]
     assert all(dispatch["inputs"][name]["type"] == "string" for name in dispatch["inputs"])
 
     assert workflow["permissions"] == {"contents": "read", "packages": "write"}
@@ -660,15 +706,38 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
 
     assert "${{ inputs.authorized_sha }}" not in checkout["with"]["ref"]
     assert "${{ inputs.authorized_sha }}" not in workflow["concurrency"]["group"]
+    assert "${{ inputs.recovery_image_digest }}" not in checkout["with"]["ref"]
+    assert "${{ inputs.recovery_image_created }}" not in workflow["concurrency"]["group"]
 
     names = [step["name"] for step in _steps(workflow)]
-    assert names.index("Build immutable application image") < names.index("Publish immutable candidate image to private GHCR")
-    assert names.index("Publish immutable candidate image to private GHCR") < names.index("Prepare candidate-bound trusted release metadata")
-    assert names.index("Prepare candidate-bound trusted release metadata") < names.index("Validate protected configuration and metadata")
-    assert names.index("Validate protected configuration and metadata") < names.index("Generate image-bound release manifest")
-    configuration_step = _step(workflow, "Validate protected configuration and metadata")
-    assert configuration_step["run"] == "python deployment/scripts/validate_deployment_config.py"
+    configuration_step = _step(workflow, "Validate protected configuration before candidate publication")
+    assert configuration_step["run"] == "python deployment/scripts/validate_deployment_config.py --pre-image"
     assert configuration_step["env"]["DATABASE_URL"] == "postgresql://sentinel@postgres:5432/sentinel_dna"
+    assert names.index(configuration_step["name"]) < names.index("Authenticate to private GHCR")
+    assert names.index(configuration_step["name"]) < names.index("Probe candidate tag before build")
+    reject_recovery = _step(workflow, "Reject recovery assertions for an absent candidate")
+    assert "candidate_state == 'absent'" in reject_recovery["if"]
+    assert names.index(reject_recovery["name"]) < names.index("Build immutable application image")
+    assert names.index("Probe candidate tag before build") < names.index("Build immutable application image")
+    build = _step(workflow, "Build immutable application image")
+    assert "candidate_state == 'absent'" in build["if"]
+    local_verify = _step(workflow, "Verify newly built image configuration")
+    assert local_verify["if"] == build["if"]
+    assert "verify_runtime_configuration" in _step_text(local_verify)
+    prepublish_probe = _step(workflow, "Probe candidate tag immediately before publication")
+    assert names.index(local_verify["name"]) < names.index(prepublish_probe["name"])
+    publish = _step(workflow, "Publish immutable candidate image to private GHCR")
+    assert "candidate_state == 'absent'" in publish["if"]
+    assert names.index(prepublish_probe["name"]) < names.index(publish["name"])
+    assert names.index(publish["name"]) < names.index("Resolve candidate tag metadata")
+    assert names.index("Resolve candidate tag metadata") < names.index("Verify recovered or newly published candidate by digest")
+    assert names.index("Verify recovered or newly published candidate by digest") < names.index("Prepare candidate-bound trusted release metadata")
+    final_configuration_step = _step(workflow, "Validate candidate-bound configuration and metadata")
+    assert final_configuration_step["run"] == "python deployment/scripts/validate_deployment_config.py"
+    assert names.index("Prepare candidate-bound trusted release metadata") < names.index(final_configuration_step["name"])
+    assert names.index(final_configuration_step["name"]) < names.index("Generate image-bound release manifest")
+    assert names.index("Verify recovered or newly published candidate by digest") < names.index("Generate image-bound release manifest")
+    assert names.index(configuration_step["name"]) < names.index("Generate image-bound release manifest")
     assert names.index("Verify image-bound release manifest") < names.index("Upload non-secret image release evidence")
 
     login = _step(workflow, "Authenticate to private GHCR")
@@ -676,20 +745,27 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "--password-stdin" in _step_text(login)
     publish = _step(workflow, "Publish immutable candidate image to private GHCR")
     publish_text = _step_text(publish)
-    assert "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna" in publish_text
+    assert publish["env"]["GHCR_IMAGE"] == "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna"
     assert 'sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}' in publish_text
     assert "docker push" in publish_text
-    assert "REPO_DIGESTS_JSON" in publish_text
-    assert "exactly one matching GHCR RepoDigest" in publish_text
-    collision = _step(workflow, "Refuse an existing candidate tag")
+    assert "candidate_publish_probe.outputs.candidate_state == 'absent'" in publish["if"]
+    collision = _step(workflow, "Probe candidate tag before build")
     collision_text = _step_text(collision)
     assert "ghcr_tag_guard.py" in collision_text
     assert "GITHUB_TOKEN" in collision["env"]
     assert "GITHUB_API_URL" in collision["env"]
-    assert "docker manifest inspect" not in collision_text
+    assert "--github-output" in collision_text
     guard_source = (ROOT / "deployment" / "scripts" / "ghcr_tag_guard.py").read_text(encoding="utf-8")
-    assert "refusing to overwrite" in guard_source
+    assert "candidate tag exists; recovery verification is required" in guard_source
     assert "GitHub Packages API" in guard_source
+    recovery = _step(workflow, "Verify recovered or newly published candidate by digest")
+    recovery_text = _step_text(recovery)
+    assert "RECOVERY_IMAGE_DIGEST" in recovery["env"]
+    assert "RECOVERY_IMAGE_CREATED" in recovery["env"]
+    assert "docker pull \"$GHCR_IMAGE@$expected_digest\"" in recovery_text
+    assert "ghcr_candidate.py" in recovery_text
+    assert "steps.candidate_probe.outputs.candidate_state" in recovery_text
+    assert "steps.candidate_publish_probe.outputs.candidate_state" in recovery_text
 
     for step in _steps(workflow):
         text = _step_text(step)
@@ -702,31 +778,34 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
         "Verify protected candidate identity",
         "Derive immutable release metadata",
         "Build immutable application image",
-        "Verify image provenance and non-root configuration",
-        "Verify OCI creation metadata",
         "Run deployment-adjacent regression tests",
         "Authenticate to private GHCR",
         "Publish immutable candidate image to private GHCR",
+        "Verify recovered or newly published candidate by digest",
     ):
         assert not {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}.intersection(_step(workflow, name).get("env", {}))
 
-    for name in ("Validate protected configuration and metadata", "Validate deployment Compose contract"):
+    for name in (
+        "Validate protected configuration before candidate publication",
+        "Validate candidate-bound configuration and metadata",
+        "Validate deployment Compose contract",
+    ):
         assert {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}.issubset(_step(workflow, name)["env"])
 
     metadata = _step(workflow, "Prepare candidate-bound trusted release metadata")
     metadata_text = _step_text(metadata)
     assert "prepare_trusted_release_metadata.py" in metadata_text
     assert "PUBLISHED_IMAGE_DIGEST" in metadata_text
-    assert '--expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"' in metadata_text
+    assert '--expected-image-created "$PUBLISHED_IMAGE_CREATED"' in metadata_text
     assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in metadata_text
     manifest = _step(workflow, "Generate image-bound release manifest")
     manifest_text = _step_text(manifest)
     assert "PUBLISHED_IMAGE_DIGEST" in manifest_text
     assert "PUBLISHED_IMAGE_ID" in manifest_text
-    assert "SENTINEL_DNA_IMAGE_CREATED" in manifest_text
+    assert "PUBLISHED_IMAGE_CREATED" in manifest_text
     assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in manifest_text
-    published = _step(workflow, "Publish immutable candidate image to private GHCR")
-    assert 'os.environ["OCI_CREATED"] != os.environ["SENTINEL_DNA_IMAGE_CREATED"]' in _step_text(published)
+    published = _step(workflow, "Verify recovered or newly published candidate by digest")
+    assert "package_created_at" in (ROOT / "deployment/scripts/ghcr_candidate.py").read_text(encoding="utf-8")
     verify_manifest = _step(workflow, "Verify image-bound release manifest")
     verify_text = _step_text(verify_manifest)
     assert "--require-image" in verify_text
@@ -734,7 +813,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in verify_text
     assert '--expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"' in verify_text
     assert '--expected-image-digest "$PUBLISHED_IMAGE_DIGEST"' in verify_text
-    assert '--expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"' in verify_text
+    assert '--expected-image-created "$PUBLISHED_IMAGE_CREATED"' in verify_text
     upload = _step(workflow, "Upload non-secret image release evidence")
     assert "sentinel-dna-image-provenance.json" in upload["with"]["path"]
     assert "sentinel-dna-release-manifest-image-bound.json" in upload["with"]["path"]
@@ -751,7 +830,11 @@ def test_workflow_does_not_expose_production_secrets_to_build_or_test_steps():
     workflow = _workflow()
     secret_names = {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}
     for step in _steps(workflow):
-        if step["name"] not in {"Validate protected configuration and metadata", "Validate deployment Compose contract"}:
+        if step["name"] not in {
+            "Validate protected configuration before candidate publication",
+            "Validate candidate-bound configuration and metadata",
+            "Validate deployment Compose contract",
+        }:
             assert not secret_names.intersection(step.get("env", {}))
 
 
@@ -788,7 +871,13 @@ def test_dispatch_values_are_assertions_and_cannot_select_release_artifacts():
     workflow = _workflow()
     trigger = _trigger(workflow)
     dispatch = trigger["workflow_dispatch"]
-    assert set(dispatch["inputs"]) == {"authorized_ref", "authorized_sha", "authorized_tree"}
+    assert set(dispatch["inputs"]) == {
+        "authorized_ref",
+        "authorized_sha",
+        "authorized_tree",
+        "recovery_image_digest",
+        "recovery_image_created",
+    }
 
     job = workflow["jobs"]["validate-release-contract"]
     checkout = _step(workflow, "Checkout protected candidate commit")
