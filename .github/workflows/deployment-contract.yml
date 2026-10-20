@@ -226,7 +226,7 @@ jobs:
           SENTINEL_DNA_SECRET_KEY: ${{ secrets.SENTINEL_DNA_SECRET_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
-        run: python deployment/scripts/validate_deployment_config.py --pre-image
+        run: python .ghcr-recovery-verifier/deployment/scripts/validate_deployment_config.py --pre-image --repository-root "$GITHUB_WORKSPACE"
 
       - name: Generate and verify deterministic release manifest
         shell: bash
