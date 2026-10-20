@@ -704,6 +704,19 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "git status --porcelain --untracked-files=all" in verify_text
     assert 'test "$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"' not in verify_text
 
+    verifier_checkout = _step(workflow, "Checkout authorized workflow recovery verifier")
+    assert verifier_checkout["with"]["ref"] == "${{ github.workflow_sha }}"
+    assert verifier_checkout["with"]["path"] == ".ghcr-recovery-verifier"
+    isolation = _step_text(_step(workflow, "Verify recovery verifier checkout identity and isolation"))
+    assert 'test "$(git -C "$verifier_root" rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"' in isolation
+    assert "test -z \"$(git status --porcelain --untracked-files=all -- . ':(exclude).ghcr-recovery-verifier/**')\"" in isolation
+    boundary = _step_text(_step(workflow, "Verify tracked deployment release boundary"))
+    assert "ghcr_candidate.py" not in boundary
+    assert "test_ghcr_candidate.py" not in boundary
+    verifier_tests = _step(workflow, "Run authorized workflow recovery verifier tests")
+    assert "tests/deployment/test_ghcr_candidate.py" in _step_text(verifier_tests)
+    assert 'cd "$GITHUB_WORKSPACE/.ghcr-recovery-verifier"' in _step_text(verifier_tests)
+
     assert "${{ inputs.authorized_sha }}" not in checkout["with"]["ref"]
     assert "${{ inputs.authorized_sha }}" not in workflow["concurrency"]["group"]
     assert "${{ inputs.recovery_image_digest }}" not in checkout["with"]["ref"]
@@ -763,7 +776,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "RECOVERY_IMAGE_DIGEST" in recovery["env"]
     assert "RECOVERY_IMAGE_CREATED" in recovery["env"]
     assert "docker pull \"$GHCR_IMAGE@$expected_digest\"" in recovery_text
-    assert "ghcr_candidate.py" in recovery_text
+    assert "ghcr-recovery-verifier/deployment/scripts/ghcr_candidate.py" in recovery_text
     assert "steps.candidate_probe.outputs.candidate_state" in recovery_text
     assert "steps.candidate_publish_probe.outputs.candidate_state" in recovery_text
 
@@ -804,8 +817,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
     assert "PUBLISHED_IMAGE_ID" in manifest_text
     assert "PUBLISHED_IMAGE_CREATED" in manifest_text
     assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in manifest_text
-    published = _step(workflow, "Verify recovered or newly published candidate by digest")
-    assert "package_created_at" in (ROOT / "deployment/scripts/ghcr_candidate.py").read_text(encoding="utf-8")
+    assert "ghcr-recovery-verifier" in recovery_text
     verify_manifest = _step(workflow, "Verify image-bound release manifest")
     verify_text = _step_text(verify_manifest)
     assert "--require-image" in verify_text

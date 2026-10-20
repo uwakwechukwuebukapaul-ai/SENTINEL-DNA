@@ -1,4 +1,4 @@
-name: deployment-contract
+﻿name: deployment-contract
 
 on:
   workflow_dispatch:
@@ -186,8 +186,25 @@ jobs:
           test -f tests/deployment/test_trusted_release_metadata.py
           test -f deployment/scripts/ghcr_tag_guard.py
           test -f tests/deployment/test_ghcr_tag_guard.py
-          test -f deployment/scripts/ghcr_candidate.py
-          test -f tests/deployment/test_ghcr_candidate.py
+
+      - name: Checkout authorized workflow recovery verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ghcr-recovery-verifier
+          fetch-depth: 1
+
+      - name: Verify recovery verifier checkout identity and isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_root="$GITHUB_WORKSPACE/.ghcr-recovery-verifier"
+          test "$(git -C "$verifier_root" rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"
+          test -f "$verifier_root/deployment/scripts/ghcr_candidate.py"
+          test -f "$verifier_root/tests/deployment/test_ghcr_candidate.py"
+          test "$(git rev-parse HEAD)" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          test -z "$(git status --porcelain --untracked-files=all -- . ':(exclude).ghcr-recovery-verifier/**')"
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -265,12 +282,18 @@ jobs:
             tests/deployment/test_build_context_policy.py \
             tests/deployment/test_trusted_release_metadata.py \
             tests/deployment/test_ghcr_tag_guard.py \
-            tests/deployment/test_ghcr_candidate.py \
             tests/production/test_runtime_hardening.py \
             tests/intelligence/api/test_execution_visibility_api.py \
             tests/security/test_production_entrypoint_reconciliation.py \
             tests/intelligence/runtime/test_execution_durable_state.py \
             tests/staging/test_staging_security_contract.py
+
+      - name: Run authorized workflow recovery verifier tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/.ghcr-recovery-verifier"
+          python -m pytest -q tests/deployment/test_ghcr_candidate.py
 
       - name: Authenticate to private GHCR
         shell: bash
@@ -334,10 +357,11 @@ jobs:
           test "$(docker image inspect "$image" --format '{{json .Config.Cmd}}')" = '["gunicorn","wsgi:application","--bind","0.0.0.0:5000","--workers","1","--access-logfile","-","--error-logfile","-"]'
           test "$(docker image inspect "$image" --format '{{json .Config.ExposedPorts}}')" = '{"5000/tcp":{}}'
           docker image inspect "$image" --format '{{json .Config}}' > "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json"
-          python - "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$SENTINEL_DNA_IMAGE_CREATED" "$SENTINEL_DNA_IMAGE_REVISION_FULL" <<'PY'
+          python - "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$SENTINEL_DNA_IMAGE_CREATED" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" <<'PY'
           import json
           import sys
           from pathlib import Path
+          sys.path.insert(0, sys.argv[5])
           from deployment.scripts.ghcr_candidate import CandidateVerificationError, verify_runtime_configuration
           try:
               verify_runtime_configuration(
@@ -438,10 +462,11 @@ jobs:
           candidate_tree="$(git rev-parse 'HEAD^{tree}')"
           manifest_json="$RUNNER_TEMP/sentinel-dna-candidate-manifest.json"
           docker buildx imagetools inspect "$candidate_ref" --format '{{json .Manifest}}' > "$manifest_json"
-          python - "$manifest_json" "$expected_digest" <<'PY'
+          python - "$manifest_json" "$expected_digest" "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" <<'PY'
           import json
           import sys
           from pathlib import Path
+          sys.path.insert(0, sys.argv[3])
           from deployment.scripts.ghcr_candidate import resolve_manifest_digest
           manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           resolve_manifest_digest(manifest, sys.argv[2])
@@ -449,7 +474,7 @@ jobs:
           docker pull "$GHCR_IMAGE@$expected_digest"
           docker image inspect "$GHCR_IMAGE@$expected_digest" --format '{{json .}}' \
             > "$RUNNER_TEMP/sentinel-dna-candidate-inspect.json"
-          python deployment/scripts/ghcr_candidate.py \
+          python "$GITHUB_WORKSPACE/.ghcr-recovery-verifier/deployment/scripts/ghcr_candidate.py" \
             --inspect-json "$RUNNER_TEMP/sentinel-dna-candidate-inspect.json" \
             --digest "$expected_digest" \
             --revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
