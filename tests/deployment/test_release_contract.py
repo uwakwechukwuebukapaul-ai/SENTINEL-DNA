@@ -430,7 +430,7 @@ def test_pre_image_validator_cli_does_not_require_candidate_evidence(monkeypatch
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("SENTINEL_DNA_IMAGE_DIGEST", raising=False)
     monkeypatch.delenv("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE", raising=False)
-    monkeypatch.setattr(sys, "argv", ["validate_deployment_config.py", "--pre-image"])
+    monkeypatch.setattr(sys, "argv", ["validate_deployment_config.py", "--pre-image", "--repository-root", str(ROOT)])
 
     assert main() == 0
     assert "pre-image deployment configuration valid" in capsys.readouterr().out.lower()
