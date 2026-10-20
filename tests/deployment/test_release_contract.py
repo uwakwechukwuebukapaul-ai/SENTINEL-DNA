@@ -724,7 +724,7 @@ def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying(
 
     names = [step["name"] for step in _steps(workflow)]
     configuration_step = _step(workflow, "Validate protected configuration before candidate publication")
-    assert configuration_step["run"] == "python deployment/scripts/validate_deployment_config.py --pre-image"
+    assert configuration_step["run"] == 'python .ghcr-recovery-verifier/deployment/scripts/validate_deployment_config.py --pre-image --repository-root "$GITHUB_WORKSPACE"'
     assert configuration_step["env"]["DATABASE_URL"] == "postgresql://sentinel@postgres:5432/sentinel_dna"
     assert names.index(configuration_step["name"]) < names.index("Authenticate to private GHCR")
     assert names.index(configuration_step["name"]) < names.index("Probe candidate tag before build")
