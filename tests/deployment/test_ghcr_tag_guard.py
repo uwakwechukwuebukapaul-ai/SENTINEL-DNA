@@ -25,7 +25,11 @@ class FakeResponse:
 
 
 def _version(*tags: str) -> dict:
-    return {"metadata": {"container": {"tags": list(tags)}}}
+    return {
+        "id": 123,
+        "created_at": "2026-10-20T02:17:00Z",
+        "metadata": {"container": {"tags": list(tags)}},
+    }
 
 
 def test_candidate_tag_present_is_refused():
@@ -40,11 +44,47 @@ def test_candidate_tag_absent_after_complete_listing_is_distinguished():
     )
 
 
-def test_unknown_metadata_shapes_do_not_create_false_positive():
-    assert not ghcr_tag_guard.candidate_tag_exists(
-        [{"metadata": {}}, {"metadata": {"container": {"tags": "not-a-list"}}}],
-        "sha-target",
-    )
+@pytest.mark.parametrize(
+    "version",
+    [
+        {"id": 123, "created_at": "2026-10-20T02:17:00Z", "metadata": {}},
+        {
+            "id": 123,
+            "created_at": "2026-10-20T02:17:00Z",
+            "metadata": {"container": {"tags": "not-a-list"}},
+        },
+        {"id": 123, "metadata": {"container": {"tags": ["sha-target"]}}},
+    ],
+)
+def test_incomplete_package_metadata_fails_closed(version):
+    with pytest.raises(ghcr_tag_guard.ProbeError):
+        ghcr_tag_guard.candidate_tag_exists([version], "sha-target")
+
+
+def test_duplicate_tag_versions_fail_closed():
+    with pytest.raises(ghcr_tag_guard.ProbeError, match="multiple package versions"):
+        ghcr_tag_guard.candidate_tag_version([_version("sha-target"), _version("sha-target")], "sha-target")
+
+
+def test_candidate_probe_reports_absent_and_present_without_authorizing_overwrite(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_TOKEN", "synthetic-token")
+    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.com")
+    monkeypatch.setattr(ghcr_tag_guard, "package_versions", lambda *_: [_version("latest")])
+    monkeypatch.setattr("sys.argv", ["ghcr_tag_guard", "--image", "ghcr.io/example/image", "--tag", "sha-target", "--github-output", str(output)])
+
+    assert ghcr_tag_guard.main() == 0
+    assert "candidate_state=absent" in output.read_text()
+    assert "absence confirmed" in capsys.readouterr().out
+
+    output.write_text("")
+    monkeypatch.setattr(ghcr_tag_guard, "package_versions", lambda *_: [_version("sha-target")])
+    assert ghcr_tag_guard.main() == 0
+    result = output.read_text()
+    assert "candidate_state=present" in result
+    assert "package_version_id=123" in result
+    assert "package_created_at=2026-10-20T02:17:00Z" in result
+    assert "recovery verification is required" in capsys.readouterr().out
 
 
 def test_package_versions_paginates_until_a_short_page(monkeypatch):

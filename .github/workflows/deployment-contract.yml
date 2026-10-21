@@ -1,4 +1,4 @@
-name: deployment-contract
+﻿name: deployment-contract
 
 on:
   workflow_dispatch:
@@ -15,6 +15,16 @@ on:
         description: Git tree object approved for this validation
         required: true
         type: string
+      recovery_image_digest:
+        description: Digest recorded by a prior failed run; required only when recovering an existing candidate
+        required: false
+        type: string
+        default: ""
+      recovery_image_created:
+        description: OCI creation timestamp recorded by the prior candidate run; required only for recovery
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -177,6 +187,28 @@ jobs:
           test -f deployment/scripts/ghcr_tag_guard.py
           test -f tests/deployment/test_ghcr_tag_guard.py
 
+      - name: Checkout authorized workflow recovery verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ghcr-recovery-verifier
+          fetch-depth: 1
+
+      - name: Verify recovery verifier checkout identity and isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_root="$GITHUB_WORKSPACE/.ghcr-recovery-verifier"
+          test "$(git -C "$verifier_root" rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"
+          test -f "$verifier_root/deployment/scripts/ghcr_candidate.py"
+          test -f "$verifier_root/tests/deployment/test_ghcr_candidate.py"
+          test "$(git rev-parse HEAD)" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"
+          test -z "$(git -C "$verifier_root" status --porcelain --untracked-files=all)"
+          test -z "$(git status --porcelain --untracked-files=all -- . ':(exclude).ghcr-recovery-verifier/**')"
+          printf '\n/.ghcr-recovery-verifier/\n' >> .git/info/exclude
+          test -z "$(git status --porcelain --untracked-files=all)"
+
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -190,6 +222,14 @@ jobs:
       - name: Derive immutable release metadata
         shell: bash
         run: python deployment/scripts/release_metadata.py --format github-env >> "$GITHUB_ENV"
+
+      - name: Validate protected configuration before candidate publication
+        shell: bash
+        env:
+          SENTINEL_DNA_SECRET_KEY: ${{ secrets.SENTINEL_DNA_SECRET_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          DATABASE_URL: postgresql://sentinel@postgres:5432/sentinel_dna
+        run: python .ghcr-recovery-verifier/deployment/scripts/validate_deployment_config.py --pre-image --repository-root "$GITHUB_WORKSPACE"
 
       - name: Generate and verify deterministic release manifest
         shell: bash
@@ -236,37 +276,6 @@ jobs:
         shell: bash
         run: python deployment/scripts/build_context_policy.py --repository-root .
 
-      - name: Build immutable application image
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker build \
-            --tag "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" \
-            --build-arg "VCS_REF=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
-            --build-arg "VCS_REF_FULL=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
-            --build-arg "IMAGE_VERSION=${SENTINEL_DNA_IMAGE_TAG}" \
-            --build-arg "IMAGE_SOURCE=https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
-            --build-arg "IMAGE_CREATED=${SENTINEL_DNA_IMAGE_CREATED}" \
-            .
-
-      - name: Verify image provenance and non-root configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="deployment-app:${SENTINEL_DNA_IMAGE_TAG}"
-          test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "sentinel"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "com.sentinel-dna.git.revision.full"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$SENTINEL_DNA_IMAGE_TAG"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
-
-      - name: Verify OCI creation metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="deployment-app:${SENTINEL_DNA_IMAGE_TAG}"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')" = "$SENTINEL_DNA_IMAGE_CREATED"
-
       - name: Run deployment-adjacent regression tests
         run: |
           python -m pytest -q \
@@ -275,11 +284,19 @@ jobs:
             tests/deployment/test_release_manifest.py \
             tests/deployment/test_build_context_policy.py \
             tests/deployment/test_trusted_release_metadata.py \
+            tests/deployment/test_ghcr_tag_guard.py \
             tests/production/test_runtime_hardening.py \
             tests/intelligence/api/test_execution_visibility_api.py \
             tests/security/test_production_entrypoint_reconciliation.py \
             tests/intelligence/runtime/test_execution_durable_state.py \
             tests/staging/test_staging_security_contract.py
+
+      - name: Run authorized workflow recovery verifier tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/.ghcr-recovery-verifier"
+          python -m pytest -q tests/deployment/test_ghcr_candidate.py
 
       - name: Authenticate to private GHCR
         shell: bash
@@ -289,7 +306,8 @@ jobs:
             --username "${{ github.actor }}" \
             --password-stdin
 
-      - name: Refuse an existing candidate tag
+      - name: Probe candidate tag before build
+        id: candidate_probe
         shell: bash
         env:
           GHCR_IMAGE: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna
@@ -297,11 +315,85 @@ jobs:
           GITHUB_API_URL: ${{ github.api_url }}
         run: |
           set -euo pipefail
-          python deployment/scripts/ghcr_tag_guard.py \
+          python .ghcr-recovery-verifier/deployment/scripts/ghcr_tag_guard.py \
             --image "$GHCR_IMAGE" \
-            --tag "sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}"
+            --tag "sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Reject recovery assertions for an absent candidate
+        if: steps.candidate_probe.outputs.candidate_state == 'absent'
+        shell: bash
+        env:
+          RECOVERY_IMAGE_DIGEST: ${{ inputs.recovery_image_digest }}
+          RECOVERY_IMAGE_CREATED: ${{ inputs.recovery_image_created }}
+        run: |
+          set -euo pipefail
+          test -z "$RECOVERY_IMAGE_DIGEST" && test -z "$RECOVERY_IMAGE_CREATED" \
+            || { echo "recovery assertions are only accepted when the candidate tag already exists" >&2; exit 1; }
+
+      - name: Build immutable application image
+        if: steps.candidate_probe.outputs.candidate_state == 'absent'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --tag "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" \
+            --build-arg "VCS_REF=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --build-arg "VCS_REF_FULL=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --build-arg "IMAGE_VERSION=${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --build-arg "IMAGE_SOURCE=https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
+            --build-arg "IMAGE_CREATED=${SENTINEL_DNA_IMAGE_CREATED}" \
+            .
+
+      - name: Verify newly built image configuration
+        if: steps.candidate_probe.outputs.candidate_state == 'absent'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="deployment-app:${SENTINEL_DNA_IMAGE_TAG}"
+          test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "sentinel"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "com.sentinel-dna.git.revision.full"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$SENTINEL_DNA_IMAGE_REVISION_FULL"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')" = "$SENTINEL_DNA_IMAGE_CREATED"
+          test "$(docker image inspect "$image" --format '{{json .Config.Cmd}}')" = '["gunicorn","wsgi:application","--bind","0.0.0.0:5000","--workers","1","--access-logfile","-","--error-logfile","-"]'
+          test "$(docker image inspect "$image" --format '{{json .Config.ExposedPorts}}')" = '{"5000/tcp":{}}'
+          docker image inspect "$image" --format '{{json .Config}}' > "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json"
+          python - "$RUNNER_TEMP/sentinel-dna-new-candidate-runtime.json" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$SENTINEL_DNA_IMAGE_CREATED" "$SENTINEL_DNA_IMAGE_REVISION_FULL" "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, sys.argv[5])
+          from deployment.scripts.ghcr_candidate import CandidateVerificationError, verify_runtime_configuration
+          try:
+              verify_runtime_configuration(
+                  json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")),
+                  revision=sys.argv[2],
+                  image_created=sys.argv[3],
+                  image_version=sys.argv[4],
+              )
+          except (OSError, ValueError, CandidateVerificationError) as exc:
+              raise SystemExit(f"new candidate runtime verification failed: {exc}") from None
+          PY
+
+      - name: Probe candidate tag immediately before publication
+        id: candidate_publish_probe
+        if: steps.candidate_probe.outputs.candidate_state == 'absent'
+        shell: bash
+        env:
+          GHCR_IMAGE: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
+        run: |
+          set -euo pipefail
+          python .ghcr-recovery-verifier/deployment/scripts/ghcr_tag_guard.py \
+            --image "$GHCR_IMAGE" \
+            --tag "sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Publish immutable candidate image to private GHCR
+        if: steps.candidate_publish_probe.outputs.candidate_state == 'absent'
         shell: bash
         env:
           GHCR_IMAGE: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna
@@ -311,95 +403,91 @@ jobs:
           ghcr_ref="${GHCR_IMAGE}:${ghcr_tag}"
           docker tag "deployment-app:${SENTINEL_DNA_IMAGE_TAG}" "$ghcr_ref"
           docker push "$ghcr_ref"
+          docker image inspect "$ghcr_ref" --format '{{json .RepoDigests}}' \
+            > "$RUNNER_TEMP/sentinel-dna-pushed-repo-digests.json"
 
-          repo_digests_json="$(docker image inspect "$ghcr_ref" --format '{{json .RepoDigests}}')"
-          image_id="$(docker image inspect "$ghcr_ref" --format '{{.Id}}')"
-          oci_revision="$(docker image inspect "$ghcr_ref" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
-          oci_source="$(docker image inspect "$ghcr_ref" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')"
-          oci_created="$(docker image inspect "$ghcr_ref" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')"
-          runtime_user="$(docker image inspect "$ghcr_ref" --format '{{.Config.User}}')"
-          command_json="$(docker image inspect "$ghcr_ref" --format '{{json .Config.Cmd}}')"
-          entrypoint_json="$(docker image inspect "$ghcr_ref" --format '{{json .Config.Entrypoint}}')"
-          exposed_ports_json="$(docker image inspect "$ghcr_ref" --format '{{json .Config.ExposedPorts}}')"
-          candidate_tree="$(git rev-parse 'HEAD^{tree}')"
-          publication_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      - name: Resolve candidate tag metadata
+        id: candidate_final
+        shell: bash
+        env:
+          GHCR_IMAGE: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
+        run: |
+          set -euo pipefail
+          python .ghcr-recovery-verifier/deployment/scripts/ghcr_tag_guard.py \
+            --image "$GHCR_IMAGE" \
+            --tag "sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}" \
+            --github-output "$GITHUB_OUTPUT"
+          grep -qx 'candidate_state=present' "$GITHUB_OUTPUT" \
+            || { echo "candidate tag is absent after publication or recovery probe" >&2; exit 1; }
 
-          export GHCR_REF="$ghcr_ref" GHCR_TAG="$ghcr_tag" IMAGE_ID="$image_id"
-          export REPO_DIGESTS_JSON="$repo_digests_json"
-          export OCI_REVISION="$oci_revision" OCI_SOURCE="$oci_source" OCI_CREATED="$oci_created"
-          export RUNTIME_USER="$runtime_user" COMMAND_JSON="$command_json" ENTRYPOINT_JSON="$entrypoint_json"
-          export EXPOSED_PORTS_JSON="$exposed_ports_json" CANDIDATE_SHA="$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"
-          export SENTINEL_DNA_IMAGE_CREATED="$SENTINEL_DNA_IMAGE_CREATED"
-          export CANDIDATE_TREE="$candidate_tree" PUBLICATION_TIMESTAMP="$publication_timestamp"
-          export EVIDENCE_PATH="$RUNNER_TEMP/sentinel-dna-image-provenance.json"
-          python - <<'PY'
+      - name: Verify recovered or newly published candidate by digest
+        shell: bash
+        env:
+          GHCR_IMAGE: ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna
+          RECOVERY_IMAGE_DIGEST: ${{ inputs.recovery_image_digest }}
+          RECOVERY_IMAGE_CREATED: ${{ inputs.recovery_image_created }}
+          PACKAGE_CREATED_AT: ${{ steps.candidate_final.outputs.package_created_at }}
+          PACKAGE_VERSION_ID: ${{ steps.candidate_final.outputs.package_version_id }}
+        run: |
+          set -euo pipefail
+          candidate_tag="sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}"
+          candidate_ref="${GHCR_IMAGE}:${candidate_tag}"
+          if [[ "${{ steps.candidate_probe.outputs.candidate_state }}" == "present" \
+             || "${{ steps.candidate_publish_probe.outputs.candidate_state }}" == "present" ]]; then
+            [[ "$RECOVERY_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] \
+              || { echo "existing candidate requires a valid recovery digest assertion" >&2; exit 1; }
+            [[ "$RECOVERY_IMAGE_CREATED" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] \
+              || { echo "existing candidate requires a valid recovery creation-time assertion" >&2; exit 1; }
+            expected_digest="$RECOVERY_IMAGE_DIGEST"
+            expected_created="$RECOVERY_IMAGE_CREATED"
+          else
+            expected_digest="$(python - "$RUNNER_TEMP/sentinel-dna-pushed-repo-digests.json" "$GHCR_IMAGE" <<'PY'
           import json
-          import os
           import re
+          import sys
           from pathlib import Path
-
-          ghcr_image = "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna"
-          repo_digests = json.loads(os.environ["REPO_DIGESTS_JSON"])
-          matching = [
+          values = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          matches = [
               value.rsplit("@", 1)[1]
-              for value in repo_digests
-              if isinstance(value, str) and value.startswith(ghcr_image + "@")
+              for value in values
+              if isinstance(value, str) and value.startswith(sys.argv[2] + "@")
           ]
-          if len(matching) != 1 or not re.fullmatch(r"sha256:[0-9a-f]{64}", matching[0]):
-              raise SystemExit("published image must have exactly one matching GHCR RepoDigest")
-          immutable_digest = matching[0]
-
-          command = json.loads(os.environ["COMMAND_JSON"])
-          entrypoint = json.loads(os.environ["ENTRYPOINT_JSON"])
-          exposed_ports = json.loads(os.environ["EXPOSED_PORTS_JSON"])
-          if "gunicorn" not in command or "wsgi:application" not in command:
-              raise SystemExit("published image command contract failed")
-          if set(exposed_ports) != {"5000/tcp"}:
-              raise SystemExit("published image exposed-port contract failed")
-          if not os.environ["IMAGE_ID"]:
-              raise SystemExit("published image ID is missing")
-          if os.environ["OCI_CREATED"] != os.environ["SENTINEL_DNA_IMAGE_CREATED"]:
-              raise SystemExit("published image creation timestamp does not match expected build timestamp")
-          if os.environ["OCI_REVISION"] != os.environ["CANDIDATE_SHA"]:
-              raise SystemExit("published image revision does not match candidate SHA")
-          if os.environ["OCI_SOURCE"] != "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA":
-              raise SystemExit("published image source is invalid")
-          if os.environ["RUNTIME_USER"] != "sentinel":
-              raise SystemExit("published image runtime user is invalid")
-
-          evidence = {
-              "candidate_sha": os.environ["CANDIDATE_SHA"],
-              "candidate_tree": os.environ["CANDIDATE_TREE"],
-              "registry": "ghcr.io",
-              "repository": ghcr_image,
-              "image_reference": os.environ["GHCR_REF"],
-              "tag": os.environ["GHCR_TAG"],
-              "image_id": os.environ["IMAGE_ID"],
-              "repo_digest": ghcr_image + "@" + immutable_digest,
-              "immutable_digest": immutable_digest,
-              "oci_revision": os.environ["OCI_REVISION"],
-              "oci_source": os.environ["OCI_SOURCE"],
-              "oci_created": os.environ["OCI_CREATED"],
-              "runtime_user": os.environ["RUNTIME_USER"],
-              "entrypoint": entrypoint,
-              "command": command,
-              "exposed_ports": exposed_ports,
-              "publication_timestamp": os.environ["PUBLICATION_TIMESTAMP"],
-              "verification_status": "PASS",
-              "custodian": "GitHub Actions workflow",
-              "authorization_status": "workflow-token-scoped",
-          }
-          Path(os.environ["EVIDENCE_PATH"]).write_text(
-              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env_file:
-              env_file.write(f"PUBLISHED_IMAGE_REFERENCE={os.environ['GHCR_REF']}\n")
-              env_file.write(f"PUBLISHED_IMAGE_DIGEST={immutable_digest}\n")
-              env_file.write(f"PUBLISHED_IMAGE_ID={os.environ['IMAGE_ID']}\n")
-              env_file.write(f"PUBLISHED_REPO_DIGEST={ghcr_image}@{immutable_digest}\n")
-              env_file.write(f"IMAGE_PROVENANCE_PATH={os.environ['EVIDENCE_PATH']}\n")
+          if len(matches) != 1 or not re.fullmatch(r"sha256:[0-9a-f]{64}", matches[0]):
+              raise SystemExit("newly published candidate must have exactly one matching repo digest")
+          print(matches[0])
           PY
+          )"
+            expected_created="$SENTINEL_DNA_IMAGE_CREATED"
+          fi
+
+          candidate_tree="$(git rev-parse 'HEAD^{tree}')"
+          manifest_json="$RUNNER_TEMP/sentinel-dna-candidate-manifest.json"
+          docker buildx imagetools inspect "$candidate_ref" --format '{{json .Manifest}}' > "$manifest_json"
+          python - "$manifest_json" "$expected_digest" "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, sys.argv[3])
+          from deployment.scripts.ghcr_candidate import resolve_manifest_digest
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          resolve_manifest_digest(manifest, sys.argv[2])
+          PY
+          docker pull "$GHCR_IMAGE@$expected_digest"
+          docker image inspect "$GHCR_IMAGE@$expected_digest" --format '{{json .}}' \
+            > "$RUNNER_TEMP/sentinel-dna-candidate-inspect.json"
+          python "$GITHUB_WORKSPACE/.ghcr-recovery-verifier/deployment/scripts/ghcr_candidate.py" \
+            --inspect-json "$RUNNER_TEMP/sentinel-dna-candidate-inspect.json" \
+            --digest "$expected_digest" \
+            --revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
+            --image-version "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
+            --candidate-tree "$candidate_tree" \
+            --image-created "$expected_created" \
+            --package-created-at "$PACKAGE_CREATED_AT" \
+            --package-version-id "$PACKAGE_VERSION_ID" \
+            --evidence "$RUNNER_TEMP/sentinel-dna-image-provenance.json" \
+            --github-env "$GITHUB_ENV"
 
       - name: Prepare candidate-bound trusted release metadata
         shell: bash
@@ -410,12 +498,12 @@ jobs:
             --image "$PUBLISHED_IMAGE_REFERENCE" \
             --expected-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --expected-digest "$PUBLISHED_IMAGE_DIGEST" \
-            --expected-image-created "$SENTINEL_DNA_IMAGE_CREATED" \
+            --expected-image-created "$PUBLISHED_IMAGE_CREATED" \
             --output "$metadata_path"
           echo "SENTINEL_DNA_IMAGE_DIGEST=$PUBLISHED_IMAGE_DIGEST" >> "$GITHUB_ENV"
           echo "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE=$metadata_path" >> "$GITHUB_ENV"
 
-      - name: Validate protected configuration and metadata
+      - name: Validate candidate-bound configuration and metadata
         shell: bash
         env:
           SENTINEL_DNA_SECRET_KEY: ${{ secrets.SENTINEL_DNA_SECRET_KEY }}
@@ -428,6 +516,7 @@ jobs:
         run: |
           set -euo pipefail
           manifest="$RUNNER_TEMP/sentinel-dna-release-manifest-image-bound.json"
+          test -z "$(git -C "$GITHUB_WORKSPACE/.ghcr-recovery-verifier" status --porcelain --untracked-files=all)"
           python deployment/scripts/release_manifest.py build \
             --output "$manifest" \
             --image-reference "$PUBLISHED_IMAGE_REFERENCE" \
@@ -435,7 +524,7 @@ jobs:
             --image-id "$PUBLISHED_IMAGE_ID" \
             --image-revision "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --image-source "https://github.com/uwakwechukwuebukapaul-ai/SENTINEL-DNA" \
-            --image-created "$SENTINEL_DNA_IMAGE_CREATED" \
+            --image-created "$PUBLISHED_IMAGE_CREATED" \
             --trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"
           echo "IMAGE_BOUND_MANIFEST_PATH=$manifest" >> "$GITHUB_ENV"
 
@@ -450,7 +539,7 @@ jobs:
             --trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" \
             --expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA" \
             --expected-image-digest "$PUBLISHED_IMAGE_DIGEST" \
-            --expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"
+            --expected-image-created "$PUBLISHED_IMAGE_CREATED"
 
       - name: Upload non-secret image release evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -73,6 +73,7 @@ def validate_configuration(
     env_file: Path | None = None,
     repository_root: Path | None = None,
     require_postgresql: bool = False,
+    require_image_evidence: bool = True,
 ) -> list[str]:
     """Return safe error names; an empty list means valid configuration."""
     values = merged_environment(environ=environ, env_file=env_file)
@@ -105,39 +106,40 @@ def validate_configuration(
                 if created.tzinfo is None or not value.endswith("Z"):
                     errors.append(f"{name}:must-be-UTC")
 
-    image_digest = values.get("SENTINEL_DNA_IMAGE_DIGEST", "").strip()
-    if not image_digest:
-        errors.append("SENTINEL_DNA_IMAGE_DIGEST:missing")
-    elif not IMAGE_DIGEST_PATTERN.fullmatch(image_digest):
-        errors.append("SENTINEL_DNA_IMAGE_DIGEST:invalid")
+    if require_image_evidence:
+        image_digest = values.get("SENTINEL_DNA_IMAGE_DIGEST", "").strip()
+        if not image_digest:
+            errors.append("SENTINEL_DNA_IMAGE_DIGEST:missing")
+        elif not IMAGE_DIGEST_PATTERN.fullmatch(image_digest):
+            errors.append("SENTINEL_DNA_IMAGE_DIGEST:invalid")
 
-    metadata_path_value = values.get("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE", "").strip()
-    if not metadata_path_value:
-        errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:missing")
-    else:
-        metadata_path = Path(metadata_path_value)
-        try:
-            if not metadata_path.is_absolute():
-                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:must-be-absolute")
-            elif metadata_path.is_symlink() or not metadata_path.is_file():
-                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unavailable")
-            elif os.name != "nt" and (metadata_path.stat().st_mode & 0o222 or os.access(metadata_path, os.W_OK)):
-                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:writable")
-            else:
-                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-                if not isinstance(metadata, dict):
-                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:invalid")
-                elif set(metadata) != {"release_sha", "image_digest"}:
-                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unexpected-fields")
-                elif (
-                    not isinstance(metadata.get("release_sha"), str)
-                    or not isinstance(metadata.get("image_digest"), str)
-                    or metadata["release_sha"] != expected["SENTINEL_DNA_IMAGE_REVISION_FULL"]
-                    or metadata["image_digest"] != image_digest
-                ):
-                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:mismatch")
-        except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError):
-            errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:invalid")
+        metadata_path_value = values.get("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE", "").strip()
+        if not metadata_path_value:
+            errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:missing")
+        else:
+            metadata_path = Path(metadata_path_value)
+            try:
+                if not metadata_path.is_absolute():
+                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:must-be-absolute")
+                elif metadata_path.is_symlink() or not metadata_path.is_file():
+                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unavailable")
+                elif os.name != "nt" and (metadata_path.stat().st_mode & 0o222 or os.access(metadata_path, os.W_OK)):
+                    errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:writable")
+                else:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    if not isinstance(metadata, dict):
+                        errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:invalid")
+                    elif set(metadata) != {"release_sha", "image_digest"}:
+                        errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:unexpected-fields")
+                    elif (
+                        not isinstance(metadata.get("release_sha"), str)
+                        or not isinstance(metadata.get("image_digest"), str)
+                        or metadata["release_sha"] != expected["SENTINEL_DNA_IMAGE_REVISION_FULL"]
+                        or metadata["image_digest"] != image_digest
+                    ):
+                        errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:mismatch")
+            except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError):
+                errors.append("SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE:invalid")
 
     if values.get("SENTINEL_DNA_ENV", "production").lower() != "production":
         errors.append("SENTINEL_DNA_ENV:must-be-production")
@@ -160,12 +162,30 @@ def validate_configuration(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path)
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        help="application checkout root used to derive release metadata",
+    )
+    parser.add_argument(
+        "--pre-image",
+        action="store_true",
+        help="validate protected configuration before the candidate digest and trusted metadata exist",
+    )
     args = parser.parse_args()
-    errors = validate_configuration(env_file=args.env_file, require_postgresql=True)
+    errors = validate_configuration(
+        env_file=args.env_file,
+        repository_root=args.repository_root,
+        require_postgresql=True,
+        require_image_evidence=not args.pre_image,
+    )
     if errors:
         print("Deployment configuration invalid: " + ", ".join(errors))
         return 1
-    print("Deployment configuration valid: protected variables present; release metadata matches HEAD")
+    if args.pre_image:
+        print("Pre-image deployment configuration valid: protected variables present; release metadata matches HEAD")
+    else:
+        print("Deployment configuration valid: protected variables present; release metadata matches HEAD")
     return 0
 
 

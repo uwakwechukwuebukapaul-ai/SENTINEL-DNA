@@ -8,6 +8,7 @@ successfully. API/auth/network errors never count as absence.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import os
 import re
@@ -73,24 +74,47 @@ def package_versions(image: str, token: str, api_url: str) -> list[dict]:
         page += 1
 
 
-def candidate_tag_exists(versions: list[dict], tag: str) -> bool:
+def _parse_timestamp(value: object, *, field: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ProbeError(f"GitHub Packages API {field} metadata is missing or malformed")
+    try:
+        return datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise ProbeError(f"GitHub Packages API {field} metadata is missing or malformed") from exc
+
+
+def candidate_tag_version(versions: list[dict], tag: str) -> dict | None:
+    matches = []
     for version in versions:
+        if not isinstance(version, dict):
+            raise ProbeError("GitHub Packages API version response was unexpected")
+        if type(version.get("id")) is not int or version["id"] <= 0:
+            raise ProbeError("GitHub Packages API version identity is incomplete")
+        _parse_timestamp(version.get("created_at"), field="created_at")
         metadata = version.get("metadata")
-        if not isinstance(metadata, dict):
-            continue
-        container = metadata.get("container")
-        if not isinstance(container, dict):
-            continue
+        if not isinstance(metadata, dict) or not isinstance(metadata.get("container"), dict):
+            raise ProbeError("GitHub Packages API container provenance is incomplete")
+        container = metadata["container"]
         tags = container.get("tags")
-        if isinstance(tags, list) and tag in tags:
-            return True
-    return False
+        if not isinstance(tags, list) or any(not isinstance(value, str) for value in tags):
+            raise ProbeError("GitHub Packages API container tags are incomplete")
+        if tag in tags:
+            matches.append(version)
+    if len(matches) > 1:
+        raise ProbeError("candidate tag is associated with multiple package versions")
+    return matches[0] if matches else None
+
+
+def candidate_tag_exists(versions: list[dict], tag: str) -> bool:
+    """Compatibility helper: incomplete package data is an error, never absence."""
+    return candidate_tag_version(versions, tag) is not None
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--github-output", required=True)
     args = parser.parse_args()
 
     if not TAG_PATTERN.fullmatch(args.tag):
@@ -108,15 +132,21 @@ def main() -> int:
             token,
             os.environ.get("GITHUB_API_URL", "https://api.github.com"),
         )
+        version = candidate_tag_version(versions, args.tag)
     except ProbeError as exc:
         print(f"candidate tag probe inconclusive: {exc}; refusing to publish", file=sys.stderr)
         return 2
 
-    if candidate_tag_exists(versions, args.tag):
-        print("candidate GHCR tag already exists; refusing to overwrite", file=sys.stderr)
-        return 1
+    with open(args.github_output, "a", encoding="utf-8") as output:
+        output.write(f"candidate_state={'present' if version else 'absent'}\n")
+        if version is not None:
+            output.write(f"package_version_id={version['id']}\n")
+            output.write(f"package_created_at={version['created_at']}\n")
 
-    print(f"candidate tag absence confirmed by GitHub Packages API ({len(versions)} versions checked)")
+    if version is None:
+        print(f"candidate tag absence confirmed by GitHub Packages API ({len(versions)} versions checked)")
+    else:
+        print("candidate tag exists; recovery verification is required before reuse")
     return 0
 
 
