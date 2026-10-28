@@ -19,10 +19,62 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        seen_merge_key = False
+        for key_node, _value_node in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                if seen_merge_key:
+                    raise yaml.constructor.ConstructorError(
+                        "while constructing a mapping",
+                        node.start_mark,
+                        "found duplicate key '<<'",
+                        key_node.start_mark,
+                    )
+                seen_merge_key = True
+                continue
+
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                duplicate = key in seen
+                seen.add(key)
+            except TypeError as error:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found an unhashable mapping key",
+                    key_node.start_mark,
+                ) from error
+            if duplicate:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+
+        return super().construct_mapping(node, deep=deep)
+
+
+def _strict_yaml_load(source: str):
+    return yaml.load(source, Loader=_UniqueKeyLoader)
+
+
 def _workflow() -> dict:
-    parsed = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    parsed = _strict_yaml_load(WORKFLOW.read_text(encoding="utf-8"))
     assert isinstance(parsed, dict)
     return parsed
+
+
+def test_workflow_yaml_loader_rejects_duplicate_top_level_keys():
+    with pytest.raises(yaml.constructor.ConstructorError, match="duplicate key"):
+        _strict_yaml_load("name: first\nname: second\n")
+
+
+def test_workflow_yaml_loader_rejects_duplicate_nested_keys():
+    with pytest.raises(yaml.constructor.ConstructorError, match="duplicate key"):
+        _strict_yaml_load("jobs:\n  blocked:\n    runs-on: ubuntu-latest\n    runs-on: windows-latest\n")
 
 
 def _trigger(workflow: dict) -> dict:
@@ -32,21 +84,44 @@ def _trigger(workflow: dict) -> dict:
     return trigger
 
 
-def _steps(workflow: dict) -> list[dict]:
-    steps = workflow["jobs"]["validate-release-contract"]["steps"]
-    assert isinstance(steps, list)
-    assert all(isinstance(step, dict) and isinstance(step.get("name"), str) for step in steps)
-    return steps
+def _assert_blocked_workflow_structure(workflow: dict) -> None:
+    assert set(workflow) == {"name", True, "permissions", "jobs"}
+    assert workflow["name"] == "deployment-contract-blocked"
+    assert _trigger(workflow) == {"workflow_dispatch": None}
+    assert workflow["permissions"] == {}
+    assert "env" not in workflow
+    assert set(workflow["jobs"]) == {"blocked"}
 
+    job = workflow["jobs"]["blocked"]
+    assert set(job) == {"name", "runs-on", "steps"}
+    assert job["name"] == "Fail closed — independent release trust root unavailable"
+    assert job["runs-on"] == "ubuntu-latest"
+    assert "env" not in job
+    assert len(job["steps"]) == 1
 
-def _step(workflow: dict, name: str) -> dict:
-    matches = [step for step in _steps(workflow) if step["name"] == name]
-    assert len(matches) == 1, f"expected exactly one workflow step named {name!r}"
-    return matches[0]
+    step = job["steps"][0]
+    assert set(step) == {"name", "shell", "run"}
+    assert step["name"] == "Refuse all release and publication activity"
+    assert step["shell"] == "bash"
+    assert "env" not in step
+    assert step["run"] == (
+        'echo "::error title=Release blocked::This repository workflow has no '
+        "independent trust root or release authorization.\"\n"
+        "exit 1\n"
+    )
 
+    def assert_no_secret_references(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                assert_no_secret_references(key)
+                assert_no_secret_references(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                assert_no_secret_references(item)
+        elif isinstance(value, str):
+            assert not re.search(r"\$\{\{\s*secrets(?:\.|\[|\s)", value, re.IGNORECASE)
 
-def _step_text(step: dict) -> str:
-    return str(step.get("run", ""))
+    assert_no_secret_references(workflow)
 
 
 class ReleaseContractViolation(ValueError):
@@ -549,270 +624,80 @@ def test_nginx_contract_preserves_internal_app_and_secure_tls_forwarding():
     assert "proxy_set_header X-Forwarded-Proto https;" in nginx
 
 
-def test_ci_compose_tls_override_is_temporary_static_and_precedes_publication():
+def test_blocked_workflow_does_not_reference_compose_tls_override_or_publication():
     workflow = _workflow()
-    step = _step(workflow, "Validate deployment Compose contract")
-    run = _step_text(step)
-    steps = _steps(workflow)
-    names = [candidate["name"] for candidate in steps]
+    _assert_blocked_workflow_structure(workflow)
+    assert workflow["permissions"] == {}
+    assert set(workflow["jobs"]) == {"blocked"}
+    text = repr(workflow).lower()
+    assert "docker compose up" not in text
+    assert "docker push" not in text
+    assert "sentinel-dna-compose-validation.override.yml" not in text
 
-    assert step["env"] == {
-        "SENTINEL_DNA_SECRET_KEY": "compose-validation-only",
-        "POSTGRES_PASSWORD": "compose-validation-only",
-        "SENTINEL_DNA_IMAGE_DIGEST": "compose-validation-only",
-        "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE": "${{ runner.temp }}/sentinel-dna-compose-validation-metadata.json",
-        "SENTINEL_DNA_TLS_DIR": "${{ runner.temp }}/sentinel-dna-compose-validation-tls",
-    }
-    assert 'override_file="$RUNNER_TEMP/sentinel-dna-compose-validation.override.yml"' in run
-    override_match = re.search(r"<<'YAML'\n(?P<override>.*?)\n[ \t]*YAML", run, re.DOTALL)
-    assert override_match is not None
-    assert yaml.safe_load(override_match.group("override")) == {
-        "services": {
-            "nginx": {
-                "volumes": [
-                    {
-                        "type": "volume",
-                        "source": "compose-validation-tls",
-                        "target": "/etc/nginx/tls",
-                        "read_only": True,
-                    }
-                ]
-            }
-        },
-        "volumes": {"compose-validation-tls": {}},
-    }
-    assert "-f deployment/docker-compose.yml" in run
-    assert '-f "$override_file"' in run
-    assert "config --quiet" in run
-    assert "docker compose up" not in run
-    assert names.index(step["name"]) < names.index("Build immutable application image")
-    assert names.index(step["name"]) < names.index("Publish immutable candidate image to private GHCR")
-    assert all(
-        "sentinel-dna-compose-validation.override.yml" not in _step_text(candidate)
-        for candidate in steps
-        if candidate["name"] != step["name"]
-    )
-
-
-def test_ghcr_publication_contract_is_private_candidate_bound_and_non_deploying():
+def test_blocked_workflow_cannot_publish_ghcr_artifacts():
     workflow = _workflow()
-    assert workflow["name"] == "deployment-contract"
-    trigger = _trigger(workflow)
-    dispatch = trigger["workflow_dispatch"]
-    assert set(dispatch["inputs"]) == {"authorized_ref", "authorized_sha", "authorized_tree"}
-    assert all(dispatch["inputs"][name]["required"] for name in dispatch["inputs"])
-    assert all(dispatch["inputs"][name]["type"] == "string" for name in dispatch["inputs"])
-
-    assert workflow["permissions"] == {"contents": "read", "packages": "write"}
-    assert workflow["concurrency"] == {
-        "group": "deployment-contract-${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}",
-        "cancel-in-progress": False,
-    }
-    job = workflow["jobs"]["validate-release-contract"]
-    assert job["environment"] == "production"
-    assert not {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}.intersection(job.get("env", {}))
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF }}"
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA }}"
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_RELEASE_REF"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_REF }}"
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}"
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_TREE }}"
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_BASELINE_SHA"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_BASELINE_SHA }}"
-
-    workflow_identity = _step(workflow, "Verify protected workflow identity")
-    workflow_identity_text = _step_text(workflow_identity)
-    assert 'test "$GITHUB_REF" = "refs/heads/$SENTINEL_DNA_AUTHORIZED_WORKFLOW_REF"' in workflow_identity_text
-    assert '"$GITHUB_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$' in workflow_identity_text
-    assert '"$GITHUB_WORKFLOW_REF" = "$expected_workflow_ref"' in workflow_identity_text
-    assert "workflow_blob_sha" in workflow_identity_text
-    assert '"$executed_workflow_blob" = "$authorized_workflow_blob"' in workflow_identity_text
-    assert '"$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA"' not in workflow_identity_text
-
-    precheck = _step(workflow, "Validate protected release identity before checkout")
-    precheck_text = _step_text(precheck)
-    names = [step["name"] for step in _steps(workflow)]
-    assert names.index(precheck["name"]) < names.index("Checkout protected candidate commit")
-    assert "git check-ref-format --branch" in precheck_text
-    for variable in (
-        "SENTINEL_DNA_AUTHORIZED_WORKFLOW_SHA",
-        "SENTINEL_DNA_AUTHORIZED_RELEASE_SHA",
-        "SENTINEL_DNA_AUTHORIZED_RELEASE_TREE",
-        "SENTINEL_DNA_AUTHORIZED_BASELINE_SHA",
-    ):
-        assert f"[[ \"${variable}\" =~ ^[0-9a-f]{{40}}$ ]]" in precheck_text
-
-    checkout = _step(workflow, "Checkout protected candidate commit")
-    assert checkout["with"] == {
-        "ref": "${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}",
-        "fetch-depth": 0,
-    }
-    verify = _step(workflow, "Verify protected candidate identity")
-    assert {"REQUESTED_RELEASE_REF", "REQUESTED_RELEASE_SHA", "REQUESTED_RELEASE_TREE"}.issubset(verify["env"])
-    verify_text = _step_text(verify)
-    assert 'test "$REQUESTED_RELEASE_REF" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"' in verify_text
-    assert 'test "$REQUESTED_RELEASE_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"' in verify_text
-    assert 'test "$REQUESTED_RELEASE_TREE" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"' in verify_text
-    assert "git rev-parse HEAD" in verify_text
-    assert "HEAD^{tree}" in verify_text
-    assert 'git cat-file -e "${SENTINEL_DNA_AUTHORIZED_BASELINE_SHA}^{commit}"' in verify_text
-    assert "git merge-base --is-ancestor" in verify_text
-    assert "git status --porcelain --untracked-files=all" in verify_text
-    assert 'test "$GITHUB_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"' not in verify_text
-
-    assert "${{ inputs.authorized_sha }}" not in checkout["with"]["ref"]
-    assert "${{ inputs.authorized_sha }}" not in workflow["concurrency"]["group"]
-
-    names = [step["name"] for step in _steps(workflow)]
-    assert names.index("Build immutable application image") < names.index("Publish immutable candidate image to private GHCR")
-    assert names.index("Publish immutable candidate image to private GHCR") < names.index("Prepare candidate-bound trusted release metadata")
-    assert names.index("Prepare candidate-bound trusted release metadata") < names.index("Validate protected configuration and metadata")
-    assert names.index("Validate protected configuration and metadata") < names.index("Generate image-bound release manifest")
-    configuration_step = _step(workflow, "Validate protected configuration and metadata")
-    assert configuration_step["run"] == "python deployment/scripts/validate_deployment_config.py"
-    assert configuration_step["env"]["DATABASE_URL"] == "postgresql://sentinel@postgres:5432/sentinel_dna"
-    assert names.index("Verify image-bound release manifest") < names.index("Upload non-secret image release evidence")
-
-    login = _step(workflow, "Authenticate to private GHCR")
-    assert "github.token" in _step_text(login)
-    assert "--password-stdin" in _step_text(login)
-    publish = _step(workflow, "Publish immutable candidate image to private GHCR")
-    publish_text = _step_text(publish)
-    assert "ghcr.io/uwakwechukwuebukapaul-ai/sentinel-dna" in publish_text
-    assert 'sha-${SENTINEL_DNA_IMAGE_REVISION_FULL}' in publish_text
-    assert "docker push" in publish_text
-    assert "REPO_DIGESTS_JSON" in publish_text
-    assert "exactly one matching GHCR RepoDigest" in publish_text
-    collision = _step(workflow, "Refuse an existing candidate tag")
-    collision_text = _step_text(collision)
-    assert "ghcr_tag_guard.py" in collision_text
-    assert "GITHUB_TOKEN" in collision["env"]
-    assert "GITHUB_API_URL" in collision["env"]
-    assert "docker manifest inspect" not in collision_text
-    guard_source = (ROOT / "deployment" / "scripts" / "ghcr_tag_guard.py").read_text(encoding="utf-8")
-    assert "refusing to overwrite" in guard_source
-    assert "GitHub Packages API" in guard_source
-
-    for step in _steps(workflow):
-        text = _step_text(step)
-        assert "controlled_deploy.py --execute" not in text
-        assert "docker compose up" not in text
-        assert ":latest" not in text.lower()
-    for name in (
-        "Verify protected workflow identity",
-        "Checkout protected candidate commit",
-        "Verify protected candidate identity",
-        "Derive immutable release metadata",
-        "Build immutable application image",
-        "Verify image provenance and non-root configuration",
-        "Verify OCI creation metadata",
-        "Run deployment-adjacent regression tests",
-        "Authenticate to private GHCR",
-        "Publish immutable candidate image to private GHCR",
-    ):
-        assert not {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}.intersection(_step(workflow, name).get("env", {}))
-
-    for name in ("Validate protected configuration and metadata", "Validate deployment Compose contract"):
-        assert {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}.issubset(_step(workflow, name)["env"])
-
-    metadata = _step(workflow, "Prepare candidate-bound trusted release metadata")
-    metadata_text = _step_text(metadata)
-    assert "prepare_trusted_release_metadata.py" in metadata_text
-    assert "PUBLISHED_IMAGE_DIGEST" in metadata_text
-    assert '--expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"' in metadata_text
-    assert "SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE" in metadata_text
-    manifest = _step(workflow, "Generate image-bound release manifest")
-    manifest_text = _step_text(manifest)
-    assert "PUBLISHED_IMAGE_DIGEST" in manifest_text
-    assert "PUBLISHED_IMAGE_ID" in manifest_text
-    assert "SENTINEL_DNA_IMAGE_CREATED" in manifest_text
-    assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in manifest_text
-    published = _step(workflow, "Publish immutable candidate image to private GHCR")
-    assert 'os.environ["OCI_CREATED"] != os.environ["SENTINEL_DNA_IMAGE_CREATED"]' in _step_text(published)
-    verify_manifest = _step(workflow, "Verify image-bound release manifest")
-    verify_text = _step_text(verify_manifest)
-    assert "--require-image" in verify_text
-    assert "--require-trusted-metadata" in verify_text
-    assert '--trusted-metadata "$SENTINEL_DNA_GATE1_TRUSTED_METADATA_FILE"' in verify_text
-    assert '--expected-release-sha "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"' in verify_text
-    assert '--expected-image-digest "$PUBLISHED_IMAGE_DIGEST"' in verify_text
-    assert '--expected-image-created "$SENTINEL_DNA_IMAGE_CREATED"' in verify_text
-    upload = _step(workflow, "Upload non-secret image release evidence")
-    assert "sentinel-dna-image-provenance.json" in upload["with"]["path"]
-    assert "sentinel-dna-release-manifest-image-bound.json" in upload["with"]["path"]
-
+    _assert_blocked_workflow_structure(workflow)
+    assert workflow["name"] == "deployment-contract-blocked"
+    assert workflow["permissions"] == {}
+    assert set(workflow["jobs"]) == {"blocked"}
+    job = workflow["jobs"]["blocked"]
+    assert job.get("environment") is None
+    assert job.get("services") is None
+    assert job.get("env") is None
+    steps = job["steps"]
+    assert len(steps) == 1
+    assert steps[0]["name"] == "Refuse all release and publication activity"
+    run = steps[0]["run"]
+    assert "Release blocked" in run
+    assert "exit 1" in run
+    assert "uses" not in steps[0]
 
 def test_workflow_is_valid_yaml_and_has_unique_named_steps():
     workflow = _workflow()
+    assert workflow["name"] == "deployment-contract-blocked"
     assert isinstance(workflow["jobs"], dict)
-    names = [step["name"] for step in _steps(workflow)]
-    assert len(names) == len(set(names))
+    assert set(workflow["jobs"]) == {"blocked"}
+    for job in workflow["jobs"].values():
+        names = [step["name"] for step in job.get("steps", [])]
+        assert len(names) == len(set(names))
 
-
-def test_workflow_does_not_expose_production_secrets_to_build_or_test_steps():
+def test_blocked_workflow_does_not_expose_production_secrets():
     workflow = _workflow()
+    _assert_blocked_workflow_structure(workflow)
     secret_names = {"SENTINEL_DNA_SECRET_KEY", "POSTGRES_PASSWORD"}
-    for step in _steps(workflow):
-        if step["name"] not in {"Validate protected configuration and metadata", "Validate deployment Compose contract"}:
+    assert workflow["permissions"] == {}
+    for job in workflow["jobs"].values():
+        assert not secret_names.intersection(job.get("env", {}))
+        for step in job.get("steps", []):
             assert not secret_names.intersection(step.get("env", {}))
+            assert "uses" not in step
 
-
-def test_regression_test_job_uses_healthy_disposable_postgresql_service():
+def test_blocked_workflow_has_no_test_job_or_database_service():
     workflow = _workflow()
-    job = workflow["jobs"]["validate-release-contract"]
-    postgres = job["services"]["postgres"]
-    regression = _step(workflow, "Run deployment-adjacent regression tests")
-    steps = _steps(workflow)
-    names = [step["name"] for step in steps]
-
-    assert postgres["image"] == "postgres:16-alpine"
-    assert postgres["env"] == {
-        "POSTGRES_DB": "sentinel_dna_test",
-        "POSTGRES_USER": "sentinel_test",
-        "POSTGRES_PASSWORD": "sentinel_test_password",
-    }
-    assert postgres["ports"] == ["5432:5432"]
-    assert "pg_isready -U sentinel_test -d sentinel_dna_test" in postgres["options"]
-    assert "--health-interval 10s" in postgres["options"]
-    assert "--health-timeout 5s" in postgres["options"]
-    assert "--health-retries 5" in postgres["options"]
-    assert job["env"]["DATABASE_URL"] == (
-        "postgresql://sentinel_test:sentinel_test_password@localhost:5432/sentinel_dna_test"
+    _assert_blocked_workflow_structure(workflow)
+    assert set(workflow["jobs"]) == {"blocked"}
+    job = workflow["jobs"]["blocked"]
+    assert "services" not in job
+    assert all(
+        "pytest" not in str(step.get("run", "")).lower()
+        for step in job.get("steps", [])
     )
-    assert names.index("Set up Python") < names.index("Install project dependencies")
-    assert names.index("Install project dependencies") < names.index(regression["name"])
-    assert _step(workflow, "Set up Python")["with"]["python-version"] == "3.12"
-    assert "pip install -r requirements.txt" in _step_text(_step(workflow, "Install project dependencies"))
-    assert "python -m pytest -q" in _step_text(regression)
+    # The blocker must not launch services or run candidate tests.
+    assert len(job["steps"]) == 1
+    assert "exit 1" in job["steps"][0]["run"]
 
-
-def test_dispatch_values_are_assertions_and_cannot_select_release_artifacts():
+def test_blocked_workflow_dispatch_cannot_select_release_artifacts():
     workflow = _workflow()
+    _assert_blocked_workflow_structure(workflow)
     trigger = _trigger(workflow)
-    dispatch = trigger["workflow_dispatch"]
-    assert set(dispatch["inputs"]) == {"authorized_ref", "authorized_sha", "authorized_tree"}
-
-    job = workflow["jobs"]["validate-release-contract"]
-    checkout = _step(workflow, "Checkout protected candidate commit")
-    verify = _step(workflow, "Verify protected candidate identity")
-
-    assert checkout["with"]["ref"] == "${{ vars.SENTINEL_DNA_AUTHORIZED_RELEASE_SHA }}"
-    assert "inputs." not in checkout["with"]["ref"]
-    assert "inputs." not in workflow["concurrency"]["group"]
-    assert "inputs." not in _step(workflow, "Upload non-secret image release evidence")["with"]["name"]
-    assert set(verify["env"]) == {
-        "REQUESTED_RELEASE_REF",
-        "REQUESTED_RELEASE_SHA",
-        "REQUESTED_RELEASE_TREE",
-    }
-
-    verify_text = _step_text(verify)
-    for assertion in (
-        'test "$REQUESTED_RELEASE_REF" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_REF"',
-        'test "$REQUESTED_RELEASE_SHA" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"',
-        'test "$REQUESTED_RELEASE_TREE" = "$SENTINEL_DNA_AUTHORIZED_RELEASE_TREE"',
-    ):
-        assert assertion in verify_text
-
-    assert job["env"]["SENTINEL_DNA_AUTHORIZED_RELEASE_SHA"] != "${{ inputs.authorized_sha }}"
+    assert set(trigger) == {"workflow_dispatch"}
+    assert trigger["workflow_dispatch"] is None
+    assert workflow["permissions"] == {}
+    assert set(workflow["jobs"]) == {"blocked"}
+    text = repr(workflow)
+    assert "authorized_sha" not in text
+    assert "authorized_ref" not in text
+    assert "authorized_tree" not in text
 
 def test_deployment_validator_direct_cli_resolves_repository_packages():
     result = subprocess.run(
